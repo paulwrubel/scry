@@ -28,10 +28,19 @@ _release type:
         *) echo "Invalid bump type: {{type}}"; exit 1 ;; \
     esac; \
     echo "Releasing $$current → $$next"; \
+    read -p "Proceed? [y/N] " confirm; \
+    case "$$confirm" in \
+        [yY]*) ;; \
+        *) echo "Aborted."; exit 1 ;; \
+    esac; \
     sed -i.bak "s/^version = \"$$current\"/version = \"$$next\"/" Cargo.toml && rm -f Cargo.toml.bak; \
     git add Cargo.toml; \
     git commit -m "v$$next"; \
-    git tag "v$$next"
+    git tag "v$$next"; \
+    echo ""; \
+    echo "Release prepared locally. To publish, run:"; \
+    echo "  git push origin main"; \
+    echo "  git push origin v$$next"
 
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]
