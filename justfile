@@ -1,3 +1,5 @@
+set shell := ["bash", "-uc"]
+
 # run all validation checks: test, check, clippy
 [group('validate')]
 validate: test check clippy
@@ -19,28 +21,28 @@ clippy:
 
 # shared release logic — bump version, update Cargo.toml, commit, tag
 _release type:
-    @current=$$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/'); \
-    IFS=. read major minor patch <<< "$$current"; \
+    @current=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/'); \
+    IFS=. read major minor patch <<< "$current"; \
     case "{{type}}" in \
-        patch) next="$$major.$$minor.$$((patch + 1))" ;; \
-        minor) next="$$major.$$((minor + 1)).0" ;; \
-        major) next="$$((major + 1)).0.0" ;; \
+        patch) next="$major.$minor.$((patch + 1))" ;; \
+        minor) next="$major.$((minor + 1)).0" ;; \
+        major) next="$((major + 1)).0.0" ;; \
         *) echo "Invalid bump type: {{type}}"; exit 1 ;; \
     esac; \
-    echo "Releasing $$current → $$next"; \
+    echo "Releasing $current → $next"; \
     read -p "Proceed? [y/N] " confirm; \
-    case "$$confirm" in \
+    case "$confirm" in \
         [yY]*) ;; \
         *) echo "Aborted."; exit 1 ;; \
     esac; \
-    sed -i.bak "s/^version = \"$$current\"/version = \"$$next\"/" Cargo.toml && rm -f Cargo.toml.bak; \
+    sed -i.bak "s/^version = \"$current\"/version = \"$next\"/" Cargo.toml && rm -f Cargo.toml.bak; \
     git add Cargo.toml; \
-    git commit -m "v$$next"; \
-    git tag "v$$next"; \
+    git commit -m "v$next"; \
+    git tag "v$next"; \
     echo ""; \
     echo "Release prepared locally. To publish, run:"; \
     echo "  git push origin main"; \
-    echo "  git push origin v$$next"
+    echo "  git push origin v$next"
 
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]
