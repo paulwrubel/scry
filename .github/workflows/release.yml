@@ -39,12 +39,8 @@ jobs:
 
       - name: Package
         run: |
-          BINARY="scry"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            BINARY="scry.exe"
-          fi
           cd target/${{ matrix.target }}/release
-          tar czf "${{ github.workspace }}/scry-${{ matrix.target }}.tar.gz" "$BINARY"
+          tar czf "${{ github.workspace }}/scry-${{ matrix.target }}.tar.gz" scry
         shell: bash
 
       - name: Upload artifact
