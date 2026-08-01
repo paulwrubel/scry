@@ -36,7 +36,8 @@ _release type:
         *) echo "Aborted."; exit 1 ;; \
     esac; \
     sed -i.bak "s/^version = \"$current\"/version = \"$next\"/" Cargo.toml && rm -f Cargo.toml.bak; \
-    git add Cargo.toml; \
+    cargo check; \
+    git add Cargo.toml Cargo.lock; \
     git commit -m "v$next"; \
     git tag "v$next"; \
     echo ""; \
