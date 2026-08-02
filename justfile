@@ -42,8 +42,7 @@ _release type:
     git tag "v$next"; \
     echo ""; \
     echo "Release prepared locally. To publish, run:"; \
-    echo "  git push origin main"; \
-    echo "  git push origin v$next"
+    echo "  git push origin main v$next"
 
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]
