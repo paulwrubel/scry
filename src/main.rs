@@ -42,11 +42,11 @@ async fn main() -> Result<(), AppError> {
     match cli.command {
         Command::Add { description } => {
             let task = store.add(&description).await?;
-            println!("✓ Added task #{}: {}", task.id, task.description);
+            println!("✓ Added task #{}: {}", task.id, task.title);
         }
         Command::Complete { id } => {
             match store.complete(id).await? {
-                Some(task) => println!("✓ Completed task #{}: {}", task.id, task.description),
+                Some(task) => println!("✓ Completed task #{}: {}", task.id, task.title),
                 None => eprintln!("Task #{} not found or already completed", id),
             }
         }
@@ -73,7 +73,7 @@ async fn main() -> Result<(), AppError> {
                     "{:>width$}  {}  {}",
                     task.id,
                     checkbox,
-                    task.description,
+                    task.title,
                     width = max_id_width
                 );
             }
