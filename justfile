@@ -69,6 +69,13 @@ release-major:
 build:
     cargo build --release
 
+# build and install to ~/.local/bin
+[group('build')]
+install:
+    cargo build --release
+    mkdir -p {{"${HOME}"}}/.local/bin
+    cp target/release/scry {{"${HOME}"}}/.local/bin/scry
+
 # wipe build artifacts
 [group('misc')]
 clean:
