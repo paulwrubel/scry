@@ -10,7 +10,7 @@ use error::AppError;
 use store::{sqlite::SqliteStore, TaskStore};
 
 #[derive(Parser)]
-#[command(name = "scry", about = "A task manager for the terminal")]
+#[command(name = "scry", about = "A task manager for the terminal", version)]
 struct Cli {
     /// Target a specific project (overrides the active project)
     #[arg(short = 'p', long = "project")]
