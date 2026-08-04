@@ -39,21 +39,10 @@ impl SqliteStore {
             .await
             .map_err(|e| format!("Failed to connect to database: {}", e))?;
 
-        sqlx::query!(
-            r#"
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title           TEXT NOT NULL,
-                    description     TEXT,
-                    is_complete     INTEGER NOT NULL DEFAULT 0,
-                    created_at      TEXT NOT NULL,
-                    completed_at    TEXT
-                )
-            "#,
-        )
-        .execute(&pool)
-        .await
-        .map_err(|e| format!("Failed to create tasks table: {}", e))?;
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .map_err(|e| format!("Failed to run database migrations: {}", e))?;
 
         Ok(Self { pool })
     }
