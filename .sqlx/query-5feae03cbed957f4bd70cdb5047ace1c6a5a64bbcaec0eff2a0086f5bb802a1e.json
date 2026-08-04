@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT value FROM config WHERE key = 'active_project'",
+  "query": "\n                SELECT value\n                FROM config\n                WHERE key = 'active_project'\n            ",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "516311f31498fa58fec2615a392a281f407b673b0ee96652f9666e7f6802d8ef"
+  "hash": "5feae03cbed957f4bd70cdb5047ace1c6a5a64bbcaec0eff2a0086f5bb802a1e"
 }

@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                SELECT COUNT(*) AS \"count: i64\"\n                FROM states\n                WHERE project_id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "count: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bc21b2ce882f4b139522c9a0d304d6d19eb9239095b3da4626b7e6adbbef7aa4"
+}

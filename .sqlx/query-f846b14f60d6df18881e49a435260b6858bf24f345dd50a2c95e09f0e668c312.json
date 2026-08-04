@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, project_id, name, position AS \"position!: i32\" FROM states WHERE project_id = ? ORDER BY position ASC",
+  "query": "\n                SELECT id, project_id, name, position AS \"position!: i32\"\n                FROM states\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "97f7b0d05b55c5549fd337fee5f3b19c4bfee03a6ca3fd190700dc9ba4771afa"
+  "hash": "f846b14f60d6df18881e49a435260b6858bf24f345dd50a2c95e09f0e668c312"
 }

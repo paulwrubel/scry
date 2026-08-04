@@ -3,14 +3,16 @@ use std::fmt;
 #[derive(Debug)]
 pub enum AppError {
     Store(StorageError),
+    Config(String),
     Internal(String),
 }
 
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::Store(e) => write!(f, "Store error: {e}"),
-            AppError::Internal(msg) => write!(f, "Internal error: {msg}"),
+            AppError::Store(e) => write!(f, "store error: {e}"),
+            AppError::Config(msg) => write!(f, "config error: {msg}"),
+            AppError::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
 }
@@ -30,24 +32,22 @@ impl From<String> for AppError {
 }
 
 #[derive(Debug)]
-pub struct StorageError(pub String);
+pub enum StorageError {
+    Database(String),
+    NotFound(String),
+    Conflict(String),
+    Invalid(String),
+}
 
 impl fmt::Display for StorageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            StorageError::Database(msg) => write!(f, "database error: {msg}"),
+            StorageError::NotFound(msg) => write!(f, "not found: {msg}"),
+            StorageError::Conflict(msg) => write!(f, "conflict: {msg}"),
+            StorageError::Invalid(msg) => write!(f, "invalid operation: {msg}"),
+        }
     }
 }
 
 impl std::error::Error for StorageError {}
-
-impl From<String> for StorageError {
-    fn from(s: String) -> Self {
-        StorageError(s)
-    }
-}
-
-impl From<&str> for StorageError {
-    fn from(s: &str) -> Self {
-        StorageError(s.to_string())
-    }
-}

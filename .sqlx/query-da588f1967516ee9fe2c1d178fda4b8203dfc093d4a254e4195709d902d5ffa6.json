@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name, created_at AS \"created_at!: DateTime<Utc>\" FROM projects ORDER BY name ASC",
+  "query": "\n                SELECT id, name, created_at AS \"created_at!: DateTime<Utc>\"\n                FROM projects\n                WHERE name = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -38,7 +38,7 @@
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       false,
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "9aaa6304872b91bfe1dfd30ce5556c1ab76fe00628f3e8198ccf6b13bfea8924"
+  "hash": "da588f1967516ee9fe2c1d178fda4b8203dfc093d4a254e4195709d902d5ffa6"
 }

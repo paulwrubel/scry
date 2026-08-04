@@ -1,4 +1,3 @@
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS tasks (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -9,4 +8,3 @@ CREATE TABLE IF NOT EXISTS tasks (
     completed_at    TEXT
 );
 
-COMMIT;

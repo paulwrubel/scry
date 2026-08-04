@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT OR REPLACE INTO config (key, value)\n                VALUES ('active_project', ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "bae36618b0a94eaa879ce3cbe977e471632b5c4b2a878df907bc70c46234e6af"
+}

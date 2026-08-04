@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                INSERT INTO states (project_id, name, position)\n                VALUES (?, ?, ?)\n                RETURNING id, project_id, name, position AS \"position!: i32\"\n            ",
+  "query": "\n                INSERT INTO states (project_id, name, position)\n                VALUES (?, ?, ?)\n                RETURNING id, project_id, name, position\n            ",
   "describe": {
     "columns": [
       {
@@ -37,7 +37,7 @@
         }
       },
       {
-        "name": "position!: i32",
+        "name": "position",
         "ordinal": 3,
         "type_info": "Integer",
         "origin": {
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "71f5db9ecbe9492a0a55a18f744dee773192669d7ff0571428bdb2c6ba93ea99"
+  "hash": "72a293bd224e97d0e1b7a14bcf9222dc424a6a553c5f78877936420d1a8f4ba5"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id FROM states WHERE project_id = ? AND name = ?",
+  "query": "\n                    SELECT id\n                    FROM states\n                    WHERE project_id = ? AND id != ?\n                    ORDER BY position ASC\n                    LIMIT 1\n                ",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "44c49493481d39f57bd16e6ba0f688410f936ffeb57855e015632d087af72d83"
+  "hash": "dadd23233f1160744abde327b01b8ef6261183d7bae47f396b2bf1b1490e9dea"
 }

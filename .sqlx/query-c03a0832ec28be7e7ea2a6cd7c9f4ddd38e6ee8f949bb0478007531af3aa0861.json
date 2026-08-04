@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                DELETE FROM states\n                WHERE project_id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c03a0832ec28be7e7ea2a6cd7c9f4ddd38e6ee8f949bb0478007531af3aa0861"
+}

@@ -1,20 +1,11 @@
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::error::StorageError;
-use crate::models::{Task, TaskID};
+use crate::models::{Project, ProjectID, State, Task, TaskID};
 use crate::store::TaskStore;
-
-fn db_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_DATA_HOME") {
-        PathBuf::from(dir).join("scry")
-    } else {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home).join(".local").join("share").join("scry")
-    }
-}
 
 #[derive(Clone)]
 pub struct SqliteStore {
@@ -22,159 +13,711 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
-    pub async fn new() -> Result<Self, StorageError> {
-        let dir = db_dir();
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create scry data directory {:?}: {}", dir, e))?;
+    pub async fn new(database_url: &str) -> Result<Self, StorageError> {
+        let db_path = database_url
+            .strip_prefix("sqlite://")
+            .ok_or_else(|| StorageError::Invalid("expected sqlite:// database URL".into()))?;
 
-        let db_path = dir.join("scry.db");
+        if let Some(parent) = Path::new(db_path).parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                StorageError::Database(format!("failed to create directory {:?}: {}", parent, e))
+            })?;
+        }
 
         let connect_options = SqliteConnectOptions::new()
-            .filename(&db_path)
+            .filename(db_path)
             .create_if_missing(true);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(connect_options)
             .await
-            .map_err(|e| format!("Failed to connect to database: {}", e))?;
+            .map_err(|e| StorageError::Database(format!("failed to connect: {}", e)))?;
 
         sqlx::migrate!("./migrations")
             .run(&pool)
             .await
-            .map_err(|e| format!("Failed to run database migrations: {}", e))?;
+            .map_err(|e| StorageError::Database(format!("migration failed: {}", e)))?;
 
         Ok(Self { pool })
     }
+
+    async fn resolve_state_id(
+        &self,
+        project_id: ProjectID,
+        name: &str,
+    ) -> Result<Option<i64>, StorageError> {
+        let row = sqlx::query!(
+            r#"
+                SELECT id
+                FROM states
+                WHERE project_id = ? AND name = ?
+            "#,
+            project_id,
+            name,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to look up state: {}", e)))?;
+
+        Ok(row.map(|r| r.id))
+    }
+}
+
+fn is_unique_violation(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .map(|dbe| dbe.kind() == sqlx::error::ErrorKind::UniqueViolation)
+        .unwrap_or(false)
 }
 
 #[async_trait]
 impl TaskStore for SqliteStore {
-    async fn add(&self, description: &str) -> Result<Task, StorageError> {
+    async fn add_task(&self, title: &str, project_id: ProjectID) -> Result<Task, StorageError> {
         let now = Utc::now().to_rfc3339();
 
-        let result = sqlx::query!(
+        let state_id = self.resolve_state_id(project_id, "todo")
+            .await?
+            .ok_or_else(|| StorageError::NotFound("'todo' state not found in project".into()))?;
+
+        let row = sqlx::query!(
             r#"
-                INSERT INTO tasks (title, is_complete, created_at)
-                VALUES (?, 0, ?)
+                INSERT INTO tasks (title, description, created_at, project_id, state_id)
+                VALUES (?, '', ?, ?, ?)
                 RETURNING id
             "#,
-            description,
+            title,
             now,
+            project_id,
+            state_id,
         )
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| format!("Failed to add task: {}", e))?;
+        .map_err(|e| StorageError::Database(format!("failed to add task: {}", e)))?;
 
-        Ok(Task {
-            id: result.id,
-            title: description.to_string(),
-            description: String::new(),
-            is_complete: false,
-            created_at: Utc::now(),
-            completed_at: None,
-        })
+        sqlx::query_as!(
+            Task,
+            r#"
+                SELECT
+                    t.id,
+                    t.title,
+                    t.description,
+                    t.created_at AS "created_at!: DateTime<Utc>",
+                    t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
+                    t.project_id,
+                    t.state_id,
+                    s.name AS state_name
+                FROM tasks t
+                JOIN states s ON t.state_id = s.id
+                WHERE t.id = ? AND t.project_id = ?
+            "#,
+            row.id,
+            project_id,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to fetch new task: {}", e)))
     }
 
-    async fn complete(&self, id: TaskID) -> Result<Option<Task>, StorageError> {
-        let now = Utc::now().to_rfc3339();
+    async fn update_task(
+        &self,
+        id: TaskID,
+        project_id: ProjectID,
+        state_name: Option<&str>,
+    ) -> Result<Option<Task>, StorageError> {
+        let name = match state_name {
+            Some(s) => s,
+            None => return Err(StorageError::Invalid("no fields to update".into())),
+        };
 
+        let state_id = self.resolve_state_id(project_id, name)
+            .await?
+            .ok_or_else(|| {
+                StorageError::NotFound(format!("state '{}' not found in project", name))
+            })?;
+
+        let now = Utc::now().to_rfc3339();
         let result = sqlx::query!(
             r#"
                 UPDATE tasks
-                SET is_complete = 1, completed_at = ?
-                WHERE id = ? AND is_complete = 0
+                SET state_id = ?, completed_at = COALESCE(completed_at, ?)
+                WHERE id = ? AND project_id = ?
             "#,
+            state_id,
             now,
             id,
+            project_id,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| format!("Failed to complete task: {}", e))?;
+        .map_err(|e| StorageError::Database(format!("failed to update task: {}", e)))?;
 
         if result.rows_affected() == 0 {
             return Ok(None);
         }
 
-        let row = sqlx::query!(
+        let task = sqlx::query_as!(
+            Task,
             r#"
-                SELECT id, title, description, is_complete, created_at, completed_at
-                FROM tasks
-                WHERE id = ?
+                SELECT
+                    t.id,
+                    t.title,
+                    t.description,
+                    t.created_at AS "created_at!: DateTime<Utc>",
+                    t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
+                    t.project_id,
+                    t.state_id,
+                    s.name AS state_name
+                FROM tasks t
+                JOIN states s ON t.state_id = s.id
+                WHERE t.id = ? AND t.project_id = ?
             "#,
             id,
+            project_id,
         )
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| format!("Failed to fetch completed task: {}", e))?;
+        .map_err(|e| StorageError::Database(format!("failed to fetch updated task: {}", e)))?;
 
-        Ok(Some(Task {
-            id: row.id,
-            title: row.title,
-            description: row.description.unwrap_or_default(),
-            is_complete: row.is_complete != 0,
-            created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
-                .map_err(|e| format!("Failed to parse created_at: {}", e))?
-                .with_timezone(&Utc),
-            completed_at: match row.completed_at {
-                Some(s) => Some(
-                    chrono::DateTime::parse_from_rfc3339(&s)
-                        .map_err(|e| format!("Failed to parse completed_at: {}", e))?
-                        .with_timezone(&Utc),
-                ),
-                None => None,
-            },
-        }))
+        Ok(Some(task))
     }
 
-    async fn delete(&self, id: TaskID) -> Result<bool, StorageError> {
+    async fn delete_task(&self, id: TaskID, project_id: ProjectID) -> Result<bool, StorageError> {
         let result = sqlx::query!(
             r#"
                 DELETE FROM tasks
-                WHERE id = ?
+                WHERE id = ? AND project_id = ?
             "#,
             id,
+            project_id,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| format!("Failed to delete task: {}", e))?;
+        .map_err(|e| StorageError::Database(format!("failed to delete task: {}", e)))?;
 
         Ok(result.rows_affected() > 0)
     }
 
-    async fn list_all(&self) -> Result<Vec<Task>, StorageError> {
-        let rows = sqlx::query!(
+    async fn show_task(
+        &self,
+        id: TaskID,
+        project_id: ProjectID,
+    ) -> Result<Option<Task>, StorageError> {
+        let row = sqlx::query_as!(
+            Task,
             r#"
-                SELECT id, title, description, is_complete, created_at, completed_at
-                FROM tasks
-                ORDER BY id ASC
+                SELECT
+                    t.id,
+                    t.title,
+                    t.description,
+                    t.created_at AS "created_at!: DateTime<Utc>",
+                    t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
+                    t.project_id,
+                    t.state_id,
+                    s.name AS state_name
+                FROM tasks t
+                JOIN states s ON t.state_id = s.id
+                WHERE t.id = ? AND t.project_id = ?
+            "#,
+            id,
+            project_id,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to show task: {}", e)))?;
+
+        Ok(row)
+    }
+
+    async fn list_tasks(
+        &self,
+        project_id: ProjectID,
+        state_name: Option<&str>,
+    ) -> Result<Vec<Task>, StorageError> {
+        let rows = if let Some(name) = state_name {
+            match self.resolve_state_id(project_id, name).await? {
+                Some(sid) => {
+                    sqlx::query_as!(
+                        Task,
+                        r#"
+                            SELECT
+                                t.id,
+                                t.title,
+                                t.description,
+                                t.created_at AS "created_at!: DateTime<Utc>",
+                                t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
+                                t.project_id,
+                                t.state_id,
+                                s.name AS state_name
+                            FROM tasks t
+                            JOIN states s ON t.state_id = s.id
+                            WHERE t.project_id = ? AND t.state_id = ?
+                            ORDER BY t.id ASC
+                        "#,
+                        project_id,
+                        sid,
+                    )
+                    .fetch_all(&self.pool)
+                    .await
+                }
+                None => return Ok(vec![]),
+            }
+        } else {
+            sqlx::query_as!(
+                Task,
+                r#"
+                    SELECT
+                        t.id,
+                        t.title,
+                        t.description,
+                        t.created_at AS "created_at!: DateTime<Utc>",
+                        t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
+                        t.project_id,
+                        t.state_id,
+                        s.name AS state_name
+                    FROM tasks t
+                    JOIN states s ON t.state_id = s.id
+                    WHERE t.project_id = ?
+                    ORDER BY t.id ASC
+                "#,
+                project_id,
+            )
+            .fetch_all(&self.pool)
+            .await
+        };
+
+        rows.map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))
+    }
+
+    async fn create_project(&self, name: &str) -> Result<Project, StorageError> {
+        let now = Utc::now().to_rfc3339();
+
+        let result = sqlx::query_as!(
+            Project,
+            r#"
+                INSERT INTO projects (name, created_at)
+                VALUES (?, ?)
+                RETURNING id, name, created_at AS "created_at!: DateTime<Utc>"
+            "#,
+            name,
+            now,
+        )
+        .fetch_one(&self.pool)
+        .await;
+
+        let project = match result {
+            Ok(r) => r,
+            Err(e) if is_unique_violation(&e) => {
+                return Err(StorageError::Conflict(format!(
+                    "project '{}' already exists",
+                    name
+                )));
+            }
+            Err(e) => {
+                return Err(StorageError::Database(format!(
+                    "failed to create project: {}",
+                    e
+                )));
+            }
+        };
+
+        sqlx::query!(
+            r#"
+                INSERT INTO states (project_id, name, position)
+                VALUES (?, 'todo', 0), (?, 'done', 1)
+            "#,
+            project.id,
+            project.id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to seed states: {}", e)))?;
+
+        sqlx::query!(
+            r#"
+                INSERT OR REPLACE INTO config (key, value)
+                VALUES ('active_project', ?)
+            "#,
+            project.name,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to set active project: {}", e)))?;
+
+        Ok(project)
+    }
+
+    async fn delete_project(&self, name: &str) -> Result<(), StorageError> {
+        if name == "default" {
+            return Err(StorageError::Invalid(
+                "cannot delete the default project".into(),
+            ));
+        }
+
+        let project = self
+            .get_project_by_name(name)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("project '{}' not found", name)))?;
+
+        sqlx::query!(
+            r#"
+                DELETE FROM tasks
+                WHERE project_id = ?
+            "#,
+            project.id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to delete tasks: {}", e)))?;
+
+        sqlx::query!(
+            r#"
+                DELETE FROM states
+                WHERE project_id = ?
+            "#,
+            project.id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to delete states: {}", e)))?;
+
+        sqlx::query!(
+            r#"
+                DELETE FROM projects
+                WHERE id = ?
+            "#,
+            project.id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to delete project: {}", e)))?;
+
+        let active = sqlx::query!(
+            r#"
+                SELECT value
+                FROM config
+                WHERE key = 'active_project'
+            "#,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| {
+            StorageError::Database(format!("failed to read active project: {}", e))
+        })?;
+
+        if active.is_some_and(|r| r.value == name) {
+            sqlx::query!(
+                r#"
+                    INSERT OR REPLACE INTO config (key, value)
+                    VALUES ('active_project', 'default')
+                "#,
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!("failed to reset active project: {}", e))
+            })?;
+        }
+
+        Ok(())
+    }
+
+    async fn list_projects(&self) -> Result<Vec<Project>, StorageError> {
+        sqlx::query_as!(
+            Project,
+            r#"
+                SELECT id, name, created_at AS "created_at!: DateTime<Utc>"
+                FROM projects
+                ORDER BY name ASC
             "#,
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| format!("Failed to list tasks: {}", e))?;
+        .map_err(|e| StorageError::Database(format!("failed to list projects: {}", e)))
+    }
 
-        let mut tasks = Vec::with_capacity(rows.len());
-        for row in rows {
-            tasks.push(Task {
-                id: row.id,
-                title: row.title,
-                description: row.description.unwrap_or_default(),
-                is_complete: row.is_complete != 0,
-                created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
-                    .map_err(|e| format!("Failed to parse created_at: {}", e))?
-                    .with_timezone(&Utc),
-                completed_at: match row.completed_at {
-                    Some(s) => Some(
-                        chrono::DateTime::parse_from_rfc3339(&s)
-                            .map_err(|e| format!("Failed to parse completed_at: {}", e))?
-                            .with_timezone(&Utc),
-                    ),
-                    None => None,
-                },
-            });
+    async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError> {
+        sqlx::query_as!(
+            Project,
+            r#"
+                SELECT id, name, created_at AS "created_at!: DateTime<Utc>"
+                FROM projects
+                WHERE name = ?
+            "#,
+            name,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to look up project: {}", e)))
+    }
+
+    async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError> {
+        sqlx::query_as!(
+            Project,
+            r#"
+                SELECT id, name, created_at AS "created_at!: DateTime<Utc>"
+                FROM projects
+                WHERE id = ?
+            "#,
+            id,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to look up project: {}", e)))
+    }
+
+    async fn get_active_project(&self) -> Result<Project, StorageError> {
+        let row = sqlx::query!(
+            r#"
+                SELECT value
+                FROM config
+                WHERE key = 'active_project'
+            "#,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| {
+            StorageError::Database(format!("failed to read active project: {}", e))
+        })?;
+
+        let name = if let Some(r) = row {
+            r.value
+        } else {
+            sqlx::query!(
+                r#"
+                    INSERT OR REPLACE INTO config (key, value)
+                    VALUES ('active_project', 'default')
+                "#,
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!("failed to seed active project: {}", e))
+            })?;
+            "default".to_string()
+        };
+
+        self.get_project_by_name(&name)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("project '{}' not found", name)))
+    }
+
+    async fn set_active_project(&self, name: &str) -> Result<(), StorageError> {
+        self.get_project_by_name(name)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("project '{}' not found", name)))?;
+
+        sqlx::query!(
+            r#"
+                INSERT OR REPLACE INTO config (key, value)
+                VALUES ('active_project', ?)
+            "#,
+            name,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to set active project: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn add_state(&self, project_id: ProjectID, name: &str) -> Result<State, StorageError> {
+        let row = sqlx::query!(
+            r#"
+                SELECT COUNT(*) AS count
+                FROM states
+                WHERE project_id = ?
+            "#,
+            project_id,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to count states: {}", e)))?;
+
+        let inserted = sqlx::query!(
+            r#"
+                INSERT INTO states (project_id, name, position)
+                VALUES (?, ?, ?)
+                RETURNING id, project_id, name, position
+            "#,
+            project_id,
+            name,
+            row.count,
+        )
+        .fetch_one(&self.pool)
+        .await;
+
+        match inserted {
+            Ok(row) => Ok(State {
+                id: row.id.expect("RETURNING guarantees id"),
+                project_id: row.project_id,
+                name: row.name,
+                position: row.position as i32,
+            }),
+            Err(e) if is_unique_violation(&e) => {
+                Err(StorageError::Conflict(format!(
+                    "state '{}' already exists",
+                    name
+                )))
+            }
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to add state: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn remove_state(
+        &self,
+        project_id: ProjectID,
+        name: &str,
+        force: bool,
+    ) -> Result<(), StorageError> {
+        let state_id = self.resolve_state_id(project_id, name)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("state '{}' not found", name)))?;
+
+        let row = sqlx::query!(
+            r#"
+                SELECT COUNT(*) AS "count: i64"
+                FROM states
+                WHERE project_id = ?
+            "#,
+            project_id,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to count states: {}", e)))?;
+
+        if row.count <= 1 {
+            return Err(StorageError::Invalid(
+                "cannot remove the last state of a project".into(),
+            ));
         }
 
-        Ok(tasks)
+        let row = sqlx::query!(
+            r#"
+                SELECT COUNT(*) AS "count: i64"
+                FROM tasks
+                WHERE project_id = ? AND state_id = ?
+            "#,
+            project_id,
+            state_id,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to count tasks: {}", e)))?;
+
+        if row.count > 0 && !force {
+            return Err(StorageError::Conflict(format!(
+                "state '{}' has {} tasks. use force to move them",
+                name, row.count
+            )));
+        }
+
+        if force && row.count > 0 {
+            let fallback = sqlx::query!(
+                r#"
+                    SELECT id
+                    FROM states
+                    WHERE project_id = ? AND id != ?
+                    ORDER BY position ASC
+                    LIMIT 1
+                "#,
+                project_id,
+                state_id,
+            )
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!("failed to find fallback state: {}", e))
+            })?;
+
+            sqlx::query!(
+                r#"
+                    UPDATE tasks
+                    SET state_id = ?
+                    WHERE project_id = ? AND state_id = ?
+                "#,
+                fallback.id,
+                project_id,
+                state_id,
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to move tasks: {}", e)))?;
+        }
+
+        sqlx::query!(
+            r#"
+                DELETE FROM states
+                WHERE project_id = ? AND id = ?
+            "#,
+            project_id,
+            state_id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to remove state: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn rename_state(
+        &self,
+        project_id: ProjectID,
+        old_name: &str,
+        new_name: &str,
+    ) -> Result<(), StorageError> {
+        let exists = self.resolve_state_id(project_id, old_name)
+            .await?
+            .is_some();
+        if !exists {
+            return Err(StorageError::NotFound(format!(
+                "state '{}' not found",
+                old_name
+            )));
+        }
+
+        if self.resolve_state_id(project_id, new_name)
+            .await?
+            .is_some()
+        {
+            return Err(StorageError::Conflict(format!(
+                "state '{}' already exists",
+                new_name
+            )));
+        }
+
+        sqlx::query!(
+            r#"
+                UPDATE states
+                SET name = ?
+                WHERE project_id = ? AND name = ?
+            "#,
+            new_name,
+            project_id,
+            old_name,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to rename state: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn list_states(&self, project_id: ProjectID) -> Result<Vec<State>, StorageError> {
+        sqlx::query_as!(
+            State,
+            r#"
+                SELECT id, project_id, name, position AS "position!: i32"
+                FROM states
+                WHERE project_id = ?
+                ORDER BY position ASC
+            "#,
+            project_id,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to list states: {}", e)))
     }
 }
