@@ -1,4 +1,3 @@
-
 CREATE TABLE tasks_new (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     title        TEXT NOT NULL,
@@ -15,6 +14,4 @@ INSERT INTO tasks_new (id, title, description, created_at, completed_at, project
     FROM tasks;
 
 DROP TABLE tasks;
-
 ALTER TABLE tasks_new RENAME TO tasks;
-

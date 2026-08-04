@@ -1,4 +1,3 @@
-
 CREATE TABLE IF NOT EXISTS tasks (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     title           TEXT NOT NULL,
@@ -7,4 +6,3 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at      TEXT NOT NULL,
     completed_at    TEXT
 );
-
