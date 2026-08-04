@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                INSERT INTO tasks (title, is_complete, created_at)\n                VALUES (?, 0, ?)\n                RETURNING id\n            ",
+  "query": "SELECT id FROM states WHERE project_id = ? AND id != ? ORDER BY position ASC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "tasks",
+            "table": "states",
             "name": "id"
           }
         }
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "05fea295f77dcc02a2649a6d943ae946fa71feea1d75b36b8498d0f20d63fd06"
+  "hash": "2c6dbb98da97c4d8098cd2e016fef808d1d6c4a3e10b9d070b30d1e0c942c9d5"
 }

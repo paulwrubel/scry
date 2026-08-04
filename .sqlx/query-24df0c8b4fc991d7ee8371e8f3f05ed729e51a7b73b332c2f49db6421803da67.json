@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE states SET name = ? WHERE project_id = ? AND name = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "24df0c8b4fc991d7ee8371e8f3f05ed729e51a7b73b332c2f49db6421803da67"
+}

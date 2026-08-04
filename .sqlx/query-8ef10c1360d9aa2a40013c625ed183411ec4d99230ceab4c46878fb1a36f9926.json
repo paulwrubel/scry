@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                            SELECT\n                                t.id,\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at!: DateTime<Utc>\",\n                                t.completed_at AS \"completed_at!: Option<DateTime<Utc>>\",\n                                t.project_id,\n                                t.state_id,\n                                s.name AS state_name\n                            FROM tasks t\n                            JOIN states s ON t.state_id = s.id\n                            WHERE t.project_id = ? AND t.state_id = ?\n                            ORDER BY t.id ASC\n                        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "completed_at!: Option<DateTime<Utc>>",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "completed_at"
+          }
+        }
+      },
+      {
+        "name": "project_id",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "name": "state_id",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "state_id"
+          }
+        }
+      },
+      {
+        "name": "state_name",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "states",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8ef10c1360d9aa2a40013c625ed183411ec4d99230ceab4c46878fb1a36f9926"
+}
