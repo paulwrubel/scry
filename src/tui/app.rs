@@ -391,11 +391,20 @@ impl App {
                     _ => None,
                 }
             }
-            PopupState::ConfirmDelete { task_id, .. } => {
+            PopupState::ConfirmDelete {
+                task_id, confirm, ..
+            } => {
                 let task_id = *task_id;
                 match code {
                     KeyCode::Esc | KeyCode::Char('n') => Some(Message::DismissPopup),
                     KeyCode::Char('y') => Some(Message::ExecuteDelete(task_id)),
+                    KeyCode::Enter => {
+                        if *confirm {
+                            Some(Message::ExecuteDelete(task_id))
+                        } else {
+                            Some(Message::DismissPopup)
+                        }
+                    }
                     KeyCode::Left | KeyCode::Right => Some(Message::ToggleDeleteConfirm),
                     _ => None,
                 }
@@ -493,7 +502,7 @@ impl App {
                     self.popup = Some(PopupState::ConfirmDelete {
                         task_id: id,
                         task_title: task.title.clone(),
-                        confirm: true,
+                        confirm: false,
                     });
                 }
                 None

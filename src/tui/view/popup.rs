@@ -123,9 +123,9 @@ fn render_confirm_delete(frame: &mut Frame, task_title: &str, confirm: bool) {
 
     let button_line = Line::from(vec![
         Span::styled("        ", Style::default()),
-        Span::styled("[y] Yes", yes_style),
-        Span::styled("   ", Style::default()),
         Span::styled("[n] No", no_style),
+        Span::styled("   ", Style::default()),
+        Span::styled("[y] Yes", yes_style),
         Span::styled("        ", Style::default()),
     ]);
 
