@@ -32,7 +32,7 @@ clippy: setup-database
     cargo clippy -- -D warnings
 
 # shared release logic — bump version, update Cargo.toml, commit, tag
-_release type:
+_release type do_push="":
     @current=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/'); \
     IFS=. read major minor patch <<< "$current"; \
     case "{{type}}" in \
@@ -52,9 +52,13 @@ _release type:
     git add Cargo.toml Cargo.lock; \
     git commit -m "v$next"; \
     git tag "v$next"; \
-    echo ""; \
-    echo "Release prepared locally. To publish, run:"; \
-    echo "  git push origin main v$next"
+    if [ "{{do_push}}" = "push" ]; then \
+        git push origin main "v$next"; \
+    else \
+        echo ""; \
+        echo "Release prepared locally. To publish, run:"; \
+        echo "  git push origin main v$next"; \
+    fi
 
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]
@@ -70,6 +74,21 @@ release-minor:
 [group('release')]
 release-major:
     @just _release major
+
+# bump patch version and push to origin
+[group('release')]
+release-patch-and-push:
+    @just _release patch push
+
+# bump minor version and push to origin
+[group('release')]
+release-minor-and-push:
+    @just _release minor push
+
+# bump major version and push to origin
+[group('release')]
+release-major-and-push:
+    @just _release major push
 
 # build an optimized release binary
 [group('build')]
