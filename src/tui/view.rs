@@ -39,10 +39,14 @@ pub fn render(frame: &mut Frame, app: &App) {
         .split(h_layout[1]);
 
     task_list::render(frame, app, layout[1]);
-    new_task_input::render(frame, &app.input, layout[2], app.is_input_selected());
+    let cursor_pos = new_task_input::render(frame, &app.input, layout[2], app.is_input_selected());
     status_bar::render(frame, app, layout[3]);
 
     frame.render_widget(block, area);
+
+    if let Some((col, row)) = cursor_pos {
+        frame.set_cursor_position((col, row));
+    }
 
     popup::render(frame, app);
 }

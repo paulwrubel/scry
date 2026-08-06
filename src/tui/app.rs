@@ -1,6 +1,7 @@
 use std::future::Future;
 
 use crossterm::{
+    cursor::{SetCursorStyle, Show},
     event::{
         self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
     },
@@ -121,8 +122,14 @@ impl App {
         enable_raw_mode()
             .map_err(|e| AppError::Internal(format!("failed to enable raw mode: {}", e)))?;
         let mut stdout = std::io::stdout();
-        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
-            .map_err(|e| AppError::Internal(format!("failed to enter alternate screen: {}", e)))?;
+        execute!(
+            stdout,
+            EnterAlternateScreen,
+            EnableMouseCapture,
+            SetCursorStyle::BlinkingBlock,
+            Show
+        )
+        .map_err(|e| AppError::Internal(format!("failed to enter alternate screen: {}", e)))?;
 
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)

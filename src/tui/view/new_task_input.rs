@@ -7,7 +7,12 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
-pub fn render(frame: &mut Frame, state: &InputState, area: Rect, selected: bool) {
+pub fn render(
+    frame: &mut Frame,
+    state: &InputState,
+    area: Rect,
+    selected: bool,
+) -> Option<(u16, u16)> {
     use ratatui::layout::{Constraint, Direction, Layout};
 
     // build a block around the input area when selected or focused
@@ -35,32 +40,9 @@ pub fn render(frame: &mut Frame, state: &InputState, area: Rect, selected: bool)
 
     let lines = if state.focused {
         if state.buffer.is_empty() {
-            vec![Line::from(vec![Span::styled(
-                " ",
-                Style::default().add_modifier(Modifier::REVERSED),
-            )])]
+            vec![Line::from(Span::raw(" "))]
         } else {
-            let cursor_pos = state.cursor_position.min(state.buffer.len());
-            let before = &state.buffer[..cursor_pos];
-            let cursor_char = if cursor_pos < state.buffer.len() {
-                &state.buffer[cursor_pos..cursor_pos + 1]
-            } else {
-                " "
-            };
-            let after = if cursor_pos + 1 < state.buffer.len() {
-                &state.buffer[cursor_pos + 1..]
-            } else {
-                ""
-            };
-
-            vec![Line::from(vec![
-                Span::raw(before),
-                Span::styled(
-                    cursor_char,
-                    Style::default().add_modifier(Modifier::REVERSED),
-                ),
-                Span::raw(after),
-            ])]
+            vec![Line::from(Span::raw(&state.buffer))]
         }
     } else if selected {
         vec![Line::from(Span::styled(
@@ -77,4 +59,15 @@ pub fn render(frame: &mut Frame, state: &InputState, area: Rect, selected: bool)
     frame.render_widget(block, area);
     let para = Paragraph::new(lines).wrap(Wrap { trim: false });
     frame.render_widget(para, text_area);
+
+    if state.focused {
+        let col = if state.buffer.is_empty() {
+            text_area.x
+        } else {
+            text_area.x + state.cursor_position.min(state.buffer.len()) as u16
+        };
+        Some((col, text_area.y))
+    } else {
+        None
+    }
 }
