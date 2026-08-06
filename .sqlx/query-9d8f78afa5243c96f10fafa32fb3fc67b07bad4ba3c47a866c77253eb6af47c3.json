@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n                            SELECT\n                                t.id,\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at!: DateTime<Utc>\",\n                                t.project_id,\n                                t.state_id,\n                                t.position AS \"position!: i32\"\n                            FROM tasks t\n                            WHERE t.project_id = ?\n                            ORDER BY t.position ASC, t.id ASC\n                ",
+  "query": "\n                            SELECT\n                                t.id AS \"id: i64\",\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at: DateTime<Utc>\",\n                                t.project_id AS \"project_id: i64\",\n                                t.state_id AS \"state_id: i64\",\n                                t.position AS \"position: i32\"\n                            FROM tasks t\n                            WHERE t.project_id = ? AND t.state_id = ?\n                            ORDER BY t.position ASC, t.id ASC\n                        ",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id: i64",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
@@ -37,7 +37,7 @@
         }
       },
       {
-        "name": "created_at!: DateTime<Utc>",
+        "name": "created_at: DateTime<Utc>",
         "ordinal": 3,
         "type_info": "Text",
         "origin": {
@@ -48,7 +48,7 @@
         }
       },
       {
-        "name": "project_id",
+        "name": "project_id: i64",
         "ordinal": 4,
         "type_info": "Integer",
         "origin": {
@@ -59,7 +59,7 @@
         }
       },
       {
-        "name": "state_id",
+        "name": "state_id: i64",
         "ordinal": 5,
         "type_info": "Integer",
         "origin": {
@@ -70,7 +70,7 @@
         }
       },
       {
-        "name": "position!: i32",
+        "name": "position: i32",
         "ordinal": 6,
         "type_info": "Integer",
         "origin": {
@@ -82,7 +82,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false,
@@ -94,5 +94,5 @@
       false
     ]
   },
-  "hash": "ed3397c2e10bcc05764d9638d1d378d64e98a1aea9972454741ec38b7de8556c"
+  "hash": "9d8f78afa5243c96f10fafa32fb3fc67b07bad4ba3c47a866c77253eb6af47c3"
 }

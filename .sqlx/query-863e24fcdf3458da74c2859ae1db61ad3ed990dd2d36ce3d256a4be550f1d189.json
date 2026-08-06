@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n                            SELECT\n                                t.id,\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at!: DateTime<Utc>\",\n                                t.project_id,\n                                t.state_id,\n                                t.position AS \"position!: i32\"\n                            FROM tasks t\n                            WHERE t.project_id = ? AND t.state_id = ?\n                            ORDER BY t.position ASC, t.id ASC\n                        ",
+  "query": "\n                SELECT\n                    t.id AS \"id: i64\",\n                    t.title,\n                    t.description,\n                    t.created_at AS \"created_at: DateTime<Utc>\",\n                    t.project_id AS \"project_id: i64\",\n                    t.state_id AS \"state_id: i64\",\n                    t.position AS \"position: i32\"\n                FROM tasks t\n                WHERE t.id = ? AND t.project_id = ?\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id: i64",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
@@ -37,7 +37,7 @@
         }
       },
       {
-        "name": "created_at!: DateTime<Utc>",
+        "name": "created_at: DateTime<Utc>",
         "ordinal": 3,
         "type_info": "Text",
         "origin": {
@@ -48,7 +48,7 @@
         }
       },
       {
-        "name": "project_id",
+        "name": "project_id: i64",
         "ordinal": 4,
         "type_info": "Integer",
         "origin": {
@@ -59,7 +59,7 @@
         }
       },
       {
-        "name": "state_id",
+        "name": "state_id: i64",
         "ordinal": 5,
         "type_info": "Integer",
         "origin": {
@@ -70,7 +70,7 @@
         }
       },
       {
-        "name": "position!: i32",
+        "name": "position: i32",
         "ordinal": 6,
         "type_info": "Integer",
         "origin": {
@@ -94,5 +94,5 @@
       false
     ]
   },
-  "hash": "e509d2a76d61b01009082f2da26d0bffff3a6b72317cb19e126782ec54446efd"
+  "hash": "863e24fcdf3458da74c2859ae1db61ad3ed990dd2d36ce3d256a4be550f1d189"
 }

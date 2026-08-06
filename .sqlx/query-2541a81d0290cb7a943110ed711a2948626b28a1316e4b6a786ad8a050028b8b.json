@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id, name, created_at AS \"created_at!: DateTime<Utc>\"\n                FROM projects\n                ORDER BY name ASC\n            ",
+  "query": "\n                INSERT INTO projects (name, created_at)\n                VALUES (?, ?)\n                RETURNING id AS \"id: i64\", name, created_at AS \"created_at: DateTime<Utc>\"\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id: i64",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
@@ -26,7 +26,7 @@
         }
       },
       {
-        "name": "created_at!: DateTime<Utc>",
+        "name": "created_at: DateTime<Utc>",
         "ordinal": 2,
         "type_info": "Text",
         "origin": {
@@ -38,7 +38,7 @@
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 2
     },
     "nullable": [
       false,
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "62650b26df7f023efd23aad2f984dd1f6ab9aa1ce2f725843ef20e4e2417f17b"
+  "hash": "2541a81d0290cb7a943110ed711a2948626b28a1316e4b6a786ad8a050028b8b"
 }

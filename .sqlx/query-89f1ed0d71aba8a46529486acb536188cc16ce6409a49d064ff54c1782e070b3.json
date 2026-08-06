@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id, name, created_at AS \"created_at!: DateTime<Utc>\"\n                FROM projects\n                WHERE name = ?\n            ",
+  "query": "\n                SELECT id AS \"id: i64\", name, created_at AS \"created_at: DateTime<Utc>\"\n                FROM projects\n                WHERE id = ?\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id: i64",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
@@ -26,7 +26,7 @@
         }
       },
       {
-        "name": "created_at!: DateTime<Utc>",
+        "name": "created_at: DateTime<Utc>",
         "ordinal": 2,
         "type_info": "Text",
         "origin": {
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "da588f1967516ee9fe2c1d178fda4b8203dfc093d4a254e4195709d902d5ffa6"
+  "hash": "89f1ed0d71aba8a46529486acb536188cc16ce6409a49d064ff54c1782e070b3"
 }
