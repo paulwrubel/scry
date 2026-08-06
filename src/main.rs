@@ -2,12 +2,13 @@ mod config;
 mod error;
 mod models;
 mod store;
+mod tui;
 
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use config::ScryConfig;
 use error::AppError;
-use store::{sqlite::SqliteStore, TaskStore};
+use store::{TaskStore, sqlite::SqliteStore};
 
 #[derive(Parser)]
 #[command(name = "scry", about = "A task manager for the terminal", version)]
@@ -17,7 +18,7 @@ struct Cli {
     project: Option<String>,
 
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -125,9 +126,14 @@ async fn main() -> Result<(), AppError> {
     let db_url = config.resolve_database_url();
     let store = SqliteStore::new(&db_url).await?;
 
+    let Some(command) = cli.command else {
+        let mut app = tui::App::from_store(&store).await?;
+        return app.run(&store).await;
+    };
+
     let (project_id, project_name) = resolve_project(&store, cli.project.as_deref()).await?;
 
-    match cli.command {
+    match command {
         Command::Add { description } => {
             let task = store.add_task(&description, project_id).await?;
             println!(
@@ -135,12 +141,10 @@ async fn main() -> Result<(), AppError> {
                 task.id, project_name, task.state_name, task.title
             );
         }
-        Command::Move { id, state } => {
-            match store.move_task(id, project_id, &state).await? {
-                Some(_) => println!("Moved task {} --> \"{}\"", id, state),
-                None => eprintln!("Task {} not found in \"{}\"", id, project_name),
-            }
-        }
+        Command::Move { id, state } => match store.move_task(id, project_id, &state).await? {
+            Some(_) => println!("Moved task {} --> \"{}\"", id, state),
+            None => eprintln!("Task {} not found in \"{}\"", id, project_name),
+        },
         Command::Update { id, state } => {
             let Some(state_name) = state else {
                 eprintln!("No flags provided. Use 'scry update --help' for available options.");
@@ -160,28 +164,28 @@ async fn main() -> Result<(), AppError> {
                 eprintln!("Task {} not found in \"{}\"", id, project_name);
             }
         }
-        Command::Show { id } => {
-            match store.show_task(id, project_id).await? {
-                Some(task) => {
-                    println!("Task {}", task.id);
-                    println!("  Project:   {}", project_name);
-                    println!("  Title:     {}", task.title);
-                    println!("  State:     {}", task.state_name);
-                    println!(
-                        "  Created:   {}",
-                        task.created_at.with_timezone(&Local).format("%Y-%m-%d %I:%M %p %Z")
-                    );
-                    match task.completed_at {
-                        Some(ts) => println!(
-                            "  Completed: {}",
-                            ts.with_timezone(&Local).format("%Y-%m-%d %I:%M %p %Z")
-                        ),
-                        None => println!("  Completed: -"),
-                    }
+        Command::Show { id } => match store.show_task(id, project_id).await? {
+            Some(task) => {
+                println!("Task {}", task.id);
+                println!("  Project:   {}", project_name);
+                println!("  Title:     {}", task.title);
+                println!("  State:     {}", task.state_name);
+                println!(
+                    "  Created:   {}",
+                    task.created_at
+                        .with_timezone(&Local)
+                        .format("%Y-%m-%d %I:%M %p %Z")
+                );
+                match task.completed_at {
+                    Some(ts) => println!(
+                        "  Completed: {}",
+                        ts.with_timezone(&Local).format("%Y-%m-%d %I:%M %p %Z")
+                    ),
+                    None => println!("  Completed: -"),
                 }
-                None => eprintln!("Task {} not found in \"{}\"", id, project_name),
             }
-        }
+            None => eprintln!("Task {} not found in \"{}\"", id, project_name),
+        },
         Command::List { state } => {
             let tasks = store.list_tasks(project_id, state.as_deref()).await?;
             let states = store.list_states(project_id).await?;
@@ -207,7 +211,11 @@ async fn main() -> Result<(), AppError> {
 
                 println!("{} ({}):", state_def.name, state_tasks.len());
                 for task in &state_tasks {
-                    let icon = if task.completed_at.is_some() { "[x]" } else { "[ ]" };
+                    let icon = if task.completed_at.is_some() {
+                        "[x]"
+                    } else {
+                        "[ ]"
+                    };
                     println!("  {}  {}  {}", task.id, icon, task.title);
                 }
                 if !state_tasks.is_empty() {
@@ -219,9 +227,7 @@ async fn main() -> Result<(), AppError> {
             ProjectCommand::List => {
                 let projects = store.list_projects().await?;
                 if projects.is_empty() {
-                    println!(
-                        "No projects. Run 'scry project create <name>' to create one."
-                    );
+                    println!("No projects. Run 'scry project create <name>' to create one.");
                 } else {
                     for p in &projects {
                         let marker = if p.id == project_id { "* " } else { "  " };

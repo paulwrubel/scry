@@ -26,8 +26,9 @@ impl ScryConfig {
 
         if !path.exists() {
             if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| AppError::Config(format!("failed to create config directory: {}", e)))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    AppError::Config(format!("failed to create config directory: {}", e))
+                })?;
             }
             let template = DEFAULT_CONFIG_TEMPLATE;
             std::fs::write(&path, template)
@@ -55,7 +56,10 @@ impl ScryConfig {
             PathBuf::from(d).join("scry")
         } else {
             let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            PathBuf::from(home).join(".local").join("share").join("scry")
+            PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("scry")
         };
         format!("sqlite://{}", dir.join("scry.db").display())
     }
@@ -66,6 +70,9 @@ fn config_path() -> PathBuf {
         PathBuf::from(dir).join("scry").join("config.toml")
     } else {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home).join(".config").join("scry").join("config.toml")
+        PathBuf::from(home)
+            .join(".config")
+            .join("scry")
+            .join("config.toml")
     }
 }

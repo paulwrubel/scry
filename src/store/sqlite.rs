@@ -75,7 +75,8 @@ impl TaskStore for SqliteStore {
     async fn add_task(&self, title: &str, project_id: ProjectID) -> Result<Task, StorageError> {
         let now = Utc::now().to_rfc3339();
 
-        let state_id = self.resolve_state_id(project_id, "todo")
+        let state_id = self
+            .resolve_state_id(project_id, "todo")
             .await?
             .ok_or_else(|| StorageError::NotFound("'todo' state not found in project".into()))?;
 
@@ -129,7 +130,8 @@ impl TaskStore for SqliteStore {
             None => return Err(StorageError::Invalid("no fields to update".into())),
         };
 
-        let state_id = self.resolve_state_id(project_id, name)
+        let state_id = self
+            .resolve_state_id(project_id, name)
             .await?
             .ok_or_else(|| {
                 StorageError::NotFound(format!("state '{}' not found in project", name))
@@ -400,9 +402,7 @@ impl TaskStore for SqliteStore {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| {
-            StorageError::Database(format!("failed to read active project: {}", e))
-        })?;
+        .map_err(|e| StorageError::Database(format!("failed to read active project: {}", e)))?;
 
         if active.is_some_and(|r| r.value == name) {
             sqlx::query!(
@@ -475,9 +475,7 @@ impl TaskStore for SqliteStore {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| {
-            StorageError::Database(format!("failed to read active project: {}", e))
-        })?;
+        .map_err(|e| StorageError::Database(format!("failed to read active project: {}", e)))?;
 
         let name = if let Some(r) = row {
             r.value
@@ -490,9 +488,7 @@ impl TaskStore for SqliteStore {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| {
-                StorageError::Database(format!("failed to seed active project: {}", e))
-            })?;
+            .map_err(|e| StorageError::Database(format!("failed to seed active project: {}", e)))?;
             "default".to_string()
         };
 
@@ -553,12 +549,10 @@ impl TaskStore for SqliteStore {
                 name: row.name,
                 position: row.position as i32,
             }),
-            Err(e) if is_unique_violation(&e) => {
-                Err(StorageError::Conflict(format!(
-                    "state '{}' already exists",
-                    name
-                )))
-            }
+            Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
+                "state '{}' already exists",
+                name
+            ))),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to add state: {}",
                 e
@@ -572,7 +566,8 @@ impl TaskStore for SqliteStore {
         name: &str,
         force: bool,
     ) -> Result<(), StorageError> {
-        let state_id = self.resolve_state_id(project_id, name)
+        let state_id = self
+            .resolve_state_id(project_id, name)
             .await?
             .ok_or_else(|| StorageError::NotFound(format!("state '{}' not found", name)))?;
 
@@ -628,9 +623,7 @@ impl TaskStore for SqliteStore {
             )
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| {
-                StorageError::Database(format!("failed to find fallback state: {}", e))
-            })?;
+            .map_err(|e| StorageError::Database(format!("failed to find fallback state: {}", e)))?;
 
             sqlx::query!(
                 r#"
@@ -668,9 +661,7 @@ impl TaskStore for SqliteStore {
         old_name: &str,
         new_name: &str,
     ) -> Result<(), StorageError> {
-        let exists = self.resolve_state_id(project_id, old_name)
-            .await?
-            .is_some();
+        let exists = self.resolve_state_id(project_id, old_name).await?.is_some();
         if !exists {
             return Err(StorageError::NotFound(format!(
                 "state '{}' not found",
@@ -678,10 +669,7 @@ impl TaskStore for SqliteStore {
             )));
         }
 
-        if self.resolve_state_id(project_id, new_name)
-            .await?
-            .is_some()
-        {
+        if self.resolve_state_id(project_id, new_name).await?.is_some() {
             return Err(StorageError::Conflict(format!(
                 "state '{}' already exists",
                 new_name

@@ -5,7 +5,6 @@ use crate::models::{Project, ProjectID, State, Task, TaskID};
 
 #[async_trait]
 pub trait TaskStore {
-
     /// Add a new task to a project. The task is created in the "todo" state.
     async fn add_task(&self, title: &str, project_id: ProjectID) -> Result<Task, StorageError>;
 
