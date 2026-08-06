@@ -11,7 +11,11 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
     let selected_id = app.selected_task().map(|t| t.id);
 
-    for state in &app.states {
+    for (i, state) in app.states.iter().enumerate() {
+        if i > 0 {
+            lines.push(Line::from(""));
+        }
+
         let state_tasks: Vec<_> = app
             .tasks
             .iter()
