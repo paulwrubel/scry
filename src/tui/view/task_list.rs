@@ -42,7 +42,7 @@ fn render_task_row(task: &Task, selected: bool, is_completed: bool) -> Line<'_> 
     let Task { id, title, .. } = task;
 
     let checkbox = if is_completed { "[x]" } else { "[ ]" };
-    let row_text = format!(" {id:>3} {checkbox} | {title}");
+    let row_text = format!(" {id:>3} {checkbox} {title}");
 
     let style = if selected {
         Style::default().add_modifier(Modifier::REVERSED)
