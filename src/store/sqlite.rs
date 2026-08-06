@@ -92,13 +92,18 @@ impl TaskStore for SqliteStore {
 
         let row = sqlx::query!(
             r#"
-                INSERT INTO tasks (title, description, created_at, project_id, state_id)
-                VALUES (?, '', ?, ?, ?)
+                INSERT INTO tasks (title, description, created_at, project_id, state_id, position)
+                VALUES (?, '', ?, ?, ?, (
+                    SELECT COALESCE(MAX(position), -1) + 1 
+                    FROM tasks 
+                    WHERE state_id = ?
+                ))
                 RETURNING id
             "#,
             title,
             now,
             project_id,
+            state_id,
             state_id,
         )
         .fetch_one(&self.pool)
@@ -114,7 +119,8 @@ impl TaskStore for SqliteStore {
                     t.description,
                     t.created_at AS "created_at!: DateTime<Utc>",
                     t.project_id,
-                    t.state_id
+                    t.state_id,
+                    t.position AS "position!: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
             "#,
@@ -147,9 +153,14 @@ impl TaskStore for SqliteStore {
         let result = sqlx::query!(
             r#"
                 UPDATE tasks
-                SET state_id = ?
+                SET state_id = ?, position = (
+                    SELECT COALESCE(MAX(position), -1) + 1 
+                    FROM tasks 
+                    WHERE state_id = ?
+                )
                 WHERE id = ? AND project_id = ?
             "#,
+            state_id,
             state_id,
             id,
             project_id,
@@ -171,7 +182,8 @@ impl TaskStore for SqliteStore {
                     t.description,
                     t.created_at AS "created_at!: DateTime<Utc>",
                     t.project_id,
-                    t.state_id
+                    t.state_id,
+                    t.position AS "position!: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
             "#,
@@ -215,7 +227,8 @@ impl TaskStore for SqliteStore {
                     t.description,
                     t.created_at AS "created_at!: DateTime<Utc>",
                     t.project_id,
-                    t.state_id
+                    t.state_id,
+                    t.position AS "position!: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
             "#,
@@ -246,9 +259,11 @@ impl TaskStore for SqliteStore {
                                 t.description,
                                 t.created_at AS "created_at!: DateTime<Utc>",
                                 t.project_id,
-                                t.state_id
+                                t.state_id,
+                                t.position AS "position!: i32"
                             FROM tasks t
                             WHERE t.project_id = ? AND t.state_id = ?
+                            ORDER BY t.position ASC, t.id ASC
                         "#,
                         project_id,
                         sid,
@@ -262,16 +277,17 @@ impl TaskStore for SqliteStore {
             sqlx::query_as!(
                 Task,
                 r#"
-                    SELECT
-                        t.id,
-                        t.title,
-                        t.description,
-                        t.created_at AS "created_at!: DateTime<Utc>",
-                        t.project_id,
-                        t.state_id
-                    FROM tasks t
-                    WHERE t.project_id = ?
-                    ORDER BY t.id ASC
+                            SELECT
+                                t.id,
+                                t.title,
+                                t.description,
+                                t.created_at AS "created_at!: DateTime<Utc>",
+                                t.project_id,
+                                t.state_id,
+                                t.position AS "position!: i32"
+                            FROM tasks t
+                            WHERE t.project_id = ?
+                            ORDER BY t.position ASC, t.id ASC
                 "#,
                 project_id,
             )

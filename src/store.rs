@@ -38,7 +38,7 @@ pub trait TaskStore {
     ) -> Result<Option<Task>, StorageError>;
 
     /// List tasks in a project, optionally filtered by state.
-    /// Results are ordered by task ID ascending.
+    /// Results are ordered by position ascending, then task ID ascending.
     async fn list_tasks(
         &self,
         project_id: ProjectID,

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                            SELECT\n                                t.id,\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at!: DateTime<Utc>\",\n                                t.project_id,\n                                t.state_id\n                            FROM tasks t\n                            WHERE t.project_id = ? AND t.state_id = ?\n                        ",
+  "query": "\n                            SELECT\n                                t.id,\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at!: DateTime<Utc>\",\n                                t.project_id,\n                                t.state_id,\n                                t.position AS \"position!: i32\"\n                            FROM tasks t\n                            WHERE t.project_id = ? AND t.state_id = ?\n                            ORDER BY t.position ASC, t.id ASC\n                        ",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,17 @@
             "name": "state_id"
           }
         }
+      },
+      {
+        "name": "position!: i32",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "position"
+          }
+        }
       }
     ],
     "parameters": {
@@ -79,8 +90,9 @@
       true,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "45be21153afe962fdbb77d9de1fd4401fa481afb44abe45080b6f353b7ac95b9"
+  "hash": "e509d2a76d61b01009082f2da26d0bffff3a6b72317cb19e126782ec54446efd"
 }

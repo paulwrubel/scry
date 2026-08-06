@@ -29,5 +29,6 @@ pub struct Task {
     pub title: String,
     pub description: Option<String>,
     pub state_id: i64,
+    pub position: i32,
     pub created_at: DateTime<Utc>,
 }
