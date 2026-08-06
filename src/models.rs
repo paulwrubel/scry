@@ -1,18 +1,17 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 
 pub type TaskID = i64;
 pub type ProjectID = i64;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectID,
     pub name: String,
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub id: i64,
     pub project_id: ProjectID,
@@ -22,7 +21,7 @@ pub struct State {
     pub is_entry: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: TaskID,
     pub project_id: ProjectID,

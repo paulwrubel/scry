@@ -110,17 +110,16 @@ impl TaskStore for SqliteStore {
         .await
         .map_err(|e| StorageError::Database(format!("failed to add task: {}", e)))?;
 
-        sqlx::query_as!(
-            Task,
+        sqlx::query!(
             r#"
                 SELECT
-                    t.id,
+                    t.id AS "id: i64",
                     t.title,
                     t.description,
-                    t.created_at AS "created_at!: DateTime<Utc>",
-                    t.project_id,
-                    t.state_id,
-                    t.position AS "position!: i32"
+                    t.created_at AS "created_at: DateTime<Utc>",
+                    t.project_id AS "project_id: i64",
+                    t.state_id AS "state_id: i64",
+                    t.position AS "position: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
             "#,
@@ -130,6 +129,15 @@ impl TaskStore for SqliteStore {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to fetch new task: {}", e)))
+        .map(|task| Task {
+            id: task.id,
+            project_id: task.project_id,
+            title: task.title,
+            description: task.description,
+            state_id: task.state_id,
+            position: task.position,
+            created_at: task.created_at,
+        })
     }
 
     async fn update_task(
@@ -173,17 +181,16 @@ impl TaskStore for SqliteStore {
             return Ok(None);
         }
 
-        let task = sqlx::query_as!(
-            Task,
+        sqlx::query!(
             r#"
                 SELECT
-                    t.id,
+                    t.id AS "id: i64",
                     t.title,
                     t.description,
-                    t.created_at AS "created_at!: DateTime<Utc>",
-                    t.project_id,
-                    t.state_id,
-                    t.position AS "position!: i32"
+                    t.created_at AS "created_at: DateTime<Utc>",
+                    t.project_id AS "project_id: i64",
+                    t.state_id AS "state_id: i64",
+                    t.position AS "position: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
             "#,
@@ -192,9 +199,16 @@ impl TaskStore for SqliteStore {
         )
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to fetch updated task: {}", e)))?;
-
-        Ok(Some(task))
+        .map_err(|e| StorageError::Database(format!("failed to fetch updated task: {}", e)))
+        .map(|task| Some(Task {
+            id: task.id,
+            project_id: task.project_id,
+            title: task.title,
+            description: task.description,
+            state_id: task.state_id,
+            position: task.position,
+            created_at: task.created_at,
+        }))
     }
 
     async fn delete_task(&self, id: TaskID, project_id: ProjectID) -> Result<bool, StorageError> {
@@ -218,17 +232,16 @@ impl TaskStore for SqliteStore {
         id: TaskID,
         project_id: ProjectID,
     ) -> Result<Option<Task>, StorageError> {
-        let row = sqlx::query_as!(
-            Task,
+        let row = sqlx::query!(
             r#"
                 SELECT
-                    t.id,
+                    t.id AS "id: i64",
                     t.title,
                     t.description,
-                    t.created_at AS "created_at!: DateTime<Utc>",
-                    t.project_id,
-                    t.state_id,
-                    t.position AS "position!: i32"
+                    t.created_at AS "created_at: DateTime<Utc>",
+                    t.project_id AS "project_id: i64",
+                    t.state_id AS "state_id: i64",
+                    t.position AS "position: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
             "#,
@@ -239,7 +252,15 @@ impl TaskStore for SqliteStore {
         .await
         .map_err(|e| StorageError::Database(format!("failed to show task: {}", e)))?;
 
-        Ok(row)
+        Ok(row.map(|r| Task {
+            id: r.id,
+            project_id: r.project_id,
+            title: r.title,
+            description: r.description,
+            state_id: r.state_id,
+            position: r.position,
+            created_at: r.created_at,
+        }))
     }
 
     async fn list_tasks(
@@ -247,20 +268,19 @@ impl TaskStore for SqliteStore {
         project_id: ProjectID,
         state_name: Option<&str>,
     ) -> Result<Vec<Task>, StorageError> {
-        let rows = if let Some(name) = state_name {
+        if let Some(name) = state_name {
             match self.resolve_state_id(project_id, name).await? {
                 Some(sid) => {
-                    sqlx::query_as!(
-                        Task,
+                    sqlx::query!(
                         r#"
                             SELECT
-                                t.id,
+                                t.id AS "id: i64",
                                 t.title,
                                 t.description,
-                                t.created_at AS "created_at!: DateTime<Utc>",
-                                t.project_id,
-                                t.state_id,
-                                t.position AS "position!: i32"
+                                t.created_at AS "created_at: DateTime<Utc>",
+                                t.project_id AS "project_id: i64",
+                                t.state_id AS "state_id: i64",
+                                t.position AS "position: i32"
                             FROM tasks t
                             WHERE t.project_id = ? AND t.state_id = ?
                             ORDER BY t.position ASC, t.id ASC
@@ -270,49 +290,78 @@ impl TaskStore for SqliteStore {
                     )
                     .fetch_all(&self.pool)
                     .await
+                    .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))
+                    .map(|rows| {
+                        rows.into_iter()
+                            .map(|r| Task {
+                                id: r.id,
+                                project_id: r.project_id,
+                                title: r.title,
+                                description: r.description,
+                                state_id: r.state_id,
+                                position: r.position,
+                                created_at: r.created_at,
+                            })
+                            .collect()
+                    })
                 }
                 None => return Ok(vec![]),
             }
         } else {
-            sqlx::query_as!(
-                Task,
+            sqlx::query!(
                 r#"
-                            SELECT
-                                t.id,
-                                t.title,
-                                t.description,
-                                t.created_at AS "created_at!: DateTime<Utc>",
-                                t.project_id,
-                                t.state_id,
-                                t.position AS "position!: i32"
-                            FROM tasks t
-                            WHERE t.project_id = ?
-                            ORDER BY t.position ASC, t.id ASC
+                    SELECT
+                        t.id AS "id: i64",
+                        t.title,
+                        t.description,
+                        t.created_at AS "created_at: DateTime<Utc>",
+                        t.project_id AS "project_id: i64",
+                        t.state_id AS "state_id: i64",
+                        t.position AS "position: i32"
+                    FROM tasks t
+                    WHERE t.project_id = ?
+                    ORDER BY t.position ASC, t.id ASC
                 "#,
                 project_id,
             )
             .fetch_all(&self.pool)
             .await
-        };
-
-        rows.map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))
+            .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|r| Task {
+                        id: r.id,
+                        project_id: r.project_id,
+                        title: r.title,
+                        description: r.description,
+                        state_id: r.state_id,
+                        position: r.position,
+                        created_at: r.created_at,
+                    })
+                    .collect()
+            })
+        }
     }
 
     async fn create_project(&self, name: &str) -> Result<Project, StorageError> {
         let now = Utc::now().to_rfc3339();
 
-        let result = sqlx::query_as!(
-            Project,
+        let result = sqlx::query!(
             r#"
                 INSERT INTO projects (name, created_at)
                 VALUES (?, ?)
-                RETURNING id, name, created_at AS "created_at!: DateTime<Utc>"
+                RETURNING id AS "id: i64", name, created_at AS "created_at: DateTime<Utc>"
             "#,
             name,
             now,
         )
         .fetch_one(&self.pool)
-        .await;
+        .await
+        .map(|r| Project {
+            id: r.id,
+            name: r.name,
+            created_at: r.created_at,
+        });
 
         let project = match result {
             Ok(r) => r,
@@ -430,10 +479,9 @@ impl TaskStore for SqliteStore {
     }
 
     async fn list_projects(&self) -> Result<Vec<Project>, StorageError> {
-        sqlx::query_as!(
-            Project,
+        sqlx::query!(
             r#"
-                SELECT id, name, created_at AS "created_at!: DateTime<Utc>"
+                SELECT id AS "id: i64", name, created_at AS "created_at: DateTime<Utc>"
                 FROM projects
                 ORDER BY name ASC
             "#,
@@ -441,13 +489,21 @@ impl TaskStore for SqliteStore {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to list projects: {}", e)))
+        .map(|rows| {
+            rows.into_iter()
+                .map(|r| Project {
+                    id: r.id,
+                    name: r.name,
+                    created_at: r.created_at,
+                })
+                .collect()
+        })
     }
 
     async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError> {
-        sqlx::query_as!(
-            Project,
+        sqlx::query!(
             r#"
-                SELECT id, name, created_at AS "created_at!: DateTime<Utc>"
+                SELECT id AS "id: i64", name, created_at AS "created_at: DateTime<Utc>"
                 FROM projects
                 WHERE name = ?
             "#,
@@ -456,13 +512,19 @@ impl TaskStore for SqliteStore {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to look up project: {}", e)))
+        .map(|opt| {
+            opt.map(|r| Project {
+                id: r.id,
+                name: r.name,
+                created_at: r.created_at,
+            })
+        })
     }
 
     async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError> {
-        sqlx::query_as!(
-            Project,
+        sqlx::query!(
             r#"
-                SELECT id, name, created_at AS "created_at!: DateTime<Utc>"
+                SELECT id AS "id: i64", name, created_at AS "created_at: DateTime<Utc>"
                 FROM projects
                 WHERE id = ?
             "#,
@@ -471,6 +533,13 @@ impl TaskStore for SqliteStore {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to look up project: {}", e)))
+        .map(|opt| {
+            opt.map(|r| Project {
+                id: r.id,
+                name: r.name,
+                created_at: r.created_at,
+            })
+        })
     }
 
     async fn get_active_project(&self) -> Result<Project, StorageError> {
@@ -704,10 +773,15 @@ impl TaskStore for SqliteStore {
     }
 
     async fn list_states(&self, project_id: ProjectID) -> Result<Vec<State>, StorageError> {
-        sqlx::query_as!(
-            State,
+        sqlx::query!(
             r#"
-                SELECT id, project_id, name, position AS "position!: i32", is_completed AS "is_completed: bool", is_entry AS "is_entry: bool"
+                SELECT
+                    id AS "id: i64",
+                    project_id AS "project_id: i64",
+                    name,
+                    position AS "position: i32",
+                    is_completed AS "is_completed: bool",
+                    is_entry AS "is_entry: bool"
                 FROM states
                 WHERE project_id = ?
                 ORDER BY position ASC
@@ -717,5 +791,17 @@ impl TaskStore for SqliteStore {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to list states: {}", e)))
+        .map(|rows| {
+            rows.into_iter()
+                .map(|r| State {
+                    id: r.id,
+                    project_id: r.project_id,
+                    name: r.name,
+                    position: r.position,
+                    is_completed: r.is_completed,
+                    is_entry: r.is_entry,
+                })
+                .collect()
+        })
     }
 }
