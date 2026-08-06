@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT\n                    t.id,\n                    t.title,\n                    t.description,\n                    t.created_at AS \"created_at!: DateTime<Utc>\",\n                    t.completed_at AS \"completed_at!: Option<DateTime<Utc>>\",\n                    t.project_id,\n                    t.state_id,\n                    s.name AS state_name\n                FROM tasks t\n                JOIN states s ON t.state_id = s.id\n                WHERE t.id = ? AND t.project_id = ?\n            ",
+  "query": "\n                            SELECT\n                                t.id,\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at!: DateTime<Utc>\",\n                                t.project_id,\n                                t.state_id\n                            FROM tasks t\n                            WHERE t.project_id = ? AND t.state_id = ?\n                        ",
   "describe": {
     "columns": [
       {
@@ -48,19 +48,8 @@
         }
       },
       {
-        "name": "completed_at!: Option<DateTime<Utc>>",
-        "ordinal": 4,
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "tasks",
-            "name": "completed_at"
-          }
-        }
-      },
-      {
         "name": "project_id",
-        "ordinal": 5,
+        "ordinal": 4,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -71,23 +60,12 @@
       },
       {
         "name": "state_id",
-        "ordinal": 6,
+        "ordinal": 5,
         "type_info": "Integer",
         "origin": {
           "Table": {
             "table": "tasks",
             "name": "state_id"
-          }
-        }
-      },
-      {
-        "name": "state_name",
-        "ordinal": 7,
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "states",
-            "name": "name"
           }
         }
       }
@@ -100,11 +78,9 @@
       false,
       true,
       false,
-      true,
-      false,
       false,
       false
     ]
   },
-  "hash": "b7c0de2e155e26fbac9ec3e4fedf5ef43ba848c690ec98f398944b9462292d74"
+  "hash": "45be21153afe962fdbb77d9de1fd4401fa481afb44abe45080b6f353b7ac95b9"
 }

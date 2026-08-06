@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                INSERT INTO states (project_id, name, position)\n                VALUES (?, ?, ?)\n                RETURNING id, project_id, name, position\n            ",
+  "query": "\n                INSERT INTO states (project_id, name, position, is_completed, is_entry)\n                VALUES (?, ?, ?, 0, 0)\n                RETURNING id, project_id, name, position, is_completed, is_entry\n            ",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,28 @@
             "name": "position"
           }
         }
+      },
+      {
+        "name": "is_completed",
+        "ordinal": 4,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "states",
+            "name": "is_completed"
+          }
+        }
+      },
+      {
+        "name": "is_entry",
+        "ordinal": 5,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "states",
+            "name": "is_entry"
+          }
+        }
       }
     ],
     "parameters": {
@@ -55,8 +77,10 @@
       null,
       false,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "72a293bd224e97d0e1b7a14bcf9222dc424a6a553c5f78877936420d1a8f4ba5"
+  "hash": "1848816488deaed147dd3188e580fc711fb21d5cd84597d66d4bee6dbeb7605c"
 }

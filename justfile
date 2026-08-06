@@ -1,27 +1,34 @@
 set shell := ["bash", "-uc"]
 
-# initialize the compile-time SQLite database for sqlx query! macros
+# regenerate sqlx offline query cache by rebuilding the DB fresh
 [group('validate')]
-setup-db:
-    sqlite3 scry.db "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT, is_complete INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, completed_at TEXT)"
+setup-database:
+    rm -f scry.db
+    touch scry.db
+    sqlx migrate run
+
+# regenerate sqlx offline query cache by rebuilding the DB fresh
+[group('validate')]
+sqlx-prepare: setup-database
+    cargo sqlx prepare
 
 # run all validation checks: test, check, clippy
 [group('validate')]
-validate: test check clippy
+validate:  test check clippy
 
 # run the test suite
 [group('validate')]
-test:
+test: setup-database
     cargo test
 
 # type-check without compiling (fast feedback)
 [group('validate')]
-check:
+check: setup-database
     cargo check
 
 # lint for common mistakes and style issues
 [group('validate')]
-clippy:
+clippy: setup-database
     cargo clippy -- -D warnings
 
 # shared release logic — bump version, update Cargo.toml, commit, tag
@@ -80,3 +87,4 @@ install:
 [group('misc')]
 clean:
     cargo clean
+    rm -f ./scry.db

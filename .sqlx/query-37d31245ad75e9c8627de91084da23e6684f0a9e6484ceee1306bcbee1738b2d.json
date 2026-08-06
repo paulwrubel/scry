@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO states (project_id, name, position, is_completed, is_entry)\n                VALUES (?, 'todo', 0, 0, 1), (?, 'done', 1, 1, 0)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "37d31245ad75e9c8627de91084da23e6684f0a9e6484ceee1306bcbee1738b2d"
+}

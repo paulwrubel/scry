@@ -204,7 +204,7 @@ impl App {
         self.visual_order.clear();
         for state in &self.states {
             for (task_idx, task) in self.tasks.iter().enumerate() {
-                if task.state_name == state.name {
+                if task.state_id == state.id {
                     self.visual_order.push(task_idx);
                 }
             }
@@ -218,26 +218,22 @@ impl App {
             // input bar selected — scroll past all tasks
             for state in &self.states {
                 line_index += 1; // header
-                let count = self
-                    .tasks
-                    .iter()
-                    .filter(|t| t.state_name == state.name)
-                    .count();
+                let count = self.tasks.iter().filter(|t| t.state_id == state.id).count();
                 line_index += count as u16;
             }
         } else {
             let flat_idx = self.visual_order[self.selected_index];
-            let selected_state = &self.tasks[flat_idx].state_name;
+            let selected_state_id = self.tasks[flat_idx].state_id;
 
             for state in &self.states {
                 line_index += 1; // state header
 
-                if state.name == *selected_state {
+                if state.id == selected_state_id {
                     // count tasks in this state before the selected one
                     let tasks_in_state: Vec<_> = self
                         .tasks
                         .iter()
-                        .filter(|t| t.state_name == state.name)
+                        .filter(|t| t.state_id == state.id)
                         .collect();
                     let pos = tasks_in_state
                         .iter()
@@ -247,11 +243,7 @@ impl App {
                     break;
                 }
 
-                let count = self
-                    .tasks
-                    .iter()
-                    .filter(|t| t.state_name == state.name)
-                    .count();
+                let count = self.tasks.iter().filter(|t| t.state_id == state.id).count();
                 line_index += count as u16;
             }
         }
@@ -488,7 +480,7 @@ impl App {
             Message::OpenMovePicker(id) => {
                 let idx = self
                     .selected_task()
-                    .and_then(|t| self.states.iter().position(|s| s.name == t.state_name))
+                    .and_then(|t| self.states.iter().position(|s| s.id == t.state_id))
                     .unwrap_or(0);
                 self.popup = Some(PopupState::StatePicker {
                     task_id: id,

@@ -15,14 +15,14 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         let state_tasks: Vec<_> = app
             .tasks
             .iter()
-            .filter(|t| t.state_name == state.name)
+            .filter(|t| t.state_id == state.id)
             .collect();
 
         lines.push(render_state_header(&state.name, state_tasks.len()));
 
         for task in state_tasks {
             let selected = Some(task.id) == selected_id;
-            lines.push(render_task_row(task, selected));
+            lines.push(render_task_row(task, selected, state.is_completed));
         }
     }
 
@@ -38,15 +38,10 @@ fn render_state_header(state_name: &str, task_count: usize) -> Line<'_> {
     ))
 }
 
-fn render_task_row(task: &Task, selected: bool) -> Line<'_> {
-    let Task {
-        id,
-        title,
-        completed_at,
-        ..
-    } = task;
+fn render_task_row(task: &Task, selected: bool, is_completed: bool) -> Line<'_> {
+    let Task { id, title, .. } = task;
 
-    let checkbox = if completed_at.is_some() { "[x]" } else { "[ ]" };
+    let checkbox = if is_completed { "[x]" } else { "[ ]" };
     let row_text = format!(" {id:>3} {checkbox} | {title}");
 
     let style = if selected {

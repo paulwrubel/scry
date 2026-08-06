@@ -75,10 +75,20 @@ impl TaskStore for SqliteStore {
     async fn add_task(&self, title: &str, project_id: ProjectID) -> Result<Task, StorageError> {
         let now = Utc::now().to_rfc3339();
 
-        let state_id = self
-            .resolve_state_id(project_id, "todo")
-            .await?
-            .ok_or_else(|| StorageError::NotFound("'todo' state not found in project".into()))?;
+        let state_id = sqlx::query!(
+            r#"
+                SELECT id
+                FROM states
+                WHERE project_id = ? AND is_entry = 1
+                LIMIT 1
+            "#,
+            project_id,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to find entry state: {}", e)))?
+        .ok_or_else(|| StorageError::NotFound("no entry state found for project".to_string()))?
+        .id;
 
         let row = sqlx::query!(
             r#"
@@ -103,12 +113,9 @@ impl TaskStore for SqliteStore {
                     t.title,
                     t.description,
                     t.created_at AS "created_at!: DateTime<Utc>",
-                    t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
                     t.project_id,
-                    t.state_id,
-                    s.name AS state_name
+                    t.state_id
                 FROM tasks t
-                JOIN states s ON t.state_id = s.id
                 WHERE t.id = ? AND t.project_id = ?
             "#,
             row.id,
@@ -137,15 +144,13 @@ impl TaskStore for SqliteStore {
                 StorageError::NotFound(format!("state '{}' not found in project", name))
             })?;
 
-        let now = Utc::now().to_rfc3339();
         let result = sqlx::query!(
             r#"
                 UPDATE tasks
-                SET state_id = ?, completed_at = COALESCE(completed_at, ?)
+                SET state_id = ?
                 WHERE id = ? AND project_id = ?
             "#,
             state_id,
-            now,
             id,
             project_id,
         )
@@ -165,12 +170,9 @@ impl TaskStore for SqliteStore {
                     t.title,
                     t.description,
                     t.created_at AS "created_at!: DateTime<Utc>",
-                    t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
                     t.project_id,
-                    t.state_id,
-                    s.name AS state_name
+                    t.state_id
                 FROM tasks t
-                JOIN states s ON t.state_id = s.id
                 WHERE t.id = ? AND t.project_id = ?
             "#,
             id,
@@ -212,12 +214,9 @@ impl TaskStore for SqliteStore {
                     t.title,
                     t.description,
                     t.created_at AS "created_at!: DateTime<Utc>",
-                    t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
                     t.project_id,
-                    t.state_id,
-                    s.name AS state_name
+                    t.state_id
                 FROM tasks t
-                JOIN states s ON t.state_id = s.id
                 WHERE t.id = ? AND t.project_id = ?
             "#,
             id,
@@ -246,14 +245,10 @@ impl TaskStore for SqliteStore {
                                 t.title,
                                 t.description,
                                 t.created_at AS "created_at!: DateTime<Utc>",
-                                t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
                                 t.project_id,
-                                t.state_id,
-                                s.name AS state_name
+                                t.state_id
                             FROM tasks t
-                            JOIN states s ON t.state_id = s.id
                             WHERE t.project_id = ? AND t.state_id = ?
-                            ORDER BY t.id ASC
                         "#,
                         project_id,
                         sid,
@@ -272,12 +267,9 @@ impl TaskStore for SqliteStore {
                         t.title,
                         t.description,
                         t.created_at AS "created_at!: DateTime<Utc>",
-                        t.completed_at AS "completed_at!: Option<DateTime<Utc>>",
                         t.project_id,
-                        t.state_id,
-                        s.name AS state_name
+                        t.state_id
                     FROM tasks t
-                    JOIN states s ON t.state_id = s.id
                     WHERE t.project_id = ?
                     ORDER BY t.id ASC
                 "#,
@@ -324,8 +316,8 @@ impl TaskStore for SqliteStore {
 
         sqlx::query!(
             r#"
-                INSERT INTO states (project_id, name, position)
-                VALUES (?, 'todo', 0), (?, 'done', 1)
+                INSERT INTO states (project_id, name, position, is_completed, is_entry)
+                VALUES (?, 'todo', 0, 0, 1), (?, 'done', 1, 1, 0)
             "#,
             project.id,
             project.id,
@@ -531,9 +523,9 @@ impl TaskStore for SqliteStore {
 
         let inserted = sqlx::query!(
             r#"
-                INSERT INTO states (project_id, name, position)
-                VALUES (?, ?, ?)
-                RETURNING id, project_id, name, position
+                INSERT INTO states (project_id, name, position, is_completed, is_entry)
+                VALUES (?, ?, ?, 0, 0)
+                RETURNING id, project_id, name, position, is_completed, is_entry
             "#,
             project_id,
             name,
@@ -548,6 +540,8 @@ impl TaskStore for SqliteStore {
                 project_id: row.project_id,
                 name: row.name,
                 position: row.position as i32,
+                is_completed: row.is_completed,
+                is_entry: row.is_entry,
             }),
             Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
                 "state '{}' already exists",
@@ -697,7 +691,7 @@ impl TaskStore for SqliteStore {
         sqlx::query_as!(
             State,
             r#"
-                SELECT id, project_id, name, position AS "position!: i32"
+                SELECT id, project_id, name, position AS "position!: i32", is_completed AS "is_completed: bool", is_entry AS "is_entry: bool"
                 FROM states
                 WHERE project_id = ?
                 ORDER BY position ASC

@@ -28,10 +28,12 @@ fn render_task_detail(frame: &mut Frame, app: &App, task_id: i64) {
     let task = app.tasks.iter().find(|t| t.id == task_id);
     if let Some(task) = task {
         let created = task.created_at.format("%Y-%m-%d %I:%M %p").to_string();
-        let completed = task
-            .completed_at
-            .map(|ts| ts.format("%Y-%m-%d %I:%M %p").to_string())
-            .unwrap_or_else(|| "-".to_string());
+        let state_name = app
+            .states
+            .iter()
+            .find(|s| s.id == task.state_id)
+            .map(|s| s.name.as_str())
+            .unwrap_or("unknown");
 
         let lines = vec![
             Line::from(Span::styled(
@@ -40,10 +42,9 @@ fn render_task_detail(frame: &mut Frame, app: &App, task_id: i64) {
             )),
             Line::from(""),
             Line::from(format!("  Title:     {}", task.title)),
-            Line::from(format!("  State:     {}", task.state_name)),
+            Line::from(format!("  State:     {}", state_name)),
             Line::from(format!("  Project:   {}", app.project.name)),
             Line::from(format!("  Created:   {}", created)),
-            Line::from(format!("  Completed: {}", completed)),
             Line::from(""),
         ];
 
@@ -76,7 +77,7 @@ fn render_state_picker(frame: &mut Frame, app: &App, selected_state_index: usize
         let marker = if i == selected_state_index { ">" } else { " " };
         let is_current = app
             .selected_task()
-            .map(|t| t.state_name == state.name)
+            .map(|t| t.state_id == state.id)
             .unwrap_or(false);
         let suffix = if is_current { " (current)" } else { "" };
         let text = format!("  {} {}{}", marker, state.name, suffix);

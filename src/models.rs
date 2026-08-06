@@ -18,6 +18,8 @@ pub struct State {
     pub project_id: ProjectID,
     pub name: String,
     pub position: i32,
+    pub is_completed: bool,
+    pub is_entry: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -27,8 +29,5 @@ pub struct Task {
     pub title: String,
     pub description: Option<String>,
     pub state_id: i64,
-    // populated from JOIN with the states table, not a direct column
-    pub state_name: String,
     pub created_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
 }

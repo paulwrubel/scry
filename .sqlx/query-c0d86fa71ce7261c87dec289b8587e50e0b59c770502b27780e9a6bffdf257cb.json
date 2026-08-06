@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id, project_id, name, position AS \"position!: i32\"\n                FROM states\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
+  "query": "\n                SELECT id, project_id, name, position AS \"position!: i32\", is_completed AS \"is_completed: bool\", is_entry AS \"is_entry: bool\"\n                FROM states\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,28 @@
             "name": "position"
           }
         }
+      },
+      {
+        "name": "is_completed: bool",
+        "ordinal": 4,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "states",
+            "name": "is_completed"
+          }
+        }
+      },
+      {
+        "name": "is_entry: bool",
+        "ordinal": 5,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "states",
+            "name": "is_entry"
+          }
+        }
       }
     ],
     "parameters": {
@@ -55,8 +77,10 @@
       false,
       false,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "f846b14f60d6df18881e49a435260b6858bf24f345dd50a2c95e09f0e668c312"
+  "hash": "c0d86fa71ce7261c87dec289b8587e50e0b59c770502b27780e9a6bffdf257cb"
 }

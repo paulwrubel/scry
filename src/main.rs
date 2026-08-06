@@ -136,9 +136,17 @@ async fn main() -> Result<(), AppError> {
     match command {
         Command::Add { description } => {
             let task = store.add_task(&description, project_id).await?;
+            let state_defs = store.list_states(project_id).await?;
             println!(
                 "Created task {} in \"{}\" [{}]: {}",
-                task.id, project_name, task.state_name, task.title
+                task.id,
+                project_name,
+                state_defs
+                    .iter()
+                    .find(|s| s.id == task.state_id)
+                    .map(|s| s.name.as_str())
+                    .unwrap_or("?"),
+                task.title
             );
         }
         Command::Move { id, state } => match store.move_task(id, project_id, &state).await? {
@@ -166,23 +174,23 @@ async fn main() -> Result<(), AppError> {
         }
         Command::Show { id } => match store.show_task(id, project_id).await? {
             Some(task) => {
+                let state_defs = store.list_states(project_id).await?;
+                let state_name = state_defs
+                    .iter()
+                    .find(|s| s.id == task.state_id)
+                    .map(|s| s.name.as_str())
+                    .unwrap_or("unknown");
+
                 println!("Task {}", task.id);
                 println!("  Project:   {}", project_name);
                 println!("  Title:     {}", task.title);
-                println!("  State:     {}", task.state_name);
+                println!("  State:     {}", state_name);
                 println!(
                     "  Created:   {}",
                     task.created_at
                         .with_timezone(&Local)
                         .format("%Y-%m-%d %I:%M %p %Z")
                 );
-                match task.completed_at {
-                    Some(ts) => println!(
-                        "  Completed: {}",
-                        ts.with_timezone(&Local).format("%Y-%m-%d %I:%M %p %Z")
-                    ),
-                    None => println!("  Completed: -"),
-                }
             }
             None => eprintln!("Task {} not found in \"{}\"", id, project_name),
         },
@@ -200,7 +208,7 @@ async fn main() -> Result<(), AppError> {
             for state_def in &states {
                 let state_tasks: Vec<_> = tasks
                     .iter()
-                    .filter(|t| t.state_name == state_def.name)
+                    .filter(|t| t.state_id == state_def.id)
                     .collect();
 
                 if let Some(ref filter) = state
@@ -211,11 +219,7 @@ async fn main() -> Result<(), AppError> {
 
                 println!("{} ({}):", state_def.name, state_tasks.len());
                 for task in &state_tasks {
-                    let icon = if task.completed_at.is_some() {
-                        "[x]"
-                    } else {
-                        "[ ]"
-                    };
+                    let icon = if state_def.is_completed { "[x]" } else { "[ ]" };
                     println!("  {}  {}  {}", task.id, icon, task.title);
                 }
                 if !state_tasks.is_empty() {
