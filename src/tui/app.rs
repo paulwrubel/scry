@@ -53,7 +53,22 @@ pub enum PopupState {
         task_title: String,
         confirm: bool,
     },
-    ColorPicker {
+    ProjectSettings {
+        selected_row: usize,
+        mode: SettingsMode,
+        delete_confirm: bool,
+    },
+}
+
+pub enum SettingsMode {
+    Browsing,
+    EditingName {
+        input: InputState,
+    },
+    AddingState {
+        input: InputState,
+    },
+    PickingColor {
         state_id: i64,
         selected_color_index: usize,
     },
@@ -86,10 +101,27 @@ enum Message {
     ConfirmMove(i64, String),
     ExecuteDelete(i64),
     ToggleDeleteConfirm,
-    OpenColorPicker(i64),
-    ColorPickerUp,
-    ColorPickerDown,
-    ConfirmColor(i64, usize),
+
+    // settings
+    OpenSettings,
+    SettingsUp,
+    SettingsDown,
+    SettingsRename,
+    SettingsAddState,
+    SettingsDeleteState,
+    SettingsRecolor,
+    SettingsReorderUp,
+    SettingsReorderDown,
+    SettingsTypeChar(char),
+    SettingsDeleteChar,
+    SettingsConfirmEdit,
+    SettingsCancelEdit,
+    SettingsCursorLeft,
+    SettingsCursorRight,
+    SettingsColorUp,
+    SettingsColorDown,
+    SettingsConfirmColor,
+    SettingsCancelColor,
 
     // side effects
     DataRefreshed(Vec<State>, Vec<Task>),
@@ -354,13 +386,11 @@ impl App {
             }
             KeyCode::Char('a') => Some(Message::FocusInput),
             KeyCode::Char('m') => self.selected_task().map(|t| Message::OpenMovePicker(t.id)),
-            KeyCode::Char('c') => self
-                .selected_task()
-                .map(|t| Message::OpenColorPicker(t.state_id)),
             KeyCode::Char('d') => self
                 .selected_task()
                 .map(|t| Message::OpenDeleteConfirm(t.id)),
             KeyCode::Char('q') => Some(Message::Quit),
+            KeyCode::Char('s') => Some(Message::OpenSettings),
             _ => None,
         }
     }
@@ -409,21 +439,35 @@ impl App {
                     _ => None,
                 }
             }
-            PopupState::ColorPicker { .. } => match code {
-                KeyCode::Esc => Some(Message::DismissPopup),
-                KeyCode::Up => Some(Message::ColorPickerUp),
-                KeyCode::Down => Some(Message::ColorPickerDown),
-                KeyCode::Enter => {
-                    let (state_id, idx) = match self.popup.as_ref().unwrap() {
-                        PopupState::ColorPicker {
-                            state_id,
-                            selected_color_index,
-                        } => (*state_id, *selected_color_index),
-                        _ => unreachable!(),
-                    };
-                    Some(Message::ConfirmColor(state_id, idx))
-                }
-                _ => None,
+            PopupState::ProjectSettings { mode, .. } => match mode {
+                SettingsMode::Browsing => match code {
+                    KeyCode::Esc => Some(Message::DismissPopup),
+                    KeyCode::Up => Some(Message::SettingsUp),
+                    KeyCode::Down => Some(Message::SettingsDown),
+                    KeyCode::Char('r') => Some(Message::SettingsRename),
+                    KeyCode::Char('a') => Some(Message::SettingsAddState),
+                    KeyCode::Char('d') => Some(Message::SettingsDeleteState),
+                    KeyCode::Char('c') => Some(Message::SettingsRecolor),
+                    KeyCode::Char('k') => Some(Message::SettingsReorderUp),
+                    KeyCode::Char('j') => Some(Message::SettingsReorderDown),
+                    _ => None,
+                },
+                SettingsMode::PickingColor { .. } => match code {
+                    KeyCode::Esc => Some(Message::SettingsCancelColor),
+                    KeyCode::Up => Some(Message::SettingsColorUp),
+                    KeyCode::Down => Some(Message::SettingsColorDown),
+                    KeyCode::Enter => Some(Message::SettingsConfirmColor),
+                    _ => None,
+                },
+                SettingsMode::EditingName { .. } | SettingsMode::AddingState { .. } => match code {
+                    KeyCode::Esc => Some(Message::SettingsCancelEdit),
+                    KeyCode::Enter => Some(Message::SettingsConfirmEdit),
+                    KeyCode::Char(c) => Some(Message::SettingsTypeChar(c)),
+                    KeyCode::Backspace => Some(Message::SettingsDeleteChar),
+                    KeyCode::Left => Some(Message::SettingsCursorLeft),
+                    KeyCode::Right => Some(Message::SettingsCursorRight),
+                    _ => None,
+                },
             },
             PopupState::ConfirmDelete {
                 task_id, confirm, ..
@@ -589,57 +633,435 @@ impl App {
                 }
                 None
             }
-            Message::OpenColorPicker(state_id) => {
-                let selected_color_index = self
-                    .states
-                    .iter()
-                    .find(|s| s.id == state_id)
-                    .and_then(|s| s.color.as_ref().map(|c| c.0.as_str()))
-                    .and_then(|c| {
-                        crate::models::STATE_COLORS
-                            .iter()
-                            .position(|(n, _)| *n == c)
-                    })
-                    .map(|pos| pos + 1)
-                    .unwrap_or(0);
 
-                self.popup = Some(PopupState::ColorPicker {
-                    state_id,
-                    selected_color_index,
+            Message::OpenSettings => {
+                self.popup = Some(PopupState::ProjectSettings {
+                    selected_row: 0,
+                    mode: SettingsMode::Browsing,
+                    delete_confirm: false,
                 });
                 None
             }
-            Message::ColorPickerUp => {
-                if let Some(PopupState::ColorPicker {
-                    selected_color_index,
-                    ..
+            Message::SettingsUp => {
+                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
+                    *delete_confirm = false;
+                }
+                if let Some(PopupState::ProjectSettings { selected_row, .. }) = &mut self.popup
+                    && *selected_row > 0
+                {
+                    *selected_row -= 1;
+                }
+                None
+            }
+            Message::SettingsDown => {
+                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
+                    *delete_confirm = false;
+                }
+                if let Some(PopupState::ProjectSettings { selected_row, .. }) = &mut self.popup
+                    && *selected_row < self.states.len()
+                {
+                    *selected_row += 1;
+                }
+                None
+            }
+            Message::SettingsRename => {
+                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
+                    *delete_confirm = false;
+                }
+                if let Some(PopupState::ProjectSettings {
+                    selected_row, mode, ..
                 }) = &mut self.popup
+                {
+                    let default_text = if *selected_row == 0 {
+                        self.project.name.clone()
+                    } else {
+                        self.states
+                            .get(*selected_row - 1)
+                            .map(|s| s.name.clone())
+                            .unwrap_or_default()
+                    };
+                    let cursor_pos = default_text.len();
+                    *mode = SettingsMode::EditingName {
+                        input: InputState {
+                            buffer: default_text,
+                            cursor_position: cursor_pos,
+                            focused: true,
+                        },
+                    };
+                }
+                None
+            }
+            Message::SettingsAddState => {
+                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
+                    *delete_confirm = false;
+                }
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                    *mode = SettingsMode::AddingState {
+                        input: InputState {
+                            buffer: String::new(),
+                            cursor_position: 0,
+                            focused: true,
+                        },
+                    };
+                }
+                None
+            }
+            Message::SettingsDeleteState => {
+                // read delete_confirm + selected_row from immutable borrow
+                let (delete_confirm, selected_row) = match &self.popup {
+                    Some(PopupState::ProjectSettings {
+                        delete_confirm,
+                        selected_row,
+                        ..
+                    }) => (*delete_confirm, *selected_row),
+                    _ => return None,
+                };
+
+                if selected_row == 0 {
+                    return None;
+                }
+
+                if !delete_confirm {
+                    // set confirm flag via mutable borrow
+                    if let Some(PopupState::ProjectSettings { delete_confirm, .. }) =
+                        &mut self.popup
+                    {
+                        *delete_confirm = true;
+                    }
+                    return None;
+                }
+
+                // confirmed — read state name, drop popup borrow
+                let state_name = self.states.get(selected_row - 1).map(|s| s.name.clone());
+
+                // reset confirm
+                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
+                    *delete_confirm = false;
+                }
+
+                if let Some(name) = state_name {
+                    match Self::block_on(store.remove_state(self.project.id, &name, false)) {
+                        Ok(_) => {
+                            match Self::fetch_data(store, self.project.id) {
+                                Ok((states, tasks)) => {
+                                    self.states = states;
+                                    self.tasks = tasks;
+                                    self.rebuild_visual_order();
+                                    // clamp selected_row — mutable borrow of popup
+                                    if let Some(PopupState::ProjectSettings {
+                                        selected_row: sr,
+                                        ..
+                                    }) = &mut self.popup
+                                        && *sr > self.states.len()
+                                    {
+                                        *sr = self.states.len();
+                                    }
+                                }
+                                Err(e) => {
+                                    self.set_error(format!("{}", e));
+                                }
+                            }
+                            None
+                        }
+                        Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
+                    }
+                } else {
+                    None
+                }
+            }
+            Message::SettingsRecolor => {
+                // reset delete_confirm
+                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
+                    *delete_confirm = false;
+                }
+
+                let state_id = self.popup.as_ref().and_then(|p| match p {
+                    PopupState::ProjectSettings { selected_row, .. } => {
+                        if *selected_row > 0 {
+                            self.states.get(*selected_row - 1).map(|s| s.id)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                });
+
+                if let Some(id) = state_id {
+                    let selected_color_index = self
+                        .states
+                        .iter()
+                        .find(|s| s.id == id)
+                        .and_then(|s| s.color.as_ref().map(|c| c.0.as_str()))
+                        .and_then(|c| {
+                            crate::models::STATE_COLORS
+                                .iter()
+                                .position(|(n, _)| *n == c)
+                        })
+                        .map(|pos| pos + 1)
+                        .unwrap_or(0);
+
+                    if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                        *mode = SettingsMode::PickingColor {
+                            state_id: id,
+                            selected_color_index,
+                        };
+                    }
+                }
+                None
+            }
+            Message::SettingsReorderUp => {
+                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
+                    *delete_confirm = false;
+                }
+                let state_info = self.popup.as_ref().and_then(|p| match p {
+                    PopupState::ProjectSettings { selected_row, .. } => {
+                        if *selected_row > 0 {
+                            self.states
+                                .get(*selected_row - 1)
+                                .map(|s| (s.name.clone(), s.position))
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                });
+
+                if let Some((name, pos)) = state_info {
+                    if pos > 0 {
+                        match Self::block_on(store.reorder_state(self.project.id, &name, pos - 1)) {
+                            Ok(_) => {
+                                match Self::fetch_data(store, self.project.id) {
+                                    Ok((states, tasks)) => {
+                                        self.states = states;
+                                        self.tasks = tasks;
+                                        self.rebuild_visual_order();
+                                    }
+                                    Err(e) => {
+                                        self.set_error(format!("{}", e));
+                                    }
+                                }
+                                None
+                            }
+                            Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            Message::SettingsReorderDown => {
+                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
+                    *delete_confirm = false;
+                }
+                let state_info = self.popup.as_ref().and_then(|p| match p {
+                    PopupState::ProjectSettings { selected_row, .. } => {
+                        if *selected_row > 0 {
+                            self.states
+                                .get(*selected_row - 1)
+                                .map(|s| (s.name.clone(), s.position))
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                });
+
+                if let Some((name, pos)) = state_info {
+                    let max_pos = (self.states.len() as i32) - 1;
+                    if pos < max_pos {
+                        match Self::block_on(store.reorder_state(self.project.id, &name, pos + 1)) {
+                            Ok(_) => {
+                                match Self::fetch_data(store, self.project.id) {
+                                    Ok((states, tasks)) => {
+                                        self.states = states;
+                                        self.tasks = tasks;
+                                        self.rebuild_visual_order();
+                                    }
+                                    Err(e) => {
+                                        self.set_error(format!("{}", e));
+                                    }
+                                }
+                                None
+                            }
+                            Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            Message::SettingsTypeChar(c) => {
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                    let input = match mode {
+                        SettingsMode::EditingName { input } => input,
+                        SettingsMode::AddingState { input } => input,
+                        _ => return None,
+                    };
+                    input.buffer.insert(input.cursor_position, c);
+                    input.cursor_position += 1;
+                }
+                None
+            }
+            Message::SettingsDeleteChar => {
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                    let input = match mode {
+                        SettingsMode::EditingName { input } => input,
+                        SettingsMode::AddingState { input } => input,
+                        _ => return None,
+                    };
+                    if input.cursor_position > 0 {
+                        input.cursor_position -= 1;
+                        input.buffer.remove(input.cursor_position);
+                    }
+                }
+                None
+            }
+            Message::SettingsCursorLeft => {
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                    let input = match mode {
+                        SettingsMode::EditingName { input } => input,
+                        SettingsMode::AddingState { input } => input,
+                        _ => return None,
+                    };
+                    if input.cursor_position > 0 {
+                        input.cursor_position -= 1;
+                    }
+                }
+                None
+            }
+            Message::SettingsCursorRight => {
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                    let input = match mode {
+                        SettingsMode::EditingName { input } => input,
+                        SettingsMode::AddingState { input } => input,
+                        _ => return None,
+                    };
+                    if input.cursor_position < input.buffer.len() {
+                        input.cursor_position += 1;
+                    }
+                }
+                None
+            }
+            Message::SettingsConfirmEdit => {
+                let (_selected_row, new_name, is_project_rename, old_state_name) = match &self.popup
+                {
+                    Some(PopupState::ProjectSettings {
+                        selected_row, mode, ..
+                    }) => {
+                        match mode {
+                            SettingsMode::EditingName { input } => {
+                                let name = input.buffer.trim().to_string();
+                                if *selected_row == 0 {
+                                    (Some(*selected_row), name, true, None)
+                                } else {
+                                    let old = self
+                                        .states
+                                        .get(*selected_row - 1)
+                                        .map(|s| s.name.clone())
+                                        .unwrap_or_default();
+                                    (Some(*selected_row), name, false, Some(old))
+                                }
+                            }
+                            SettingsMode::AddingState { input } => {
+                                let name = input.buffer.trim().to_string();
+                                (None, name, false, None) // selected_row not needed for add
+                            }
+                            _ => return None,
+                        }
+                    }
+                    _ => return None,
+                };
+
+                // return to browsing mode
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                    *mode = SettingsMode::Browsing;
+                }
+
+                if new_name.is_empty() {
+                    return None;
+                }
+
+                if is_project_rename {
+                    if new_name == self.project.name {
+                        return None;
+                    }
+                    match Self::block_on(store.rename_project(self.project.id, &new_name)) {
+                        Ok(_) => {
+                            self.project.name = new_name;
+                            self.refresh_after_mutation(store)
+                        }
+                        Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
+                    }
+                } else if let Some(old_name) = old_state_name {
+                    // editing an existing state name
+                    if new_name == old_name {
+                        return None;
+                    }
+                    match Self::block_on(store.rename_state(self.project.id, &old_name, &new_name))
+                    {
+                        Ok(_) => self.refresh_after_mutation(store),
+                        Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
+                    }
+                } else {
+                    // adding a new state (from AddingState mode)
+                    match Self::block_on(store.add_state(self.project.id, &new_name)) {
+                        Ok(_) => self.refresh_after_mutation(store),
+                        Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
+                    }
+                }
+            }
+            Message::SettingsCancelEdit => {
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                    *mode = SettingsMode::Browsing;
+                }
+                None
+            }
+            Message::SettingsColorUp => {
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup
+                    && let SettingsMode::PickingColor {
+                        selected_color_index,
+                        ..
+                    } = mode
                     && *selected_color_index > 0
                 {
                     *selected_color_index -= 1;
                 }
                 None
             }
-            Message::ColorPickerDown => {
-                if let Some(PopupState::ColorPicker {
-                    selected_color_index,
-                    ..
-                }) = &mut self.popup
+            Message::SettingsColorDown => {
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup
+                    && let SettingsMode::PickingColor {
+                        selected_color_index,
+                        ..
+                    } = mode
+                    && *selected_color_index + 1 < 16
                 {
-                    // 15 named colors + 1 "None" option = 16 total
-                    if *selected_color_index + 1 < 16 {
-                        *selected_color_index += 1;
-                    }
+                    *selected_color_index += 1;
                 }
                 None
             }
-            Message::ConfirmColor(state_id, selected_color_index) => {
-                // map index 0 to None (clear), indices 1-15 to the color name string
-                let color_name: Option<&str> = if selected_color_index == 0 {
+            Message::SettingsConfirmColor => {
+                let (state_id, color_idx) = match &self.popup {
+                    Some(PopupState::ProjectSettings {
+                        mode:
+                            SettingsMode::PickingColor {
+                                state_id,
+                                selected_color_index,
+                            },
+                        ..
+                    }) => (*state_id, *selected_color_index),
+                    _ => return None,
+                };
+
+                let color_name: Option<&str> = if color_idx == 0 {
                     None
                 } else {
                     crate::models::STATE_COLORS
-                        .get(selected_color_index - 1)
+                        .get(color_idx - 1)
                         .map(|(n, _)| *n)
                 };
 
@@ -650,13 +1072,27 @@ impl App {
                     .map(|s| s.name.as_str())
                     .unwrap_or("");
 
-                self.popup = None;
-
                 match Self::block_on(store.set_state_color(self.project.id, state_name, color_name))
                 {
-                    Ok(_) => self.refresh_after_mutation(store),
-                    Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
+                    Ok(_) => {
+                        if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                            *mode = SettingsMode::Browsing;
+                        }
+                        self.refresh_after_mutation(store)
+                    }
+                    Err(e) => {
+                        if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                            *mode = SettingsMode::Browsing;
+                        }
+                        Some(Message::ErrorOccurred(format!("{}", e)))
+                    }
                 }
+            }
+            Message::SettingsCancelColor => {
+                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
+                    *mode = SettingsMode::Browsing;
+                }
+                None
             }
 
             // side effects

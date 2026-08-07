@@ -1,4 +1,4 @@
-use crate::tui::app::{App, PopupState};
+use crate::tui::app::{App, PopupState, SettingsMode};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -15,10 +15,9 @@ pub fn render(frame: &mut Frame, app: &App) {
                 task_id: _,
                 selected_state_index,
             } => render_state_picker(frame, app, *selected_state_index),
-            PopupState::ColorPicker {
-                state_id,
-                selected_color_index,
-            } => render_color_picker(frame, app, *state_id, *selected_color_index),
+            PopupState::ProjectSettings {
+                selected_row, mode, ..
+            } => render_project_settings(frame, app, *selected_row, mode),
             PopupState::ConfirmDelete {
                 task_id: _,
                 task_title,
@@ -146,69 +145,282 @@ fn render_confirm_delete(frame: &mut Frame, task_title: &str, confirm: bool) {
     );
 }
 
-fn render_color_picker(frame: &mut Frame, app: &App, state_id: i64, selected_color_index: usize) {
-    let state_name = app
-        .states
-        .iter()
-        .find(|s| s.id == state_id)
-        .map(|s| s.name.as_str())
-        .unwrap_or("unknown");
-
-    let current_color = app
-        .states
-        .iter()
-        .find(|s| s.id == state_id)
-        .and_then(|s| s.color.as_ref().map(|c| c.0.as_str()));
-
+fn render_project_settings(frame: &mut Frame, app: &App, selected_row: usize, mode: &SettingsMode) {
     let mut lines: Vec<Line> = Vec::new();
+    let states = &app.states;
 
-    // header
-    lines.push(Line::from(Span::styled(
-        format!("  Color for state \"{}\":", state_name),
-        Style::default().add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
+    // PickingColor mode: side-by-side layout
+    if let SettingsMode::PickingColor {
+        selected_color_index,
+        ..
+    } = mode
+    {
+        let color_idx = *selected_color_index;
 
-    // "None" option (index 0)
-    let is_none_selected = selected_color_index == 0;
-    let marker = if is_none_selected { ">" } else { " " };
-    let prefix = if current_color.is_none() { "*" } else { " " };
-    let text = format!("  {}{} None (default)", marker, prefix);
-    let style = if is_none_selected {
-        Style::default().add_modifier(Modifier::REVERSED)
-    } else {
-        Style::default()
-    };
-    lines.push(Line::from(Span::styled(text, style)));
+        // ── build left panel (compact settings view) ──
+        let mut left: Vec<Line> = Vec::new();
+        left.push(Line::from(Span::styled(
+            "  Project",
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
+        left.push(Line::from(Span::styled(
+            format!("    {}", app.project.name),
+            Style::default(),
+        )));
+        left.push(Line::from(""));
+        left.push(Line::from(Span::styled(
+            "  States",
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
+        for (i, state) in states.iter().enumerate() {
+            let row_idx = i + 1;
+            let is_selected = row_idx == selected_row;
+            let marker = if is_selected { ">" } else { " " };
+            let color_name = state.color.as_ref().map(|c| c.0.as_str()).unwrap_or("none");
+            left.push(Line::from(format!(
+                "  {} {}. {} [{}]",
+                marker, row_idx, state.name, color_name
+            )));
+        }
+        if states.is_empty() {
+            left.push(Line::from("    (no states)"));
+        }
 
-    // named colors (indices 1..)
-    for (i, (name, color)) in crate::models::STATE_COLORS.iter().enumerate() {
-        let color_idx = i + 1;
-        let is_selected = color_idx == selected_color_index;
-        let marker = if is_selected { ">" } else { " " };
-        let prefix = if current_color == Some(name) { "*" } else { " " };
+        // ── build right panel (color picker) ──
+        let mut right: Vec<Line> = Vec::new();
+        right.push(Line::from(Span::styled(
+            "  Color",
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
+        right.push(Line::from(""));
 
-        let text = format!("  {}{} {}", marker, prefix, name);
-
-        let style = if is_selected {
+        // "None" option (index 0)
+        let is_none_selected = color_idx == 0;
+        let marker = if is_none_selected { ">" } else { " " };
+        let style = if is_none_selected {
             Style::default().add_modifier(Modifier::REVERSED)
         } else {
-            Style::default().fg(*color)
+            Style::default()
         };
+        right.push(Line::from(Span::styled(
+            format!("  {} None (default)", marker),
+            style,
+        )));
 
-        lines.push(Line::from(Span::styled(text, style)));
+        // named colors
+        for (i, (name, color)) in crate::models::STATE_COLORS.iter().enumerate() {
+            let cidx = i + 1;
+            let is_selected = cidx == color_idx;
+            let marker = if is_selected { ">" } else { " " };
+            let style = if is_selected {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default().fg(*color)
+            };
+            right.push(Line::from(Span::styled(
+                format!("  {} {}", marker, name),
+                style,
+            )));
+        }
+
+        // ── merge side-by-side ──
+        let left_width = 34usize;
+        let max_rows = left.len().max(right.len());
+        let mut lines: Vec<Line> = Vec::new();
+
+        for row in 0..max_rows {
+            let left_text = if row < left.len() {
+                let line_str = left[row]
+                    .spans
+                    .iter()
+                    .map(|s| s.content.as_ref())
+                    .collect::<Vec<&str>>()
+                    .join("");
+                format!("{:<width$}", line_str, width = left_width)
+            } else {
+                " ".repeat(left_width)
+            };
+
+            let right_spans = if row < right.len() {
+                right[row].spans.clone()
+            } else {
+                vec![Span::raw("")]
+            };
+
+            let mut all_spans = vec![Span::raw(left_text), Span::raw(" ")];
+            all_spans.extend(right_spans);
+            lines.push(Line::from(all_spans));
+        }
+
+        let height = (lines.len() + 2) as u16;
+        let width = 68u16;
+        let title = format!(" Project Settings: {}", app.project.name);
+        render_centered_popup(frame, lines, height.min(frame.area().height), width, &title);
+        return;
     }
 
+    // Project section
+    lines.push(Line::from(Span::styled(
+        "  Project",
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+    let row0_selected = selected_row == 0;
+
+    match mode {
+        SettingsMode::EditingName { input } if selected_row == 0 => {
+            let text = format!("    Name:  {}", input.buffer);
+            let style = if row0_selected {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            lines.push(Line::from(Span::styled(text, style)));
+            lines.push(Line::from(Span::styled(
+                "           Enter confirm  Esc cancel",
+                Style::default().add_modifier(Modifier::DIM),
+            )));
+        }
+        _ => {
+            let text = format!("    Name:  {}", app.project.name);
+            let style = if row0_selected {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            lines.push(Line::from(Span::styled(text, style)));
+            lines.push(Line::from(Span::styled(
+                "           (r) rename",
+                Style::default().add_modifier(Modifier::DIM),
+            )));
+        }
+    }
+
+    lines.push(Line::from(""));
+
+    // States section
+    lines.push(Line::from(Span::styled(
+        "  States",
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+
+    if let SettingsMode::AddingState { input } = mode {
+        let text = format!("    New:  {}", input.buffer);
+        let style = if selected_row == 1 {
+            Style::default().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::default()
+        };
+        lines.push(Line::from(Span::styled(text, style)));
+        lines.push(Line::from(Span::styled(
+            "          Enter confirm  Esc cancel",
+            Style::default().add_modifier(Modifier::DIM),
+        )));
+    } else {
+        for (i, state) in states.iter().enumerate() {
+            let row_idx = i + 1;
+            let is_selected = row_idx == selected_row;
+            let is_editing = matches!(mode, SettingsMode::EditingName { .. }) && is_selected;
+
+            if is_editing {
+                if let SettingsMode::EditingName { input } = mode {
+                    let text = format!("    {}. {}", i + 1, input.buffer);
+                    let style = Style::default().add_modifier(Modifier::REVERSED);
+                    lines.push(Line::from(Span::styled(text, style)));
+                    lines.push(Line::from(Span::styled(
+                        "        Enter confirm  Esc cancel",
+                        Style::default().add_modifier(Modifier::DIM),
+                    )));
+                }
+            } else {
+                let marker = if is_selected { ">" } else { " " };
+                let state_color_name = state.color.as_ref().map(|c| c.0.as_str());
+
+                let color_text = match state_color_name {
+                    Some(name) => format!("[{}]", name),
+                    None => "[none]".to_string(),
+                };
+
+                let rat_color = state.color.clone().map(ratatui::style::Color::from);
+
+                let color_style = if let Some(c) = rat_color {
+                    Style::default().fg(c)
+                } else {
+                    Style::default().add_modifier(Modifier::DIM)
+                };
+
+                let name_style = if is_selected {
+                    Style::default().add_modifier(Modifier::REVERSED)
+                } else {
+                    Style::default()
+                };
+
+                let hints = if is_selected { "kj r c d" } else { "" };
+
+                let mut spans: Vec<Span> = Vec::new();
+                spans.push(Span::styled(
+                    format!("  {} {}. ", marker, i + 1),
+                    name_style,
+                ));
+                spans.push(Span::styled(format!("{:<20} ", state.name), name_style));
+                spans.push(Span::styled(
+                    format!("{:<10}", color_text),
+                    if is_selected { name_style } else { color_style },
+                ));
+                if is_selected {
+                    spans.push(Span::styled(
+                        format!(" {}", hints),
+                        Style::default().add_modifier(Modifier::DIM),
+                    ));
+                }
+
+                lines.push(Line::from(spans));
+            }
+        }
+    }
+
+    if states.is_empty() && !matches!(mode, SettingsMode::AddingState { .. }) {
+        lines.push(Line::from(Span::styled(
+            "    (no states — press a to add)",
+            Style::default().add_modifier(Modifier::DIM),
+        )));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
+        Style::default().add_modifier(Modifier::DIM),
+    )));
+    lines.push(Line::from(Span::styled(
+        "  Esc close  k/j reorder  r rename  c color  d delete",
+        Style::default().add_modifier(Modifier::DIM),
+    )));
+    lines.push(Line::from(Span::styled(
+        "  a add state",
+        Style::default().add_modifier(Modifier::DIM),
+    )));
+
     let height = (lines.len() + 2) as u16;
-    let width = 36u16;
-    let title = format!(" Color: {}", state_name);
-    render_centered_popup(
-        frame,
-        lines,
-        height.min(frame.area().height),
-        width,
-        &title,
-    );
+    let width = 62u16;
+    let title = format!(" Project Settings: {}", app.project.name);
+
+    // set blinking cursor position when editing
+    if let SettingsMode::EditingName { input } | SettingsMode::AddingState { input } = mode {
+        let popup_area = centered_rect(width, height.min(frame.area().height), frame.area());
+
+        let (input_line_idx, text_offset): (usize, u16) = if matches!(mode, SettingsMode::AddingState { .. }) {
+            (5, 10) // "    New:  "
+        } else if selected_row == 0 {
+            (1, 11) // "    Name:  "
+        } else {
+            (4 + selected_row, 6 + (selected_row.to_string().len() as u16)) // "    {N}. "
+        };
+
+        let col = popup_area.x + 1 + text_offset + input.cursor_position as u16;
+        let row = popup_area.y + 1 + input_line_idx as u16;
+        frame.set_cursor_position((col, row));
+    }
+
+    let _ = render_centered_popup(frame, lines, height.min(frame.area().height), width, &title);
 }
 
 fn render_centered_popup(
@@ -217,7 +429,7 @@ fn render_centered_popup(
     height: u16,
     width: u16,
     title: &str,
-) {
+) -> Rect {
     let area = frame.area();
     let popup_area = centered_rect(width, height, area);
 
@@ -245,6 +457,7 @@ fn render_centered_popup(
         .split(inner)[1];
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    popup_area
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

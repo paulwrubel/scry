@@ -100,6 +100,24 @@ pub trait TaskStore {
         state_name: &str,
         color: Option<&str>,
     ) -> Result<(), StorageError>;
+
+    /// Rename a project. If this is the active project, the active-project
+    /// config is updated to the new name.
+    async fn rename_project(
+        &self,
+        project_id: ProjectID,
+        new_name: &str,
+    ) -> Result<(), StorageError>;
+
+    /// Move a state to a new position (0-based) within its project.
+    /// Other states are shifted to accommodate the new position.
+    /// The new position is clamped to [0, number of states - 1].
+    async fn reorder_state(
+        &self,
+        project_id: ProjectID,
+        state_name: &str,
+        new_position: i32,
+    ) -> Result<(), StorageError>;
 }
 
 pub mod sqlite;

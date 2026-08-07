@@ -834,4 +834,167 @@ impl TaskStore for SqliteStore {
 
         Ok(())
     }
+
+    async fn rename_project(
+        &self,
+        project_id: ProjectID,
+        new_name: &str,
+    ) -> Result<(), StorageError> {
+        // verify project exists
+        let project = self.get_project_by_id(project_id).await?.ok_or_else(|| {
+            StorageError::NotFound(format!("project with id {} not found", project_id))
+        })?;
+
+        let old_name = project.name.clone();
+
+        let result = sqlx::query!(
+            r#"
+                UPDATE projects
+                SET name = ?
+                WHERE id = ?
+            "#,
+            new_name,
+            project_id,
+        )
+        .execute(&self.pool)
+        .await;
+
+        match result {
+            Ok(_) => {}
+            Err(e) if is_unique_violation(&e) => {
+                return Err(StorageError::Conflict(format!(
+                    "project '{}' already exists",
+                    new_name
+                )));
+            }
+            Err(e) => {
+                return Err(StorageError::Database(format!(
+                    "failed to rename project: {}",
+                    e
+                )));
+            }
+        }
+
+        // if this was the active project, update the config
+        let active = sqlx::query!(
+            r#"
+                SELECT value
+                FROM config
+                WHERE key = 'active_project'
+            "#,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to read active project: {}", e)))?;
+
+        if active.is_some_and(|r| r.value == old_name) {
+            sqlx::query!(
+                r#"
+                    INSERT OR REPLACE INTO config (key, value)
+                    VALUES ('active_project', ?)
+                "#,
+                new_name,
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!("failed to update active project: {}", e))
+            })?;
+        }
+
+        Ok(())
+    }
+
+    async fn reorder_state(
+        &self,
+        project_id: ProjectID,
+        state_name: &str,
+        new_position: i32,
+    ) -> Result<(), StorageError> {
+        let state = sqlx::query!(
+            r#"
+                SELECT id, name, position AS "position: i32"
+                FROM states
+                WHERE project_id = ? AND name = ?
+            "#,
+            project_id,
+            state_name,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to look up state: {}", e)))?;
+
+        let state = state
+            .ok_or_else(|| StorageError::NotFound(format!("state '{}' not found", state_name)))?;
+
+        let current_pos = state.position;
+
+        // count total states to clamp new_position
+        let total = sqlx::query!(
+            r#"
+                SELECT COUNT(*) AS count
+                FROM states
+                WHERE project_id = ?
+            "#,
+            project_id,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to count states: {}", e)))?
+        .count;
+
+        let total_i32 = total as i32;
+        let new_pos = new_position.clamp(0, total_i32 - 1);
+
+        if new_pos == current_pos {
+            return Ok(());
+        }
+
+        if new_pos > current_pos {
+            // moving down: shift states between current+1 and new_pos up by 1
+            sqlx::query!(
+                r#"
+                    UPDATE states
+                    SET position = position - 1
+                    WHERE project_id = ? AND position > ? AND position <= ?
+                "#,
+                project_id,
+                current_pos,
+                new_pos,
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to shift states: {}", e)))?;
+        } else {
+            // moving up: shift states between new_pos and current-1 down by 1
+            sqlx::query!(
+                r#"
+                    UPDATE states
+                    SET position = position + 1
+                    WHERE project_id = ? AND position >= ? AND position < ?
+                "#,
+                project_id,
+                new_pos,
+                current_pos,
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to shift states: {}", e)))?;
+        }
+
+        sqlx::query!(
+            r#"
+                UPDATE states
+                SET position = ?
+                WHERE id = ?
+            "#,
+            new_pos,
+            state.id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to update state position: {}", e)))?;
+
+        Ok(())
+    }
 }
