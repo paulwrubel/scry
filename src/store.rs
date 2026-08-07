@@ -92,6 +92,14 @@ pub trait TaskStore {
 
     /// List all states for a project, ordered by position.
     async fn list_states(&self, project_id: ProjectID) -> Result<Vec<State>, StorageError>;
+
+    /// Set the color of a state. Pass `None` to clear the color.
+    async fn set_state_color(
+        &self,
+        project_id: ProjectID,
+        state_name: &str,
+        color: Option<&str>,
+    ) -> Result<(), StorageError>;
 }
 
 pub mod sqlite;

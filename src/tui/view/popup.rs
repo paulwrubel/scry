@@ -15,6 +15,10 @@ pub fn render(frame: &mut Frame, app: &App) {
                 task_id: _,
                 selected_state_index,
             } => render_state_picker(frame, app, *selected_state_index),
+            PopupState::ColorPicker {
+                state_id,
+                selected_color_index,
+            } => render_color_picker(frame, app, *state_id, *selected_color_index),
             PopupState::ConfirmDelete {
                 task_id: _,
                 task_title,
@@ -139,6 +143,71 @@ fn render_confirm_delete(frame: &mut Frame, task_title: &str, confirm: bool) {
         height.min(frame.area().height),
         width,
         "Confirm",
+    );
+}
+
+fn render_color_picker(frame: &mut Frame, app: &App, state_id: i64, selected_color_index: usize) {
+    let state_name = app
+        .states
+        .iter()
+        .find(|s| s.id == state_id)
+        .map(|s| s.name.as_str())
+        .unwrap_or("unknown");
+
+    let current_color = app
+        .states
+        .iter()
+        .find(|s| s.id == state_id)
+        .and_then(|s| s.color.as_ref().map(|c| c.0.as_str()));
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    // header
+    lines.push(Line::from(Span::styled(
+        format!("  Color for state \"{}\":", state_name),
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    // "None" option (index 0)
+    let is_none_selected = selected_color_index == 0;
+    let marker = if is_none_selected { ">" } else { " " };
+    let prefix = if current_color.is_none() { "*" } else { " " };
+    let text = format!("  {}{} None (default)", marker, prefix);
+    let style = if is_none_selected {
+        Style::default().add_modifier(Modifier::REVERSED)
+    } else {
+        Style::default()
+    };
+    lines.push(Line::from(Span::styled(text, style)));
+
+    // named colors (indices 1..)
+    for (i, (name, color)) in crate::models::STATE_COLORS.iter().enumerate() {
+        let color_idx = i + 1;
+        let is_selected = color_idx == selected_color_index;
+        let marker = if is_selected { ">" } else { " " };
+        let prefix = if current_color == Some(name) { "*" } else { " " };
+
+        let text = format!("  {}{} {}", marker, prefix, name);
+
+        let style = if is_selected {
+            Style::default().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::default().fg(*color)
+        };
+
+        lines.push(Line::from(Span::styled(text, style)));
+    }
+
+    let height = (lines.len() + 2) as u16;
+    let width = 36u16;
+    let title = format!(" Color: {}", state_name);
+    render_centered_popup(
+        frame,
+        lines,
+        height.min(frame.area().height),
+        width,
+        &title,
     );
 }
 

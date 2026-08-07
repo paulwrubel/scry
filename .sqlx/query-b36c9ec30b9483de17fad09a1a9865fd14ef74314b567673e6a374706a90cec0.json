@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT\n                    id AS \"id: i64\",\n                    project_id AS \"project_id: i64\",\n                    name,\n                    position AS \"position: i32\",\n                    is_completed AS \"is_completed: bool\",\n                    is_entry AS \"is_entry: bool\"\n                FROM states\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
+  "query": "\n                SELECT\n                    id AS \"id: i64\",\n                    project_id AS \"project_id: i64\",\n                    name,\n                    position AS \"position: i32\",\n                    is_completed AS \"is_completed: bool\",\n                    is_entry AS \"is_entry: bool\",\n                    color\n                FROM states\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,17 @@
             "name": "is_entry"
           }
         }
+      },
+      {
+        "name": "color",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "states",
+            "name": "color"
+          }
+        }
       }
     ],
     "parameters": {
@@ -79,8 +90,9 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "d1bda7cc93a9dc5dec5e560fc380183a7bf7a49b33aeeb2a9709e18fcd839e66"
+  "hash": "b36c9ec30b9483de17fad09a1a9865fd14ef74314b567673e6a374706a90cec0"
 }

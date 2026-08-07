@@ -53,6 +53,10 @@ pub enum PopupState {
         task_title: String,
         confirm: bool,
     },
+    ColorPicker {
+        state_id: i64,
+        selected_color_index: usize,
+    },
 }
 
 enum Message {
@@ -82,6 +86,10 @@ enum Message {
     ConfirmMove(i64, String),
     ExecuteDelete(i64),
     ToggleDeleteConfirm,
+    OpenColorPicker(i64),
+    ColorPickerUp,
+    ColorPickerDown,
+    ConfirmColor(i64, usize),
 
     // side effects
     DataRefreshed(Vec<State>, Vec<Task>),
@@ -346,6 +354,9 @@ impl App {
             }
             KeyCode::Char('a') => Some(Message::FocusInput),
             KeyCode::Char('m') => self.selected_task().map(|t| Message::OpenMovePicker(t.id)),
+            KeyCode::Char('c') => self
+                .selected_task()
+                .map(|t| Message::OpenColorPicker(t.state_id)),
             KeyCode::Char('d') => self
                 .selected_task()
                 .map(|t| Message::OpenDeleteConfirm(t.id)),
@@ -398,6 +409,22 @@ impl App {
                     _ => None,
                 }
             }
+            PopupState::ColorPicker { .. } => match code {
+                KeyCode::Esc => Some(Message::DismissPopup),
+                KeyCode::Up => Some(Message::ColorPickerUp),
+                KeyCode::Down => Some(Message::ColorPickerDown),
+                KeyCode::Enter => {
+                    let (state_id, idx) = match self.popup.as_ref().unwrap() {
+                        PopupState::ColorPicker {
+                            state_id,
+                            selected_color_index,
+                        } => (*state_id, *selected_color_index),
+                        _ => unreachable!(),
+                    };
+                    Some(Message::ConfirmColor(state_id, idx))
+                }
+                _ => None,
+            },
             PopupState::ConfirmDelete {
                 task_id, confirm, ..
             } => {
@@ -561,6 +588,75 @@ impl App {
                     *confirm = !*confirm;
                 }
                 None
+            }
+            Message::OpenColorPicker(state_id) => {
+                let selected_color_index = self
+                    .states
+                    .iter()
+                    .find(|s| s.id == state_id)
+                    .and_then(|s| s.color.as_ref().map(|c| c.0.as_str()))
+                    .and_then(|c| {
+                        crate::models::STATE_COLORS
+                            .iter()
+                            .position(|(n, _)| *n == c)
+                    })
+                    .map(|pos| pos + 1)
+                    .unwrap_or(0);
+
+                self.popup = Some(PopupState::ColorPicker {
+                    state_id,
+                    selected_color_index,
+                });
+                None
+            }
+            Message::ColorPickerUp => {
+                if let Some(PopupState::ColorPicker {
+                    selected_color_index,
+                    ..
+                }) = &mut self.popup
+                    && *selected_color_index > 0
+                {
+                    *selected_color_index -= 1;
+                }
+                None
+            }
+            Message::ColorPickerDown => {
+                if let Some(PopupState::ColorPicker {
+                    selected_color_index,
+                    ..
+                }) = &mut self.popup
+                {
+                    // 15 named colors + 1 "None" option = 16 total
+                    if *selected_color_index + 1 < 16 {
+                        *selected_color_index += 1;
+                    }
+                }
+                None
+            }
+            Message::ConfirmColor(state_id, selected_color_index) => {
+                // map index 0 to None (clear), indices 1-15 to the color name string
+                let color_name: Option<&str> = if selected_color_index == 0 {
+                    None
+                } else {
+                    crate::models::STATE_COLORS
+                        .get(selected_color_index - 1)
+                        .map(|(n, _)| *n)
+                };
+
+                let state_name = self
+                    .states
+                    .iter()
+                    .find(|s| s.id == state_id)
+                    .map(|s| s.name.as_str())
+                    .unwrap_or("");
+
+                self.popup = None;
+
+                match Self::block_on(store.set_state_color(self.project.id, state_name, color_name))
+                {
+                    Ok(_) => self.refresh_after_mutation(store),
+                    Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
+                }
             }
 
             // side effects

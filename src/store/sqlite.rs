@@ -4,7 +4,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
 use crate::error::StorageError;
-use crate::models::{Project, ProjectID, State, Task, TaskID};
+use crate::models::{Color, Project, ProjectID, State, Task, TaskID};
 use crate::store::TaskStore;
 
 #[derive(Clone)]
@@ -200,15 +200,17 @@ impl TaskStore for SqliteStore {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to fetch updated task: {}", e)))
-        .map(|task| Some(Task {
-            id: task.id,
-            project_id: task.project_id,
-            title: task.title,
-            description: task.description,
-            state_id: task.state_id,
-            position: task.position,
-            created_at: task.created_at,
-        }))
+        .map(|task| {
+            Some(Task {
+                id: task.id,
+                project_id: task.project_id,
+                title: task.title,
+                description: task.description,
+                state_id: task.state_id,
+                position: task.position,
+                created_at: task.created_at,
+            })
+        })
     }
 
     async fn delete_task(&self, id: TaskID, project_id: ProjectID) -> Result<bool, StorageError> {
@@ -270,9 +272,8 @@ impl TaskStore for SqliteStore {
     ) -> Result<Vec<Task>, StorageError> {
         if let Some(name) = state_name {
             match self.resolve_state_id(project_id, name).await? {
-                Some(sid) => {
-                    sqlx::query!(
-                        r#"
+                Some(sid) => sqlx::query!(
+                    r#"
                             SELECT
                                 t.id AS "id: i64",
                                 t.title,
@@ -285,26 +286,25 @@ impl TaskStore for SqliteStore {
                             WHERE t.project_id = ? AND t.state_id = ?
                             ORDER BY t.position ASC, t.id ASC
                         "#,
-                        project_id,
-                        sid,
-                    )
-                    .fetch_all(&self.pool)
-                    .await
-                    .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))
-                    .map(|rows| {
-                        rows.into_iter()
-                            .map(|r| Task {
-                                id: r.id,
-                                project_id: r.project_id,
-                                title: r.title,
-                                description: r.description,
-                                state_id: r.state_id,
-                                position: r.position,
-                                created_at: r.created_at,
-                            })
-                            .collect()
-                    })
-                }
+                    project_id,
+                    sid,
+                )
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))
+                .map(|rows| {
+                    rows.into_iter()
+                        .map(|r| Task {
+                            id: r.id,
+                            project_id: r.project_id,
+                            title: r.title,
+                            description: r.description,
+                            state_id: r.state_id,
+                            position: r.position,
+                            created_at: r.created_at,
+                        })
+                        .collect()
+                }),
                 None => return Ok(vec![]),
             }
         } else {
@@ -610,7 +610,7 @@ impl TaskStore for SqliteStore {
             r#"
                 INSERT INTO states (project_id, name, position, is_completed, is_entry)
                 VALUES (?, ?, ?, 0, 0)
-                RETURNING id, project_id, name, position, is_completed, is_entry
+                RETURNING id, project_id, name, position, is_completed, is_entry, color
             "#,
             project_id,
             name,
@@ -627,6 +627,7 @@ impl TaskStore for SqliteStore {
                 position: row.position as i32,
                 is_completed: row.is_completed,
                 is_entry: row.is_entry,
+                color: row.color.map(Color),
             }),
             Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
                 "state '{}' already exists",
@@ -781,7 +782,8 @@ impl TaskStore for SqliteStore {
                     name,
                     position AS "position: i32",
                     is_completed AS "is_completed: bool",
-                    is_entry AS "is_entry: bool"
+                    is_entry AS "is_entry: bool",
+                    color
                 FROM states
                 WHERE project_id = ?
                 ORDER BY position ASC
@@ -800,8 +802,36 @@ impl TaskStore for SqliteStore {
                     position: r.position,
                     is_completed: r.is_completed,
                     is_entry: r.is_entry,
+                    color: r.color.map(Color),
                 })
                 .collect()
         })
+    }
+
+    async fn set_state_color(
+        &self,
+        project_id: ProjectID,
+        state_name: &str,
+        color: Option<&str>,
+    ) -> Result<(), StorageError> {
+        let state_id = self
+            .resolve_state_id(project_id, state_name)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("state '{}' not found", state_name)))?;
+
+        sqlx::query!(
+            r#"
+                UPDATE states
+                SET color = ?
+                WHERE id = ?
+            "#,
+            color,
+            state_id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to set state color: {}", e)))?;
+
+        Ok(())
     }
 }
