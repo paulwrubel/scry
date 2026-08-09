@@ -120,46 +120,44 @@ impl Component for ProjectSettings {
                         .map(|s| Action::DeleteState(s.name.clone()))
                 }
                 KeyCode::Char('c') => {
-                    if self.selected_row > 0 {
-                        if let Some(state) = ctx.states.get(self.selected_row - 1) {
-                            let selected_color_index = state
-                                .color
-                                .as_ref()
-                                .map(|c| c.0.as_str())
-                                .and_then(|c| STATE_COLORS.iter().position(|(name, _)| *name == c))
-                                .map(|pos| pos + 1)
-                                .unwrap_or(0);
-                            self.mode = SettingsMode::PickingColor {
-                                state_id: state.id,
-                                selected_color_index,
-                            };
-                        }
+                    if self.selected_row > 0
+                        && let Some(state) = ctx.states.get(self.selected_row - 1)
+                    {
+                        let selected_color_index = state
+                            .color
+                            .as_ref()
+                            .map(|c| c.0.as_str())
+                            .and_then(|c| STATE_COLORS.iter().position(|(name, _)| *name == c))
+                            .map(|pos| pos + 1)
+                            .unwrap_or(0);
+                        self.mode = SettingsMode::PickingColor {
+                            state_id: state.id,
+                            selected_color_index,
+                        };
                     }
                     None
                 }
                 KeyCode::Char('k') => {
-                    if self.selected_row > 0 {
-                        if let Some(state) = ctx.states.get(self.selected_row - 1) {
-                            if state.position > 0 {
-                                return Some(Action::ReorderState {
-                                    state_name: state.name.clone(),
-                                    new_position: state.position - 1,
-                                });
-                            }
-                        }
+                    if self.selected_row > 0
+                        && let Some(state) = ctx.states.get(self.selected_row - 1)
+                        && state.position > 0
+                    {
+                        return Some(Action::ReorderState {
+                            state_name: state.name.clone(),
+                            new_position: state.position - 1,
+                        });
                     }
                     None
                 }
                 KeyCode::Char('j') => {
-                    if self.selected_row > 0 {
-                        if let Some(state) = ctx.states.get(self.selected_row - 1) {
-                            if state.position < self.state_count as i32 - 1 {
-                                return Some(Action::ReorderState {
-                                    state_name: state.name.clone(),
-                                    new_position: state.position + 1,
-                                });
-                            }
-                        }
+                    if self.selected_row > 0
+                        && let Some(state) = ctx.states.get(self.selected_row - 1)
+                        && state.position < self.state_count as i32 - 1
+                    {
+                        return Some(Action::ReorderState {
+                            state_name: state.name.clone(),
+                            new_position: state.position + 1,
+                        });
                     }
                     None
                 }
@@ -185,14 +183,13 @@ impl Component for ProjectSettings {
                         .states
                         .get(self.selected_row - 1)
                         .map(|s| s.name.clone())
+                        && trimmed != old
                     {
-                        if trimmed != old {
-                            self.mode = SettingsMode::Browsing;
-                            return Some(Action::RenameState {
-                                old_name: old,
-                                new_name: trimmed,
-                            });
-                        }
+                        self.mode = SettingsMode::Browsing;
+                        return Some(Action::RenameState {
+                            old_name: old,
+                            new_name: trimmed,
+                        });
                     }
                     self.mode = SettingsMode::Browsing;
                     None
