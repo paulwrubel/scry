@@ -44,40 +44,41 @@ impl TaskList {
 
     fn compute_vertical_scroll_offset(&self, ctx: &AppContext, viewport_height: u16) -> u16 {
         let order = Self::build_visual_order(ctx.states, ctx.tasks);
+        if order.is_empty() {
+            return 0;
+        }
+
+        let selected_index = self.selected_index.clamp(0, order.len().saturating_sub(1));
+
         let mut line_index: u16 = 0;
 
-        if self.selected_index >= order.len() {
-            // empty task list — scroll past all state headers
-            for state in ctx.states {
+        let flat_idx = order[selected_index];
+        let selected_state_id = ctx.tasks[flat_idx].state_id;
+
+        for state in ctx.states {
+            // blank separator between state groups (matches render)
+            if line_index > 0 {
                 line_index += 1;
-                let count = ctx.tasks.iter().filter(|t| t.state_id == state.id).count();
-                line_index += count as u16;
             }
-        } else {
-            let flat_idx = order[self.selected_index];
-            let selected_state_id = ctx.tasks[flat_idx].state_id;
+            line_index += 1;
 
-            for state in ctx.states {
-                line_index += 1;
-
-                if state.id == selected_state_id {
-                    // count tasks in this state before the selected one
-                    let tasks_in_state: Vec<_> = ctx
-                        .tasks
-                        .iter()
-                        .filter(|t| t.state_id == state.id)
-                        .collect();
-                    let pos = tasks_in_state
-                        .iter()
-                        .position(|t| t.id == ctx.tasks[flat_idx].id)
-                        .unwrap_or(0);
-                    line_index += pos as u16;
-                    break;
-                }
-
-                let count = ctx.tasks.iter().filter(|t| t.state_id == state.id).count();
-                line_index += count as u16;
+            if state.id == selected_state_id {
+                // count tasks in this state before the selected one
+                let tasks_in_state: Vec<_> = ctx
+                    .tasks
+                    .iter()
+                    .filter(|t| t.state_id == state.id)
+                    .collect();
+                let pos = tasks_in_state
+                    .iter()
+                    .position(|t| t.id == ctx.tasks[flat_idx].id)
+                    .unwrap_or(0);
+                line_index += pos as u16;
+                break;
             }
+
+            let count = ctx.tasks.iter().filter(|t| t.state_id == state.id).count();
+            line_index += count as u16;
         }
 
         // ensure the selected line is visible within the viewport
@@ -93,7 +94,7 @@ impl TaskList {
 
     fn render_state_header(state_name: &str, task_count: usize) -> Line<'static> {
         Line::from(Span::styled(
-            format!("{} ({}):", state_name, task_count),
+            format!("{state_name} ({task_count}):"),
             Style::default().add_modifier(Modifier::BOLD),
         ))
     }
