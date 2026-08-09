@@ -2,9 +2,7 @@ use std::future::Future;
 
 use crossterm::{
     cursor::{SetCursorStyle, Show},
-    event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
-    },
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -16,139 +14,30 @@ use crate::error::AppError;
 use crate::models::{Project, State, Task};
 use crate::store::TaskStore;
 
-use super::view;
+use crate::tui::action::Action;
+use crate::tui::component::AppContext;
+use crate::tui::component::Root;
 
+/// Terminal lifecycle and domain logic. UI orchestration lives in Root.
 pub struct App {
-    pub project: Project,
-    pub states: Vec<State>,
-    pub tasks: Vec<Task>,
-    pub selected_index: usize,
+    root: Root,
+    is_running: bool,
 
-    pub scroll_offset: u16,
-    pub input: InputState,
-    pub popup: Option<PopupState>,
-    pub running: bool,
-    pub error_message: String,
-
-    // maps visual task position (0..n) to index in self.tasks, respecting state grouping order
-    visual_order: Vec<usize>,
-}
-
-pub struct InputState {
-    pub buffer: String,
-    pub cursor_position: usize,
-    pub focused: bool,
-}
-
-pub enum PopupState {
-    TaskDetail {
-        task_id: i64,
-    },
-    StatePicker {
-        task_id: i64,
-        selected_state_index: usize,
-    },
-    ConfirmDelete {
-        task_id: i64,
-        task_title: String,
-        confirm: bool,
-    },
-    ProjectSettings {
-        selected_row: usize,
-        mode: SettingsMode,
-        delete_confirm: bool,
-    },
-}
-
-pub enum SettingsMode {
-    Browsing,
-    EditingName {
-        input: InputState,
-    },
-    AddingState {
-        input: InputState,
-    },
-    PickingColor {
-        state_id: i64,
-        selected_color_index: usize,
-    },
-}
-
-enum Message {
-    // navigation
-    MoveUp,
-    MoveDown,
-    FocusInput,
-    Quit,
-
-    // input bar
-    TypeChar(char),
-    DeleteChar,
-    CursorLeft,
-    CursorRight,
-    SubmitInput(String),
-    CancelInput,
-
-    // task actions
-    OpenDetail(i64),
-    OpenMovePicker(i64),
-    OpenDeleteConfirm(i64),
-
-    // popup interactions
-    DismissPopup,
-    MovePickerUp,
-    MovePickerDown,
-    ConfirmMove(i64, String),
-    ExecuteDelete(i64),
-    ToggleDeleteConfirm,
-
-    // settings
-    OpenSettings,
-    SettingsUp,
-    SettingsDown,
-    SettingsRename,
-    SettingsAddState,
-    SettingsDeleteState,
-    SettingsRecolor,
-    SettingsReorderUp,
-    SettingsReorderDown,
-    SettingsTypeChar(char),
-    SettingsDeleteChar,
-    SettingsConfirmEdit,
-    SettingsCancelEdit,
-    SettingsCursorLeft,
-    SettingsCursorRight,
-    SettingsColorUp,
-    SettingsColorDown,
-    SettingsConfirmColor,
-    SettingsCancelColor,
-
-    // side effects
-    DataRefreshed(Vec<State>, Vec<Task>),
-    ErrorOccurred(String),
+    // domain state
+    project: Project,
+    states: Vec<State>,
+    tasks: Vec<Task>,
 }
 
 impl App {
     pub fn new(project: Project, states: Vec<State>, tasks: Vec<Task>) -> Self {
-        let mut app = App {
+        App {
+            root: Root::new(),
+            is_running: true,
             project,
             states,
             tasks,
-            selected_index: 0,
-            scroll_offset: 0,
-            input: InputState {
-                buffer: String::new(),
-                cursor_position: 0,
-                focused: false,
-            },
-            popup: None,
-            running: true,
-            error_message: String::new(),
-
-            visual_order: Vec::new(),
-        };
-        app.rebuild_visual_order();
-        app
+        }
     }
 
     pub async fn from_store<S: TaskStore + Sync>(store: &S) -> Result<Self, AppError> {
@@ -159,8 +48,19 @@ impl App {
     }
 
     pub async fn run<S: TaskStore + Sync>(&mut self, store: &S) -> Result<(), AppError> {
+        let mut terminal = Self::setup_terminal()?;
+
+        let result = self.event_loop(&mut terminal, store).await;
+
+        Self::teardown_terminal(terminal)?;
+
+        result
+    }
+
+    fn setup_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, AppError> {
         enable_raw_mode()
             .map_err(|e| AppError::Internal(format!("failed to enable raw mode: {}", e)))?;
+
         let mut stdout = std::io::stdout();
         execute!(
             stdout,
@@ -171,8 +71,7 @@ impl App {
         )
         .map_err(|e| AppError::Internal(format!("failed to enter alternate screen: {}", e)))?;
 
-        let backend = CrosstermBackend::new(stdout);
-        let mut terminal = Terminal::new(backend)
+        let terminal = Terminal::new(CrosstermBackend::new(stdout))
             .map_err(|e| AppError::Internal(format!("failed to create terminal: {}", e)))?;
 
         let original_hook = std::panic::take_hook();
@@ -182,121 +81,144 @@ impl App {
             original_hook(info);
         }));
 
-        let result = self.event_loop(&mut terminal, store).await;
+        Ok(terminal)
+    }
 
+    fn teardown_terminal(
+        mut terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
+    ) -> Result<(), AppError> {
         disable_raw_mode()
             .map_err(|e| AppError::Internal(format!("failed to disable raw mode: {}", e)))?;
+
         execute!(
             terminal.backend_mut(),
             LeaveAlternateScreen,
             DisableMouseCapture
         )
         .map_err(|e| AppError::Internal(format!("failed to leave alternate screen: {}", e)))?;
+
         terminal
             .show_cursor()
             .map_err(|e| AppError::Internal(format!("failed to show cursor: {}", e)))?;
 
-        result
+        Ok(())
     }
 
-    pub fn is_input_selected(&self) -> bool {
-        self.selected_index == self.visual_order.len()
+    async fn event_loop<S: TaskStore + Sync>(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+        store: &S,
+    ) -> Result<(), AppError> {
+        while self.is_running {
+            let ctx = AppContext {
+                project: &self.project,
+                states: &self.states,
+                tasks: &self.tasks,
+            };
+
+            terminal
+                .draw(|f| self.root.render(&ctx, f))
+                .map_err(|e| AppError::Internal(format!("render error: {}", e)))?;
+
+            match event::read().map_err(|e| AppError::Internal(format!("event error: {}", e)))? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    self.root.clear_status();
+                    if let Some(action) = self.root.handle_event(&ctx, key) {
+                        self.process_action(store, action);
+                    }
+                }
+                Event::Resize(_, _) => {}
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
-    pub fn selected_task(&self) -> Option<&Task> {
-        if self.selected_index < self.visual_order.len() {
-            Some(&self.tasks[self.visual_order[self.selected_index]])
-        } else {
-            None
+    fn process_action<S: TaskStore + Sync>(&mut self, store: &S, action: Action) {
+        match action {
+            Action::Quit => self.is_running = false,
+
+            Action::AddTask(title) => {
+                match Self::block_on(store.add_task(&title, self.project.id)) {
+                    Ok(_) => self.refresh_data(store),
+                    Err(e) => self.root.set_status(format!("{}", e)),
+                }
+            }
+            Action::MoveTask {
+                task_id,
+                state_name,
+            } => match Self::block_on(store.move_task(task_id, self.project.id, &state_name)) {
+                Ok(_) => self.refresh_data(store),
+                Err(e) => self.root.set_status(format!("{}", e)),
+            },
+            Action::DeleteTask(task_id) => {
+                match Self::block_on(store.delete_task(task_id, self.project.id)) {
+                    Ok(_) => self.refresh_data(store),
+                    Err(e) => self.root.set_status(format!("{}", e)),
+                }
+            }
+            Action::RenameProject(new_name) => {
+                match Self::block_on(store.rename_project(self.project.id, &new_name)) {
+                    Ok(_) => {
+                        self.project.name = new_name;
+                        self.refresh_data(store);
+                    }
+                    Err(e) => self.root.set_status(format!("{}", e)),
+                }
+            }
+            Action::RenameState { old_name, new_name } => {
+                match Self::block_on(store.rename_state(self.project.id, &old_name, &new_name)) {
+                    Ok(_) => self.refresh_data(store),
+                    Err(e) => self.root.set_status(format!("{}", e)),
+                }
+            }
+            Action::AddState(name) => {
+                match Self::block_on(store.add_state(self.project.id, &name)) {
+                    Ok(_) => self.refresh_data(store),
+                    Err(e) => self.root.set_status(format!("{}", e)),
+                }
+            }
+            Action::DeleteState(state_name) => {
+                match Self::block_on(store.remove_state(self.project.id, &state_name, false)) {
+                    Ok(_) => self.refresh_data(store),
+                    Err(e) => self.root.set_status(format!("{}", e)),
+                }
+            }
+            Action::SetStateColor { state_id, color } => {
+                let state_name = self
+                    .states
+                    .iter()
+                    .find(|s| s.id == state_id)
+                    .map(|s| s.name.as_str())
+                    .unwrap_or("");
+                match Self::block_on(store.set_state_color(
+                    self.project.id,
+                    state_name,
+                    color.as_deref(),
+                )) {
+                    Ok(_) => self.refresh_data(store),
+                    Err(e) => self.root.set_status(format!("{}", e)),
+                }
+            }
+            Action::ReorderState {
+                state_name,
+                new_position,
+            } => {
+                match Self::block_on(store.reorder_state(
+                    self.project.id,
+                    &state_name,
+                    new_position,
+                )) {
+                    Ok(_) => self.refresh_data(store),
+                    Err(e) => self.root.set_status(format!("{}", e)),
+                }
+            }
+            _ => {}
         }
     }
 
     fn block_on<T>(f: impl Future<Output = T>) -> T {
         tokio::task::block_in_place(|| Handle::current().block_on(f))
-    }
-
-    fn selectable_row_count(&self) -> usize {
-        self.visual_order.len() + 1
-    }
-
-    fn select_up(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-        }
-    }
-
-    fn select_down(&mut self) {
-        let max = self.selectable_row_count() - 1;
-        if self.selected_index < max {
-            self.selected_index += 1;
-        }
-    }
-
-    fn ensure_row_visible(&mut self, row_index: u16, viewport_height: u16) {
-        if viewport_height == 0 {
-            return;
-        }
-        if row_index < self.scroll_offset {
-            self.scroll_offset = row_index;
-        } else if row_index >= self.scroll_offset + viewport_height {
-            self.scroll_offset = row_index - viewport_height + 1;
-        }
-    }
-
-    fn set_error(&mut self, msg: String) {
-        self.error_message = msg;
-    }
-
-    fn rebuild_visual_order(&mut self) {
-        self.visual_order.clear();
-        for state in &self.states {
-            for (task_idx, task) in self.tasks.iter().enumerate() {
-                if task.state_id == state.id {
-                    self.visual_order.push(task_idx);
-                }
-            }
-        }
-    }
-
-    fn scroll_to_selection(&mut self) {
-        let mut line_index: u16 = 0;
-
-        if self.selected_index >= self.visual_order.len() {
-            // input bar selected — scroll past all tasks
-            for state in &self.states {
-                line_index += 1; // header
-                let count = self.tasks.iter().filter(|t| t.state_id == state.id).count();
-                line_index += count as u16;
-            }
-        } else {
-            let flat_idx = self.visual_order[self.selected_index];
-            let selected_state_id = self.tasks[flat_idx].state_id;
-
-            for state in &self.states {
-                line_index += 1; // state header
-
-                if state.id == selected_state_id {
-                    // count tasks in this state before the selected one
-                    let tasks_in_state: Vec<_> = self
-                        .tasks
-                        .iter()
-                        .filter(|t| t.state_id == state.id)
-                        .collect();
-                    let pos = tasks_in_state
-                        .iter()
-                        .position(|t| t.id == self.tasks[flat_idx].id)
-                        .unwrap_or(0);
-                    line_index += pos as u16;
-                    break;
-                }
-
-                let count = self.tasks.iter().filter(|t| t.state_id == state.id).count();
-                line_index += count as u16;
-            }
-        }
-
-        let viewport_height = 20u16;
-        self.ensure_row_visible(line_index, viewport_height);
     }
 
     fn fetch_data<S: TaskStore + Sync>(
@@ -310,806 +232,13 @@ impl App {
         Ok((states, tasks))
     }
 
-    fn refresh_after_mutation<S: TaskStore + Sync>(&self, store: &S) -> Option<Message> {
+    fn refresh_data<S: TaskStore + Sync>(&mut self, store: &S) {
         match Self::fetch_data(store, self.project.id) {
-            Ok((states, tasks)) => Some(Message::DataRefreshed(states, tasks)),
-            Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-        }
-    }
-
-    async fn event_loop<S: TaskStore + Sync>(
-        &mut self,
-        terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-        store: &S,
-    ) -> Result<(), AppError> {
-        // initial render
-        terminal
-            .draw(|f| view::render(f, self))
-            .map_err(|e| AppError::Internal(format!("render error: {}", e)))?;
-
-        while self.running {
-            // block until an event arrives — no wasted CPU
-            match event::read().map_err(|e| AppError::Internal(format!("event error: {}", e)))? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    // clear any stale error before processing new input
-                    self.error_message.clear();
-
-                    // map raw key to a semantic Message
-                    if let Some(msg) = self.map_key_to_message(key) {
-                        // cascade: one message can produce another
-                        let mut next = Some(msg);
-                        while let Some(m) = next {
-                            next = self.update(store, m);
-                        }
-                    }
-                }
-                Event::Resize(_, _) => {
-                    // terminal was resized — just redraw
-                }
-                _ => {}
-            }
-
-            // redraw once after all cascaded updates
-            terminal
-                .draw(|f| view::render(f, self))
-                .map_err(|e| AppError::Internal(format!("render error: {}", e)))?;
-        }
-
-        Ok(())
-    }
-
-    fn map_key_to_message(&self, key: KeyEvent) -> Option<Message> {
-        // popup mode — only popup keys are valid
-        if self.popup.is_some() {
-            return self.popup_key_to_message(key.code);
-        }
-
-        // input mode — typing keys go to the input handler
-        if self.input.focused {
-            return self.input_key_to_message(key.code);
-        }
-
-        // normal navigation mode
-        self.navigation_key_to_message(key.code)
-    }
-
-    fn navigation_key_to_message(&self, code: KeyCode) -> Option<Message> {
-        match code {
-            KeyCode::Up => Some(Message::MoveUp),
-            KeyCode::Down => Some(Message::MoveDown),
-            KeyCode::Enter => {
-                if self.is_input_selected() {
-                    Some(Message::FocusInput)
-                } else {
-                    self.selected_task().map(|t| Message::OpenDetail(t.id))
-                }
-            }
-            KeyCode::Char('a') => Some(Message::FocusInput),
-            KeyCode::Char('m') => self.selected_task().map(|t| Message::OpenMovePicker(t.id)),
-            KeyCode::Char('d') => self
-                .selected_task()
-                .map(|t| Message::OpenDeleteConfirm(t.id)),
-            KeyCode::Char('q') => Some(Message::Quit),
-            KeyCode::Char('s') => Some(Message::OpenSettings),
-            _ => None,
-        }
-    }
-
-    fn input_key_to_message(&self, code: KeyCode) -> Option<Message> {
-        match code {
-            KeyCode::Esc => Some(Message::CancelInput),
-            KeyCode::Enter => {
-                let title = self.input.buffer.trim().to_string();
-                if title.is_empty() {
-                    Some(Message::CancelInput)
-                } else {
-                    Some(Message::SubmitInput(title))
-                }
-            }
-            KeyCode::Char(c) => Some(Message::TypeChar(c)),
-            KeyCode::Backspace => Some(Message::DeleteChar),
-            KeyCode::Left => Some(Message::CursorLeft),
-            KeyCode::Right => Some(Message::CursorRight),
-            _ => None,
-        }
-    }
-
-    fn popup_key_to_message(&self, code: KeyCode) -> Option<Message> {
-        match self.popup.as_ref().unwrap() {
-            PopupState::TaskDetail { .. } => match code {
-                KeyCode::Esc | KeyCode::Enter => Some(Message::DismissPopup),
-                _ => None,
-            },
-            PopupState::StatePicker { task_id, .. } => {
-                let task_id = *task_id;
-                match code {
-                    KeyCode::Esc => Some(Message::DismissPopup),
-                    KeyCode::Up => Some(Message::MovePickerUp),
-                    KeyCode::Down => Some(Message::MovePickerDown),
-                    KeyCode::Enter => {
-                        let state_name = match self.popup.as_ref().unwrap() {
-                            PopupState::StatePicker {
-                                selected_state_index,
-                                ..
-                            } => self.states[*selected_state_index].name.clone(),
-                            _ => unreachable!(),
-                        };
-                        Some(Message::ConfirmMove(task_id, state_name))
-                    }
-                    _ => None,
-                }
-            }
-            PopupState::ProjectSettings { mode, .. } => match mode {
-                SettingsMode::Browsing => match code {
-                    KeyCode::Esc => Some(Message::DismissPopup),
-                    KeyCode::Up => Some(Message::SettingsUp),
-                    KeyCode::Down => Some(Message::SettingsDown),
-                    KeyCode::Char('r') => Some(Message::SettingsRename),
-                    KeyCode::Char('a') => Some(Message::SettingsAddState),
-                    KeyCode::Char('d') => Some(Message::SettingsDeleteState),
-                    KeyCode::Char('c') => Some(Message::SettingsRecolor),
-                    KeyCode::Char('k') => Some(Message::SettingsReorderUp),
-                    KeyCode::Char('j') => Some(Message::SettingsReorderDown),
-                    _ => None,
-                },
-                SettingsMode::PickingColor { .. } => match code {
-                    KeyCode::Esc => Some(Message::SettingsCancelColor),
-                    KeyCode::Up => Some(Message::SettingsColorUp),
-                    KeyCode::Down => Some(Message::SettingsColorDown),
-                    KeyCode::Enter => Some(Message::SettingsConfirmColor),
-                    _ => None,
-                },
-                SettingsMode::EditingName { .. } | SettingsMode::AddingState { .. } => match code {
-                    KeyCode::Esc => Some(Message::SettingsCancelEdit),
-                    KeyCode::Enter => Some(Message::SettingsConfirmEdit),
-                    KeyCode::Char(c) => Some(Message::SettingsTypeChar(c)),
-                    KeyCode::Backspace => Some(Message::SettingsDeleteChar),
-                    KeyCode::Left => Some(Message::SettingsCursorLeft),
-                    KeyCode::Right => Some(Message::SettingsCursorRight),
-                    _ => None,
-                },
-            },
-            PopupState::ConfirmDelete {
-                task_id, confirm, ..
-            } => {
-                let task_id = *task_id;
-                match code {
-                    KeyCode::Esc | KeyCode::Char('n') => Some(Message::DismissPopup),
-                    KeyCode::Char('y') => Some(Message::ExecuteDelete(task_id)),
-                    KeyCode::Enter => {
-                        if *confirm {
-                            Some(Message::ExecuteDelete(task_id))
-                        } else {
-                            Some(Message::DismissPopup)
-                        }
-                    }
-                    KeyCode::Left | KeyCode::Right => Some(Message::ToggleDeleteConfirm),
-                    _ => None,
-                }
-            }
-        }
-    }
-
-    // update takes a Message, mutates state, optionally returns a follow-up Message
-    fn update<S: TaskStore + Sync>(&mut self, store: &S, msg: Message) -> Option<Message> {
-        match msg {
-            // navigation
-            Message::MoveUp => {
-                self.select_up();
-                self.scroll_to_selection();
-                None
-            }
-            Message::MoveDown => {
-                self.select_down();
-                self.scroll_to_selection();
-                None
-            }
-            Message::FocusInput => {
-                self.selected_index = self.visual_order.len();
-                self.input.focused = true;
-                self.input.buffer.clear();
-                self.input.cursor_position = 0;
-                self.scroll_to_selection();
-                None
-            }
-            Message::Quit => {
-                self.running = false;
-                None
-            }
-
-            // input bar
-            Message::TypeChar(c) => {
-                self.input.buffer.insert(self.input.cursor_position, c);
-                self.input.cursor_position += 1;
-                None
-            }
-            Message::DeleteChar => {
-                if self.input.cursor_position > 0 {
-                    self.input.cursor_position -= 1;
-                    self.input.buffer.remove(self.input.cursor_position);
-                }
-                None
-            }
-            Message::CursorLeft => {
-                if self.input.cursor_position > 0 {
-                    self.input.cursor_position -= 1;
-                }
-                None
-            }
-            Message::CursorRight => {
-                if self.input.cursor_position < self.input.buffer.len() {
-                    self.input.cursor_position += 1;
-                }
-                None
-            }
-            Message::SubmitInput(title) => {
-                self.input.focused = false;
-                self.input.buffer.clear();
-                self.input.cursor_position = 0;
-
-                match Self::block_on(store.add_task(&title, self.project.id)) {
-                    Ok(_) => self.refresh_after_mutation(store),
-                    Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                }
-            }
-            Message::CancelInput => {
-                self.input.focused = false;
-                self.input.buffer.clear();
-                self.input.cursor_position = 0;
-                None
-            }
-
-            // task actions
-            Message::OpenDetail(id) => {
-                self.popup = Some(PopupState::TaskDetail { task_id: id });
-                None
-            }
-            Message::OpenMovePicker(id) => {
-                let idx = self
-                    .selected_task()
-                    .and_then(|t| self.states.iter().position(|s| s.id == t.state_id))
-                    .unwrap_or(0);
-                self.popup = Some(PopupState::StatePicker {
-                    task_id: id,
-                    selected_state_index: idx,
-                });
-                None
-            }
-            Message::OpenDeleteConfirm(id) => {
-                if let Some(task) = self.tasks.iter().find(|t| t.id == id) {
-                    self.popup = Some(PopupState::ConfirmDelete {
-                        task_id: id,
-                        task_title: task.title.clone(),
-                        confirm: false,
-                    });
-                }
-                None
-            }
-
-            // popup interactions
-            Message::DismissPopup => {
-                self.popup = None;
-                None
-            }
-            Message::MovePickerUp => {
-                if let Some(PopupState::StatePicker {
-                    selected_state_index,
-                    ..
-                }) = &mut self.popup
-                    && *selected_state_index > 0
-                {
-                    *selected_state_index -= 1;
-                }
-                None
-            }
-            Message::MovePickerDown => {
-                if let Some(PopupState::StatePicker {
-                    selected_state_index,
-                    ..
-                }) = &mut self.popup
-                    && *selected_state_index + 1 < self.states.len()
-                {
-                    *selected_state_index += 1;
-                }
-                None
-            }
-            Message::ConfirmMove(task_id, state_name) => {
-                self.popup = None;
-                match Self::block_on(store.move_task(task_id, self.project.id, &state_name)) {
-                    Ok(_) => self.refresh_after_mutation(store),
-                    Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                }
-            }
-            Message::ExecuteDelete(task_id) => {
-                self.popup = None;
-                match Self::block_on(store.delete_task(task_id, self.project.id)) {
-                    Ok(_) => self.refresh_after_mutation(store),
-                    Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                }
-            }
-            Message::ToggleDeleteConfirm => {
-                if let Some(PopupState::ConfirmDelete { confirm, .. }) = &mut self.popup {
-                    *confirm = !*confirm;
-                }
-                None
-            }
-
-            Message::OpenSettings => {
-                self.popup = Some(PopupState::ProjectSettings {
-                    selected_row: 0,
-                    mode: SettingsMode::Browsing,
-                    delete_confirm: false,
-                });
-                None
-            }
-            Message::SettingsUp => {
-                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
-                    *delete_confirm = false;
-                }
-                if let Some(PopupState::ProjectSettings { selected_row, .. }) = &mut self.popup
-                    && *selected_row > 0
-                {
-                    *selected_row -= 1;
-                }
-                None
-            }
-            Message::SettingsDown => {
-                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
-                    *delete_confirm = false;
-                }
-                if let Some(PopupState::ProjectSettings { selected_row, .. }) = &mut self.popup
-                    && *selected_row < self.states.len()
-                {
-                    *selected_row += 1;
-                }
-                None
-            }
-            Message::SettingsRename => {
-                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
-                    *delete_confirm = false;
-                }
-                if let Some(PopupState::ProjectSettings {
-                    selected_row, mode, ..
-                }) = &mut self.popup
-                {
-                    let default_text = if *selected_row == 0 {
-                        self.project.name.clone()
-                    } else {
-                        self.states
-                            .get(*selected_row - 1)
-                            .map(|s| s.name.clone())
-                            .unwrap_or_default()
-                    };
-                    let cursor_pos = default_text.len();
-                    *mode = SettingsMode::EditingName {
-                        input: InputState {
-                            buffer: default_text,
-                            cursor_position: cursor_pos,
-                            focused: true,
-                        },
-                    };
-                }
-                None
-            }
-            Message::SettingsAddState => {
-                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
-                    *delete_confirm = false;
-                }
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                    *mode = SettingsMode::AddingState {
-                        input: InputState {
-                            buffer: String::new(),
-                            cursor_position: 0,
-                            focused: true,
-                        },
-                    };
-                }
-                None
-            }
-            Message::SettingsDeleteState => {
-                // read delete_confirm + selected_row from immutable borrow
-                let (delete_confirm, selected_row) = match &self.popup {
-                    Some(PopupState::ProjectSettings {
-                        delete_confirm,
-                        selected_row,
-                        ..
-                    }) => (*delete_confirm, *selected_row),
-                    _ => return None,
-                };
-
-                if selected_row == 0 {
-                    return None;
-                }
-
-                if !delete_confirm {
-                    // set confirm flag via mutable borrow
-                    if let Some(PopupState::ProjectSettings { delete_confirm, .. }) =
-                        &mut self.popup
-                    {
-                        *delete_confirm = true;
-                    }
-                    return None;
-                }
-
-                // confirmed — read state name, drop popup borrow
-                let state_name = self.states.get(selected_row - 1).map(|s| s.name.clone());
-
-                // reset confirm
-                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
-                    *delete_confirm = false;
-                }
-
-                if let Some(name) = state_name {
-                    match Self::block_on(store.remove_state(self.project.id, &name, false)) {
-                        Ok(_) => {
-                            match Self::fetch_data(store, self.project.id) {
-                                Ok((states, tasks)) => {
-                                    self.states = states;
-                                    self.tasks = tasks;
-                                    self.rebuild_visual_order();
-                                    // clamp selected_row — mutable borrow of popup
-                                    if let Some(PopupState::ProjectSettings {
-                                        selected_row: sr,
-                                        ..
-                                    }) = &mut self.popup
-                                        && *sr > self.states.len()
-                                    {
-                                        *sr = self.states.len();
-                                    }
-                                }
-                                Err(e) => {
-                                    self.set_error(format!("{}", e));
-                                }
-                            }
-                            None
-                        }
-                        Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                    }
-                } else {
-                    None
-                }
-            }
-            Message::SettingsRecolor => {
-                // reset delete_confirm
-                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
-                    *delete_confirm = false;
-                }
-
-                let state_id = self.popup.as_ref().and_then(|p| match p {
-                    PopupState::ProjectSettings { selected_row, .. } => {
-                        if *selected_row > 0 {
-                            self.states.get(*selected_row - 1).map(|s| s.id)
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                });
-
-                if let Some(id) = state_id {
-                    let selected_color_index = self
-                        .states
-                        .iter()
-                        .find(|s| s.id == id)
-                        .and_then(|s| s.color.as_ref().map(|c| c.0.as_str()))
-                        .and_then(|c| {
-                            crate::models::STATE_COLORS
-                                .iter()
-                                .position(|(n, _)| *n == c)
-                        })
-                        .map(|pos| pos + 1)
-                        .unwrap_or(0);
-
-                    if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                        *mode = SettingsMode::PickingColor {
-                            state_id: id,
-                            selected_color_index,
-                        };
-                    }
-                }
-                None
-            }
-            Message::SettingsReorderUp => {
-                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
-                    *delete_confirm = false;
-                }
-                let state_info = self.popup.as_ref().and_then(|p| match p {
-                    PopupState::ProjectSettings { selected_row, .. } => {
-                        if *selected_row > 0 {
-                            self.states
-                                .get(*selected_row - 1)
-                                .map(|s| (s.name.clone(), s.position))
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                });
-
-                if let Some((name, pos)) = state_info {
-                    if pos > 0 {
-                        match Self::block_on(store.reorder_state(self.project.id, &name, pos - 1)) {
-                            Ok(_) => {
-                                match Self::fetch_data(store, self.project.id) {
-                                    Ok((states, tasks)) => {
-                                        self.states = states;
-                                        self.tasks = tasks;
-                                        self.rebuild_visual_order();
-                                    }
-                                    Err(e) => {
-                                        self.set_error(format!("{}", e));
-                                    }
-                                }
-                                None
-                            }
-                            Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            Message::SettingsReorderDown => {
-                if let Some(PopupState::ProjectSettings { delete_confirm, .. }) = &mut self.popup {
-                    *delete_confirm = false;
-                }
-                let state_info = self.popup.as_ref().and_then(|p| match p {
-                    PopupState::ProjectSettings { selected_row, .. } => {
-                        if *selected_row > 0 {
-                            self.states
-                                .get(*selected_row - 1)
-                                .map(|s| (s.name.clone(), s.position))
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                });
-
-                if let Some((name, pos)) = state_info {
-                    let max_pos = (self.states.len() as i32) - 1;
-                    if pos < max_pos {
-                        match Self::block_on(store.reorder_state(self.project.id, &name, pos + 1)) {
-                            Ok(_) => {
-                                match Self::fetch_data(store, self.project.id) {
-                                    Ok((states, tasks)) => {
-                                        self.states = states;
-                                        self.tasks = tasks;
-                                        self.rebuild_visual_order();
-                                    }
-                                    Err(e) => {
-                                        self.set_error(format!("{}", e));
-                                    }
-                                }
-                                None
-                            }
-                            Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            Message::SettingsTypeChar(c) => {
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                    let input = match mode {
-                        SettingsMode::EditingName { input } => input,
-                        SettingsMode::AddingState { input } => input,
-                        _ => return None,
-                    };
-                    input.buffer.insert(input.cursor_position, c);
-                    input.cursor_position += 1;
-                }
-                None
-            }
-            Message::SettingsDeleteChar => {
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                    let input = match mode {
-                        SettingsMode::EditingName { input } => input,
-                        SettingsMode::AddingState { input } => input,
-                        _ => return None,
-                    };
-                    if input.cursor_position > 0 {
-                        input.cursor_position -= 1;
-                        input.buffer.remove(input.cursor_position);
-                    }
-                }
-                None
-            }
-            Message::SettingsCursorLeft => {
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                    let input = match mode {
-                        SettingsMode::EditingName { input } => input,
-                        SettingsMode::AddingState { input } => input,
-                        _ => return None,
-                    };
-                    if input.cursor_position > 0 {
-                        input.cursor_position -= 1;
-                    }
-                }
-                None
-            }
-            Message::SettingsCursorRight => {
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                    let input = match mode {
-                        SettingsMode::EditingName { input } => input,
-                        SettingsMode::AddingState { input } => input,
-                        _ => return None,
-                    };
-                    if input.cursor_position < input.buffer.len() {
-                        input.cursor_position += 1;
-                    }
-                }
-                None
-            }
-            Message::SettingsConfirmEdit => {
-                let (_selected_row, new_name, is_project_rename, old_state_name) = match &self.popup
-                {
-                    Some(PopupState::ProjectSettings {
-                        selected_row, mode, ..
-                    }) => {
-                        match mode {
-                            SettingsMode::EditingName { input } => {
-                                let name = input.buffer.trim().to_string();
-                                if *selected_row == 0 {
-                                    (Some(*selected_row), name, true, None)
-                                } else {
-                                    let old = self
-                                        .states
-                                        .get(*selected_row - 1)
-                                        .map(|s| s.name.clone())
-                                        .unwrap_or_default();
-                                    (Some(*selected_row), name, false, Some(old))
-                                }
-                            }
-                            SettingsMode::AddingState { input } => {
-                                let name = input.buffer.trim().to_string();
-                                (None, name, false, None) // selected_row not needed for add
-                            }
-                            _ => return None,
-                        }
-                    }
-                    _ => return None,
-                };
-
-                // return to browsing mode
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                    *mode = SettingsMode::Browsing;
-                }
-
-                if new_name.is_empty() {
-                    return None;
-                }
-
-                if is_project_rename {
-                    if new_name == self.project.name {
-                        return None;
-                    }
-                    match Self::block_on(store.rename_project(self.project.id, &new_name)) {
-                        Ok(_) => {
-                            self.project.name = new_name;
-                            self.refresh_after_mutation(store)
-                        }
-                        Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                    }
-                } else if let Some(old_name) = old_state_name {
-                    // editing an existing state name
-                    if new_name == old_name {
-                        return None;
-                    }
-                    match Self::block_on(store.rename_state(self.project.id, &old_name, &new_name))
-                    {
-                        Ok(_) => self.refresh_after_mutation(store),
-                        Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                    }
-                } else {
-                    // adding a new state (from AddingState mode)
-                    match Self::block_on(store.add_state(self.project.id, &new_name)) {
-                        Ok(_) => self.refresh_after_mutation(store),
-                        Err(e) => Some(Message::ErrorOccurred(format!("{}", e))),
-                    }
-                }
-            }
-            Message::SettingsCancelEdit => {
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                    *mode = SettingsMode::Browsing;
-                }
-                None
-            }
-            Message::SettingsColorUp => {
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup
-                    && let SettingsMode::PickingColor {
-                        selected_color_index,
-                        ..
-                    } = mode
-                    && *selected_color_index > 0
-                {
-                    *selected_color_index -= 1;
-                }
-                None
-            }
-            Message::SettingsColorDown => {
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup
-                    && let SettingsMode::PickingColor {
-                        selected_color_index,
-                        ..
-                    } = mode
-                    && *selected_color_index + 1 < 16
-                {
-                    *selected_color_index += 1;
-                }
-                None
-            }
-            Message::SettingsConfirmColor => {
-                let (state_id, color_idx) = match &self.popup {
-                    Some(PopupState::ProjectSettings {
-                        mode:
-                            SettingsMode::PickingColor {
-                                state_id,
-                                selected_color_index,
-                            },
-                        ..
-                    }) => (*state_id, *selected_color_index),
-                    _ => return None,
-                };
-
-                let color_name: Option<&str> = if color_idx == 0 {
-                    None
-                } else {
-                    crate::models::STATE_COLORS
-                        .get(color_idx - 1)
-                        .map(|(n, _)| *n)
-                };
-
-                let state_name = self
-                    .states
-                    .iter()
-                    .find(|s| s.id == state_id)
-                    .map(|s| s.name.as_str())
-                    .unwrap_or("");
-
-                match Self::block_on(store.set_state_color(self.project.id, state_name, color_name))
-                {
-                    Ok(_) => {
-                        if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                            *mode = SettingsMode::Browsing;
-                        }
-                        self.refresh_after_mutation(store)
-                    }
-                    Err(e) => {
-                        if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                            *mode = SettingsMode::Browsing;
-                        }
-                        Some(Message::ErrorOccurred(format!("{}", e)))
-                    }
-                }
-            }
-            Message::SettingsCancelColor => {
-                if let Some(PopupState::ProjectSettings { mode, .. }) = &mut self.popup {
-                    *mode = SettingsMode::Browsing;
-                }
-                None
-            }
-
-            // side effects
-            Message::DataRefreshed(states, tasks) => {
+            Ok((states, tasks)) => {
                 self.states = states;
                 self.tasks = tasks;
-                self.rebuild_visual_order();
-                if self.selected_index >= self.selectable_row_count() {
-                    self.selected_index = self.selectable_row_count().saturating_sub(1);
-                }
-                self.scroll_to_selection();
-                None
             }
-            Message::ErrorOccurred(msg) => {
-                self.set_error(msg);
-                None
-            }
+            Err(e) => self.root.set_status(format!("{}", e)),
         }
     }
 }

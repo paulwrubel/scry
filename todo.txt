@@ -1,0 +1,4 @@
+- refactor the scrolling nonsense in task_list (this shit can just happen in render! render gets the size of the widget and the task_list already knows the index!)
+- split up project_settings (also it's bugged to hell)
+- Root needs to be a component
+- centralize all the "center rect" and other popup utilities

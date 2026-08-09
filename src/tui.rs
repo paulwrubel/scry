@@ -1,4 +1,7 @@
+pub mod action;
+pub use action::Action;
+
 pub mod app;
 pub use app::App;
 
-mod view;
+pub mod component;
