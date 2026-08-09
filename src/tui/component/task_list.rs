@@ -14,15 +14,11 @@ pub struct TaskList {
     // ── internal ──
     // which visible row is selected (tasks only; input bar selection is handled by the parent)
     selected_index: usize,
-    scroll_offset: u16,
 }
 
 impl TaskList {
     pub fn new() -> Self {
-        Self {
-            selected_index: 0,
-            scroll_offset: 0,
-        }
+        Self { selected_index: 0 }
     }
 
     fn build_visual_order(states: &[State], tasks: &[Task]) -> Vec<usize> {
@@ -46,22 +42,7 @@ impl TaskList {
         }
     }
 
-    pub fn update_scroll(&mut self, ctx: &AppContext, viewport_height: u16) {
-        self.scroll_to_selection(ctx, viewport_height);
-    }
-
-    fn ensure_row_visible(&mut self, row_index: u16, viewport_height: u16) {
-        if viewport_height == 0 {
-            return;
-        }
-        if row_index < self.scroll_offset {
-            self.scroll_offset = row_index;
-        } else if row_index >= self.scroll_offset + viewport_height {
-            self.scroll_offset = row_index - viewport_height + 1;
-        }
-    }
-
-    fn scroll_to_selection(&mut self, ctx: &AppContext, viewport_height: u16) {
+    fn compute_vertical_scroll_offset(&self, ctx: &AppContext, viewport_height: u16) -> u16 {
         let order = Self::build_visual_order(ctx.states, ctx.tasks);
         let mut line_index: u16 = 0;
 
@@ -99,7 +80,15 @@ impl TaskList {
             }
         }
 
-        self.ensure_row_visible(line_index, viewport_height);
+        // ensure the selected line is visible within the viewport
+        if viewport_height == 0 {
+            return 0;
+        }
+        if line_index >= viewport_height {
+            line_index - viewport_height + 1
+        } else {
+            0
+        }
     }
 
     fn render_state_header(state_name: &str, task_count: usize) -> Line<'static> {
@@ -164,6 +153,8 @@ impl Component for TaskList {
     }
 
     fn render(&self, ctx: &AppContext, frame: &mut Frame, area: Rect) {
+        let scroll_offset = Self::compute_vertical_scroll_offset(self, ctx, area.height);
+
         let mut lines: Vec<Line> = Vec::new();
         let selected_id = self.selected_task_id(ctx);
 
@@ -191,7 +182,7 @@ impl Component for TaskList {
             }
         }
 
-        let paragraph = Paragraph::new(lines).scroll((self.scroll_offset, 0));
+        let paragraph = Paragraph::new(lines).scroll((scroll_offset, 0));
 
         frame.render_widget(paragraph, area);
     }

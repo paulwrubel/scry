@@ -168,9 +168,6 @@ impl Root {
             ])
             .split(h_layout[1]);
 
-        // update task list scroll
-        self.task_list.update_scroll(ctx, layout[1].height);
-
         // render components in z-order
         self.task_list.render(ctx, frame, layout[1]);
         self.input_bar.render(ctx, frame, layout[2]);
@@ -181,7 +178,7 @@ impl Root {
 
         // popup last (on top of everything)
         if let Some(ref popup) = self.popup {
-            popup.render_popup(ctx, frame, area);
+            popup.render(ctx, frame, area);
         }
     }
 }

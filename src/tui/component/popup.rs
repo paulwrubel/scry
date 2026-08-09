@@ -26,8 +26,8 @@ pub enum Popup {
     ProjectSettings(ProjectSettings),
 }
 
-impl Popup {
-    pub fn handle_event(&mut self, ctx: &AppContext, key: KeyEvent) -> Option<Action> {
+impl Component for Popup {
+    fn handle_event(&mut self, ctx: &AppContext, key: KeyEvent) -> Option<Action> {
         match self {
             Popup::TaskDetail(p) => p.handle_event(ctx, key),
             Popup::StatePicker(p) => p.handle_event(ctx, key),
@@ -36,7 +36,7 @@ impl Popup {
         }
     }
 
-    pub fn render_popup(&self, ctx: &AppContext, frame: &mut Frame, area: Rect) {
+    fn render(&self, ctx: &AppContext, frame: &mut Frame, area: Rect) {
         match self {
             Popup::TaskDetail(p) => p.render(ctx, frame, area),
             Popup::StatePicker(p) => p.render(ctx, frame, area),
