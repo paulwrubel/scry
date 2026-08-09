@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::widgets::{Block, Borders};
 
 use crate::tui::action::Action;
@@ -34,43 +34,6 @@ impl Root {
 
     pub fn clear_status(&mut self) {
         self.status_bar.set_message(String::new());
-    }
-
-    pub fn handle_event(&mut self, ctx: &AppContext, key: KeyEvent) -> Option<Action> {
-        let code = key.code;
-
-        // 1 - active popup swallows all input
-        if let Some(ref mut popup) = self.popup {
-            match popup {
-                Popup::StatePicker(p) => p.sync(ctx),
-                Popup::ProjectSettings(p) => p.sync(ctx),
-                _ => {}
-            }
-            return popup
-                .handle_event(ctx, key)
-                .and_then(|a| self.process(ctx, a));
-        }
-
-        // 2 - input bar when typing
-        if self.input_bar.is_focused() {
-            return self
-                .input_bar
-                .handle_event(ctx, key)
-                .and_then(|a| self.process(ctx, a));
-        }
-
-        // 3 - task list handles navigation + Enter/m/d internally
-        if let Some(action) = self.task_list.handle_event(ctx, key) {
-            return self.process(ctx, action);
-        }
-
-        // 4 - global keys are handled ONLY if nothing above handled the event
-        match code {
-            KeyCode::Char('q') => self.process(ctx, Action::Quit),
-            KeyCode::Char('a') => self.process(ctx, Action::FocusInput),
-            KeyCode::Char('s') => self.process(ctx, Action::OpenPopupProjectSettings),
-            _ => None,
-        }
     }
 
     fn process(&mut self, ctx: &AppContext, action: Action) -> Option<Action> {
@@ -139,8 +102,47 @@ impl Root {
             | Action::ReorderState { .. } => Some(action),
         }
     }
+}
 
-    pub fn render(&mut self, ctx: &AppContext, frame: &mut Frame) {
+impl Component for Root {
+    fn handle_event(&mut self, ctx: &AppContext, key: KeyEvent) -> Option<Action> {
+        let code = key.code;
+
+        // 1 - active popup swallows all input
+        if let Some(ref mut popup) = self.popup {
+            match popup {
+                Popup::StatePicker(p) => p.sync(ctx),
+                Popup::ProjectSettings(p) => p.sync(ctx),
+                _ => {}
+            }
+            return popup
+                .handle_event(ctx, key)
+                .and_then(|a| self.process(ctx, a));
+        }
+
+        // 2 - input bar when typing
+        if self.input_bar.is_focused() {
+            return self
+                .input_bar
+                .handle_event(ctx, key)
+                .and_then(|a| self.process(ctx, a));
+        }
+
+        // 3 - task list handles navigation + Enter/m/d internally
+        if let Some(action) = self.task_list.handle_event(ctx, key) {
+            return self.process(ctx, action);
+        }
+
+        // 4 - global keys are handled ONLY if nothing above handled the event
+        match code {
+            KeyCode::Char('q') => self.process(ctx, Action::Quit),
+            KeyCode::Char('a') => self.process(ctx, Action::FocusInput),
+            KeyCode::Char('s') => self.process(ctx, Action::OpenPopupProjectSettings),
+            _ => None,
+        }
+    }
+
+    fn render(&self, ctx: &AppContext, frame: &mut Frame, _area: Rect) {
         let area = frame.area();
 
         let block = Block::default()

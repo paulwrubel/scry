@@ -10,9 +10,9 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use tokio::runtime::Handle;
 
-use crate::error::AppError;
 use crate::models::{Project, State, Task};
 use crate::store::TaskStore;
+use crate::{error::AppError, tui::component::Component};
 
 use crate::tui::action::Action;
 use crate::tui::component::AppContext;
@@ -117,7 +117,7 @@ impl App {
             };
 
             terminal
-                .draw(|f| self.root.render(&ctx, f))
+                .draw(|f| self.root.render(&ctx, f, f.area()))
                 .map_err(|e| AppError::Internal(format!("render error: {}", e)))?;
 
             match event::read().map_err(|e| AppError::Internal(format!("event error: {}", e)))? {
