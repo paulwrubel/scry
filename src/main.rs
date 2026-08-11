@@ -90,11 +90,11 @@ enum ProjectCommand {
     Current,
     /// Manage statuses within a project
     #[command(subcommand)]
-    State(StateCommand),
+    Status(StatusCommand),
 }
 
 #[derive(Subcommand)]
-enum StateCommand {
+enum StatusCommand {
     /// List statuses for a project
     List,
     /// Add a new status
@@ -187,7 +187,7 @@ async fn main() -> Result<(), AppError> {
                 println!("Task {}", task.id);
                 println!("  Project:   {}", project_name);
                 println!("  Title:     {}", task.title);
-                println!("  State:     {}", status_name);
+                println!("  Status:    {}", status_name);
                 println!(
                     "  Created:   {}",
                     task.created_at
@@ -280,29 +280,29 @@ async fn main() -> Result<(), AppError> {
             ProjectCommand::Current => {
                 println!("{}", project_name);
             }
-            ProjectCommand::State(status_cmd) => match status_cmd {
-                StateCommand::List => {
+            ProjectCommand::Status(status_cmd) => match status_cmd {
+                StatusCommand::List => {
                     let statuses = store.list_statuses(project_id).await?;
-                    println!("States for \"{}\":", project_name);
+                    println!("Statuses for \"{}\":", project_name);
                     for s in &statuses {
                         println!("  {}", s.name);
                     }
                 }
-                StateCommand::Add { name } => {
+                StatusCommand::Add { name } => {
                     let status = store.add_status(project_id, &name).await?;
                     println!(
                         "Added status \"{}\" to project \"{}\"",
                         status.name, project_name
                     );
                 }
-                StateCommand::Remove { name, force } => {
+                StatusCommand::Remove { name, force } => {
                     store.remove_status(project_id, &name, force).await?;
                     println!(
                         "Removed status \"{}\" from project \"{}\"",
                         name, project_name
                     );
                 }
-                StateCommand::Rename { old_name, new_name } => {
+                StatusCommand::Rename { old_name, new_name } => {
                     store
                         .rename_status(project_id, &old_name, &new_name)
                         .await?;
