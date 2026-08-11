@@ -9,13 +9,26 @@ use crate::tui::action::Action;
 use crate::tui::component::{RenderContext, State};
 
 pub struct TaskList {
+    pub is_focused: bool,
     // which visible row is selected (tasks only)
     selected_index: usize,
 }
 
 impl TaskList {
-    pub fn new() -> Self {
-        Self { selected_index: 0 }
+    pub fn new(is_focused: bool) -> Self {
+        Self {
+            is_focused,
+            selected_index: 0,
+        }
+    }
+
+    pub fn focus_index(&mut self, index: usize) {
+        self.is_focused = true;
+        self.selected_index = index;
+    }
+
+    pub fn blur(&mut self) {
+        self.is_focused = false;
     }
 
     fn build_visual_order(statuses: &[Status], tasks: &[Task]) -> Vec<usize> {
@@ -27,7 +40,7 @@ impl TaskList {
                 }
             }
         }
-        // ── internal ──
+
         order
     }
 
@@ -102,6 +115,7 @@ impl TaskList {
     }
 
     fn render_task_row(
+        &self,
         task: &Task,
         selected: bool,
         is_completed: bool,
@@ -112,7 +126,7 @@ impl TaskList {
         let checkbox = if is_completed { "[x]" } else { "[ ]" };
         let row_text = format!(" {id:>3} {checkbox} {title}");
 
-        let mut style = if selected {
+        let mut style = if selected && self.is_focused {
             Style::default().add_modifier(Modifier::REVERSED)
         } else {
             Style::default()
@@ -126,6 +140,9 @@ impl TaskList {
     }
 
     pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
+        if !self.is_focused {
+            return None;
+        }
         match key.code {
             KeyCode::Up => {
                 if self.selected_index == 0 {
@@ -179,7 +196,7 @@ impl TaskList {
 
             for task in status_tasks {
                 let selected = Some(task.id) == selected_id;
-                lines.push(Self::render_task_row(
+                lines.push(self.render_task_row(
                     task,
                     selected,
                     status.is_completed,

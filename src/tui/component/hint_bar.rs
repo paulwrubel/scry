@@ -23,7 +23,6 @@ impl HintBar {
             "[m]ove task",
             "[d]elete task",
             "[Enter]: task details",
-            "[q]uit",
         ];
         let (text, style) = if self.message.is_empty() {
             (hint_actions.join(" | "), Style::default())

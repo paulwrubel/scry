@@ -1,3 +1,4 @@
+use crossterm::event::KeyModifiers;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::widgets::{Block, Borders};
@@ -18,8 +19,8 @@ pub struct Root {
 impl Root {
     pub fn new() -> Self {
         Self {
-            task_list: TaskList::new(),
-            input_bar: InputBar::new(),
+            task_list: TaskList::new(true),
+            input_bar: InputBar::new(false),
             hint_bar: HintBar::new(),
             popup: None,
         }
@@ -38,6 +39,7 @@ impl Root {
             // UI actions — handled here, never reach the coordinator
             Action::FocusInput => {
                 self.input_bar.focus();
+                self.task_list.blur();
                 None
             }
             Action::OpenPopupTaskDetail(task_id) => {
@@ -98,22 +100,39 @@ impl Root {
         }
 
         // 2 - input bar when typing
-        if self.input_bar.is_focused() {
-            return self
-                .input_bar
-                .handle_event(state, key)
-                .and_then(|a| self.process(state, a));
+        if self.input_bar.is_focused
+            && let Some(action) = self.input_bar.handle_event(state, key)
+        {
+            return match action {
+                Action::MoveFocusDown => None,
+                Action::MoveFocusUp => {
+                    self.input_bar.blur();
+                    self.task_list.focus_index(state.tasks.len() - 1);
+                    None
+                }
+                _ => self.process(state, action),
+            };
         }
 
-        // 3 - task list handles navigation + Enter/m/d internally
-        if let Some(action) = self.task_list.handle_event(state, key) {
-            return self.process(state, action);
+        // 3 - task list catched the next event if focused
+        if self.task_list.is_focused
+            && let Some(action) = self.task_list.handle_event(state, key)
+        {
+            return match action {
+                Action::MoveFocusDown => {
+                    self.task_list.blur();
+                    self.input_bar.focus();
+                    return None;
+                }
+                Action::MoveFocusUp => None,
+                _ => self.process(state, action),
+            };
         }
 
         // 4 - global keys are handled ONLY if nothing above handled the event
-        match code {
-            KeyCode::Char('q') => self.process(state, Action::Quit),
-            KeyCode::Char('a') => self.process(state, Action::FocusInput),
+        match (key.modifiers, code) {
+            (KeyModifiers::CONTROL, KeyCode::Char('c')) => self.process(state, Action::Quit),
+            (KeyModifiers::NONE, KeyCode::Char('a')) => self.process(state, Action::FocusInput),
             _ => None,
         }
     }
