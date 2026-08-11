@@ -4,7 +4,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
 use crate::error::StorageError;
-use crate::models::{Color, Project, ProjectID, State, Task, TaskID};
+use crate::models::{Color, Project, ProjectID, Status, Task, TaskID};
 use crate::store::TaskStore;
 
 #[derive(Clone)]
@@ -42,7 +42,7 @@ impl SqliteStore {
         Ok(Self { pool })
     }
 
-    async fn resolve_state_id(
+    async fn resolve_status_id(
         &self,
         project_id: ProjectID,
         name: &str,
@@ -50,7 +50,7 @@ impl SqliteStore {
         let row = sqlx::query!(
             r#"
                 SELECT id
-                FROM states
+                FROM statuses
                 WHERE project_id = ? AND name = ?
             "#,
             project_id,
@@ -58,7 +58,7 @@ impl SqliteStore {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to look up state: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to look up status: {}", e)))?;
 
         Ok(row.map(|r| r.id))
     }
@@ -75,10 +75,10 @@ impl TaskStore for SqliteStore {
     async fn add_task(&self, title: &str, project_id: ProjectID) -> Result<Task, StorageError> {
         let now = Utc::now().to_rfc3339();
 
-        let state_id = sqlx::query!(
+        let status_id = sqlx::query!(
             r#"
                 SELECT id
-                FROM states
+                FROM statuses
                 WHERE project_id = ? AND is_entry = 1
                 LIMIT 1
             "#,
@@ -86,25 +86,25 @@ impl TaskStore for SqliteStore {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to find entry state: {}", e)))?
-        .ok_or_else(|| StorageError::NotFound("no entry state found for project".to_string()))?
+        .map_err(|e| StorageError::Database(format!("failed to find entry status: {}", e)))?
+        .ok_or_else(|| StorageError::NotFound("no entry status found for project".to_string()))?
         .id;
 
         let row = sqlx::query!(
             r#"
-                INSERT INTO tasks (title, description, created_at, project_id, state_id, position)
+                INSERT INTO tasks (title, description, created_at, project_id, status_id, position)
                 VALUES (?, '', ?, ?, ?, (
                     SELECT COALESCE(MAX(position), -1) + 1 
                     FROM tasks 
-                    WHERE state_id = ?
+                    WHERE status_id = ?
                 ))
                 RETURNING id
             "#,
             title,
             now,
             project_id,
-            state_id,
-            state_id,
+            status_id,
+            status_id,
         )
         .fetch_one(&self.pool)
         .await
@@ -118,7 +118,7 @@ impl TaskStore for SqliteStore {
                     t.description,
                     t.created_at AS "created_at: DateTime<Utc>",
                     t.project_id AS "project_id: i64",
-                    t.state_id AS "state_id: i64",
+                    t.status_id AS "status_id: i64",
                     t.position AS "position: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
@@ -134,7 +134,7 @@ impl TaskStore for SqliteStore {
             project_id: task.project_id,
             title: task.title,
             description: task.description,
-            state_id: task.state_id,
+            status_id: task.status_id,
             position: task.position,
             created_at: task.created_at,
         })
@@ -144,32 +144,32 @@ impl TaskStore for SqliteStore {
         &self,
         id: TaskID,
         project_id: ProjectID,
-        state_name: Option<&str>,
+        status_name: Option<&str>,
     ) -> Result<Option<Task>, StorageError> {
-        let name = match state_name {
+        let name = match status_name {
             Some(s) => s,
             None => return Err(StorageError::Invalid("no fields to update".into())),
         };
 
-        let state_id = self
-            .resolve_state_id(project_id, name)
+        let status_id = self
+            .resolve_status_id(project_id, name)
             .await?
             .ok_or_else(|| {
-                StorageError::NotFound(format!("state '{}' not found in project", name))
+                StorageError::NotFound(format!("status '{}' not found in project", name))
             })?;
 
         let result = sqlx::query!(
             r#"
                 UPDATE tasks
-                SET state_id = ?, position = (
+                SET status_id = ?, position = (
                     SELECT COALESCE(MAX(position), -1) + 1 
                     FROM tasks 
-                    WHERE state_id = ?
+                    WHERE status_id = ?
                 )
                 WHERE id = ? AND project_id = ?
             "#,
-            state_id,
-            state_id,
+            status_id,
+            status_id,
             id,
             project_id,
         )
@@ -189,7 +189,7 @@ impl TaskStore for SqliteStore {
                     t.description,
                     t.created_at AS "created_at: DateTime<Utc>",
                     t.project_id AS "project_id: i64",
-                    t.state_id AS "state_id: i64",
+                    t.status_id AS "status_id: i64",
                     t.position AS "position: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
@@ -206,7 +206,7 @@ impl TaskStore for SqliteStore {
                 project_id: task.project_id,
                 title: task.title,
                 description: task.description,
-                state_id: task.state_id,
+                status_id: task.status_id,
                 position: task.position,
                 created_at: task.created_at,
             })
@@ -242,7 +242,7 @@ impl TaskStore for SqliteStore {
                     t.description,
                     t.created_at AS "created_at: DateTime<Utc>",
                     t.project_id AS "project_id: i64",
-                    t.state_id AS "state_id: i64",
+                    t.status_id AS "status_id: i64",
                     t.position AS "position: i32"
                 FROM tasks t
                 WHERE t.id = ? AND t.project_id = ?
@@ -259,7 +259,7 @@ impl TaskStore for SqliteStore {
             project_id: r.project_id,
             title: r.title,
             description: r.description,
-            state_id: r.state_id,
+            status_id: r.status_id,
             position: r.position,
             created_at: r.created_at,
         }))
@@ -268,10 +268,10 @@ impl TaskStore for SqliteStore {
     async fn list_tasks(
         &self,
         project_id: ProjectID,
-        state_name: Option<&str>,
+        status_name: Option<&str>,
     ) -> Result<Vec<Task>, StorageError> {
-        if let Some(name) = state_name {
-            match self.resolve_state_id(project_id, name).await? {
+        if let Some(name) = status_name {
+            match self.resolve_status_id(project_id, name).await? {
                 Some(sid) => sqlx::query!(
                     r#"
                             SELECT
@@ -280,10 +280,10 @@ impl TaskStore for SqliteStore {
                                 t.description,
                                 t.created_at AS "created_at: DateTime<Utc>",
                                 t.project_id AS "project_id: i64",
-                                t.state_id AS "state_id: i64",
+                                t.status_id AS "status_id: i64",
                                 t.position AS "position: i32"
                             FROM tasks t
-                            WHERE t.project_id = ? AND t.state_id = ?
+                            WHERE t.project_id = ? AND t.status_id = ?
                             ORDER BY t.position ASC, t.id ASC
                         "#,
                     project_id,
@@ -299,7 +299,7 @@ impl TaskStore for SqliteStore {
                             project_id: r.project_id,
                             title: r.title,
                             description: r.description,
-                            state_id: r.state_id,
+                            status_id: r.status_id,
                             position: r.position,
                             created_at: r.created_at,
                         })
@@ -316,7 +316,7 @@ impl TaskStore for SqliteStore {
                         t.description,
                         t.created_at AS "created_at: DateTime<Utc>",
                         t.project_id AS "project_id: i64",
-                        t.state_id AS "state_id: i64",
+                        t.status_id AS "status_id: i64",
                         t.position AS "position: i32"
                     FROM tasks t
                     WHERE t.project_id = ?
@@ -334,7 +334,7 @@ impl TaskStore for SqliteStore {
                         project_id: r.project_id,
                         title: r.title,
                         description: r.description,
-                        state_id: r.state_id,
+                        status_id: r.status_id,
                         position: r.position,
                         created_at: r.created_at,
                     })
@@ -381,7 +381,7 @@ impl TaskStore for SqliteStore {
 
         sqlx::query!(
             r#"
-                INSERT INTO states (project_id, name, position, is_completed, is_entry)
+                INSERT INTO statuses (project_id, name, position, is_completed, is_entry)
                 VALUES (?, 'todo', 0, 0, 1), (?, 'done', 1, 1, 0)
             "#,
             project.id,
@@ -389,7 +389,7 @@ impl TaskStore for SqliteStore {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to seed states: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to seed statuses: {}", e)))?;
 
         sqlx::query!(
             r#"
@@ -430,14 +430,14 @@ impl TaskStore for SqliteStore {
 
         sqlx::query!(
             r#"
-                DELETE FROM states
+                DELETE FROM statuses
                 WHERE project_id = ?
             "#,
             project.id,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to delete states: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to delete statuses: {}", e)))?;
 
         sqlx::query!(
             r#"
@@ -593,22 +593,22 @@ impl TaskStore for SqliteStore {
         Ok(())
     }
 
-    async fn add_state(&self, project_id: ProjectID, name: &str) -> Result<State, StorageError> {
+    async fn add_status(&self, project_id: ProjectID, name: &str) -> Result<Status, StorageError> {
         let row = sqlx::query!(
             r#"
                 SELECT COUNT(*) AS count
-                FROM states
+                FROM statuses
                 WHERE project_id = ?
             "#,
             project_id,
         )
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to count states: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to count statuses: {}", e)))?;
 
         let inserted = sqlx::query!(
             r#"
-                INSERT INTO states (project_id, name, position, is_completed, is_entry)
+                INSERT INTO statuses (project_id, name, position, is_completed, is_entry)
                 VALUES (?, ?, ?, 0, 0)
                 RETURNING id, project_id, name, position, is_completed, is_entry, color
             "#,
@@ -620,7 +620,7 @@ impl TaskStore for SqliteStore {
         .await;
 
         match inserted {
-            Ok(row) => Ok(State {
+            Ok(row) => Ok(Status {
                 id: row.id.expect("RETURNING guarantees id"),
                 project_id: row.project_id,
                 name: row.name,
@@ -630,42 +630,42 @@ impl TaskStore for SqliteStore {
                 color: row.color.map(Color),
             }),
             Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
-                "state '{}' already exists",
+                "status '{}' already exists",
                 name
             ))),
             Err(e) => Err(StorageError::Database(format!(
-                "failed to add state: {}",
+                "failed to add status: {}",
                 e
             ))),
         }
     }
 
-    async fn remove_state(
+    async fn remove_status(
         &self,
         project_id: ProjectID,
         name: &str,
         force: bool,
     ) -> Result<(), StorageError> {
-        let state_id = self
-            .resolve_state_id(project_id, name)
+        let status_id = self
+            .resolve_status_id(project_id, name)
             .await?
-            .ok_or_else(|| StorageError::NotFound(format!("state '{}' not found", name)))?;
+            .ok_or_else(|| StorageError::NotFound(format!("status '{}' not found", name)))?;
 
         let row = sqlx::query!(
             r#"
                 SELECT COUNT(*) AS "count: i64"
-                FROM states
+                FROM statuses
                 WHERE project_id = ?
             "#,
             project_id,
         )
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to count states: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to count statuses: {}", e)))?;
 
         if row.count <= 1 {
             return Err(StorageError::Invalid(
-                "cannot remove the last state of a project".into(),
+                "cannot remove the last status of a project".into(),
             ));
         }
 
@@ -673,10 +673,10 @@ impl TaskStore for SqliteStore {
             r#"
                 SELECT COUNT(*) AS "count: i64"
                 FROM tasks
-                WHERE project_id = ? AND state_id = ?
+                WHERE project_id = ? AND status_id = ?
             "#,
             project_id,
-            state_id,
+            status_id,
         )
         .fetch_one(&self.pool)
         .await
@@ -684,7 +684,7 @@ impl TaskStore for SqliteStore {
 
         if row.count > 0 && !force {
             return Err(StorageError::Conflict(format!(
-                "state '{}' has {} tasks. use force to move them",
+                "status '{}' has {} tasks. use force to move them",
                 name, row.count
             )));
         }
@@ -693,27 +693,29 @@ impl TaskStore for SqliteStore {
             let fallback = sqlx::query!(
                 r#"
                     SELECT id
-                    FROM states
+                    FROM statuses
                     WHERE project_id = ? AND id != ?
                     ORDER BY position ASC
                     LIMIT 1
                 "#,
                 project_id,
-                state_id,
+                status_id,
             )
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| StorageError::Database(format!("failed to find fallback state: {}", e)))?;
+            .map_err(|e| {
+                StorageError::Database(format!("failed to find fallback status: {}", e))
+            })?;
 
             sqlx::query!(
                 r#"
                     UPDATE tasks
-                    SET state_id = ?
-                    WHERE project_id = ? AND state_id = ?
+                    SET status_id = ?
+                    WHERE project_id = ? AND status_id = ?
                 "#,
                 fallback.id,
                 project_id,
-                state_id,
+                status_id,
             )
             .execute(&self.pool)
             .await
@@ -722,43 +724,50 @@ impl TaskStore for SqliteStore {
 
         sqlx::query!(
             r#"
-                DELETE FROM states
+                DELETE FROM statuses
                 WHERE project_id = ? AND id = ?
             "#,
             project_id,
-            state_id,
+            status_id,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to remove state: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to remove status: {}", e)))?;
 
         Ok(())
     }
 
-    async fn rename_state(
+    async fn rename_status(
         &self,
         project_id: ProjectID,
         old_name: &str,
         new_name: &str,
     ) -> Result<(), StorageError> {
-        let exists = self.resolve_state_id(project_id, old_name).await?.is_some();
+        let exists = self
+            .resolve_status_id(project_id, old_name)
+            .await?
+            .is_some();
         if !exists {
             return Err(StorageError::NotFound(format!(
-                "state '{}' not found",
+                "status '{}' not found",
                 old_name
             )));
         }
 
-        if self.resolve_state_id(project_id, new_name).await?.is_some() {
+        if self
+            .resolve_status_id(project_id, new_name)
+            .await?
+            .is_some()
+        {
             return Err(StorageError::Conflict(format!(
-                "state '{}' already exists",
+                "status '{}' already exists",
                 new_name
             )));
         }
 
         sqlx::query!(
             r#"
-                UPDATE states
+                UPDATE statuses
                 SET name = ?
                 WHERE project_id = ? AND name = ?
             "#,
@@ -768,12 +777,12 @@ impl TaskStore for SqliteStore {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to rename state: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to rename status: {}", e)))?;
 
         Ok(())
     }
 
-    async fn list_states(&self, project_id: ProjectID) -> Result<Vec<State>, StorageError> {
+    async fn list_statuses(&self, project_id: ProjectID) -> Result<Vec<Status>, StorageError> {
         sqlx::query!(
             r#"
                 SELECT
@@ -784,7 +793,7 @@ impl TaskStore for SqliteStore {
                     is_completed AS "is_completed: bool",
                     is_entry AS "is_entry: bool",
                     color
-                FROM states
+                FROM statuses
                 WHERE project_id = ?
                 ORDER BY position ASC
             "#,
@@ -792,10 +801,10 @@ impl TaskStore for SqliteStore {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to list states: {}", e)))
+        .map_err(|e| StorageError::Database(format!("failed to list statuses: {}", e)))
         .map(|rows| {
             rows.into_iter()
-                .map(|r| State {
+                .map(|r| Status {
                     id: r.id,
                     project_id: r.project_id,
                     name: r.name,
@@ -808,29 +817,23 @@ impl TaskStore for SqliteStore {
         })
     }
 
-    async fn set_state_color(
+    async fn set_status_color(
         &self,
-        project_id: ProjectID,
-        state_name: &str,
+        status_id: i64,
         color: Option<&str>,
     ) -> Result<(), StorageError> {
-        let state_id = self
-            .resolve_state_id(project_id, state_name)
-            .await?
-            .ok_or_else(|| StorageError::NotFound(format!("state '{}' not found", state_name)))?;
-
         sqlx::query!(
             r#"
-                UPDATE states
+                UPDATE statuses
                 SET color = ?
                 WHERE id = ?
             "#,
             color,
-            state_id,
+            status_id,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to set state color: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to set status color: {}", e)))?;
 
         Ok(())
     }
@@ -905,42 +908,42 @@ impl TaskStore for SqliteStore {
         Ok(())
     }
 
-    async fn reorder_state(
+    async fn reorder_status(
         &self,
         project_id: ProjectID,
-        state_name: &str,
+        status_name: &str,
         new_position: i32,
     ) -> Result<(), StorageError> {
-        let state = sqlx::query!(
+        let status = sqlx::query!(
             r#"
                 SELECT id, name, position AS "position: i32"
-                FROM states
+                FROM statuses
                 WHERE project_id = ? AND name = ?
             "#,
             project_id,
-            state_name,
+            status_name,
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to look up state: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to look up status: {}", e)))?;
 
-        let state = state
-            .ok_or_else(|| StorageError::NotFound(format!("state '{}' not found", state_name)))?;
+        let status = status
+            .ok_or_else(|| StorageError::NotFound(format!("status '{}' not found", status_name)))?;
 
-        let current_pos = state.position;
+        let current_pos = status.position;
 
-        // count total states to clamp new_position
+        // count total statuses to clamp new_position
         let total = sqlx::query!(
             r#"
                 SELECT COUNT(*) AS count
-                FROM states
+                FROM statuses
                 WHERE project_id = ?
             "#,
             project_id,
         )
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to count states: {}", e)))?
+        .map_err(|e| StorageError::Database(format!("failed to count statuses: {}", e)))?
         .count;
 
         let total_i32 = total as i32;
@@ -951,10 +954,10 @@ impl TaskStore for SqliteStore {
         }
 
         if new_pos > current_pos {
-            // moving down: shift states between current+1 and new_pos up by 1
+            // moving down: shift statuses between current+1 and new_pos up by 1
             sqlx::query!(
                 r#"
-                    UPDATE states
+                    UPDATE statuses
                     SET position = position - 1
                     WHERE project_id = ? AND position > ? AND position <= ?
                 "#,
@@ -964,12 +967,12 @@ impl TaskStore for SqliteStore {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| StorageError::Database(format!("failed to shift states: {}", e)))?;
+            .map_err(|e| StorageError::Database(format!("failed to shift statuses: {}", e)))?;
         } else {
-            // moving up: shift states between new_pos and current-1 down by 1
+            // moving up: shift statuses between new_pos and current-1 down by 1
             sqlx::query!(
                 r#"
-                    UPDATE states
+                    UPDATE statuses
                     SET position = position + 1
                     WHERE project_id = ? AND position >= ? AND position < ?
                 "#,
@@ -979,21 +982,21 @@ impl TaskStore for SqliteStore {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| StorageError::Database(format!("failed to shift states: {}", e)))?;
+            .map_err(|e| StorageError::Database(format!("failed to shift statuses: {}", e)))?;
         }
 
         sqlx::query!(
             r#"
-                UPDATE states
+                UPDATE statuses
                 SET position = ?
                 WHERE id = ?
             "#,
             new_pos,
-            state.id,
+            status.id,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to update state position: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to update status position: {}", e)))?;
 
         Ok(())
     }

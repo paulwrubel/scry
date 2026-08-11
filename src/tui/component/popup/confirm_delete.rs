@@ -6,11 +6,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
 use crate::tui::action::Action;
-use crate::tui::component::AppContext;
-use crate::tui::component::Component;
+use crate::tui::component::{RenderContext, State};
 
 pub struct ConfirmDelete {
-    // ── internal ──
     task_id: i64,
     task_title: String,
     is_confirmation_option_highlighted: bool,
@@ -24,10 +22,8 @@ impl ConfirmDelete {
             is_confirmation_option_highlighted: false,
         }
     }
-}
 
-impl Component for ConfirmDelete {
-    fn handle_event(&mut self, _ctx: &AppContext, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Esc | KeyCode::Char('n') => Some(Action::DismissPopup),
             KeyCode::Char('y') => Some(Action::DeleteTask(self.task_id)),
@@ -46,7 +42,7 @@ impl Component for ConfirmDelete {
         }
     }
 
-    fn render(&self, _ctx: &AppContext, frame: &mut Frame, _area: Rect) {
+    pub fn render(&self, ctx: &mut RenderContext) {
         let lines = [
             Line::from(format!("  Delete task \"{}\"?", self.task_title)),
             Line::from(""),
@@ -76,9 +72,9 @@ impl Component for ConfirmDelete {
         let height = 5u16;
         let width = 44u16;
         render_centered_popup(
-            frame,
+            ctx.frame,
             all_lines,
-            height.min(frame.area().height),
+            height.min(ctx.frame.area().height),
             width,
             "Confirm",
         );

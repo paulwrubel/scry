@@ -1,1 +1,0 @@
-ALTER TABLE states DROP COLUMN color;

@@ -1,18 +1,15 @@
-use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::models::State;
+use crate::models::Status;
 use crate::models::Task;
 use crate::tui::action::Action;
-use crate::tui::component::{AppContext, Component};
+use crate::tui::component::{RenderContext, State};
 
 pub struct TaskList {
-    // ── internal ──
-    // which visible row is selected (tasks only; input bar selection is handled by the parent)
+    // which visible row is selected (tasks only)
     selected_index: usize,
 }
 
@@ -21,29 +18,30 @@ impl TaskList {
         Self { selected_index: 0 }
     }
 
-    fn build_visual_order(states: &[State], tasks: &[Task]) -> Vec<usize> {
+    fn build_visual_order(statuses: &[Status], tasks: &[Task]) -> Vec<usize> {
         let mut order = Vec::new();
-        for state in states {
+        for status in statuses {
             for (task_idx, task) in tasks.iter().enumerate() {
-                if task.state_id == state.id {
+                if task.status_id == status.id {
                     order.push(task_idx);
                 }
             }
         }
+        // ── internal ──
         order
     }
 
-    pub fn selected_task_id(&self, ctx: &AppContext) -> Option<i64> {
-        let order = Self::build_visual_order(ctx.states, ctx.tasks);
+    pub fn selected_task_id(&self, state: &State) -> Option<i64> {
+        let order = Self::build_visual_order(&state.statuses, &state.tasks);
         if self.selected_index < order.len() {
-            Some(ctx.tasks[order[self.selected_index]].id)
+            Some(state.tasks[order[self.selected_index]].id)
         } else {
             None
         }
     }
 
-    fn compute_vertical_scroll_offset(&self, ctx: &AppContext, viewport_height: u16) -> u16 {
-        let order = Self::build_visual_order(ctx.states, ctx.tasks);
+    fn compute_vertical_scroll_offset(&self, state: &State, viewport_height: u16) -> u16 {
+        let order = Self::build_visual_order(&state.statuses, &state.tasks);
         if order.is_empty() {
             return 0;
         }
@@ -53,31 +51,35 @@ impl TaskList {
         let mut line_index: u16 = 0;
 
         let flat_idx = order[selected_index];
-        let selected_state_id = ctx.tasks[flat_idx].state_id;
+        let selected_status_id = state.tasks[flat_idx].status_id;
 
-        for state in ctx.states {
+        for status in &state.statuses {
             // blank separator between state groups (matches render)
             if line_index > 0 {
                 line_index += 1;
             }
             line_index += 1;
 
-            if state.id == selected_state_id {
-                // count tasks in this state before the selected one
-                let tasks_in_state: Vec<_> = ctx
+            if status.id == selected_status_id {
+                // count tasks in this status before the selected one
+                let tasks_in_status: Vec<_> = state
                     .tasks
                     .iter()
-                    .filter(|t| t.state_id == state.id)
+                    .filter(|t| t.status_id == status.id)
                     .collect();
-                let pos = tasks_in_state
+                let pos = tasks_in_status
                     .iter()
-                    .position(|t| t.id == ctx.tasks[flat_idx].id)
+                    .position(|t| t.id == state.tasks[flat_idx].id)
                     .unwrap_or(0);
                 line_index += pos as u16;
                 break;
             }
 
-            let count = ctx.tasks.iter().filter(|t| t.state_id == state.id).count();
+            let count = state
+                .tasks
+                .iter()
+                .filter(|t| t.status_id == status.id)
+                .count();
             line_index += count as u16;
         }
 
@@ -92,9 +94,9 @@ impl TaskList {
         }
     }
 
-    fn render_state_header(state_name: &str, task_count: usize) -> Line<'static> {
+    fn render_status_header(status_name: &str, task_count: usize) -> Line<'static> {
         Line::from(Span::styled(
-            format!("{state_name} ({task_count}):"),
+            format!("{status_name} ({task_count}):"),
             Style::default().add_modifier(Modifier::BOLD),
         ))
     }
@@ -103,7 +105,7 @@ impl TaskList {
         task: &Task,
         selected: bool,
         is_completed: bool,
-        state_color: Option<Color>,
+        status_color: Option<Color>,
     ) -> Line<'static> {
         let Task { id, title, .. } = task;
 
@@ -116,16 +118,14 @@ impl TaskList {
             Style::default()
         };
 
-        if !selected && let Some(color) = state_color {
+        if !selected && let Some(color) = status_color {
             style = style.fg(color);
         }
 
         Line::styled(row_text, style)
     }
-}
 
-impl Component for TaskList {
-    fn handle_event(&mut self, ctx: &AppContext, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Up => {
                 if self.selected_index == 0 {
@@ -136,7 +136,7 @@ impl Component for TaskList {
                 }
             }
             KeyCode::Down => {
-                let task_count = ctx.tasks.len();
+                let task_count = state.tasks.len();
                 if self.selected_index >= task_count.saturating_sub(1) || task_count == 0 {
                     Some(Action::MoveFocusDown)
                 } else {
@@ -144,47 +144,50 @@ impl Component for TaskList {
                     None
                 }
             }
-            KeyCode::Enter => self.selected_task_id(ctx).map(Action::OpenPopupTaskDetail),
-            KeyCode::Char('m') => self.selected_task_id(ctx).map(Action::OpenPopupMovePicker),
+            KeyCode::Enter => self
+                .selected_task_id(state)
+                .map(Action::OpenPopupTaskDetail),
+            KeyCode::Char('m') => self
+                .selected_task_id(state)
+                .map(Action::OpenPopupMovePicker),
             KeyCode::Char('d') => self
-                .selected_task_id(ctx)
+                .selected_task_id(state)
                 .map(Action::OpenPopupDeleteConfirm),
             _ => None,
         }
     }
 
-    fn render(&self, ctx: &AppContext, frame: &mut Frame, area: Rect) {
-        let scroll_offset = Self::compute_vertical_scroll_offset(self, ctx, area.height);
+    pub fn render(&self, ctx: &mut RenderContext) {
+        let scroll_offset = Self::compute_vertical_scroll_offset(self, ctx.state, ctx.area.height);
 
         let mut lines: Vec<Line> = Vec::new();
-        let selected_id = self.selected_task_id(ctx);
+        let selected_id = self.selected_task_id(ctx.state);
 
-        for (i, state) in ctx.states.iter().enumerate() {
+        for (i, status) in ctx.state.statuses.iter().enumerate() {
             if i > 0 {
                 lines.push(Line::from(""));
             }
 
-            let state_tasks: Vec<_> = ctx
+            let status_tasks: Vec<_> = ctx
+                .state
                 .tasks
                 .iter()
-                .filter(|t| t.state_id == state.id)
+                .filter(|t| t.status_id == status.id)
                 .collect();
 
-            lines.push(Self::render_state_header(&state.name, state_tasks.len()));
+            lines.push(Self::render_status_header(&status.name, status_tasks.len()));
 
-            for task in state_tasks {
+            for task in status_tasks {
                 let selected = Some(task.id) == selected_id;
                 lines.push(Self::render_task_row(
                     task,
                     selected,
-                    state.is_completed,
-                    state.color.clone().map(Into::into),
+                    status.is_completed,
+                    status.color.clone().map(Into::into),
                 ));
             }
         }
 
-        let paragraph = Paragraph::new(lines).scroll((scroll_offset, 0));
-
-        frame.render_widget(paragraph, area);
+        ctx.render_widget(Paragraph::new(lines).scroll((scroll_offset, 0)));
     }
 }

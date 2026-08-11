@@ -1,40 +1,36 @@
 mod confirm_delete;
 pub use confirm_delete::ConfirmDelete;
 
-mod state_picker;
-pub use state_picker::StatePicker;
+mod status_selection;
+pub use status_selection::StatusSelection;
 
 mod task_detail;
 pub use task_detail::TaskDetail;
 
-use ratatui::Frame;
-use ratatui::crossterm::event::KeyEvent;
-use ratatui::layout::Rect;
-
 use crate::tui::Action;
-use crate::tui::component::AppContext;
-use crate::tui::component::Component;
+use crate::tui::component::{RenderContext, State};
+use ratatui::crossterm::event::KeyEvent;
 
 pub enum Popup {
     TaskDetail(TaskDetail),
-    StatePicker(StatePicker),
+    StatusSelection(StatusSelection),
     ConfirmDelete(ConfirmDelete),
 }
 
-impl Component for Popup {
-    fn handle_event(&mut self, ctx: &AppContext, key: KeyEvent) -> Option<Action> {
+impl Popup {
+    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
         match self {
-            Popup::TaskDetail(p) => p.handle_event(ctx, key),
-            Popup::StatePicker(p) => p.handle_event(ctx, key),
-            Popup::ConfirmDelete(p) => p.handle_event(ctx, key),
+            Popup::TaskDetail(p) => p.handle_event(state, key),
+            Popup::StatusSelection(p) => p.handle_event(state, key),
+            Popup::ConfirmDelete(p) => p.handle_event(state, key),
         }
     }
 
-    fn render(&self, ctx: &AppContext, frame: &mut Frame, area: Rect) {
+    pub fn render(&self, ctx: &mut RenderContext) {
         match self {
-            Popup::TaskDetail(p) => p.render(ctx, frame, area),
-            Popup::StatePicker(p) => p.render(ctx, frame, area),
-            Popup::ConfirmDelete(p) => p.render(ctx, frame, area),
+            Popup::TaskDetail(p) => p.render(ctx),
+            Popup::StatusSelection(p) => p.render(ctx),
+            Popup::ConfirmDelete(p) => p.render(ctx),
         }
     }
 }

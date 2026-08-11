@@ -1,3 +1,5 @@
+use crate::tui::action::Action;
+use crate::tui::component::{RenderContext, State};
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -5,11 +7,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
-use crate::tui::action::Action;
-use crate::tui::component::{AppContext, Component};
-
 pub struct TaskDetail {
-    // ── internal ──
     task_id: i64,
 }
 
@@ -17,24 +15,23 @@ impl TaskDetail {
     pub fn new(task_id: i64) -> Self {
         TaskDetail { task_id }
     }
-}
 
-impl Component for TaskDetail {
-    fn handle_event(&mut self, _ctx: &AppContext, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Esc | KeyCode::Enter => Some(Action::DismissPopup),
             _ => None,
         }
     }
 
-    fn render(&self, ctx: &AppContext, frame: &mut Frame, _area: Rect) {
-        let Some(task) = ctx.tasks.iter().find(|t| t.id == self.task_id) else {
+    pub fn render(&self, ctx: &mut RenderContext) {
+        let Some(task) = ctx.state.tasks.iter().find(|t| t.id == self.task_id) else {
             return;
         };
-        let state_name = ctx
-            .states
+        let status_name = ctx
+            .state
+            .statuses
             .iter()
-            .find(|s| s.id == task.state_id)
+            .find(|s| s.id == task.status_id)
             .map(|s| s.name.as_str())
             .unwrap_or("unknown");
 
@@ -47,8 +44,8 @@ impl Component for TaskDetail {
             )),
             Line::from(""),
             Line::from(format!("  Title:     {}", task.title)),
-            Line::from(format!("  State:     {}", state_name)),
-            Line::from(format!("  Project:   {}", ctx.project.name)),
+            Line::from(format!("  Status:    {}", status_name)),
+            Line::from(format!("  Project:   {}", ctx.state.project.name)),
             Line::from(format!("  Created:   {}", created)),
             Line::from(""),
         ];
@@ -66,9 +63,9 @@ impl Component for TaskDetail {
         let height = (lines.len() + 2) as u16;
         let width = 60u16;
         render_centered_popup(
-            frame,
+            ctx.frame,
             lines,
-            height.min(frame.area().height),
+            height.min(ctx.frame.area().height),
             width,
             "Task Detail",
         );

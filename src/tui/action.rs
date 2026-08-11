@@ -15,7 +15,7 @@ pub enum Action {
     OpenPopupDeleteConfirm(i64),
     MoveTask {
         task_id: i64,
-        state_name: String,
+        status_name: String,
     },
     DeleteTask(i64),
 
@@ -30,22 +30,22 @@ pub enum Action {
     #[allow(dead_code)]
     RenameProject(String),
     #[allow(dead_code)]
-    RenameState {
+    RenameStatus {
         old_name: String,
         new_name: String,
     },
     #[allow(dead_code)]
-    AddState(String),
+    AddStatus(String),
     #[allow(dead_code)]
-    DeleteState(String),
+    DeleteStatus(String),
     #[allow(dead_code)]
-    SetStateColor {
-        state_id: i64,
+    SetStatusColor {
+        status_id: i64,
         color: Option<String>,
     },
     #[allow(dead_code)]
-    ReorderState {
-        state_name: String,
+    ReorderStatus {
+        status_name: String,
         new_position: i32,
     },
 }

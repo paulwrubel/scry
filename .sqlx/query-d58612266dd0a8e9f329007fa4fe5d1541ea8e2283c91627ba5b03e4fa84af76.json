@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE statuses\n                SET color = ?\n                WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d58612266dd0a8e9f329007fa4fe5d1541ea8e2283c91627ba5b03e4fa84af76"
+}

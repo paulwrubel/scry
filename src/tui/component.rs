@@ -7,36 +7,59 @@ pub use popup::Popup;
 mod root;
 pub use root::Root;
 
-mod status_bar;
-pub use status_bar::StatusBar;
+mod hint_bar;
+pub use hint_bar::HintBar;
 
 mod task_list;
 pub use task_list::TaskList;
 
-use crate::models::{Project, State, Task};
-use crate::tui::action::Action;
+use crate::error::StorageError;
+use crate::models::{Project, ProjectID, Status, Task};
+use crate::store::TaskStore;
 use ratatui::Frame;
-use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
+use ratatui::widgets::Widget;
 
-/// Domain data passed to components each frame.
-/// References into the coordinator's fields — no cloning.
-pub struct AppContext<'a> {
-    pub project: &'a Project,
-    pub states: &'a [State],
-    pub tasks: &'a [Task],
+/// RenderContext is the context passed to components during
+/// rendering, containg the current frame and area to render into.
+pub struct RenderContext<'a, 'b> {
+    pub state: &'a State,
+
+    pub frame: &'a mut Frame<'b>,
+    pub area: Rect,
 }
 
-/// Core trait for all UI components in the application.
-/// Each component owns its UI state, handles its own events,
-/// and knows how to render itself into a given area.
-pub trait Component {
-    /// Handle a key event. Returns Some(Action) if the event produces a
-    /// cross-cutting action the parent coordinator needs to process.
-    /// Returns None if the event was handled internally (cursor movement,
-    /// scrolling, text editing) or ignored.
-    fn handle_event(&mut self, ctx: &AppContext, key: KeyEvent) -> Option<Action>;
+impl RenderContext<'_, '_> {
+    pub fn render_widget<W: Widget>(&mut self, widget: W) {
+        self.frame.render_widget(widget, self.area);
+    }
+}
 
-    /// Render the component into the given area of the frame.
-    fn render(&self, ctx: &AppContext, frame: &mut Frame, area: Rect);
+/// Domain data passed to components each frame, so they have accurate and up-to-date backend info
+pub struct State {
+    pub project: Project,
+    pub statuses: Vec<Status>,
+    pub tasks: Vec<Task>,
+}
+
+impl State {
+    pub async fn load_from_store(
+        store: &dyn TaskStore,
+        project_id: ProjectID,
+    ) -> Result<State, StorageError> {
+        let project = store
+            .get_project_by_id(project_id)
+            .await?
+            .ok_or(StorageError::NotFound(format!(
+                "Project not found for id {project_id}"
+            )))?;
+        let statuses = store.list_statuses(project_id).await?;
+        let tasks = store.list_tasks(project_id, None).await?;
+
+        Ok(Self {
+            project,
+            statuses,
+            tasks,
+        })
+    }
 }

@@ -1,1 +1,0 @@
-ALTER TABLE states ADD COLUMN color TEXT;

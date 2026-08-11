@@ -28,20 +28,20 @@ enum Command {
         /// The task description
         description: String,
     },
-    /// Move a task to a new state (alias for update --state)
+    /// Move a task to a new status (alias for update --status)
     Move {
         /// The task ID
         id: i64,
-        /// The target state
-        state: String,
+        /// The target status
+        status: String,
     },
     /// Update task properties
     Update {
         /// The task ID
         id: i64,
-        /// Move the task to a new state
+        /// Move the task to a new status
         #[arg(long)]
-        state: Option<String>,
+        status: Option<String>,
     },
     /// Delete a task
     Delete {
@@ -55,9 +55,9 @@ enum Command {
     },
     /// List tasks in the active project
     List {
-        /// Show only tasks in a specific state
+        /// Show only tasks in a specific status
         #[arg(long)]
-        state: Option<String>,
+        status: Option<String>,
     },
     /// Manage projects
     #[command(subcommand)]
@@ -88,33 +88,33 @@ enum ProjectCommand {
     },
     /// Show the currently active project
     Current,
-    /// Manage states within a project
+    /// Manage statuses within a project
     #[command(subcommand)]
     State(StateCommand),
 }
 
 #[derive(Subcommand)]
 enum StateCommand {
-    /// List states for a project
+    /// List statuses for a project
     List,
-    /// Add a new state
+    /// Add a new status
     Add {
-        /// The state name
+        /// The status name
         name: String,
     },
-    /// Remove a state from a project
+    /// Remove a status from a project
     Remove {
-        /// The state name
+        /// The status name
         name: String,
-        /// Move tasks to the first remaining state
+        /// Move tasks to the first remaining status
         #[arg(short, long)]
         force: bool,
     },
-    /// Rename a state
+    /// Rename a status
     Rename {
-        /// The current state name
+        /// The current status name
         old_name: String,
-        /// The new state name
+        /// The new status name
         new_name: String,
     },
 }
@@ -126,41 +126,44 @@ async fn main() -> Result<(), AppError> {
     let db_url = config.resolve_database_url();
     let store = SqliteStore::new(&db_url).await?;
 
-    let Some(command) = cli.command else {
-        let mut app = tui::App::from_store(&store).await?;
-        return app.run(&store).await;
-    };
-
     let (project_id, project_name) = resolve_project(&store, cli.project.as_deref()).await?;
+
+    let Some(command) = cli.command else {
+        let mut app = tui::App::new(store, project_id);
+        return app.run().await;
+    };
 
     match command {
         Command::Add { description } => {
             let task = store.add_task(&description, project_id).await?;
-            let state_defs = store.list_states(project_id).await?;
+            let status_defs = store.list_statuses(project_id).await?;
             println!(
                 "Created task {} in \"{}\" [{}]: {}",
                 task.id,
                 project_name,
-                state_defs
+                status_defs
                     .iter()
-                    .find(|s| s.id == task.state_id)
+                    .find(|s| s.id == task.status_id)
                     .map(|s| s.name.as_str())
                     .unwrap_or("?"),
                 task.title
             );
         }
-        Command::Move { id, state } => match store.move_task(id, project_id, &state).await? {
-            Some(_) => println!("Moved task {} --> \"{}\"", id, state),
+        Command::Move { id, status } => match store.move_task(id, project_id, &status).await? {
+            Some(_) => println!("Moved task {} --> \"{}\"", id, status),
             None => eprintln!("Task {} not found in \"{}\"", id, project_name),
         },
-        Command::Update { id, state } => {
-            let Some(state_name) = state else {
+        Command::Update { id, status } => {
+            let Some(status_name) = status else {
                 eprintln!("No flags provided. Use 'scry update --help' for available options.");
                 return Ok(());
             };
-            match store.update_task(id, project_id, Some(&state_name)).await? {
+            match store
+                .update_task(id, project_id, Some(&status_name))
+                .await?
+            {
                 Some(task) => {
-                    println!("Updated task {}: state --> \"{}\"", task.id, &state_name);
+                    println!("Updated task {}: status --> \"{}\"", task.id, &status_name);
                 }
                 None => eprintln!("Task {} not found in \"{}\"", id, project_name),
             }
@@ -174,17 +177,17 @@ async fn main() -> Result<(), AppError> {
         }
         Command::Show { id } => match store.show_task(id, project_id).await? {
             Some(task) => {
-                let state_defs = store.list_states(project_id).await?;
-                let state_name = state_defs
+                let status_defs = store.list_statuses(project_id).await?;
+                let status_name = status_defs
                     .iter()
-                    .find(|s| s.id == task.state_id)
+                    .find(|s| s.id == task.status_id)
                     .map(|s| s.name.as_str())
                     .unwrap_or("unknown");
 
                 println!("Task {}", task.id);
                 println!("  Project:   {}", project_name);
                 println!("  Title:     {}", task.title);
-                println!("  State:     {}", state_name);
+                println!("  State:     {}", status_name);
                 println!(
                     "  Created:   {}",
                     task.created_at
@@ -194,9 +197,9 @@ async fn main() -> Result<(), AppError> {
             }
             None => eprintln!("Task {} not found in \"{}\"", id, project_name),
         },
-        Command::List { state } => {
-            let tasks = store.list_tasks(project_id, state.as_deref()).await?;
-            let states = store.list_states(project_id).await?;
+        Command::List { status } => {
+            let tasks = store.list_tasks(project_id, status.as_deref()).await?;
+            let statuses = store.list_statuses(project_id).await?;
 
             println!("project \"{}\"\n", project_name);
 
@@ -205,24 +208,28 @@ async fn main() -> Result<(), AppError> {
                 return Ok(());
             }
 
-            for state_def in &states {
-                let state_tasks: Vec<_> = tasks
+            for status_def in &statuses {
+                let status_tasks: Vec<_> = tasks
                     .iter()
-                    .filter(|t| t.state_id == state_def.id)
+                    .filter(|t| t.status_id == status_def.id)
                     .collect();
 
-                if let Some(ref filter) = state
-                    && state_def.name != *filter
+                if let Some(ref filter) = status
+                    && status_def.name != *filter
                 {
                     continue;
                 }
 
-                println!("{} ({}):", state_def.name, state_tasks.len());
-                for task in &state_tasks {
-                    let icon = if state_def.is_completed { "[x]" } else { "[ ]" };
+                println!("{} ({}):", status_def.name, status_tasks.len());
+                for task in &status_tasks {
+                    let icon = if status_def.is_completed {
+                        "[x]"
+                    } else {
+                        "[ ]"
+                    };
                     println!("  {}  {}  {}", task.id, icon, task.title);
                 }
-                if !state_tasks.is_empty() {
+                if !status_tasks.is_empty() {
                     println!();
                 }
             }
@@ -242,7 +249,7 @@ async fn main() -> Result<(), AppError> {
             ProjectCommand::Create { name } => {
                 let project = store.create_project(&name).await?;
                 println!(
-                    "Created project \"{}\" with states: todo, done",
+                    "Created project \"{}\" with statuses: todo, done",
                     project.name
                 );
                 println!("Using project \"{}\"", project.name);
@@ -273,32 +280,34 @@ async fn main() -> Result<(), AppError> {
             ProjectCommand::Current => {
                 println!("{}", project_name);
             }
-            ProjectCommand::State(state_cmd) => match state_cmd {
+            ProjectCommand::State(status_cmd) => match status_cmd {
                 StateCommand::List => {
-                    let states = store.list_states(project_id).await?;
+                    let statuses = store.list_statuses(project_id).await?;
                     println!("States for \"{}\":", project_name);
-                    for s in &states {
+                    for s in &statuses {
                         println!("  {}", s.name);
                     }
                 }
                 StateCommand::Add { name } => {
-                    let state = store.add_state(project_id, &name).await?;
+                    let status = store.add_status(project_id, &name).await?;
                     println!(
-                        "Added state \"{}\" to project \"{}\"",
-                        state.name, project_name
+                        "Added status \"{}\" to project \"{}\"",
+                        status.name, project_name
                     );
                 }
                 StateCommand::Remove { name, force } => {
-                    store.remove_state(project_id, &name, force).await?;
+                    store.remove_status(project_id, &name, force).await?;
                     println!(
-                        "Removed state \"{}\" from project \"{}\"",
+                        "Removed status \"{}\" from project \"{}\"",
                         name, project_name
                     );
                 }
                 StateCommand::Rename { old_name, new_name } => {
-                    store.rename_state(project_id, &old_name, &new_name).await?;
+                    store
+                        .rename_status(project_id, &old_name, &new_name)
+                        .await?;
                     println!(
-                        "Renamed state \"{}\" --> \"{}\" in project \"{}\"",
+                        "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
                         old_name, new_name, project_name
                     );
                 }

@@ -1,18 +1,15 @@
-use ratatui::Frame;
+use crate::tui::action::Action;
+use crate::tui::component::{RenderContext, State};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
-use crate::tui::action::Action;
-use crate::tui::component::{AppContext, Component};
-
 pub struct InputBar {
-    // ── internal ──
-    pub buffer: String,
-    pub cursor_position: usize,
-    pub focused: bool,
+    buffer: String,
+    cursor_position: usize,
+    focused: bool,
 }
 
 impl InputBar {
@@ -40,10 +37,8 @@ impl InputBar {
     pub fn is_focused(&self) -> bool {
         self.focused
     }
-}
 
-impl Component for InputBar {
-    fn handle_event(&mut self, _ctx: &AppContext, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
         if !self.focused {
             return None;
         }
@@ -89,7 +84,7 @@ impl Component for InputBar {
         }
     }
 
-    fn render(&self, _ctx: &AppContext, frame: &mut Frame, area: Rect) {
+    pub fn render(&self, ctx: &mut RenderContext) {
         let block = if self.focused {
             Block::default().borders(Borders::ALL).title("New Task")
         } else {
@@ -106,7 +101,7 @@ impl Component for InputBar {
                 Constraint::Length(1),
                 Constraint::Fill(1),
             ])
-            .split(block.inner(area));
+            .split(block.inner(ctx.area));
 
         let text_area = rows[1];
 
@@ -123,17 +118,17 @@ impl Component for InputBar {
             ))]
         };
 
-        frame.render_widget(block, area);
-        let para = Paragraph::new(lines).wrap(Wrap { trim: false });
-        frame.render_widget(para, text_area);
+        ctx.render_widget(block);
+        ctx.frame
+            .render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), text_area);
 
-        if self.focused {
-            let col = if self.buffer.is_empty() {
-                text_area.x
-            } else {
-                text_area.x + self.cursor_position.min(self.buffer.len()) as u16
-            };
-            frame.set_cursor_position((col, text_area.y));
-        }
+        // if self.focused {
+        let col = if self.buffer.is_empty() {
+            text_area.x
+        } else {
+            text_area.x + self.cursor_position.min(self.buffer.len()) as u16
+        };
+        ctx.frame.set_cursor_position((col, text_area.y));
+        // }
     }
 }

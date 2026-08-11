@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                            SELECT\n                                t.id AS \"id: i64\",\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at: DateTime<Utc>\",\n                                t.project_id AS \"project_id: i64\",\n                                t.status_id AS \"status_id: i64\",\n                                t.position AS \"position: i32\"\n                            FROM tasks t\n                            WHERE t.project_id = ? AND t.status_id = ?\n                            ORDER BY t.position ASC, t.id ASC\n                        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "project_id: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "name": "status_id: i64",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "status_id"
+          }
+        }
+      },
+      {
+        "name": "position: i32",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "position"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "745f5ba15b733d969f727fc4884507d7c6716f85ca21f8e08e77b4dcad856a6e"
+}

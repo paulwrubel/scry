@@ -1,30 +1,30 @@
 use async_trait::async_trait;
 
 use crate::error::StorageError;
-use crate::models::{Project, ProjectID, State, Task, TaskID};
+use crate::models::{Project, ProjectID, Status, Task, TaskID};
 
 #[async_trait]
 pub trait TaskStore {
-    /// Add a new task to a project. The task is created in the project's entry state.
+    /// Add a new task to a project. The task is created in the project's entry status.
     async fn add_task(&self, title: &str, project_id: ProjectID) -> Result<Task, StorageError>;
 
-    /// Move a task to a new state. Alias for `update_task(id, project_id, Some(state_name))`.
+    /// Move a task to a new status. Alias for `update_task(id, project_id, Some(status_name))`.
     async fn move_task(
         &self,
         id: TaskID,
         project_id: ProjectID,
-        state_name: &str,
+        status_name: &str,
     ) -> Result<Option<Task>, StorageError> {
-        self.update_task(id, project_id, Some(state_name)).await
+        self.update_task(id, project_id, Some(status_name)).await
     }
 
-    /// Update task properties. Currently only `state_name` is supported;
+    /// Update task properties. Currently only `status_name` is supported;
     /// future flags (title, due, priority) will be added here.
     async fn update_task(
         &self,
         id: TaskID,
         project_id: ProjectID,
-        state_name: Option<&str>,
+        status_name: Option<&str>,
     ) -> Result<Option<Task>, StorageError>;
 
     /// Delete a task permanently.
@@ -37,15 +37,15 @@ pub trait TaskStore {
         project_id: ProjectID,
     ) -> Result<Option<Task>, StorageError>;
 
-    /// List tasks in a project, optionally filtered by state.
+    /// List tasks in a project, optionally filtered by status.
     /// Results are ordered by position ascending, then task ID ascending.
     async fn list_tasks(
         &self,
         project_id: ProjectID,
-        state_name: Option<&str>,
+        status_name: Option<&str>,
     ) -> Result<Vec<Task>, StorageError>;
 
-    /// Create a new project with default states (todo, done).
+    /// Create a new project with default statuses (todo, done).
     /// The new project becomes the active project.
     async fn create_project(&self, name: &str) -> Result<Project, StorageError>;
 
@@ -69,35 +69,34 @@ pub trait TaskStore {
     /// Set the active project. Persisted across sessions.
     async fn set_active_project(&self, name: &str) -> Result<(), StorageError>;
 
-    /// Add a new state to a project. Appended after existing states.
-    async fn add_state(&self, project_id: ProjectID, name: &str) -> Result<State, StorageError>;
+    /// Add a new status to a project. Appended after existing statuses.
+    async fn add_status(&self, project_id: ProjectID, name: &str) -> Result<Status, StorageError>;
 
-    /// Remove a state from a project. If `force` is true, tasks in the removed
-    /// state are moved to the first remaining state. The last state of a project
+    /// Remove a status from a project. If `force` is true, tasks in the removed
+    /// status are moved to the first remaining status. The last status of a project
     /// cannot be removed.
-    async fn remove_state(
+    async fn remove_status(
         &self,
         project_id: ProjectID,
         name: &str,
         force: bool,
     ) -> Result<(), StorageError>;
 
-    /// Rename a state within a project. All tasks referencing the old name are updated.
-    async fn rename_state(
+    /// Rename a status within a project. All tasks referencing the old name are updated.
+    async fn rename_status(
         &self,
         project_id: ProjectID,
         old_name: &str,
         new_name: &str,
     ) -> Result<(), StorageError>;
 
-    /// List all states for a project, ordered by position.
-    async fn list_states(&self, project_id: ProjectID) -> Result<Vec<State>, StorageError>;
+    /// List all statuses for a project, ordered by position.
+    async fn list_statuses(&self, project_id: ProjectID) -> Result<Vec<Status>, StorageError>;
 
-    /// Set the color of a state. Pass `None` to clear the color.
-    async fn set_state_color(
+    /// Set the color of a status. Pass `None` to clear the color.
+    async fn set_status_color(
         &self,
-        project_id: ProjectID,
-        state_name: &str,
+        status_id: i64,
         color: Option<&str>,
     ) -> Result<(), StorageError>;
 
@@ -109,13 +108,13 @@ pub trait TaskStore {
         new_name: &str,
     ) -> Result<(), StorageError>;
 
-    /// Move a state to a new position (0-based) within its project.
-    /// Other states are shifted to accommodate the new position.
-    /// The new position is clamped to [0, number of states - 1].
-    async fn reorder_state(
+    /// Move a status to a new position (0-based) within its project.
+    /// Other statuses are shifted to accommodate the new position.
+    /// The new position is clamped to [0, number of statuses - 1].
+    async fn reorder_status(
         &self,
         project_id: ProjectID,
-        state_name: &str,
+        status_name: &str,
         new_position: i32,
     ) -> Result<(), StorageError>;
 }

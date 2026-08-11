@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 pub type TaskID = i64;
 pub type ProjectID = i64;
 
-/// Canonical list of all supported state colors: (name, ratatui Color).
-pub const STATE_COLORS: &[(&str, ratatui::style::Color)] = &[
+/// Canonical list of all supported status colors: (name, ratatui Color).
+pub const STATUS_COLORS: &[(&str, ratatui::style::Color)] = &[
     ("Red", ratatui::style::Color::Red),
     ("Green", ratatui::style::Color::Green),
     ("Yellow", ratatui::style::Color::Yellow),
@@ -28,7 +28,7 @@ pub struct Color(pub String);
 
 impl From<Color> for ratatui::style::Color {
     fn from(c: Color) -> Self {
-        STATE_COLORS
+        STATUS_COLORS
             .iter()
             .find(|(name, _)| *name == c.0.as_str())
             .map(|(_, color)| *color)
@@ -44,7 +44,7 @@ pub struct Project {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct State {
+pub struct Status {
     pub id: i64,
     pub project_id: ProjectID,
     pub name: String,
@@ -60,7 +60,7 @@ pub struct Task {
     pub project_id: ProjectID,
     pub title: String,
     pub description: Option<String>,
-    pub state_id: i64,
+    pub status_id: i64,
     pub position: i32,
     pub created_at: DateTime<Utc>,
 }

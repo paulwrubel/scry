@@ -1,5 +1,11 @@
 use std::future::Future;
 
+use crate::models::ProjectID;
+use crate::store::TaskStore;
+use crate::tui::action::Action;
+use crate::tui::component::RenderContext;
+use crate::tui::component::Root;
+use crate::{error::AppError, tui::component::State};
 use crossterm::{
     cursor::{SetCursorStyle, Show},
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
@@ -10,47 +16,30 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use tokio::runtime::Handle;
 
-use crate::models::{Project, State, Task};
-use crate::store::TaskStore;
-use crate::{error::AppError, tui::component::Component};
-
-use crate::tui::action::Action;
-use crate::tui::component::AppContext;
-use crate::tui::component::Root;
-
 /// Terminal lifecycle and domain logic. UI orchestration lives in Root.
-pub struct App {
+pub struct App<S: TaskStore + Sync> {
     root: Root,
     is_running: bool,
 
     // domain state
-    project: Project,
-    states: Vec<State>,
-    tasks: Vec<Task>,
+    store: S,
+    project_id: ProjectID,
 }
 
-impl App {
-    pub fn new(project: Project, states: Vec<State>, tasks: Vec<Task>) -> Self {
+impl<S: TaskStore + Sync> App<S> {
+    pub fn new(store: S, project_id: ProjectID) -> Self {
         App {
             root: Root::new(),
             is_running: true,
-            project,
-            states,
-            tasks,
+            store,
+            project_id,
         }
     }
 
-    pub async fn from_store<S: TaskStore + Sync>(store: &S) -> Result<Self, AppError> {
-        let project = Self::block_on(store.get_active_project())
-            .map_err(|e| AppError::Internal(format!("failed to load active project: {}", e)))?;
-        let (states, tasks) = Self::fetch_data(store, project.id)?;
-        Ok(App::new(project, states, tasks))
-    }
-
-    pub async fn run<S: TaskStore + Sync>(&mut self, store: &S) -> Result<(), AppError> {
+    pub async fn run(&mut self) -> Result<(), AppError> {
         let mut terminal = Self::setup_terminal()?;
 
-        let result = self.event_loop(&mut terminal, store).await;
+        let result = self.event_loop(&mut terminal).await;
 
         Self::teardown_terminal(terminal)?;
 
@@ -104,27 +93,29 @@ impl App {
         Ok(())
     }
 
-    async fn event_loop<S: TaskStore + Sync>(
+    async fn event_loop(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-        store: &S,
     ) -> Result<(), AppError> {
         while self.is_running {
-            let ctx = AppContext {
-                project: &self.project,
-                states: &self.states,
-                tasks: &self.tasks,
-            };
+            let state = State::load_from_store(&self.store, self.project_id).await?;
 
             terminal
-                .draw(|f| self.root.render(&ctx, f, f.area()))
+                .draw(|f| {
+                    let area = f.area();
+                    self.root.render(&mut RenderContext {
+                        state: &state,
+                        frame: f,
+                        area,
+                    })
+                })
                 .map_err(|e| AppError::Internal(format!("render error: {}", e)))?;
 
             match event::read().map_err(|e| AppError::Internal(format!("event error: {}", e)))? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
                     self.root.clear_status();
-                    if let Some(action) = self.root.handle_event(&ctx, key) {
-                        self.process_action(store, action);
+                    if let Some(action) = self.root.handle_event(&state, key) {
+                        self.process_action(action);
                     }
                 }
                 Event::Resize(_, _) => {}
@@ -134,83 +125,79 @@ impl App {
         Ok(())
     }
 
-    fn process_action<S: TaskStore + Sync>(&mut self, store: &S, action: Action) {
+    fn process_action(&mut self, action: Action) {
         match action {
             Action::Quit => self.is_running = false,
 
             Action::AddTask(title) => {
-                match Self::block_on(store.add_task(&title, self.project.id)) {
-                    Ok(_) => self.refresh_data(store),
-                    Err(e) => self.root.set_status(format!("{}", e)),
+                match Self::block_on(self.store.add_task(&title, self.project_id)) {
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
                 }
             }
             Action::MoveTask {
                 task_id,
-                state_name,
-            } => match Self::block_on(store.move_task(task_id, self.project.id, &state_name)) {
-                Ok(_) => self.refresh_data(store),
-                Err(e) => self.root.set_status(format!("{}", e)),
-            },
+                status_name,
+            } => {
+                match Self::block_on(self.store.move_task(task_id, self.project_id, &status_name)) {
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
+                }
+            }
             Action::DeleteTask(task_id) => {
-                match Self::block_on(store.delete_task(task_id, self.project.id)) {
-                    Ok(_) => self.refresh_data(store),
-                    Err(e) => self.root.set_status(format!("{}", e)),
+                match Self::block_on(self.store.delete_task(task_id, self.project_id)) {
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
                 }
             }
             Action::RenameProject(new_name) => {
-                match Self::block_on(store.rename_project(self.project.id, &new_name)) {
-                    Ok(_) => {
-                        self.project.name = new_name;
-                        self.refresh_data(store);
-                    }
-                    Err(e) => self.root.set_status(format!("{}", e)),
+                match Self::block_on(self.store.rename_project(self.project_id, &new_name)) {
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::RenameState { old_name, new_name } => {
-                match Self::block_on(store.rename_state(self.project.id, &old_name, &new_name)) {
-                    Ok(_) => self.refresh_data(store),
-                    Err(e) => self.root.set_status(format!("{}", e)),
-                }
-            }
-            Action::AddState(name) => {
-                match Self::block_on(store.add_state(self.project.id, &name)) {
-                    Ok(_) => self.refresh_data(store),
-                    Err(e) => self.root.set_status(format!("{}", e)),
-                }
-            }
-            Action::DeleteState(state_name) => {
-                match Self::block_on(store.remove_state(self.project.id, &state_name, false)) {
-                    Ok(_) => self.refresh_data(store),
-                    Err(e) => self.root.set_status(format!("{}", e)),
-                }
-            }
-            Action::SetStateColor { state_id, color } => {
-                let state_name = self
-                    .states
-                    .iter()
-                    .find(|s| s.id == state_id)
-                    .map(|s| s.name.as_str())
-                    .unwrap_or("");
-                match Self::block_on(store.set_state_color(
-                    self.project.id,
-                    state_name,
-                    color.as_deref(),
+            Action::RenameStatus { old_name, new_name } => {
+                match Self::block_on(self.store.rename_status(
+                    self.project_id,
+                    &old_name,
+                    &new_name,
                 )) {
-                    Ok(_) => self.refresh_data(store),
-                    Err(e) => self.root.set_status(format!("{}", e)),
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::ReorderState {
-                state_name,
+            Action::AddStatus(name) => {
+                match Self::block_on(self.store.add_status(self.project_id, &name)) {
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
+                }
+            }
+            Action::DeleteStatus(status_name) => {
+                match Self::block_on(
+                    self.store
+                        .remove_status(self.project_id, &status_name, false),
+                ) {
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
+                }
+            }
+            Action::SetStatusColor { status_id, color } => {
+                match Self::block_on(self.store.set_status_color(status_id, color.as_deref())) {
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
+                }
+            }
+            Action::ReorderStatus {
+                status_name,
                 new_position,
             } => {
-                match Self::block_on(store.reorder_state(
-                    self.project.id,
-                    &state_name,
+                match Self::block_on(self.store.reorder_status(
+                    self.project_id,
+                    &status_name,
                     new_position,
                 )) {
-                    Ok(_) => self.refresh_data(store),
-                    Err(e) => self.root.set_status(format!("{}", e)),
+                    Ok(_) => {}
+                    Err(e) => self.root.set_status(e.to_string()),
                 }
             }
             _ => {}
@@ -219,26 +206,5 @@ impl App {
 
     fn block_on<T>(f: impl Future<Output = T>) -> T {
         tokio::task::block_in_place(|| Handle::current().block_on(f))
-    }
-
-    fn fetch_data<S: TaskStore + Sync>(
-        store: &S,
-        project_id: i64,
-    ) -> Result<(Vec<State>, Vec<Task>), AppError> {
-        let states = Self::block_on(store.list_states(project_id))
-            .map_err(|e| AppError::Internal(format!("failed to list states: {}", e)))?;
-        let tasks = Self::block_on(store.list_tasks(project_id, None))
-            .map_err(|e| AppError::Internal(format!("failed to list tasks: {}", e)))?;
-        Ok((states, tasks))
-    }
-
-    fn refresh_data<S: TaskStore + Sync>(&mut self, store: &S) {
-        match Self::fetch_data(store, self.project.id) {
-            Ok((states, tasks)) => {
-                self.states = states;
-                self.tasks = tasks;
-            }
-            Err(e) => self.root.set_status(format!("{}", e)),
-        }
     }
 }

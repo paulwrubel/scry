@@ -1,20 +1,17 @@
-use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::widgets::{Block, Borders};
 
 use crate::tui::action::Action;
-use crate::tui::component::AppContext;
-use crate::tui::component::Component;
-use crate::tui::component::Popup;
-use crate::tui::component::popup::{ConfirmDelete, StatePicker, TaskDetail};
-use crate::tui::component::{InputBar, StatusBar, TaskList};
+use crate::tui::component::popup::{ConfirmDelete, StatusSelection, TaskDetail};
+use crate::tui::component::{HintBar, InputBar, State, TaskList};
+use crate::tui::component::{Popup, RenderContext};
 
 pub struct Root {
-    // ── children ──
     task_list: TaskList,
     input_bar: InputBar,
-    status_bar: StatusBar,
+    hint_bar: HintBar,
+
     popup: Option<Popup>,
 }
 
@@ -23,20 +20,20 @@ impl Root {
         Self {
             task_list: TaskList::new(),
             input_bar: InputBar::new(),
-            status_bar: StatusBar::new(),
+            hint_bar: HintBar::new(),
             popup: None,
         }
     }
 
     pub fn set_status(&mut self, msg: String) {
-        self.status_bar.set_message(msg);
+        self.hint_bar.set_message(msg);
     }
 
     pub fn clear_status(&mut self) {
-        self.status_bar.set_message(String::new());
+        self.hint_bar.set_message(String::new());
     }
 
-    fn process(&mut self, ctx: &AppContext, action: Action) -> Option<Action> {
+    fn process(&mut self, state: &State, action: Action) -> Option<Action> {
         match action {
             // UI actions — handled here, never reach the coordinator
             Action::FocusInput => {
@@ -48,20 +45,20 @@ impl Root {
                 None
             }
             Action::OpenPopupMovePicker(task_id) => {
-                let current_state_id = ctx
+                let current_status_id = state
                     .tasks
                     .iter()
                     .find(|t| t.id == task_id)
-                    .map(|t| t.state_id);
-                self.popup = Some(Popup::StatePicker(StatePicker::new(
+                    .map(|t| t.status_id);
+                self.popup = Some(Popup::StatusSelection(StatusSelection::new(
                     task_id,
-                    ctx.states.len(),
-                    current_state_id,
+                    state.statuses.len(),
+                    current_status_id,
                 )));
                 None
             }
             Action::OpenPopupDeleteConfirm(task_id) => {
-                if let Some(task) = ctx.tasks.iter().find(|t| t.id == task_id) {
+                if let Some(task) = state.tasks.iter().find(|t| t.id == task_id) {
                     self.popup = Some(Popup::ConfirmDelete(ConfirmDelete::new(
                         task_id,
                         task.title.clone(),
@@ -89,51 +86,44 @@ impl Root {
             _ => Some(action),
         }
     }
-}
 
-impl Component for Root {
-    fn handle_event(&mut self, ctx: &AppContext, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
         let code = key.code;
 
         // 1 - active popup swallows all input
         if let Some(ref mut popup) = self.popup {
-            if let Popup::StatePicker(p) = popup {
-                p.sync(ctx);
-            }
             return popup
-                .handle_event(ctx, key)
-                .and_then(|a| self.process(ctx, a));
+                .handle_event(state, key)
+                .and_then(|a| self.process(state, a));
         }
 
         // 2 - input bar when typing
         if self.input_bar.is_focused() {
             return self
                 .input_bar
-                .handle_event(ctx, key)
-                .and_then(|a| self.process(ctx, a));
+                .handle_event(state, key)
+                .and_then(|a| self.process(state, a));
         }
 
         // 3 - task list handles navigation + Enter/m/d internally
-        if let Some(action) = self.task_list.handle_event(ctx, key) {
-            return self.process(ctx, action);
+        if let Some(action) = self.task_list.handle_event(state, key) {
+            return self.process(state, action);
         }
 
         // 4 - global keys are handled ONLY if nothing above handled the event
         match code {
-            KeyCode::Char('q') => self.process(ctx, Action::Quit),
-            KeyCode::Char('a') => self.process(ctx, Action::FocusInput),
+            KeyCode::Char('q') => self.process(state, Action::Quit),
+            KeyCode::Char('a') => self.process(state, Action::FocusInput),
             _ => None,
         }
     }
 
-    fn render(&self, ctx: &AppContext, frame: &mut Frame, _area: Rect) {
-        let area = frame.area();
-
+    pub fn render(&self, ctx: &mut RenderContext) {
         let block = Block::default()
             .borders(Borders::ALL)
             .title(" scry ")
-            .title(format!(" {} ", ctx.project.name));
-        let inner_area = block.inner(area);
+            .title(format!(" {} ", ctx.state.project.name));
+        let inner_area = block.inner(ctx.area);
 
         let h_layout = Layout::default()
             .direction(Direction::Horizontal)
@@ -155,16 +145,29 @@ impl Component for Root {
             .split(h_layout[1]);
 
         // render components in z-order
-        self.task_list.render(ctx, frame, layout[1]);
-        self.input_bar.render(ctx, frame, layout[2]);
-        self.status_bar.render(ctx, frame, layout[3]);
+
+        self.task_list.render(&mut RenderContext {
+            state: ctx.state,
+            frame: ctx.frame,
+            area: layout[1],
+        });
+        self.input_bar.render(&mut RenderContext {
+            state: ctx.state,
+            frame: ctx.frame,
+            area: layout[2],
+        });
+        self.hint_bar.render(&mut RenderContext {
+            state: ctx.state,
+            frame: ctx.frame,
+            area: layout[3],
+        });
 
         // border on top at edges
-        frame.render_widget(block, area);
+        ctx.render_widget(block);
 
         // popup last (on top of everything)
         if let Some(ref popup) = self.popup {
-            popup.render(ctx, frame, area);
+            popup.render(ctx);
         }
     }
 }
