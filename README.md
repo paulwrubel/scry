@@ -4,7 +4,7 @@ A task manager for the terminal.
 
 ## Overview
 
-scry organizes work into **projects** with customizable **states** (kanban columns). Tasks live within a project and move between states. A built-in "default" project with `todo` / `done` states provides a simple out-of-box todo list experience — no setup required.
+scry organizes work into **projects** with customizable **statuses** (kanban columns). Tasks live within a project and move between statuses. A built-in "default" project with `todo` / `done` statuses provides a simple out-of-box todo list experience — no setup required.
 
 ## Installation
 
@@ -35,11 +35,11 @@ cargo build --release
 
 ### Projects
 
-A project is a container for related tasks. Each project has its own set of states. The built-in "default" project exists automatically and can be used without creating anything.
+A project is a container for related tasks. Each project has its own set of statuses. The built-in "default" project exists automatically and can be used without creating anything.
 
-### States
+### Statuses
 
-States are the columns a task moves through within a project. The "default" project comes with `todo` and `done`. Custom projects can have any number of arbitrarily named states (e.g., "backlog", "in progress", "review", "done"). State names are case-sensitive.
+Statuses are the columns a task moves through within a project. The "default" project comes with `todo` and `done`. Custom projects can have any number of arbitrarily named statuses (e.g., "backlog", "in progress", "review", "done"). Status names are case-sensitive.
 
 ### Active Project
 
@@ -57,10 +57,10 @@ scry list
 # move a task to done
 scry move 1 done
 
-# create a project with custom states
+# create a project with custom statuses
 scry project create myapp
-scry -p myapp project state add "in progress"
-scry -p myapp project state add review
+scry -p myapp project status add "in progress"
+scry -p myapp project status add review
 scry -p myapp add "design API"
 scry -p myapp move 1 "in progress"
 ```
@@ -73,33 +73,33 @@ scry -p myapp move 1 "in progress"
 
 ### Task Commands
 
-| Command | Description |
-|---------|-------------|
-| `scry add <description>` | Add a task (defaults to `todo` state) |
-| `scry list [--state <name>]` | List tasks grouped by state |
-| `scry move <id> <state>` | Move a task to a new state (alias for `update --state`) |
-| `scry update <id> --state <state>` | Update task properties |
-| `scry show <id>` | Show full task details |
-| `scry delete <id>` | Delete a task permanently |
+| Command                              | Description                                               |
+| ------------------------------------ | --------------------------------------------------------- |
+| `scry add <description>`             | Add a task (defaults to `todo` status)                    |
+| `scry list [--status <name>]`        | List tasks grouped by status                              |
+| `scry move <id> <status>`            | Move a task to a new status (alias for `update --status`) |
+| `scry update <id> --status <status>` | Update task properties                                    |
+| `scry show <id>`                     | Show full task details                                    |
+| `scry delete <id>`                   | Delete a task permanently                                 |
 
 ### Project Commands
 
-| Command | Description |
-|---------|-------------|
-| `scry project list` | List all projects (`*` marks active) |
-| `scry project create <name>` | Create a project (auto-switches to it) |
+| Command                           | Description                                 |
+| --------------------------------- | ------------------------------------------- |
+| `scry project list`               | List all projects (`*` marks active)        |
+| `scry project create <name>`      | Create a project (auto-switches to it)      |
 | `scry project delete <name> [-f]` | Delete a project (prompts unless `--force`) |
-| `scry project use <name>` | Set the active project |
-| `scry project current` | Show the active project |
+| `scry project use <name>`         | Set the active project                      |
+| `scry project current`            | Show the active project                     |
 
-### State Commands
+### Status Commands
 
-| Command | Description |
-|---------|-------------|
-| `scry project state list` | List states for the active project |
-| `scry project state add <name>` | Add a new state |
-| `scry project state remove <name> [-f]` | Remove a state (`--force` moves tasks) |
-| `scry project state rename <old> <new>` | Rename a state |
+| Command                                  | Description                             |
+| ---------------------------------------- | --------------------------------------- |
+| `scry project status list`               | List statuses for the active project    |
+| `scry project status add <name>`         | Add a new status                        |
+| `scry project status remove <name> [-f]` | Remove a status (`--force` moves tasks) |
+| `scry project status rename <old> <new>` | Rename a status                         |
 
 ## Configuration
 
@@ -107,7 +107,7 @@ On first run, scry creates `~/.config/scry/config.toml` with available options. 
 
 ## Database
 
-Tasks, projects, and states are stored in a SQLite database at `$XDG_DATA_HOME/scry/scry.db` (falling back to `~/.local/share/scry/scry.db`). No manual setup or migrations are required.
+Tasks, projects, and statuses are stored in a SQLite database at `$XDG_DATA_HOME/scry/scry.db` (falling back to `~/.local/share/scry/scry.db`). No manual setup or migrations are required.
 
 ## Roadmap
 
