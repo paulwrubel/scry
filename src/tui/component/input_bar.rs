@@ -42,6 +42,7 @@ impl InputBar {
             KeyCode::Enter => {
                 let title = self.buffer.trim().to_string();
                 self.buffer.clear();
+                self.cursor_position = 0;
                 if title.is_empty() {
                     None
                 } else {
@@ -50,22 +51,28 @@ impl InputBar {
             }
             KeyCode::Char(c) => {
                 self.buffer.insert(self.cursor_position, c);
-                self.cursor_position += 1;
+                self.cursor_position += c.len_utf8();
                 None
             }
             KeyCode::Backspace => {
                 if self.cursor_position > 0 {
-                    self.cursor_position -= 1;
-                    self.buffer.remove(self.cursor_position);
+                    let prev = self.buffer.floor_char_boundary(self.cursor_position - 1);
+                    self.buffer.remove(prev);
+                    self.cursor_position = prev;
                 }
                 None
             }
             KeyCode::Left => {
-                self.cursor_position = self.cursor_position.saturating_sub(1);
+                if self.cursor_position > 0 {
+                    self.cursor_position =
+                        self.buffer.floor_char_boundary(self.cursor_position - 1);
+                }
                 None
             }
             KeyCode::Right => {
-                self.cursor_position = (self.cursor_position + 1).min(self.buffer.len());
+                if self.cursor_position < self.buffer.len() {
+                    self.cursor_position = self.buffer.ceil_char_boundary(self.cursor_position + 1);
+                }
                 None
             }
             _ => None,
@@ -111,7 +118,10 @@ impl InputBar {
             let col = if self.buffer.is_empty() {
                 text_area.x
             } else {
-                text_area.x + self.cursor_position.min(self.buffer.len()) as u16
+                text_area.x
+                    + self.buffer[..self.cursor_position.min(self.buffer.len())]
+                        .chars()
+                        .count() as u16
             };
             ctx.frame.set_cursor_position((col, text_area.y));
         }
