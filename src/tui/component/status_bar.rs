@@ -32,13 +32,15 @@ impl Component for StatusBar {
     }
 
     fn render(&self, _ctx: &AppContext, frame: &mut Frame, area: Rect) {
+        let status_actions = [
+            "[a]dd task",
+            "[m]ove task",
+            "[d]elete task",
+            "[Enter]: task details",
+            "[q]uit",
+        ];
         let (text, style) = if self.message.is_empty() {
-            (
-                String::from(
-                    "[a]dd task | [m]ove task | [d]elete task | project [s]ettings | [Enter]: task details | [q]uit",
-                ),
-                Style::default(),
-            )
+            (status_actions.join(" | "), Style::default())
         } else {
             (
                 self.message.clone(),

@@ -24,21 +24,26 @@ pub enum Action {
     MoveFocusUp,
 
     // ── popup lifecycle ──
-    OpenPopupProjectSettings,
     DismissPopup,
 
-    // ── project settings (confirmed operations from ProjectSettings popup) ──
+    // ── project settings ──
+    #[allow(dead_code)]
     RenameProject(String),
+    #[allow(dead_code)]
     RenameState {
         old_name: String,
         new_name: String,
     },
+    #[allow(dead_code)]
     AddState(String),
+    #[allow(dead_code)]
     DeleteState(String),
+    #[allow(dead_code)]
     SetStateColor {
         state_id: i64,
         color: Option<String>,
     },
+    #[allow(dead_code)]
     ReorderState {
         state_name: String,
         new_position: i32,

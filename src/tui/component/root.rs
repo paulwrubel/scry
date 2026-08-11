@@ -7,7 +7,7 @@ use crate::tui::action::Action;
 use crate::tui::component::AppContext;
 use crate::tui::component::Component;
 use crate::tui::component::Popup;
-use crate::tui::component::popup::{ConfirmDelete, ProjectSettings, StatePicker, TaskDetail};
+use crate::tui::component::popup::{ConfirmDelete, StatePicker, TaskDetail};
 use crate::tui::component::{InputBar, StatusBar, TaskList};
 
 pub struct Root {
@@ -69,12 +69,6 @@ impl Root {
                 }
                 None
             }
-            Action::OpenPopupProjectSettings => {
-                self.popup = Some(Popup::ProjectSettings(ProjectSettings::new(
-                    ctx.states.len(),
-                )));
-                None
-            }
             Action::DismissPopup => {
                 self.popup = None;
                 None
@@ -91,15 +85,8 @@ impl Root {
                 Some(action)
             }
 
-            // Store actions — bubble up unchanged
-            Action::Quit
-            | Action::AddTask(_)
-            | Action::RenameProject(_)
-            | Action::RenameState { .. }
-            | Action::AddState(_)
-            | Action::DeleteState(_)
-            | Action::SetStateColor { .. }
-            | Action::ReorderState { .. } => Some(action),
+            // unhandled actions bubble up unchanged
+            _ => Some(action),
         }
     }
 }
@@ -110,10 +97,8 @@ impl Component for Root {
 
         // 1 - active popup swallows all input
         if let Some(ref mut popup) = self.popup {
-            match popup {
-                Popup::StatePicker(p) => p.sync(ctx),
-                Popup::ProjectSettings(p) => p.sync(ctx),
-                _ => {}
+            if let Popup::StatePicker(p) = popup {
+                p.sync(ctx);
             }
             return popup
                 .handle_event(ctx, key)
@@ -137,7 +122,6 @@ impl Component for Root {
         match code {
             KeyCode::Char('q') => self.process(ctx, Action::Quit),
             KeyCode::Char('a') => self.process(ctx, Action::FocusInput),
-            KeyCode::Char('s') => self.process(ctx, Action::OpenPopupProjectSettings),
             _ => None,
         }
     }
