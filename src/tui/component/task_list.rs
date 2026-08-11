@@ -54,7 +54,7 @@ impl TaskList {
         let selected_status_id = state.tasks[flat_idx].status_id;
 
         for status in &state.statuses {
-            // blank separator between state groups (matches render)
+            // blank separator between status groups (matches render)
             if line_index > 0 {
                 line_index += 1;
             }

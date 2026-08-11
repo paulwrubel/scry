@@ -121,14 +121,13 @@ impl InputBar {
         ctx.render_widget(block);
         ctx.frame
             .render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), text_area);
-
-        // if self.focused {
-        let col = if self.buffer.is_empty() {
-            text_area.x
-        } else {
-            text_area.x + self.cursor_position.min(self.buffer.len()) as u16
-        };
-        ctx.frame.set_cursor_position((col, text_area.y));
-        // }
+        if self.focused {
+            let col = if self.buffer.is_empty() {
+                text_area.x
+            } else {
+                text_area.x + self.cursor_position.min(self.buffer.len()) as u16
+            };
+            ctx.frame.set_cursor_position((col, text_area.y));
+        }
     }
 }

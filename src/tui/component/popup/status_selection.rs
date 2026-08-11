@@ -24,15 +24,6 @@ impl StatusSelection {
         }
     }
 
-    // the coordinator calls this before handle_event to keep status_count
-    // in sync with the domain snapshot
-    // pub fn sync(&mut self, ctx: &AppContext) {
-    //     self.status_count = ctx.statuses.len();
-    //     if self.selected_status_index >= self.status_count {
-    //         self.selected_status_index = self.status_count.saturating_sub(1);
-    //     }
-    // }
-
     pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Esc => Some(Action::DismissPopup),

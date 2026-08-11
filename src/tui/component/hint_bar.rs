@@ -18,7 +18,7 @@ impl HintBar {
     }
 
     pub fn render(&self, ctx: &mut RenderContext) {
-        let status_actions = [
+        let hint_actions = [
             "[a]dd task",
             "[m]ove task",
             "[d]elete task",
@@ -26,7 +26,7 @@ impl HintBar {
             "[q]uit",
         ];
         let (text, style) = if self.message.is_empty() {
-            (status_actions.join(" | "), Style::default())
+            (hint_actions.join(" | "), Style::default())
         } else {
             (
                 self.message.clone(),
