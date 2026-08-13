@@ -1,7 +1,6 @@
-- centralize all the "center rect" and other popup utilities
-- commands!
+- commands! (auto-trigger the input when / is typed)
 - why a gap in the border bottom left on task detail???
+  - create a task detail PANE on the right side
 - add a real status row
-- fix task detail rendering
 - fix the FUCKING POPUPS BEING NONSENSE GARBAGE code
 - fix the move status screen (default selection is just BROKEN)
