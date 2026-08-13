@@ -1,12 +1,11 @@
-use crossterm::event::KeyModifiers;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Direction, Layout};
-use ratatui::widgets::{Block, Borders};
-
 use crate::tui::action::Action;
 use crate::tui::component::popup::{ConfirmDelete, StatusSelection, TaskDetail};
 use crate::tui::component::{HintBar, InputBar, State, TaskList};
 use crate::tui::component::{Popup, RenderContext};
+use crossterm::event::KeyModifiers;
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::widgets::{Block, Borders};
 
 pub struct Root {
     task_list: TaskList,
@@ -34,7 +33,7 @@ impl Root {
         self.hint_bar.set_message(String::new());
     }
 
-    fn process(&mut self, state: &State, action: Action) -> Option<Action> {
+    fn handle_action(&mut self, state: &State, action: Action) -> Option<Action> {
         match action {
             // UI actions — handled here, never reach the coordinator
             Action::FocusInput => {
@@ -96,7 +95,7 @@ impl Root {
         if let Some(ref mut popup) = self.popup {
             return popup
                 .handle_event(state, key)
-                .and_then(|a| self.process(state, a));
+                .and_then(|a| self.handle_action(state, a));
         }
 
         // 2 - input bar when typing
@@ -110,7 +109,7 @@ impl Root {
                     self.task_list.focus_index(state.tasks.len() - 1);
                     None
                 }
-                _ => self.process(state, action),
+                _ => self.handle_action(state, action),
             };
         }
 
@@ -125,63 +124,66 @@ impl Root {
                     return None;
                 }
                 Action::MoveFocusUp => None,
-                _ => self.process(state, action),
+                _ => self.handle_action(state, action),
             };
         }
 
         // 4 - global keys are handled ONLY if nothing above handled the event
         match (key.modifiers, code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => self.process(state, Action::Quit),
-            (KeyModifiers::NONE, KeyCode::Char('a')) => self.process(state, Action::FocusInput),
+            (KeyModifiers::CONTROL, KeyCode::Char('c')) => self.handle_action(state, Action::Quit),
+            (KeyModifiers::NONE, KeyCode::Char('a')) => {
+                self.handle_action(state, Action::FocusInput)
+            }
             _ => None,
         }
     }
 
     pub fn render(&self, ctx: &mut RenderContext) {
+        // create the full bordered area
         let block = Block::default()
             .borders(Borders::ALL)
             .title(" scry ")
             .title(format!(" {} ", ctx.state.project.name));
-        let inner_area = block.inner(ctx.area);
+        // render it to the entire window
+        let content_area = block.inner(ctx.area);
 
-        let h_layout = Layout::default()
+        // add left padding
+        let left_padding = 1;
+        let [_, content_area] = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(1),
-                Constraint::Min(0),
-                Constraint::Length(1),
+                Constraint::Length(left_padding), // left padding
+                Constraint::Min(0),               // content
             ])
-            .split(inner_area);
+            .areas(content_area);
 
-        let layout = Layout::default()
+        let top_padding = 1;
+        let [_, task_list_area, input_bar_area, hints_area] = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1),
-                Constraint::Min(0),
-                Constraint::Length(3),
-                Constraint::Length(1),
+                Constraint::Length(top_padding), // top padding
+                Constraint::Min(0),              // task list
+                Constraint::Length(3),           // input bar
+                Constraint::Length(1),           // hint bar
             ])
-            .split(h_layout[1]);
+            .areas(content_area);
 
         // render components in z-order
-
         self.task_list.render(&mut RenderContext {
             state: ctx.state,
             frame: ctx.frame,
-            area: layout[1],
+            area: task_list_area,
         });
         self.input_bar.render(&mut RenderContext {
             state: ctx.state,
             frame: ctx.frame,
-            area: layout[2],
+            area: input_bar_area,
         });
         self.hint_bar.render(&mut RenderContext {
             state: ctx.state,
             frame: ctx.frame,
-            area: layout[3],
+            area: hints_area,
         });
-
-        // border on top at edges
         ctx.render_widget(block);
 
         // popup last (on top of everything)
