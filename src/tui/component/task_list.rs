@@ -121,10 +121,10 @@ impl TaskList {
         is_completed: bool,
         status_color: Option<Color>,
     ) -> Line<'static> {
-        let Task { id, title, .. } = task;
+        let Task { title, .. } = task;
 
         let checkbox = if is_completed { "[x]" } else { "[ ]" };
-        let row_text = format!(" {id:>3} {checkbox} {title}");
+        let row_text = format!("{checkbox} {title}");
 
         let mut style = if selected && self.is_focused {
             Style::default().add_modifier(Modifier::REVERSED)
