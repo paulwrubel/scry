@@ -1,2 +1,7 @@
-- split up project_settings (also it's bugged to hell)
 - centralize all the "center rect" and other popup utilities
+- commands!
+- why a gap in the border bottom left on task detail???
+- add a real status row
+- fix task detail rendering
+- fix the FUCKING POPUPS BEING NONSENSE GARBAGE code
+- fix the move status screen (default selection is just BROKEN)

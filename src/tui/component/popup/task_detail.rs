@@ -1,11 +1,8 @@
 use crate::tui::action::Action;
-use crate::tui::component::{RenderContext, State};
-use ratatui::Frame;
+use crate::tui::component::{RenderContext, State, popup};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
 pub struct TaskDetail {
     task_id: i64,
@@ -47,13 +44,11 @@ impl TaskDetail {
             Line::from(format!("  Status:    {}", status_name)),
             Line::from(format!("  Project:   {}", ctx.state.project.name)),
             Line::from(format!("  Created:   {}", created)),
-            Line::from(""),
         ];
 
         if let Some(ref desc) = task.description {
             lines.push(Line::from("  Description:"));
             lines.push(Line::from(format!("  {}", desc)));
-            lines.push(Line::from(""));
         }
         lines.push(Line::from(Span::styled(
             "  Press Esc or Enter to close.",
@@ -62,69 +57,12 @@ impl TaskDetail {
 
         let height = (lines.len() + 2) as u16;
         let width = 60u16;
-        render_centered_popup(
+        popup::render_centered_popup(
             ctx.frame,
             lines,
-            height.min(ctx.frame.area().height),
+            height.min(ctx.area.height),
             width,
             "Task Detail",
         );
     }
-}
-
-fn render_centered_popup(
-    frame: &mut Frame,
-    lines: Vec<Line>,
-    height: u16,
-    width: u16,
-    title: &str,
-) -> Rect {
-    let area = frame.area();
-    let popup_area = centered_rect(width, height, area);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Plain)
-        .title(title);
-
-    // clear the area behind the popup
-    frame.render_widget(Clear, popup_area);
-    frame.render_widget(block, popup_area);
-
-    let inner = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(popup_area)[1];
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-        .split(inner)[1];
-
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
-    popup_area
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length((r.height.saturating_sub(percent_y)) / 2),
-            Constraint::Length(percent_y),
-            Constraint::Length((r.height.saturating_sub(percent_y)) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length((r.width.saturating_sub(percent_x)) / 2),
-            Constraint::Length(percent_x),
-            Constraint::Length((r.width.saturating_sub(percent_x)) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }

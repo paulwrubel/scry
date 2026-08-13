@@ -1,11 +1,9 @@
-use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
 use crate::tui::action::Action;
+use crate::tui::component::popup;
 use crate::tui::component::{RenderContext, State};
 
 pub struct ConfirmDelete {
@@ -71,69 +69,12 @@ impl ConfirmDelete {
 
         let height = 5u16;
         let width = 44u16;
-        render_centered_popup(
+        popup::render_centered_popup(
             ctx.frame,
             all_lines,
-            height.min(ctx.frame.area().height),
+            height.min(ctx.area.height),
             width,
             "Confirm",
         );
     }
-}
-
-fn render_centered_popup(
-    frame: &mut Frame,
-    lines: Vec<Line>,
-    height: u16,
-    width: u16,
-    title: &str,
-) -> Rect {
-    let area = frame.area();
-    let popup_area = centered_rect(width, height, area);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Plain)
-        .title(title);
-
-    // clear the area behind the popup
-    frame.render_widget(Clear, popup_area);
-    frame.render_widget(block, popup_area);
-
-    let inner = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(popup_area)[1];
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-        .split(inner)[1];
-
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
-    popup_area
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length((r.height.saturating_sub(percent_y)) / 2),
-            Constraint::Length(percent_y),
-            Constraint::Length((r.height.saturating_sub(percent_y)) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length((r.width.saturating_sub(percent_x)) / 2),
-            Constraint::Length(percent_x),
-            Constraint::Length((r.width.saturating_sub(percent_x)) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }
