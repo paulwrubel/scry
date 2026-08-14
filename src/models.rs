@@ -26,8 +26,8 @@ pub const STATUS_COLORS: &[(&str, ratatui::style::Color)] = &[
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Color(pub String);
 
-impl From<Color> for ratatui::style::Color {
-    fn from(c: Color) -> Self {
+impl From<&Color> for ratatui::style::Color {
+    fn from(c: &Color) -> Self {
         STATUS_COLORS
             .iter()
             .find(|(name, _)| *name == c.0.as_str())

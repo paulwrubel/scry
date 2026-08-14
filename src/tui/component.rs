@@ -13,8 +13,12 @@ pub use hint_bar::HintBar;
 mod task_list;
 pub use task_list::TaskList;
 
+mod task_status_list;
+
+mod task_line;
+
 use crate::error::StorageError;
-use crate::models::{Project, ProjectID, Status, Task};
+use crate::models::{Project, ProjectID, Status, Task, TaskID};
 use crate::store::TaskStore;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -36,6 +40,7 @@ impl RenderContext<'_, '_> {
 }
 
 /// Domain data passed to components each frame, so they have accurate and up-to-date backend info
+#[derive(Debug, Clone)]
 pub struct State {
     pub project: Project,
     pub statuses: Vec<Status>,
@@ -61,5 +66,95 @@ impl State {
             statuses,
             tasks,
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StatusTasks {
+    status: Status,
+    tasks: Vec<Task>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProjectStatusTasks {
+    project: Project,
+    status_tasks: Vec<StatusTasks>,
+}
+
+impl ProjectStatusTasks {
+    pub fn get_task_by_id(&self, task_id: TaskID) -> Option<&Task> {
+        self.task_iterator().find(|t| t.id == task_id)
+    }
+    /// Get the first Task in any status.
+    ///
+    /// It will return None if there are no tasks.
+    pub fn first(&self) -> Option<&Task> {
+        self.task_iterator().next()
+    }
+
+    /// Get the Task immediately following the one with the provided ID in the order.
+    ///
+    /// It may return None if there is no following Task.
+    pub fn next(&self, task_id: TaskID) -> Option<&Task> {
+        let mut tasks = self.task_iterator();
+
+        while let Some(task) = tasks.next() {
+            if task.id == task_id {
+                return tasks.next();
+            }
+        }
+
+        None
+    }
+
+    /// Get the Task immediately preceding the one with the provided ID in the order.
+    ///
+    /// It may return None if there is no preceding Task.
+    pub fn previous(&self, task_id: TaskID) -> Option<&Task> {
+        let mut tasks = self.task_iterator().rev();
+
+        while let Some(task) = tasks.next() {
+            if task.id == task_id {
+                return tasks.next();
+            }
+        }
+
+        None
+    }
+
+    pub fn index_in_status(&self, task_id: TaskID) -> Option<usize> {
+        self.status_tasks
+            .iter()
+            .flat_map(|status| status.tasks.iter().enumerate())
+            .find(|(_, task)| task.id == task_id)
+            .map(|(i, _)| i)
+    }
+
+    fn task_iterator(&self) -> impl DoubleEndedIterator<Item = &Task> + '_ {
+        // flatten into a single ordered stream of tasks
+        self.status_tasks
+            .iter()
+            .flat_map(|status| status.tasks.iter())
+    }
+}
+
+impl From<&State> for ProjectStatusTasks {
+    fn from(state: &State) -> Self {
+        Self {
+            project: state.project.clone(),
+            status_tasks: state
+                .statuses
+                .iter()
+                .map(|status| StatusTasks {
+                    status: status.clone(),
+                    tasks: state
+                        .tasks
+                        .iter()
+                        .filter(|task| task.status_id == status.id)
+                        .cloned()
+                        .collect(),
+                })
+                .collect(),
+        }
     }
 }

@@ -1,210 +1,98 @@
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use std::iter;
 
-use crate::models::Status;
-use crate::models::Task;
-use crate::tui::action::Action;
-use crate::tui::component::{RenderContext, State};
+use crate::models::TaskID;
+use crate::tui::component::task_status_list::TaskStatusList;
+use crate::tui::component::{ProjectStatusTasks, RenderContext};
+use ratatui::layout::Rect;
+use ratatui::text::Line;
+use ratatui::widgets::Paragraph;
 
 pub struct TaskList {
     pub is_focused: bool,
-    // which visible row is selected (tasks only)
-    selected_index: usize,
+
+    scroll_offset: u16,
 }
 
 impl TaskList {
     pub fn new(is_focused: bool) -> Self {
         Self {
             is_focused,
-            selected_index: 0,
+            scroll_offset: 0,
         }
     }
 
-    pub fn focus_index(&mut self, index: usize) {
-        self.is_focused = true;
-        self.selected_index = index;
+    pub fn render(
+        &mut self,
+        ctx: &mut RenderContext,
+        project_status_tasks: &ProjectStatusTasks,
+        selected_task_id: Option<TaskID>,
+    ) {
+        self.adjust_scroll_offset_for_selected_task(
+            ctx.area,
+            project_status_tasks,
+            selected_task_id,
+        );
+
+        let task_list_lines: Vec<Line> = project_status_tasks
+            .status_tasks
+            .iter()
+            .flat_map(|status_tasks| {
+                iter::once(Line::default()).chain(Vec::from(TaskStatusList::new(
+                    status_tasks,
+                    selected_task_id,
+                )))
+            })
+            .skip(1) // drop the leading blank before the first status
+            .collect();
+
+        ctx.render_widget(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
     }
 
-    pub fn blur(&mut self) {
-        self.is_focused = false;
-    }
-
-    fn build_visual_order(statuses: &[Status], tasks: &[Task]) -> Vec<usize> {
-        let mut order = Vec::new();
-        for status in statuses {
-            for (task_idx, task) in tasks.iter().enumerate() {
-                if task.status_id == status.id {
-                    order.push(task_idx);
+    fn line_index_from_task_id(project_status_tasks: &ProjectStatusTasks, task_id: TaskID) -> u16 {
+        let mut line_index = 0;
+        for status in &project_status_tasks.status_tasks {
+            // the status header counts as a line
+            line_index += 1;
+            for task in &status.tasks {
+                if task.id == task_id {
+                    return line_index;
                 }
-            }
-        }
-
-        order
-    }
-
-    pub fn selected_task_id(&self, state: &State) -> Option<i64> {
-        let order = Self::build_visual_order(&state.statuses, &state.tasks);
-        if self.selected_index < order.len() {
-            Some(state.tasks[order[self.selected_index]].id)
-        } else {
-            None
-        }
-    }
-
-    fn compute_vertical_scroll_offset(&self, state: &State, viewport_height: u16) -> u16 {
-        let order = Self::build_visual_order(&state.statuses, &state.tasks);
-        if order.is_empty() {
-            return 0;
-        }
-
-        let selected_index = self.selected_index.clamp(0, order.len().saturating_sub(1));
-
-        let mut line_index: u16 = 0;
-
-        let flat_idx = order[selected_index];
-        let selected_status_id = state.tasks[flat_idx].status_id;
-
-        for status in &state.statuses {
-            // blank separator between status groups (matches render)
-            if line_index > 0 {
+                // increment for the not-matching task we just checked
                 line_index += 1;
             }
+            // spacer after each status section
             line_index += 1;
-
-            if status.id == selected_status_id {
-                // count tasks in this status before the selected one
-                let tasks_in_status: Vec<_> = state
-                    .tasks
-                    .iter()
-                    .filter(|t| t.status_id == status.id)
-                    .collect();
-                let pos = tasks_in_status
-                    .iter()
-                    .position(|t| t.id == state.tasks[flat_idx].id)
-                    .unwrap_or(0);
-                line_index += pos as u16;
-                break;
-            }
-
-            let count = state
-                .tasks
-                .iter()
-                .filter(|t| t.status_id == status.id)
-                .count();
-            line_index += count as u16;
         }
-
-        // ensure the selected line is visible within the viewport
-        if viewport_height == 0 {
-            return 0;
-        }
-        if line_index >= viewport_height {
-            line_index - viewport_height + 1
-        } else {
-            0
-        }
+        panic!("task_id not found in project status tasks!")
     }
 
-    fn render_status_header(status_name: &str, task_count: usize) -> Line<'static> {
-        Line::from(Span::styled(
-            format!("{status_name} ({task_count}):"),
-            Style::default().add_modifier(Modifier::BOLD),
-        ))
-    }
+    fn adjust_scroll_offset_for_selected_task(
+        &mut self,
+        area: Rect,
+        project_status_tasks: &ProjectStatusTasks,
+        selected_task_id: Option<TaskID>,
+    ) {
+        // todo
+        if let Some(task_id) = selected_task_id {
+            let line_to_ensure_visibility =
+                Self::line_index_from_task_id(project_status_tasks, task_id);
 
-    fn render_task_row(
-        &self,
-        task: &Task,
-        selected: bool,
-        is_completed: bool,
-        status_color: Option<Color>,
-    ) -> Line<'static> {
-        let Task { title, .. } = task;
+            let min_visible_index = self.scroll_offset;
+            let max_visible_index = min_visible_index + area.height - 1;
 
-        let checkbox = if is_completed { "[x]" } else { "[ ]" };
-        let row_text = format!("{checkbox} {title}");
-
-        let mut style = if selected && self.is_focused {
-            Style::default().add_modifier(Modifier::REVERSED)
-        } else {
-            Style::default()
-        };
-
-        if !selected && let Some(color) = status_color {
-            style = style.fg(color);
-        }
-
-        Line::styled(row_text, style)
-    }
-
-    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
-        if !self.is_focused {
-            return None;
-        }
-        match key.code {
-            KeyCode::Up => {
-                if self.selected_index == 0 {
-                    Some(Action::MoveFocusUp)
-                } else {
-                    self.selected_index -= 1;
-                    None
-                }
-            }
-            KeyCode::Down => {
-                let task_count = state.tasks.len();
-                if self.selected_index >= task_count.saturating_sub(1) || task_count == 0 {
-                    Some(Action::MoveFocusDown)
-                } else {
-                    self.selected_index += 1;
-                    None
-                }
-            }
-            KeyCode::Enter => self
-                .selected_task_id(state)
-                .map(Action::OpenPopupTaskDetail),
-            KeyCode::Char('m') => self
-                .selected_task_id(state)
-                .map(Action::OpenPopupMovePicker),
-            KeyCode::Char('d') => self
-                .selected_task_id(state)
-                .map(Action::OpenPopupDeleteConfirm),
-            _ => None,
-        }
-    }
-
-    pub fn render(&self, ctx: &mut RenderContext) {
-        let scroll_offset = Self::compute_vertical_scroll_offset(self, ctx.state, ctx.area.height);
-
-        let mut lines: Vec<Line> = Vec::new();
-        let selected_id = self.selected_task_id(ctx.state);
-
-        for (i, status) in ctx.state.statuses.iter().enumerate() {
-            if i > 0 {
-                lines.push(Line::from(""));
+            if line_to_ensure_visibility < min_visible_index {
+                self.scroll_offset -= min_visible_index - line_to_ensure_visibility
+            } else if line_to_ensure_visibility > max_visible_index {
+                self.scroll_offset += line_to_ensure_visibility - max_visible_index
             }
 
-            let status_tasks: Vec<_> = ctx
-                .state
-                .tasks
-                .iter()
-                .filter(|t| t.status_id == status.id)
-                .collect();
-
-            lines.push(Self::render_status_header(&status.name, status_tasks.len()));
-
-            for task in status_tasks {
-                let selected = Some(task.id) == selected_id;
-                lines.push(self.render_task_row(
-                    task,
-                    selected,
-                    status.is_completed,
-                    status.color.clone().map(Into::into),
-                ));
+            if line_to_ensure_visibility == self.scroll_offset
+                && let Some(iis) = project_status_tasks.index_in_status(task_id)
+                && iis == 0
+            {
+                // header visibility!
+                self.scroll_offset -= 1
             }
         }
-
-        ctx.render_widget(Paragraph::new(lines).scroll((scroll_offset, 0)));
     }
 }
