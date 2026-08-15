@@ -120,7 +120,7 @@ pub struct StatusTasks {
 
 #[derive(Debug, Clone)]
 pub struct ProjectStatusTasks {
-    project: Project,
+    _project: Project,
     status_tasks: Vec<StatusTasks>,
 }
 
@@ -184,7 +184,7 @@ impl ProjectStatusTasks {
 impl From<&State> for ProjectStatusTasks {
     fn from(state: &State) -> Self {
         Self {
-            project: state.project.clone(),
+            _project: state.project.clone(),
             status_tasks: state
                 .statuses
                 .iter()

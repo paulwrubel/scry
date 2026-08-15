@@ -6,7 +6,6 @@ use crate::tui::component::{
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Spacing};
-use ratatui::style::Styled;
 use ratatui::symbols::merge::MergeStrategy;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders};
