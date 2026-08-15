@@ -8,8 +8,12 @@ async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "chrono", "migrate"] }
+sqlx = { version = "0.9", features = [
+    "runtime-tokio",
+    "sqlite",
+    "chrono",
+    "migrate",
+] }
 toml = "0.8"
 tokio = { version = "1", features = ["full"] }
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = "0.30"

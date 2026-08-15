@@ -1,11 +1,10 @@
-use std::iter;
-
 use crate::models::TaskID;
 use crate::tui::component::task_status_list::TaskStatusList;
 use crate::tui::component::{ProjectStatusTasks, RenderContext};
 use ratatui::layout::Rect;
 use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
+use std::iter;
 
 pub struct TaskList {
     pub is_focused: bool,
@@ -45,7 +44,7 @@ impl TaskList {
             .skip(1) // drop the leading blank before the first status
             .collect();
 
-        ctx.render_widget(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
+        ctx.render(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
     }
 
     fn line_index_from_task_id(project_status_tasks: &ProjectStatusTasks, task_id: TaskID) -> u16 {

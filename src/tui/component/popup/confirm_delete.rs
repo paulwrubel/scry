@@ -1,10 +1,10 @@
+use crate::tui::action::Action;
+use crate::tui::component::{RenderContext, State};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::layout::Constraint;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-
-use crate::tui::action::Action;
-use crate::tui::component::popup;
-use crate::tui::component::{RenderContext, State};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 pub struct ConfirmDelete {
     task_id: i64,
@@ -67,14 +67,17 @@ impl ConfirmDelete {
 
         let all_lines = vec![lines[0].clone(), lines[1].clone(), button_line];
 
-        let height = 5u16;
-        let width = 44u16;
-        popup::render_centered_popup(
-            ctx.frame,
-            all_lines,
-            height.min(ctx.area.height),
-            width,
-            "Confirm",
+        // let height = 5u16;
+        // let width = 44u16;
+        let content_area = ctx.render_popup_frame(
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+            Some(Block::default().borders(Borders::ALL).title("Confirm")),
+        );
+
+        ctx.frame.render_widget(
+            Paragraph::new(all_lines).wrap(Wrap { trim: false }),
+            content_area,
         );
     }
 }

@@ -1,12 +1,8 @@
-use ratatui::{
-    style::{Style, Stylize},
-    text::Line,
-};
-
 use crate::{
     models::TaskID,
     tui::component::{StatusTasks, task_line::TaskLine},
 };
+use ratatui::{style::Style, text::Line};
 
 pub struct TaskStatusList<'a> {
     status_tasks: &'a StatusTasks,

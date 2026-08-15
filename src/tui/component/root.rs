@@ -1,11 +1,14 @@
 use crate::models::{Task, TaskID};
 use crate::tui::action::Action;
-use crate::tui::component::popup::{ConfirmDelete, StatusSelection, TaskDetail};
-use crate::tui::component::{HintBar, InputBar, ProjectStatusTasks, State, TaskList};
-use crate::tui::component::{Popup, RenderContext};
-use crossterm::event::KeyModifiers;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Direction, Layout};
+use crate::tui::component::{
+    Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskList,
+    popup::{ConfirmDelete, CreateTask, StatusSelection, TaskDetail},
+};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::layout::{Constraint, Layout, Spacing};
+use ratatui::style::Styled;
+use ratatui::symbols::merge::MergeStrategy;
+use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders};
 
 #[derive(Debug, Clone, Copy)]
@@ -16,8 +19,7 @@ enum SelectedTask {
 
 pub struct Root {
     task_list: TaskList,
-    input_bar: InputBar,
-    hint_bar: HintBar,
+    hints: Hints,
     popup: Option<Popup>,
 
     selected_task: Option<SelectedTask>,
@@ -27,8 +29,7 @@ impl Root {
     pub fn new() -> Self {
         Self {
             task_list: TaskList::new(true),
-            input_bar: InputBar::new(false),
-            hint_bar: HintBar::new(),
+            hints: Hints::new(),
             popup: None,
 
             selected_task: Some(SelectedTask::First),
@@ -38,13 +39,17 @@ impl Root {
     fn handle_action(&mut self, state: &State, action: Action) -> Option<Action> {
         match action {
             // UI actions — handled here, never reach the coordinator
-            Action::FocusInput => {
-                self.input_bar.focus();
-                self.task_list.is_focused = false;
+            Action::OpenPopupDeleteConfirm(task_id) => {
+                if let Some(task) = state.tasks.iter().find(|t| t.id == task_id) {
+                    self.popup = Some(Popup::ConfirmDelete(ConfirmDelete::new(
+                        task_id,
+                        task.title.clone(),
+                    )));
+                }
                 None
             }
-            Action::OpenPopupTaskDetail(task_id) => {
-                self.popup = Some(Popup::TaskDetail(TaskDetail::new(task_id)));
+            Action::OpenPopupCreateTask => {
+                self.popup = Some(Popup::CreateTask(CreateTask::new()));
                 None
             }
             Action::OpenPopupMovePicker(task_id) => {
@@ -60,27 +65,22 @@ impl Root {
                 )));
                 None
             }
-            Action::OpenPopupDeleteConfirm(task_id) => {
-                if let Some(task) = state.tasks.iter().find(|t| t.id == task_id) {
-                    self.popup = Some(Popup::ConfirmDelete(ConfirmDelete::new(
-                        task_id,
-                        task.title.clone(),
-                    )));
-                }
+            Action::OpenPopupTaskDetail(task_id) => {
+                self.popup = Some(Popup::TaskDetail(TaskDetail::new(task_id)));
                 None
             }
             Action::DismissPopup => {
                 self.popup = None;
                 None
             }
-            Action::MoveFocusDown => {
-                self.input_bar.focus();
-                None
-            }
-            Action::MoveFocusUp => None,
+            // Action::MoveFocusUp | Action::MoveFocusDown => None,
 
             // Store actions that also dismiss the popup before bubbling
             Action::MoveTask { .. } => {
+                self.popup = None;
+                Some(action)
+            }
+            Action::AddTask(_) => {
                 self.popup = None;
                 Some(action)
             }
@@ -113,26 +113,16 @@ impl Root {
     pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
         let code = key.code;
 
+        // if we get a quit request, we do that, regardless of anything else
+        if let (KeyModifiers::CONTROL, KeyCode::Char('c')) = (key.modifiers, code) {
+            return self.handle_action(state, Action::Quit);
+        }
+
         // active popup swallows all input
         if let Some(ref mut popup) = self.popup {
             return popup
                 .handle_event(state, key)
                 .and_then(|a| self.handle_action(state, a));
-        }
-
-        // input bar when typing
-        if self.input_bar.is_focused
-            && let Some(action) = self.input_bar.handle_event(state, key)
-        {
-            return match action {
-                Action::MoveFocusDown => None,
-                Action::MoveFocusUp => {
-                    self.input_bar.blur();
-                    self.task_list.is_focused = true;
-                    None
-                }
-                _ => self.handle_action(state, action),
-            };
         }
 
         // global keys are handled ONLY if nothing above handled the event
@@ -176,51 +166,45 @@ impl Root {
                     .and_then(|task| project_status_tasks.next(task.id))
                 {
                     self.selected_task = Some(SelectedTask::ID(next_task.id));
-                } else {
-                    self.task_list.is_focused = false;
-                    self.input_bar.focus();
                 }
                 None
             }
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => self.handle_action(state, Action::Quit),
             (KeyModifiers::NONE, KeyCode::Char('a')) => {
-                self.handle_action(state, Action::FocusInput)
+                self.handle_action(state, Action::OpenPopupCreateTask)
             }
             _ => None,
         }
     }
 
     pub fn render(&mut self, ctx: &mut RenderContext) {
-        // create the full bordered area
+        // main pane and hints
+        let [task_area, hints_area] = ctx.area.layout(
+            &Layout::vertical([Constraint::Fill(1), Constraint::Length(3)])
+                .spacing(Spacing::Overlap(1)),
+        );
+        let [task_list_area, task_details_area] = task_area
+            .layout(&Layout::horizontal([Constraint::Fill(1); 2]).spacing(Spacing::Overlap(1)));
+
+        // create the base bordered block
         let block = Block::default()
             .borders(Borders::ALL)
-            .title(" scry ")
-            .title(format!(" {} ", ctx.state.project.name));
-        // render it to the entire window
-        let content_area = block.inner(ctx.area);
+            .merge_borders(MergeStrategy::Exact);
 
-        // add left padding
-        let left_padding = 1;
-        let [_, content_area] = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Length(left_padding), // left padding
-                Constraint::Min(0),               // content
-            ])
-            .areas(content_area);
-
-        let top_padding = 1;
-        let [_, task_list_area, input_bar_area, hints_area] = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(top_padding), // top padding
-                Constraint::Min(0),              // task list
-                Constraint::Length(3),           // input bar
-                Constraint::Length(1),           // hint bar
-            ])
-            .areas(content_area);
-
-        // render components in z-order
+        // render the task list content
+        let horizontal_padding = (1, 0);
+        let vertical_padding = (1, 0);
+        let [_, task_list_content_area, _] = Layout::horizontal([
+            Constraint::Length(horizontal_padding.0), // padding
+            Constraint::Min(0),                       // content
+            Constraint::Length(horizontal_padding.1), // padding
+        ])
+        .areas(block.inner(task_list_area));
+        let [_, task_list_content_area, _] = Layout::vertical([
+            Constraint::Length(vertical_padding.0), // padding
+            Constraint::Min(0),                     // content
+            Constraint::Length(vertical_padding.1), // padding
+        ])
+        .areas(task_list_content_area);
 
         let project_status_tasks: ProjectStatusTasks = ctx.state.into();
         let selected_task = self.task_from_selected_task(&project_status_tasks);
@@ -228,22 +212,41 @@ impl Root {
             &mut RenderContext {
                 state: ctx.state,
                 frame: ctx.frame,
-                area: task_list_area,
+                area: task_list_content_area,
             },
             &project_status_tasks,
             selected_task.map(|t| t.id),
         );
-        self.input_bar.render(&mut RenderContext {
+
+        // hints border and content
+        let [_, hints_content_area] = Layout::horizontal([
+            Constraint::Length(1), // left padding
+            Constraint::Min(0),    // content
+        ])
+        .areas(block.inner(hints_area));
+        self.hints.render(&mut RenderContext {
             state: ctx.state,
             frame: ctx.frame,
-            area: input_bar_area,
+            area: hints_content_area,
         });
-        self.hint_bar.render(&mut RenderContext {
-            state: ctx.state,
-            frame: ctx.frame,
-            area: hints_area,
-        });
-        ctx.render_widget(block);
+
+        // task list block
+        ctx.frame.render_widget(
+            block
+                .clone()
+                .title(Line::from(format!(" {} ", ctx.state.project.name)).centered()),
+            task_list_area,
+        );
+        // task details block
+        ctx.frame.render_widget(
+            block.clone().title(Line::from(" Task Details ").centered()),
+            task_details_area,
+        );
+        // hints block
+        ctx.frame.render_widget(
+            block.title_bottom(Line::from(" scry ").right_aligned()),
+            hints_area,
+        );
 
         // popup last (on top of everything)
         if let Some(ref popup) = self.popup {
@@ -252,11 +255,11 @@ impl Root {
     }
 
     pub fn set_status(&mut self, msg: String) {
-        self.hint_bar.set_message(msg);
+        self.hints.set_message(msg);
     }
 
     pub fn clear_status(&mut self) {
-        self.hint_bar.set_message(String::new());
+        self.hints.set_message(String::new());
     }
 
     fn task_from_selected_task<'a>(

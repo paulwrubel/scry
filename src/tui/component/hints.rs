@@ -1,14 +1,14 @@
 use crate::tui::component::RenderContext;
-use ratatui::style::{Modifier, Style, Stylize};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
-pub struct HintBar {
+pub struct Hints {
     pub message: String,
 }
 
-impl HintBar {
+impl Hints {
     pub fn new() -> Self {
-        HintBar {
+        Hints {
             message: String::new(),
         }
     }
@@ -44,6 +44,6 @@ impl HintBar {
             )]
         };
 
-        ctx.render_widget(Line::from(spans));
+        ctx.render(Line::from(spans));
     }
 }

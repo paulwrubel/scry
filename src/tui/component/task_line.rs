@@ -1,9 +1,8 @@
+use crate::models::Task;
 use ratatui::{
-    style::{Color, Style, Stylize},
+    style::{Color, Style},
     text::Line,
 };
-
-use crate::models::Task;
 
 pub struct TaskLine<'a> {
     task: &'a Task,

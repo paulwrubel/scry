@@ -1,19 +1,18 @@
-use std::future::Future;
-
 use crate::models::ProjectID;
 use crate::store::TaskStore;
 use crate::tui::action::Action;
 use crate::tui::component::RenderContext;
 use crate::tui::component::Root;
 use crate::{error::AppError, tui::component::State};
-use crossterm::{
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
+use ratatui::crossterm::{
     cursor::{SetCursorStyle, Show},
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
+use std::future::Future;
 use tokio::runtime::Handle;
 
 /// Terminal lifecycle and domain logic. UI orchestration lives in Root.

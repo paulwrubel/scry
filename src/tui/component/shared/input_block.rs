@@ -1,22 +1,25 @@
 use crate::tui::action::Action;
 use crate::tui::component::{RenderContext, State};
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Direction, Layout};
-use ratatui::style::{Modifier, Style};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
-pub struct InputBar {
+pub struct InputBlock {
     pub is_focused: bool,
+    title: String,
+    placeholder_text: Option<String>,
 
     buffer: String,
     cursor_position: usize,
 }
 
-impl InputBar {
-    pub fn new(is_focused: bool) -> Self {
+impl InputBlock {
+    pub fn new(title: String, is_focused: bool, placeholder_text: Option<String>) -> Self {
         Self {
             is_focused,
+            title,
+            placeholder_text,
 
             buffer: String::new(),
             cursor_position: 0,
@@ -32,29 +35,21 @@ impl InputBar {
         self.is_focused = false;
     }
 
+    pub fn buffer_text(&self) -> &str {
+        &self.buffer
+    }
+
     pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
         if !self.is_focused {
             return None;
         }
-        match key.code {
-            KeyCode::Up => Some(Action::MoveFocusUp),
-            KeyCode::Down => Some(Action::MoveFocusDown),
-            KeyCode::Enter => {
-                let title = self.buffer.trim().to_string();
-                self.buffer.clear();
-                self.cursor_position = 0;
-                if title.is_empty() {
-                    None
-                } else {
-                    Some(Action::AddTask(title))
-                }
-            }
-            KeyCode::Char(c) => {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Char(c)) => {
                 self.buffer.insert(self.cursor_position, c);
                 self.cursor_position += c.len_utf8();
                 None
             }
-            KeyCode::Backspace => {
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
                 if self.cursor_position > 0 {
                     let prev = self.buffer.floor_char_boundary(self.cursor_position - 1);
                     self.buffer.remove(prev);
@@ -62,14 +57,14 @@ impl InputBar {
                 }
                 None
             }
-            KeyCode::Left => {
+            (_, KeyCode::Left) => {
                 if self.cursor_position > 0 {
                     self.cursor_position =
                         self.buffer.floor_char_boundary(self.cursor_position - 1);
                 }
                 None
             }
-            KeyCode::Right => {
+            (_, KeyCode::Right) => {
                 if self.cursor_position < self.buffer.len() {
                     self.cursor_position = self.buffer.ceil_char_boundary(self.cursor_position + 1);
                 }
@@ -83,47 +78,37 @@ impl InputBar {
         let style = if self.is_focused {
             Style::default()
         } else {
-            Style::default().add_modifier(Modifier::DIM)
+            Style::default().dim()
         };
 
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(style)
-            .title("New Task");
+            .title(self.title.as_str());
 
-        // split the block interior vertically so the input sits on the middle row
-        let rows = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Length(1),
-                Constraint::Fill(1),
-            ])
-            .split(block.inner(ctx.area));
+        let content_area = block.inner(ctx.area);
 
-        let text_area = rows[1];
-
-        let content_line = if !self.buffer.is_empty() || self.is_focused {
-            Line::from(Span::styled(&self.buffer, style))
+        let (display_text, display_text_style) = if !self.buffer.is_empty() || self.is_focused {
+            (self.buffer.as_str(), style)
         } else {
-            Line::from(Span::styled("Add a task...", style))
+            (
+                self.placeholder_text.as_deref().unwrap_or(""),
+                style.italic(),
+            )
         };
 
-        ctx.render_widget(block);
+        let display_text_line = Line::from(Span::styled(display_text, display_text_style));
+
+        ctx.render(block);
         ctx.frame.render_widget(
-            Paragraph::new(content_line).wrap(Wrap { trim: false }),
-            text_area,
+            Paragraph::new(display_text_line).wrap(Wrap { trim: false }),
+            content_area,
         );
+
         if self.is_focused {
-            let col = if self.buffer.is_empty() {
-                text_area.x
-            } else {
-                text_area.x
-                    + self.buffer[..self.cursor_position.min(self.buffer.len())]
-                        .chars()
-                        .count() as u16
-            };
-            ctx.frame.set_cursor_position((col, text_area.y));
+            let prefix = &self.buffer[..self.cursor_position];
+            let col = content_area.x + Span::raw(prefix).width() as u16;
+            ctx.frame.set_cursor_position((col, content_area.y));
         }
     }
 }

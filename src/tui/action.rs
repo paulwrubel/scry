@@ -6,25 +6,21 @@ pub enum Action {
     Quit,
 
     // ── input bar ──
-    FocusInput,
     AddTask(String),
 
-    // ── task operations ──
-    OpenPopupTaskDetail(i64),
-    OpenPopupMovePicker(i64),
+    // ── popup lifecycle ──
     OpenPopupDeleteConfirm(i64),
+    OpenPopupCreateTask,
+    OpenPopupMovePicker(i64),
+    OpenPopupTaskDetail(i64),
+    DismissPopup,
+
+    // ── task operations ──
     MoveTask {
         task_id: i64,
         status_name: String,
     },
     DeleteTask(i64),
-
-    // ── focus movement ──
-    MoveFocusDown,
-    MoveFocusUp,
-
-    // ── popup lifecycle ──
-    DismissPopup,
 
     // ── project settings ──
     #[allow(dead_code)]

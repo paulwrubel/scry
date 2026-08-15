@@ -1,8 +1,10 @@
 use crate::tui::action::Action;
-use crate::tui::component::{RenderContext, State, popup};
+use crate::tui::component::{RenderContext, State};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::layout::Constraint;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 pub struct TaskDetail {
     task_id: i64,
@@ -55,14 +57,18 @@ impl TaskDetail {
             Style::default().add_modifier(Modifier::DIM),
         )));
 
-        let height = (lines.len() + 2) as u16;
-        let width = 60u16;
-        popup::render_centered_popup(
-            ctx.frame,
-            lines,
-            height.min(ctx.area.height),
-            width,
-            "Task Detail",
+        // let height = (lines.len() + 2) as u16;
+        // let width = 60u16;
+
+        let content_area = ctx.render_popup_frame(
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+            Some(Block::default().borders(Borders::ALL).title("Task Detail")),
+        );
+
+        ctx.frame.render_widget(
+            Paragraph::new(lines).wrap(Wrap { trim: false }),
+            content_area,
         );
     }
 }
