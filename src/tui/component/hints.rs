@@ -19,10 +19,10 @@ impl Hints {
 
     pub fn render(&self, ctx: &mut RenderContext) {
         let hint_actions = [
-            ["[a]", "dd task"],
-            ["[m]", "ove task"],
-            ["[d]", "elete task"],
-            ["[Enter]", " task details"],
+            ["[a]", "dd"],
+            ["[<]", " move to previous status"],
+            ["[>]", " move to next status"],
+            ["[d]", "elete"],
         ];
 
         let spans = if self.message.is_empty() {

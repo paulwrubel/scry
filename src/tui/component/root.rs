@@ -1,6 +1,6 @@
 use crate::models::{Task, TaskID};
 use crate::tui::action::Action;
-use crate::tui::component::popup::{ConfirmDelete, CreateTask, StatusSelection};
+use crate::tui::component::popup::{ConfirmDelete, CreateTask};
 use crate::tui::component::{
     Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskDetails, TaskList,
 };
@@ -49,19 +49,6 @@ impl Root {
             }
             Action::OpenPopupCreateTask => {
                 self.popup = Some(Popup::CreateTask(CreateTask::new()));
-                None
-            }
-            Action::OpenPopupMovePicker(task_id) => {
-                let current_status_id = state
-                    .tasks
-                    .iter()
-                    .find(|t| t.id == task_id)
-                    .map(|t| t.status_id);
-                self.popup = Some(Popup::StatusSelection(StatusSelection::new(
-                    task_id,
-                    state.statuses.len(),
-                    current_status_id,
-                )));
                 None
             }
             Action::DismissPopup => {
@@ -121,24 +108,56 @@ impl Root {
         }
 
         // global keys are handled ONLY if nothing above handled the event
+
+        let project_status_tasks: ProjectStatusTasks = state.into();
+        let selected = self.task_from_selected_task(&project_status_tasks);
         match (key.modifiers, code) {
-            (_, KeyCode::Enter | KeyCode::Char('m') | KeyCode::Char('d'))
-                if self.task_list.is_focused =>
-            {
-                let project_status_tasks: ProjectStatusTasks = state.into();
-                let selected = self.task_from_selected_task(&project_status_tasks);
-                match (code, selected) {
-                    (KeyCode::Char('m'), Some(task)) => {
-                        self.handle_action(state, Action::OpenPopupMovePicker(task.id))
-                    }
-                    (KeyCode::Char('d'), Some(task)) => {
-                        self.handle_action(state, Action::OpenPopupDeleteConfirm(task.id))
-                    }
-                    _ => None,
+            (_, KeyCode::Char('d')) if self.task_list.is_focused => {
+                if let Some(task) = selected {
+                    self.handle_action(state, Action::OpenPopupDeleteConfirm(task.id))
+                } else {
+                    None
                 }
             }
+            (_, KeyCode::Char(',') | KeyCode::Char('<')) if let Some(task) = selected => {
+                // statuses is ordered by position; take the one after the task's current status
+                let previous_status = state
+                    .statuses
+                    .iter()
+                    .position(|status| status.id == task.status_id)
+                    .and_then(|index| state.statuses.get(index - 1));
+
+                // nothing to move to if the task is already in the last status
+                previous_status.and_then(|status| {
+                    self.handle_action(
+                        state,
+                        Action::MoveTask {
+                            task_id: task.id,
+                            status_id: status.id,
+                        },
+                    )
+                })
+            }
+            (_, KeyCode::Char('.') | KeyCode::Char('>')) if let Some(task) = selected => {
+                // statuses is ordered by position; take the one after the task's current status
+                let next_status = state
+                    .statuses
+                    .iter()
+                    .position(|status| status.id == task.status_id)
+                    .and_then(|index| state.statuses.get(index + 1));
+
+                // nothing to move to if the task is already in the last status
+                next_status.and_then(|status| {
+                    self.handle_action(
+                        state,
+                        Action::MoveTask {
+                            task_id: task.id,
+                            status_id: status.id,
+                        },
+                    )
+                })
+            }
             (_, KeyCode::Up | KeyCode::Char('k')) if self.task_list.is_focused => {
-                let project_status_tasks: ProjectStatusTasks = state.into();
                 // check if we have a current selection AND if there's a "previous task"
                 if let Some(next_task) = self
                     .task_from_selected_task(&project_status_tasks)
@@ -150,8 +169,6 @@ impl Root {
                 None
             }
             (_, KeyCode::Down | KeyCode::Char('j')) if self.task_list.is_focused => {
-                // if the task list is focused, we may have to change the selected task
-                let project_status_tasks: ProjectStatusTasks = state.into();
                 // check if we have a current selection AND if there's a "next task"
                 if let Some(next_task) = self
                     .task_from_selected_task(&project_status_tasks)

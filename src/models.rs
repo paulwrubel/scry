@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub type TaskID = i64;
 pub type ProjectID = i64;
+pub type StatusID = i64;
 
 /// Canonical list of all supported status colors: (name, ratatui Color).
 pub const STATUS_COLORS: &[(&str, ratatui::style::Color)] = &[
@@ -45,7 +46,7 @@ pub struct Project {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Status {
-    pub id: i64,
+    pub id: StatusID,
     pub project_id: ProjectID,
     pub name: String,
     pub position: i32,

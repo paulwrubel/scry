@@ -4,7 +4,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
 use crate::error::StorageError;
-use crate::models::{Color, Project, ProjectID, Status, Task, TaskID};
+use crate::models::{Color, Project, ProjectID, Status, StatusID, Task, TaskID};
 use crate::store::TaskStore;
 
 #[derive(Clone)]
@@ -144,19 +144,14 @@ impl TaskStore for SqliteStore {
         &self,
         id: TaskID,
         project_id: ProjectID,
-        status_name: Option<&str>,
+        status_id: StatusID,
     ) -> Result<Option<Task>, StorageError> {
-        let name = match status_name {
-            Some(s) => s,
-            None => return Err(StorageError::Invalid("no fields to update".into())),
-        };
-
-        let status_id = self
-            .resolve_status_id(project_id, name)
-            .await?
-            .ok_or_else(|| {
-                StorageError::NotFound(format!("status '{}' not found in project", name))
-            })?;
+        // let status_id = self
+        //     .resolve_status_id(project_id, name)
+        //     .await?
+        //     .ok_or_else(|| {
+        //         StorageError::NotFound(format!("status '{}' not found in project", name))
+        //     })?;
 
         let result = sqlx::query!(
             r#"
@@ -814,6 +809,43 @@ impl TaskStore for SqliteStore {
                     color: r.color.map(Color),
                 })
                 .collect()
+        })
+    }
+
+    async fn get_status_by_name(
+        &self,
+        project_id: ProjectID,
+        name: &str,
+    ) -> Result<Option<Status>, StorageError> {
+        sqlx::query!(
+            r#"
+                SELECT
+                    id AS "id: i64",
+                    project_id AS "project_id: i64",
+                    name,
+                    position AS "position: i32",
+                    is_completed AS "is_completed: bool",
+                    is_entry AS "is_entry: bool",
+                    color
+                FROM statuses
+                WHERE project_id = ? AND name = ?
+            "#,
+            project_id,
+            name,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to look up status: {}", e)))
+        .map(|r| {
+            r.map(|r| Status {
+                id: r.id,
+                project_id: r.project_id,
+                name: r.name,
+                position: r.position,
+                is_completed: r.is_completed,
+                is_entry: r.is_entry,
+                color: r.color.map(Color),
+            })
         })
     }
 

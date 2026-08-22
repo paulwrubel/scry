@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::error::StorageError;
-use crate::models::{Project, ProjectID, Status, Task, TaskID};
+use crate::models::{Project, ProjectID, Status, StatusID, Task, TaskID};
 
 #[async_trait]
 pub trait TaskStore {
@@ -13,9 +13,9 @@ pub trait TaskStore {
         &self,
         id: TaskID,
         project_id: ProjectID,
-        status_name: &str,
+        status_id: StatusID,
     ) -> Result<Option<Task>, StorageError> {
-        self.update_task(id, project_id, Some(status_name)).await
+        self.update_task(id, project_id, status_id).await
     }
 
     /// Update task properties. Currently only `status_name` is supported;
@@ -24,7 +24,7 @@ pub trait TaskStore {
         &self,
         id: TaskID,
         project_id: ProjectID,
-        status_name: Option<&str>,
+        status_id: StatusID,
     ) -> Result<Option<Task>, StorageError>;
 
     /// Delete a task permanently.
@@ -92,6 +92,13 @@ pub trait TaskStore {
 
     /// List all statuses for a project, ordered by position.
     async fn list_statuses(&self, project_id: ProjectID) -> Result<Vec<Status>, StorageError>;
+
+    /// Look up a status in a project by name.
+    async fn get_status_by_name(
+        &self,
+        project_id: ProjectID,
+        name: &str,
+    ) -> Result<Option<Status>, StorageError>;
 
     /// Set the color of a status. Pass `None` to clear the color.
     async fn set_status_color(

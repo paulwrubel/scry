@@ -1,3 +1,5 @@
+use crate::models::{StatusID, TaskID};
+
 /// Cross-cutting actions that components emit to the parent coordinator.
 /// Internal component state changes (cursor movement, scrolling, text editing)
 /// are handled within the component and return None from handle_event.
@@ -11,13 +13,12 @@ pub enum Action {
     // ── popup lifecycle ──
     OpenPopupDeleteConfirm(i64),
     OpenPopupCreateTask,
-    OpenPopupMovePicker(i64),
     DismissPopup,
 
     // ── task operations ──
     MoveTask {
-        task_id: i64,
-        status_name: String,
+        task_id: TaskID,
+        status_id: StatusID,
     },
     DeleteTask(i64),
 

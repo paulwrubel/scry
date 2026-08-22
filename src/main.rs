@@ -149,19 +149,29 @@ async fn main() -> Result<(), AppError> {
                 task.title
             );
         }
-        Command::Move { id, status } => match store.move_task(id, project_id, &status).await? {
-            Some(_) => println!("Moved task {} --> \"{}\"", id, status),
-            None => eprintln!("Task {} not found in \"{}\"", id, project_name),
-        },
+        Command::Move { id, status } => {
+            let Some(status) = store.get_status_by_name(project_id, &status).await? else {
+                eprintln!("Status \"{}\" not found in \"{}\"", status, project_name);
+                return Ok(());
+            };
+            match store.move_task(id, project_id, status.id).await? {
+                Some(_) => println!("Moved task {} --> \"{}\"", id, status.name),
+                None => eprintln!("Task {} not found in \"{}\"", id, project_name),
+            }
+        }
         Command::Update { id, status } => {
             let Some(status_name) = status else {
                 eprintln!("No flags provided. Use 'scry update --help' for available options.");
                 return Ok(());
             };
-            match store
-                .update_task(id, project_id, Some(&status_name))
-                .await?
-            {
+            let Some(status) = store.get_status_by_name(project_id, &status_name).await? else {
+                eprintln!(
+                    "Status \"{}\" not found in \"{}\"",
+                    status_name, project_name
+                );
+                return Ok(());
+            };
+            match store.update_task(id, project_id, status.id).await? {
                 Some(task) => {
                     println!("Updated task {}: status --> \"{}\"", task.id, &status_name);
                 }

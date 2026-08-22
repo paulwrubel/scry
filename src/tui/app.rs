@@ -134,11 +134,8 @@ impl<S: TaskStore + Sync> App<S> {
                     Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::MoveTask {
-                task_id,
-                status_name,
-            } => {
-                match Self::block_on(self.store.move_task(task_id, self.project_id, &status_name)) {
+            Action::MoveTask { task_id, status_id } => {
+                match Self::block_on(self.store.move_task(task_id, self.project_id, status_id)) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }
