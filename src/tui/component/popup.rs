@@ -7,9 +7,6 @@ pub use create_task::CreateTask;
 mod status_selection;
 pub use status_selection::StatusSelection;
 
-mod task_detail;
-pub use task_detail::TaskDetail;
-
 use crate::tui::Action;
 use crate::tui::component::{RenderContext, State};
 use ratatui::crossterm::event::KeyEvent;
@@ -18,7 +15,6 @@ pub enum Popup {
     ConfirmDelete(ConfirmDelete),
     CreateTask(CreateTask),
     StatusSelection(StatusSelection),
-    TaskDetail(TaskDetail),
 }
 
 impl Popup {
@@ -27,7 +23,6 @@ impl Popup {
             Popup::ConfirmDelete(p) => p.handle_event(state, key),
             Popup::CreateTask(p) => p.handle_event(state, key),
             Popup::StatusSelection(p) => p.handle_event(state, key),
-            Popup::TaskDetail(p) => p.handle_event(state, key),
         }
     }
 
@@ -36,7 +31,6 @@ impl Popup {
             Popup::ConfirmDelete(p) => p.render(ctx),
             Popup::CreateTask(p) => p.render(ctx),
             Popup::StatusSelection(p) => p.render(ctx),
-            Popup::TaskDetail(p) => p.render(ctx),
         }
     }
 }

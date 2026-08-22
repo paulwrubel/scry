@@ -12,7 +12,6 @@ pub enum Action {
     OpenPopupDeleteConfirm(i64),
     OpenPopupCreateTask,
     OpenPopupMovePicker(i64),
-    OpenPopupTaskDetail(i64),
     DismissPopup,
 
     // ── task operations ──

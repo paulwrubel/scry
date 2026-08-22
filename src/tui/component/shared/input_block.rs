@@ -99,11 +99,9 @@ impl InputBlock {
 
         let display_text_line = Line::from(Span::styled(display_text, display_text_style));
 
-        ctx.render(block);
-        ctx.frame.render_widget(
-            Paragraph::new(display_text_line).wrap(Wrap { trim: false }),
-            content_area,
-        );
+        ctx.render(&block);
+        ctx.with_area(block.inner(ctx.area))
+            .render(Paragraph::new(display_text_line).wrap(Wrap { trim: false }));
 
         if self.is_focused {
             let prefix = &self.buffer[..self.cursor_position];

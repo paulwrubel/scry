@@ -45,11 +45,10 @@ impl ConfirmDelete {
             Constraint::Length(1),
         ]));
 
-        ctx.frame.render_widget(
+        ctx.with_area(prompt_area).render(
             Paragraph::new(Line::from(format!("Delete task: \"{}\"?", self.task_title)))
                 .centered()
                 .wrap(Wrap { trim: false }),
-            prompt_area,
         );
 
         let (no_button, yes_button) = (
@@ -75,7 +74,7 @@ impl ConfirmDelete {
             .flex(Flex::SpaceAround),
         );
 
-        ctx.frame.render_widget(no_button, no_button_area);
-        ctx.frame.render_widget(yes_button, yes_button_area);
+        ctx.with_area(no_button_area).render(no_button);
+        ctx.with_area(yes_button_area).render(yes_button);
     }
 }

@@ -92,10 +92,5 @@ impl CreateTask {
             state: ctx.state,
             area: create_button_area,
         });
-
-        // ctx.frame.render_widget(
-        //     Paragraph::new(all_lines).wrap(Wrap { trim: false }),
-        //     content_area,
-        // );
     }
 }

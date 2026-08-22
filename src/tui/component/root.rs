@@ -1,8 +1,8 @@
 use crate::models::{Task, TaskID};
 use crate::tui::action::Action;
+use crate::tui::component::popup::{ConfirmDelete, CreateTask, StatusSelection};
 use crate::tui::component::{
-    Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskList,
-    popup::{ConfirmDelete, CreateTask, StatusSelection, TaskDetail},
+    Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskDetails, TaskList,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Spacing};
@@ -62,10 +62,6 @@ impl Root {
                     state.statuses.len(),
                     current_status_id,
                 )));
-                None
-            }
-            Action::OpenPopupTaskDetail(task_id) => {
-                self.popup = Some(Popup::TaskDetail(TaskDetail::new(task_id)));
                 None
             }
             Action::DismissPopup => {
@@ -132,9 +128,6 @@ impl Root {
                 let project_status_tasks: ProjectStatusTasks = state.into();
                 let selected = self.task_from_selected_task(&project_status_tasks);
                 match (code, selected) {
-                    (KeyCode::Enter, Some(task)) => {
-                        self.handle_action(state, Action::OpenPopupTaskDetail(task.id))
-                    }
                     (KeyCode::Char('m'), Some(task)) => {
                         self.handle_action(state, Action::OpenPopupMovePicker(task.id))
                     }
@@ -217,6 +210,16 @@ impl Root {
             selected_task.map(|t| t.id),
         );
 
+        // task details
+        let task_details_content_area = block.inner(task_details_area);
+        if let Some(selected_task) = selected_task {
+            TaskDetails::new(selected_task).render(&mut RenderContext {
+                state: ctx.state,
+                frame: ctx.frame,
+                area: task_details_content_area,
+            });
+        }
+
         // hints border and content
         let [_, hints_content_area] = Layout::horizontal([
             Constraint::Length(1), // left padding
@@ -230,22 +233,18 @@ impl Root {
         });
 
         // task list block
-        ctx.frame.render_widget(
+        let project_name = &ctx.state.project.name;
+        ctx.with_area(task_list_area).render(
             block
                 .clone()
-                .title(Line::from(format!(" {} ", ctx.state.project.name)).centered()),
-            task_list_area,
+                .title(Line::from(format!(" {} ", project_name)).centered()),
         );
         // task details block
-        ctx.frame.render_widget(
-            block.clone().title(Line::from(" Task Details ").centered()),
-            task_details_area,
-        );
+        ctx.with_area(task_details_area)
+            .render(block.clone().title(Line::from(" Task Details ").centered()));
         // hints block
-        ctx.frame.render_widget(
-            block.title_bottom(Line::from(" scry ").right_aligned()),
-            hints_area,
-        );
+        ctx.with_area(hints_area)
+            .render(block.title_bottom(Line::from(" scry ").right_aligned()));
 
         // popup last (on top of everything)
         if let Some(ref popup) = self.popup {

@@ -1,5 +1,5 @@
 use crate::models::TaskID;
-use crate::tui::component::task_status_list::TaskStatusList;
+use crate::tui::component::TaskStatusList;
 use crate::tui::component::{ProjectStatusTasks, RenderContext};
 use ratatui::layout::Rect;
 use ratatui::text::Line;

@@ -11,12 +11,17 @@ mod shared;
 pub use shared::Button;
 pub use shared::InputBlock;
 
+mod task_details;
+pub use task_details::TaskDetails;
+
+mod task_line;
+pub use task_line::TaskLine;
+
 mod task_list;
 pub use task_list::TaskList;
 
 mod task_status_list;
-
-mod task_line;
+pub use task_status_list::TaskStatusList;
 
 use crate::error::StorageError;
 use crate::models::{Project, ProjectID, Status, Task, TaskID};
@@ -34,9 +39,17 @@ pub struct RenderContext<'a, 'b> {
     pub area: Rect,
 }
 
-impl RenderContext<'_, '_> {
+impl<'a, 'b> RenderContext<'a, 'b> {
     pub fn render<W: Widget>(&mut self, widget: W) {
         self.frame.render_widget(widget, self.area);
+    }
+
+    pub fn with_area<'c>(&'c mut self, area: Rect) -> RenderContext<'c, 'b> {
+        RenderContext {
+            state: self.state,
+            frame: &mut *self.frame,
+            area,
+        }
     }
 
     pub fn render_popup_frame(

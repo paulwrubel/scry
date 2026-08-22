@@ -1,6 +1,6 @@
 use crate::{
     models::TaskID,
-    tui::component::{StatusTasks, task_line::TaskLine},
+    tui::component::{StatusTasks, TaskLine},
 };
 use ratatui::{style::Style, text::Line};
 
