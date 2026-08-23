@@ -14,13 +14,6 @@ impl<'a> TaskDetails<'a> {
         Self { task }
     }
 
-    // pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
-    //     match key.code {
-    //         KeyCode::Esc | KeyCode::Enter => Some(Action::DismissPopup),
-    //         _ => None,
-    //     }
-    // }
-
     pub fn render(&self, ctx: &mut RenderContext) {
         let status = ctx
             .state
@@ -36,9 +29,9 @@ impl<'a> TaskDetails<'a> {
             .format("%Y-%m-%d %I:%M %p")
             .to_string();
 
-        let [details_area] = ctx.area.layout(
-            &Layout::vertical([Constraint::Min(1)]).horizontal_margin(1), // .spacing(Spacing::Space(1)),
-        );
+        let [details_area] = ctx
+            .area
+            .layout(&Layout::vertical([Constraint::Min(1)]).horizontal_margin(1));
 
         let mut details_lines = Vec::new();
 

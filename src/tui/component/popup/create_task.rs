@@ -68,29 +68,21 @@ impl CreateTask {
 
     pub fn render(&self, ctx: &mut RenderContext) {
         let content_area = ctx.render_popup_frame(
-            Constraint::Percentage(40),
-            Constraint::Percentage(20),
+            Constraint::Percentage(50),
+            Constraint::Percentage(60),
             Some(Block::default().borders(Borders::ALL).title("Create Task")),
         );
 
-        let [title_input_area, _, create_button_area, _] = Layout::vertical([
+        let [title_input_area, _, create_button_area] = content_area.layout(&Layout::vertical([
             Constraint::Length(3),
-            Constraint::Fill(1),
+            Constraint::Fill(1), // remaining space
             Constraint::Length(1),
-            Constraint::Length(0),
-        ])
-        .areas(content_area);
+        ]));
 
-        self.title_input.render(&mut RenderContext {
-            frame: ctx.frame,
-            state: ctx.state,
-            area: title_input_area,
-        });
+        self.title_input
+            .render(&mut ctx.with_area(title_input_area));
 
-        self.create_task_button.render(&mut RenderContext {
-            frame: ctx.frame,
-            state: ctx.state,
-            area: create_button_area,
-        });
+        self.create_task_button
+            .render(&mut ctx.with_area(create_button_area));
     }
 }
