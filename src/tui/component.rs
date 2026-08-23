@@ -24,6 +24,7 @@ mod task_status_list;
 pub use task_status_list::TaskStatusList;
 
 use crate::error::StorageError;
+use crate::models::StatusID;
 use crate::models::{Project, ProjectID, Status, Task, TaskID};
 use crate::store::TaskStore;
 use ratatui::Frame;
@@ -151,7 +152,7 @@ impl ProjectStatusTasks {
     /// Get the Task immediately following the one with the provided ID in the order.
     ///
     /// It may return None if there is no following Task.
-    pub fn next(&self, task_id: TaskID) -> Option<&Task> {
+    pub fn next_task(&self, task_id: TaskID) -> Option<&Task> {
         let mut tasks = self.task_iterator();
 
         while let Some(task) = tasks.next() {
@@ -166,12 +167,42 @@ impl ProjectStatusTasks {
     /// Get the Task immediately preceding the one with the provided ID in the order.
     ///
     /// It may return None if there is no preceding Task.
-    pub fn previous(&self, task_id: TaskID) -> Option<&Task> {
+    pub fn previous_task(&self, task_id: TaskID) -> Option<&Task> {
         let mut tasks = self.task_iterator().rev();
 
         while let Some(task) = tasks.next() {
             if task.id == task_id {
                 return tasks.next();
+            }
+        }
+
+        None
+    }
+
+    /// Get the Status immediately following the one with the provided ID in the order.
+    ///
+    /// It may return None if there is no following Status.
+    pub fn next_status(&self, status_id: StatusID) -> Option<&Status> {
+        let mut statuses = self.status_iterator();
+
+        while let Some(status) = statuses.next() {
+            if status.id == status_id {
+                return statuses.next();
+            }
+        }
+
+        None
+    }
+
+    /// Get the Status immediately preceding the one with the provided ID in the order.
+    ///
+    /// It may return None if there is no preceding Status.
+    pub fn previous_status(&self, status_id: StatusID) -> Option<&Status> {
+        let mut statuses = self.status_iterator().rev();
+
+        while let Some(status) = statuses.next() {
+            if status.id == status_id {
+                return statuses.next();
             }
         }
 
@@ -191,6 +222,10 @@ impl ProjectStatusTasks {
         self.status_tasks
             .iter()
             .flat_map(|status| status.tasks.iter())
+    }
+
+    fn status_iterator(&self) -> impl DoubleEndedIterator<Item = &Status> + '_ {
+        self.status_tasks.iter().map(|st| &st.status)
     }
 }
 

@@ -75,9 +75,9 @@ impl Root {
                 if let Some(st) = self.task_from_selected_task(&project_status_tasks)
                     && st.id == task_id
                 {
-                    if let Some(next) = project_status_tasks.next(task_id) {
+                    if let Some(next) = project_status_tasks.next_task(task_id) {
                         self.selected_task = Some(SelectedTask::ID(next.id))
-                    } else if let Some(previous) = project_status_tasks.previous(task_id) {
+                    } else if let Some(previous) = project_status_tasks.previous_task(task_id) {
                         self.selected_task = Some(SelectedTask::ID(previous.id))
                     } else {
                         self.selected_task = Some(SelectedTask::First)
@@ -161,7 +161,7 @@ impl Root {
                 // check if we have a current selection AND if there's a "previous task"
                 if let Some(next_task) = self
                     .task_from_selected_task(&project_status_tasks)
-                    .and_then(|task| project_status_tasks.previous(task.id))
+                    .and_then(|task| project_status_tasks.previous_task(task.id))
                 {
                     self.selected_task = Some(SelectedTask::ID(next_task.id));
                 }
@@ -172,7 +172,7 @@ impl Root {
                 // check if we have a current selection AND if there's a "next task"
                 if let Some(next_task) = self
                     .task_from_selected_task(&project_status_tasks)
-                    .and_then(|task| project_status_tasks.next(task.id))
+                    .and_then(|task| project_status_tasks.next_task(task.id))
                 {
                     self.selected_task = Some(SelectedTask::ID(next_task.id));
                 }
@@ -238,16 +238,17 @@ impl Root {
         }
 
         // hints border and content
-        let [_, hints_content_area] = Layout::horizontal([
-            Constraint::Length(1), // left padding
-            Constraint::Min(0),    // content
-        ])
-        .areas(block.inner(hints_area));
-        self.hints.render(&mut RenderContext {
-            state: ctx.state,
-            frame: ctx.frame,
-            area: hints_content_area,
-        });
+        let [hints_content_area] = block
+            .inner(hints_area)
+            .layout(&Layout::horizontal([Constraint::Min(0)]).horizontal_margin(1));
+        self.hints.render(
+            &mut RenderContext {
+                state: ctx.state,
+                frame: ctx.frame,
+                area: hints_content_area,
+            },
+            selected_task.map(|t| t.id),
+        );
 
         // task list block
         let project_name = &ctx.state.project.name;
