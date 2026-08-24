@@ -15,6 +15,9 @@ pub enum Action {
     OpenPopupCreateTask,
     DismissPopup,
 
+    // ── commands ──
+    CloseCommandInput,
+
     // ── task operations ──
     MoveTask {
         task_id: TaskID,

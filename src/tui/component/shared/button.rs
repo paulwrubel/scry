@@ -8,7 +8,7 @@ pub struct Button {
 }
 
 impl Button {
-    pub fn new(text: String, is_focused: bool) -> Self {
+    pub fn new(is_focused: bool, text: String) -> Self {
         Self { is_focused, text }
     }
 

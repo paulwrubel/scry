@@ -16,12 +16,11 @@ pub struct CreateTask {
 impl CreateTask {
     pub fn new() -> Self {
         Self {
-            title_input: InputBlock::new(
-                String::from("Title"),
-                true,
-                Some(String::from("Do the laundry")),
-            ),
-            create_task_button: Button::new(String::from("Create Task"), false),
+            title_input: InputBlock::new(true)
+                .with_title(String::from("Title"))
+                .with_placeholder_text(String::from("Do the laundry")),
+
+            create_task_button: Button::new(false, String::from("Create Task")),
         }
     }
 

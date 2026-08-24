@@ -113,7 +113,7 @@ impl<S: TaskStore + Sync> App<S> {
             match event::read().map_err(|e| AppError::Internal(format!("event error: {}", e)))? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
                     self.root.clear_status();
-                    if let Some(action) = self.root.handle_event(&state, key) {
+                    for action in self.root.handle_event(&state, key) {
                         self.process_action(action);
                     }
                 }

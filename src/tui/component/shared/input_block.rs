@@ -1,77 +1,71 @@
 use crate::tui::action::Action;
+use crate::tui::component::shared::Input;
 use crate::tui::component::{RenderContext, State};
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::KeyEvent;
 use ratatui::style::Style;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders};
 
 pub struct InputBlock {
     pub is_focused: bool,
-    title: String,
-    placeholder_text: Option<String>,
+    title: Option<String>,
 
-    buffer: String,
-    cursor_position: usize,
+    input: Input,
 }
 
 impl InputBlock {
-    pub fn new(title: String, is_focused: bool, placeholder_text: Option<String>) -> Self {
+    pub fn new(is_focused: bool) -> Self {
         Self {
             is_focused,
-            title,
-            placeholder_text,
+            title: None,
 
-            buffer: String::new(),
-            cursor_position: 0,
+            input: Input::new(is_focused),
         }
     }
 
+    pub fn with_title(self, title: String) -> Self {
+        Self {
+            title: Some(title),
+            ..self
+        }
+    }
+
+    pub fn with_placeholder_text(self, placeholder_text: String) -> Self {
+        Self {
+            input: self.input.with_placeholder_text(placeholder_text),
+            ..self
+        }
+    }
+
+    // pub fn with_text(self, text: String) -> Self {
+    //     Self {
+    //         input: self.input.with_text(text),
+    //         ..self
+    //     }
+    // }
+
+    // pub fn reset(&mut self) {
+    //     self.input.reset();
+    // }
+
     pub fn focus(&mut self) {
-        self.cursor_position = self.buffer.len();
+        self.input.focus();
         self.is_focused = true;
     }
 
     pub fn blur(&mut self) {
+        self.input.blur();
         self.is_focused = false;
     }
 
     pub fn buffer_text(&self) -> &str {
-        &self.buffer
+        self.input.buffer_text()
     }
 
-    pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
         if !self.is_focused {
             return None;
         }
-        match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Char(c)) => {
-                self.buffer.insert(self.cursor_position, c);
-                self.cursor_position += c.len_utf8();
-                None
-            }
-            (KeyModifiers::NONE, KeyCode::Backspace) => {
-                if self.cursor_position > 0 {
-                    let prev = self.buffer.floor_char_boundary(self.cursor_position - 1);
-                    self.buffer.remove(prev);
-                    self.cursor_position = prev;
-                }
-                None
-            }
-            (_, KeyCode::Left) => {
-                if self.cursor_position > 0 {
-                    self.cursor_position =
-                        self.buffer.floor_char_boundary(self.cursor_position - 1);
-                }
-                None
-            }
-            (_, KeyCode::Right) => {
-                if self.cursor_position < self.buffer.len() {
-                    self.cursor_position = self.buffer.ceil_char_boundary(self.cursor_position + 1);
-                }
-                None
-            }
-            _ => None,
-        }
+        self.input.handle_event(state, key)
     }
 
     pub fn render(&self, ctx: &mut RenderContext) {
@@ -81,32 +75,12 @@ impl InputBlock {
             Style::default().dim()
         };
 
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(style)
-            .title(self.title.as_str());
-
-        let content_area = block.inner(ctx.area);
-
-        let (display_text, display_text_style) = if !self.buffer.is_empty() || self.is_focused {
-            (self.buffer.as_str(), style)
-        } else {
-            (
-                self.placeholder_text.as_deref().unwrap_or(""),
-                style.italic(),
-            )
+        let mut block = Block::default().borders(Borders::ALL).border_style(style);
+        if let Some(title) = &self.title {
+            block = block.title(title.as_str())
         };
 
-        let display_text_line = Line::from(Span::styled(display_text, display_text_style));
-
+        self.input.render(&mut ctx.with_area(block.inner(ctx.area)));
         ctx.render(&block);
-        ctx.with_area(block.inner(ctx.area))
-            .render(Paragraph::new(display_text_line).wrap(Wrap { trim: false }));
-
-        if self.is_focused {
-            let prefix = &self.buffer[..self.cursor_position];
-            let col = content_area.x + Span::raw(prefix).width() as u16;
-            ctx.frame.set_cursor_position((col, content_area.y));
-        }
     }
 }

@@ -2,7 +2,7 @@ use crate::models::{Task, TaskID};
 use crate::tui::action::Action;
 use crate::tui::component::popup::{ConfirmDelete, CreateTask};
 use crate::tui::component::{
-    Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskDetails, TaskList,
+    CommandInput, Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskDetails, TaskList,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Spacing};
@@ -18,6 +18,7 @@ enum SelectedTask {
 
 pub struct Root {
     task_list: TaskList,
+    command_input: CommandInput,
     hints: Hints,
     popup: Option<Popup>,
 
@@ -28,6 +29,7 @@ impl Root {
     pub fn new() -> Self {
         Self {
             task_list: TaskList::new(true),
+            command_input: CommandInput::new(false),
             hints: Hints::new(),
             popup: None,
 
@@ -35,64 +37,80 @@ impl Root {
         }
     }
 
-    fn handle_action(&mut self, state: &State, action: Action) -> Option<Action> {
-        match action {
-            // UI actions — handled here, never reach the coordinator
-            Action::OpenPopupDeleteConfirm(task_id) => {
-                if let Some(task) = state.tasks.iter().find(|t| t.id == task_id) {
-                    self.popup = Some(Popup::ConfirmDelete(ConfirmDelete::new(
-                        task_id,
-                        task.title.clone(),
-                    )));
-                }
-                None
-            }
-            Action::OpenPopupCreateTask => {
-                self.popup = Some(Popup::CreateTask(CreateTask::new()));
-                None
-            }
-            Action::DismissPopup => {
-                self.popup = None;
-                None
-            }
-            // Action::MoveFocusUp | Action::MoveFocusDown => None,
-
-            // Store actions that also dismiss the popup before bubbling
-            Action::MoveTask { .. } => {
-                self.popup = None;
-                Some(action)
-            }
-            Action::AddTask(_) => {
-                self.popup = None;
-                Some(action)
-            }
-            Action::DeleteTask(task_id) => {
-                self.popup = None;
-
-                let project_status_tasks: ProjectStatusTasks = state.into();
-
-                // these really should match, i don't see how they couldn't, but still, we'll make sure
-                if let Some(st) = self.task_from_selected_task(&project_status_tasks)
-                    && st.id == task_id
-                {
-                    if let Some(next) = project_status_tasks.next_task(task_id) {
-                        self.selected_task = Some(SelectedTask::ID(next.id))
-                    } else if let Some(previous) = project_status_tasks.previous_task(task_id) {
-                        self.selected_task = Some(SelectedTask::ID(previous.id))
-                    } else {
-                        self.selected_task = Some(SelectedTask::First)
-                    }
-                }
-
-                Some(action)
-            }
-
-            // unhandled actions bubble up unchanged
-            _ => Some(action),
-        }
+    fn handle_action(&mut self, state: &State, action: Action) -> Vec<Action> {
+        self.handle_actions(state, vec![action])
     }
 
-    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
+    fn handle_actions(&mut self, state: &State, actions: Vec<Action>) -> Vec<Action> {
+        actions
+            .into_iter()
+            .flat_map(|action| {
+                match action {
+                    // UI actions — handled here, never reach the coordinator
+                    Action::OpenPopupDeleteConfirm(task_id) => {
+                        if let Some(task) = state.tasks.iter().find(|t| t.id == task_id) {
+                            self.popup = Some(Popup::ConfirmDelete(ConfirmDelete::new(
+                                task_id,
+                                task.title.clone(),
+                            )));
+                        }
+                        vec![]
+                    }
+                    Action::OpenPopupCreateTask => {
+                        self.popup = Some(Popup::CreateTask(CreateTask::new()));
+                        vec![]
+                    }
+                    Action::DismissPopup => {
+                        self.popup = None;
+                        vec![]
+                    }
+
+                    Action::CloseCommandInput => {
+                        self.command_input.reset();
+                        self.command_input.blur();
+                        vec![]
+                    }
+
+                    // Store actions that also dismiss the popup before bubbling
+                    Action::MoveTask { .. } => {
+                        self.popup = None;
+                        vec![action]
+                    }
+                    Action::AddTask(_) => {
+                        self.popup = None;
+                        vec![action]
+                    }
+                    Action::DeleteTask(task_id) => {
+                        self.popup = None;
+
+                        let project_status_tasks: ProjectStatusTasks = state.into();
+
+                        // these really should match, i don't see how they couldn't, but still, we'll make sure
+                        if let Some(st) = self.task_from_selected_task(&project_status_tasks)
+                            && st.id == task_id
+                        {
+                            if let Some(next) = project_status_tasks.next_task(task_id) {
+                                self.selected_task = Some(SelectedTask::ID(next.id))
+                            } else if let Some(previous) =
+                                project_status_tasks.previous_task(task_id)
+                            {
+                                self.selected_task = Some(SelectedTask::ID(previous.id))
+                            } else {
+                                self.selected_task = Some(SelectedTask::First)
+                            }
+                        }
+
+                        vec![action]
+                    }
+
+                    // unhandled actions bubble up unchanged
+                    _ => vec![action],
+                }
+            })
+            .collect::<Vec<_>>()
+    }
+
+    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Vec<Action> {
         let code = key.code;
 
         // if we get a quit request, we do that, regardless of anything else
@@ -104,19 +122,32 @@ impl Root {
         if let Some(ref mut popup) = self.popup {
             return popup
                 .handle_event(state, key)
-                .and_then(|a| self.handle_action(state, a));
+                .map_or(vec![], |a| self.handle_action(state, a));
+        }
+
+        // if the command input is focused, send the event there
+        if self.command_input.is_focused {
+            let actions = self.command_input.handle_event(state, key);
+            return self.handle_actions(state, actions);
         }
 
         // global keys are handled ONLY if nothing above handled the event
-
         let project_status_tasks: ProjectStatusTasks = state.into();
         let selected = self.task_from_selected_task(&project_status_tasks);
         match (key.modifiers, code) {
+            (KeyModifiers::NONE, KeyCode::Char('/')) => {
+                self.command_input.focus();
+
+                vec![]
+            }
+            (KeyModifiers::NONE, KeyCode::Char('a')) => {
+                self.handle_action(state, Action::OpenPopupCreateTask)
+            }
             (_, KeyCode::Char('d')) if self.task_list.is_focused => {
                 if let Some(task) = selected {
                     self.handle_action(state, Action::OpenPopupDeleteConfirm(task.id))
                 } else {
-                    None
+                    vec![]
                 }
             }
             (_, KeyCode::Char(',') | KeyCode::Char('<')) if let Some(task) = selected => {
@@ -128,7 +159,7 @@ impl Root {
                     .and_then(|index| state.statuses.get(index - 1));
 
                 // nothing to move to if the task is already in the last status
-                previous_status.and_then(|status| {
+                previous_status.map_or(vec![], |status| {
                     self.handle_action(
                         state,
                         Action::MoveTask {
@@ -147,7 +178,7 @@ impl Root {
                     .and_then(|index| state.statuses.get(index + 1));
 
                 // nothing to move to if the task is already in the last status
-                next_status.and_then(|status| {
+                next_status.map_or(vec![], |status| {
                     self.handle_action(
                         state,
                         Action::MoveTask {
@@ -166,7 +197,7 @@ impl Root {
                     self.selected_task = Some(SelectedTask::ID(next_task.id));
                 }
 
-                None
+                vec![]
             }
             (_, KeyCode::Down | KeyCode::Char('j')) if self.task_list.is_focused => {
                 // check if we have a current selection AND if there's a "next task"
@@ -176,20 +207,22 @@ impl Root {
                 {
                     self.selected_task = Some(SelectedTask::ID(next_task.id));
                 }
-                None
+
+                vec![]
             }
-            (KeyModifiers::NONE, KeyCode::Char('a')) => {
-                self.handle_action(state, Action::OpenPopupCreateTask)
-            }
-            _ => None,
+            _ => vec![],
         }
     }
 
     pub fn render(&mut self, ctx: &mut RenderContext) {
         // main pane and hints
-        let [task_area, hints_area] = ctx.area.layout(
-            &Layout::vertical([Constraint::Fill(1), Constraint::Length(3)])
-                .spacing(Spacing::Overlap(1)),
+        let [task_area, command_input_area, hints_area] = ctx.area.layout(
+            &Layout::vertical([
+                Constraint::Fill(1),
+                Constraint::Length(if self.command_input.is_focused { 3 } else { 1 }),
+                Constraint::Length(3),
+            ])
+            .spacing(Spacing::Overlap(1)),
         );
         let [task_list_area, task_details_area] = task_area
             .layout(&Layout::horizontal([Constraint::Fill(1); 2]).spacing(Spacing::Overlap(1)));
@@ -223,11 +256,33 @@ impl Root {
             &project_status_tasks,
             selected_task.map(|t| t.id),
         );
+        // task list block
+        let project_name = &ctx.state.project.name;
+        ctx.with_area(task_list_area).render(
+            block
+                .clone()
+                .title(Line::from(format!(" {} ", project_name)).centered()),
+        );
 
         // task details
         let task_details_content_area = block.inner(task_details_area);
         if let Some(selected_task) = selected_task {
             TaskDetails::new(selected_task).render(&mut ctx.with_area(task_details_content_area));
+        }
+        // task details block
+        ctx.with_area(task_details_area)
+            .render(block.clone().title(Line::from(" Task Details ").centered()));
+
+        // command input area
+        if self.command_input.is_focused {
+            let [command_input_content_area] = block
+                .inner(command_input_area)
+                .layout(&Layout::horizontal([Constraint::Min(0)]).horizontal_margin(1));
+            self.command_input
+                .render(&mut ctx.with_area(command_input_content_area));
+            // command input block
+            ctx.with_area(command_input_area)
+                .render(block.clone().title(Line::from(" command ")));
         }
 
         // hints border and content
@@ -238,17 +293,6 @@ impl Root {
             &mut ctx.with_area(hints_content_area),
             selected_task.map(|t| t.id),
         );
-
-        // task list block
-        let project_name = &ctx.state.project.name;
-        ctx.with_area(task_list_area).render(
-            block
-                .clone()
-                .title(Line::from(format!(" {} ", project_name)).centered()),
-        );
-        // task details block
-        ctx.with_area(task_details_area)
-            .render(block.clone().title(Line::from(" Task Details ").centered()));
         // hints block
         ctx.with_area(hints_area)
             .render(block.title_bottom(Line::from(" scry ").right_aligned()));
