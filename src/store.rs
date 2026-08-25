@@ -69,17 +69,20 @@ pub trait TaskStore {
     /// Set the active project. Persisted across sessions.
     async fn set_active_project(&self, name: &str) -> Result<(), StorageError>;
 
+    async fn get_status_by_id(
+        &self,
+        project_id: ProjectID,
+        status_id: StatusID,
+    ) -> Result<Option<Status>, StorageError>;
+
     /// Add a new status to a project. Appended after existing statuses.
     async fn add_status(&self, project_id: ProjectID, name: &str) -> Result<Status, StorageError>;
 
-    /// Remove a status from a project. If `force` is true, tasks in the removed
-    /// status are moved to the first remaining status. The last status of a project
-    /// cannot be removed.
-    async fn remove_status(
+    /// Deletes a status from a project.
+    async fn delete_status(
         &self,
         project_id: ProjectID,
-        name: &str,
-        force: bool,
+        status_id: StatusID,
     ) -> Result<(), StorageError>;
 
     /// Rename a status within a project. All tasks referencing the old name are updated.
@@ -121,7 +124,7 @@ pub trait TaskStore {
     async fn reorder_status(
         &self,
         project_id: ProjectID,
-        status_name: &str,
+        status_id: StatusID,
         new_position: i32,
     ) -> Result<(), StorageError>;
 }

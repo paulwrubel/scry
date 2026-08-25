@@ -588,6 +588,43 @@ impl TaskStore for SqliteStore {
         Ok(())
     }
 
+    async fn get_status_by_id(
+        &self,
+        project_id: ProjectID,
+        status_id: StatusID,
+    ) -> Result<Option<Status>, StorageError> {
+        sqlx::query!(
+            r#"
+                SELECT
+                    id AS "id: i64",
+                    project_id AS "project_id: i64",
+                    name,
+                    position AS "position: i32",
+                    is_completed AS "is_completed: bool",
+                    is_entry AS "is_entry: bool",
+                    color
+                FROM statuses
+                WHERE project_id = ? AND id = ?
+            "#,
+            project_id,
+            status_id,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to look up status: {}", e)))
+        .map(|r| {
+            r.map(|r| Status {
+                id: r.id,
+                project_id: r.project_id,
+                name: r.name,
+                position: r.position,
+                is_completed: r.is_completed,
+                is_entry: r.is_entry,
+                color: r.color.map(Color),
+            })
+        })
+    }
+
     async fn add_status(&self, project_id: ProjectID, name: &str) -> Result<Status, StorageError> {
         let row = sqlx::query!(
             r#"
@@ -635,17 +672,11 @@ impl TaskStore for SqliteStore {
         }
     }
 
-    async fn remove_status(
+    async fn delete_status(
         &self,
         project_id: ProjectID,
-        name: &str,
-        force: bool,
+        status_id: StatusID,
     ) -> Result<(), StorageError> {
-        let status_id = self
-            .resolve_status_id(project_id, name)
-            .await?
-            .ok_or_else(|| StorageError::NotFound(format!("status '{}' not found", name)))?;
-
         let row = sqlx::query!(
             r#"
                 SELECT COUNT(*) AS "count: i64"
@@ -677,45 +708,45 @@ impl TaskStore for SqliteStore {
         .await
         .map_err(|e| StorageError::Database(format!("failed to count tasks: {}", e)))?;
 
-        if row.count > 0 && !force {
+        if row.count > 0 {
             return Err(StorageError::Conflict(format!(
-                "status '{}' has {} tasks. use force to move them",
-                name, row.count
+                "status with id '{}' has {} tasks.",
+                status_id, row.count
             )));
         }
 
-        if force && row.count > 0 {
-            let fallback = sqlx::query!(
-                r#"
-                    SELECT id
-                    FROM statuses
-                    WHERE project_id = ? AND id != ?
-                    ORDER BY position ASC
-                    LIMIT 1
-                "#,
-                project_id,
-                status_id,
-            )
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| {
-                StorageError::Database(format!("failed to find fallback status: {}", e))
-            })?;
+        // if row.count > 0 {
+        //     let fallback = sqlx::query!(
+        //         r#"
+        //             SELECT id
+        //             FROM statuses
+        //             WHERE project_id = ? AND id != ?
+        //             ORDER BY position ASC
+        //             LIMIT 1
+        //         "#,
+        //         project_id,
+        //         status_id,
+        //     )
+        //     .fetch_one(&self.pool)
+        //     .await
+        //     .map_err(|e| {
+        //         StorageError::Database(format!("failed to find fallback status: {}", e))
+        //     })?;
 
-            sqlx::query!(
-                r#"
-                    UPDATE tasks
-                    SET status_id = ?
-                    WHERE project_id = ? AND status_id = ?
-                "#,
-                fallback.id,
-                project_id,
-                status_id,
-            )
-            .execute(&self.pool)
-            .await
-            .map_err(|e| StorageError::Database(format!("failed to move tasks: {}", e)))?;
-        }
+        //     sqlx::query!(
+        //         r#"
+        //             UPDATE tasks
+        //             SET status_id = ?
+        //             WHERE project_id = ? AND status_id = ?
+        //         "#,
+        //         fallback.id,
+        //         project_id,
+        //         status_id,
+        //     )
+        //     .execute(&self.pool)
+        //     .await
+        //     .map_err(|e| StorageError::Database(format!("failed to move tasks: {}", e)))?;
+        // }
 
         sqlx::query!(
             r#"
@@ -943,24 +974,14 @@ impl TaskStore for SqliteStore {
     async fn reorder_status(
         &self,
         project_id: ProjectID,
-        status_name: &str,
+        status_id: StatusID,
         new_position: i32,
     ) -> Result<(), StorageError> {
-        let status = sqlx::query!(
-            r#"
-                SELECT id, name, position AS "position: i32"
-                FROM statuses
-                WHERE project_id = ? AND name = ?
-            "#,
-            project_id,
-            status_name,
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to look up status: {}", e)))?;
+        let status = self.get_status_by_id(project_id, status_id).await?;
 
-        let status = status
-            .ok_or_else(|| StorageError::NotFound(format!("status '{}' not found", status_name)))?;
+        let status = status.ok_or_else(|| {
+            StorageError::NotFound(format!("status with id '{}' not found", status_id))
+        })?;
 
         let current_pos = status.position;
 

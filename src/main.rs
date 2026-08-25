@@ -102,13 +102,10 @@ enum StatusCommand {
         /// The status name
         name: String,
     },
-    /// Remove a status from a project
+    /// Remove a status from a project. Requires the status have no assigned tasks.
     Remove {
         /// The status name
         name: String,
-        /// Move tasks to the first remaining status
-        #[arg(short, long)]
-        force: bool,
     },
     /// Rename a status
     Rename {
@@ -305,12 +302,24 @@ async fn main() -> Result<(), AppError> {
                         status.name, project_name
                     );
                 }
-                StatusCommand::Remove { name, force } => {
-                    store.remove_status(project_id, &name, force).await?;
-                    println!(
-                        "Removed status \"{}\" from project \"{}\"",
-                        name, project_name
-                    );
+                StatusCommand::Remove { name } => {
+                    if let Some(status) = store.get_status_by_name(project_id, &name).await? {
+                        let tasks_in_status =
+                            store.list_tasks(project_id, Some(&status.name)).await?;
+                        if tasks_in_status.is_empty() {
+                            store.delete_status(project_id, status.id).await?;
+                            println!(
+                                "Removed status \"{}\" from project \"{}\"",
+                                name, project_name
+                            );
+                        } else {
+                            eprintln!(
+                                "Cannot delete status with active tasks. Status \"{}\" contains {} tasks",
+                                status.name,
+                                tasks_in_status.len()
+                            );
+                        }
+                    }
                 }
                 StatusCommand::Rename { old_name, new_name } => {
                     store

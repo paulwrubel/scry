@@ -1,6 +1,6 @@
 use crate::models::{Task, TaskID};
 use crate::tui::action::Action;
-use crate::tui::component::popup::{ConfirmDelete, CreateTask};
+use crate::tui::component::popup::{ConfirmDelete, ConfirmDeleteEntity, CreateTask, ErrorInfo};
 use crate::tui::component::{
     CommandInput, Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskDetails, TaskList,
 };
@@ -13,6 +13,7 @@ use ratatui::widgets::{Block, Borders};
 #[derive(Debug, Clone, Copy)]
 enum SelectedTask {
     First,
+    Last,
     ID(TaskID),
 }
 
@@ -47,17 +48,17 @@ impl Root {
             .flat_map(|action| {
                 match action {
                     // UI actions — handled here, never reach the coordinator
-                    Action::OpenPopupDeleteConfirm(task_id) => {
-                        if let Some(task) = state.tasks.iter().find(|t| t.id == task_id) {
-                            self.popup = Some(Popup::ConfirmDelete(ConfirmDelete::new(
-                                task_id,
-                                task.title.clone(),
-                            )));
-                        }
+                    Action::OpenPopupConfirmDelete(entity) => {
+                        self.popup = Some(Popup::ConfirmDelete(ConfirmDelete::new(entity)));
+
                         vec![]
                     }
                     Action::OpenPopupCreateTask => {
                         self.popup = Some(Popup::CreateTask(CreateTask::new()));
+                        vec![]
+                    }
+                    Action::OpenPopupErrorInfo(error_text) => {
+                        self.popup = Some(Popup::ErrorInfo(ErrorInfo::new(error_text)));
                         vec![]
                     }
                     Action::DismissPopup => {
@@ -72,11 +73,7 @@ impl Root {
                     }
 
                     // Store actions that also dismiss the popup before bubbling
-                    Action::MoveTask { .. } => {
-                        self.popup = None;
-                        vec![action]
-                    }
-                    Action::AddTask(_) => {
+                    Action::MoveTask { .. } | Action::AddTask(_) | Action::DeleteStatus(_) => {
                         self.popup = None;
                         vec![action]
                     }
@@ -145,7 +142,10 @@ impl Root {
             }
             (_, KeyCode::Char('d')) if self.task_list.is_focused => {
                 if let Some(task) = selected {
-                    self.handle_action(state, Action::OpenPopupDeleteConfirm(task.id))
+                    self.handle_action(
+                        state,
+                        Action::OpenPopupConfirmDelete(ConfirmDeleteEntity::Task(task.clone())),
+                    )
                 } else {
                     vec![]
                 }
@@ -188,24 +188,34 @@ impl Root {
                     )
                 })
             }
-            (_, KeyCode::Up | KeyCode::Char('k')) if self.task_list.is_focused => {
-                // check if we have a current selection AND if there's a "previous task"
-                if let Some(next_task) = self
-                    .task_from_selected_task(&project_status_tasks)
-                    .and_then(|task| project_status_tasks.previous_task(task.id))
-                {
-                    self.selected_task = Some(SelectedTask::ID(next_task.id));
+            (modifier, KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('K'))
+                if self.task_list.is_focused =>
+            {
+                // first, check if anything at all is selected
+                if let Some(task) = self.task_from_selected_task(&project_status_tasks) {
+                    // if the user is holding shift, just go to the top
+                    if modifier == KeyModifiers::SHIFT {
+                        self.selected_task = Some(SelectedTask::First)
+                    // otherwise, if there's a previous task, select it
+                    } else if let Some(prev) = project_status_tasks.previous_task(task.id) {
+                        self.selected_task = Some(SelectedTask::ID(prev.id));
+                    }
                 }
 
                 vec![]
             }
-            (_, KeyCode::Down | KeyCode::Char('j')) if self.task_list.is_focused => {
-                // check if we have a current selection AND if there's a "next task"
-                if let Some(next_task) = self
-                    .task_from_selected_task(&project_status_tasks)
-                    .and_then(|task| project_status_tasks.next_task(task.id))
-                {
-                    self.selected_task = Some(SelectedTask::ID(next_task.id));
+            (modifier, KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('J'))
+                if self.task_list.is_focused =>
+            {
+                // first, check if anything at all is selected
+                if let Some(task) = self.task_from_selected_task(&project_status_tasks) {
+                    // if the user is holding shift, just go to the top
+                    if modifier == KeyModifiers::SHIFT {
+                        self.selected_task = Some(SelectedTask::Last)
+                    // otherwise, if there's a previous task, select it
+                    } else if let Some(next) = project_status_tasks.next_task(task.id) {
+                        self.selected_task = Some(SelectedTask::ID(next.id));
+                    }
                 }
 
                 vec![]
@@ -318,6 +328,7 @@ impl Root {
         match self.selected_task {
             Some(st) => match st {
                 SelectedTask::First => project_status_tasks.first(),
+                SelectedTask::Last => project_status_tasks.last(),
                 SelectedTask::ID(task_id) => project_status_tasks.get_task_by_id(task_id),
             },
             None => None,

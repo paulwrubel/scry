@@ -4,7 +4,7 @@ use ratatui::{
 };
 
 use crate::tui::{
-    Action,
+    Action, command,
     component::{RenderContext, State, shared::Input},
 };
 
@@ -46,13 +46,14 @@ impl CommandInput {
         match (key.modifiers, key.code) {
             (_, KeyCode::Esc) => vec![Action::CloseCommandInput],
             (_, KeyCode::Enter) => {
-                let mut actions = vec![Action::CloseCommandInput];
+                let mut actions = vec![];
 
-                let action = self.process_command_text();
-                if let Some(action) = action {
+                let mut command_actions = self.process_command_text(state);
+                if !command_actions.is_empty() {
                     self.reset();
-                    actions.insert(0, action);
+                    actions.append(&mut command_actions);
                 }
+                actions.push(Action::CloseCommandInput);
 
                 actions
             }
@@ -64,9 +65,9 @@ impl CommandInput {
         self.input.render(ctx);
     }
 
-    fn process_command_text(&self) -> Option<Action> {
+    fn process_command_text(&self, state: &State) -> Vec<Action> {
         let text = self.input.buffer_text();
 
-        None
+        command::parse_command(state, text)
     }
 }

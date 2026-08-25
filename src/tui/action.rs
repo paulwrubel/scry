@@ -1,4 +1,7 @@
-use crate::models::{StatusID, TaskID};
+use crate::{
+    models::{StatusID, TaskID},
+    tui::component::popup::ConfirmDeleteEntity,
+};
 
 /// Cross-cutting actions that components emit to the parent coordinator.
 /// Internal component state changes (cursor movement, scrolling, text editing)
@@ -11,8 +14,9 @@ pub enum Action {
     AddTask(String),
 
     // ── popup lifecycle ──
-    OpenPopupDeleteConfirm(i64),
+    OpenPopupConfirmDelete(ConfirmDeleteEntity),
     OpenPopupCreateTask,
+    OpenPopupErrorInfo(String),
     DismissPopup,
 
     // ── commands ──
@@ -23,7 +27,7 @@ pub enum Action {
         task_id: TaskID,
         status_id: StatusID,
     },
-    DeleteTask(i64),
+    DeleteTask(TaskID),
 
     // ── project settings ──
     #[allow(dead_code)]
@@ -35,16 +39,14 @@ pub enum Action {
     },
     #[allow(dead_code)]
     AddStatus(String),
-    #[allow(dead_code)]
-    DeleteStatus(String),
+    DeleteStatus(StatusID),
     #[allow(dead_code)]
     SetStatusColor {
         status_id: i64,
         color: Option<String>,
     },
-    #[allow(dead_code)]
     ReorderStatus {
-        status_name: String,
+        id: StatusID,
         new_position: i32,
     },
 }

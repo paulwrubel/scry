@@ -168,11 +168,8 @@ impl<S: TaskStore + Sync> App<S> {
                     Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::DeleteStatus(status_name) => {
-                match Self::block_on(
-                    self.store
-                        .remove_status(self.project_id, &status_name, false),
-                ) {
+            Action::DeleteStatus(id) => {
+                match Self::block_on(self.store.delete_status(self.project_id, id)) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }
@@ -183,15 +180,8 @@ impl<S: TaskStore + Sync> App<S> {
                     Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::ReorderStatus {
-                status_name,
-                new_position,
-            } => {
-                match Self::block_on(self.store.reorder_status(
-                    self.project_id,
-                    &status_name,
-                    new_position,
-                )) {
+            Action::ReorderStatus { id, new_position } => {
+                match Self::block_on(self.store.reorder_status(self.project_id, id, new_position)) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }

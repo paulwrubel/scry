@@ -145,11 +145,32 @@ impl ProjectStatusTasks {
     pub fn get_task_by_id(&self, task_id: TaskID) -> Option<&Task> {
         self.task_iterator().find(|t| t.id == task_id)
     }
+
+    pub fn tasks_in_status(&self, status_id: StatusID) -> Vec<&Task> {
+        self.status_tasks
+            .iter()
+            .find_map(|st| {
+                if st.status.id == status_id {
+                    Some(st.tasks.iter().collect())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default()
+    }
+
     /// Get the first Task in any status.
     ///
     /// It will return None if there are no tasks.
     pub fn first(&self) -> Option<&Task> {
         self.task_iterator().next()
+    }
+
+    /// Get the last Task in any status.
+    ///
+    /// It will return None if there are no tasks.
+    pub fn last(&self) -> Option<&Task> {
+        self.task_iterator().next_back()
     }
 
     /// Get the Task immediately following the one with the provided ID in the order.

@@ -1758,6 +1758,7 @@ dependencies = [
  "clap",
  "ratatui",
  "serde",
+ "shlex",
  "sqlx",
  "tokio",
  "toml",

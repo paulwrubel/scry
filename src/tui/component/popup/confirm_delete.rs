@@ -1,3 +1,4 @@
+use crate::models::{Status, Task};
 use crate::tui::action::Action;
 use crate::tui::component::{RenderContext, State};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -6,23 +7,26 @@ use ratatui::style::Stylize;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
-pub struct ConfirmDelete {
-    task_id: i64,
-    task_title: String,
+#[derive(Debug, Clone)]
+pub enum ConfirmDeleteEntity {
+    Task(Task),
+    Status(Status),
 }
 
+pub struct ConfirmDelete(ConfirmDeleteEntity);
+
 impl ConfirmDelete {
-    pub fn new(task_id: i64, task_title: String) -> Self {
-        Self {
-            task_id,
-            task_title,
-        }
+    pub fn new(entity: ConfirmDeleteEntity) -> Self {
+        Self(entity)
     }
 
     pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Esc | KeyCode::Char('n') => Some(Action::DismissPopup),
-            KeyCode::Delete | KeyCode::Char('y') => Some(Action::DeleteTask(self.task_id)),
+            KeyCode::Delete | KeyCode::Char('y') => match &self.0 {
+                ConfirmDeleteEntity::Status(status) => Some(Action::DeleteStatus(status.id)),
+                ConfirmDeleteEntity::Task(task) => Some(Action::DeleteTask(task.id)),
+            },
             _ => None,
         }
     }
@@ -45,10 +49,16 @@ impl ConfirmDelete {
             Constraint::Length(1),
         ]));
 
+        let (entity_type, entity_name) = match &self.0 {
+            ConfirmDeleteEntity::Status(status) => ("status", &status.name),
+            ConfirmDeleteEntity::Task(task) => ("task", &task.title),
+        };
         ctx.with_area(prompt_area).render(
-            Paragraph::new(Line::from(format!("Delete task: \"{}\"?", self.task_title)))
-                .centered()
-                .wrap(Wrap { trim: false }),
+            Paragraph::new(Line::from(format!(
+                "Delete {entity_type}: \"{entity_name}\"?"
+            )))
+            .centered()
+            .wrap(Wrap { trim: false }),
         );
 
         let (no_button, yes_button) = (
