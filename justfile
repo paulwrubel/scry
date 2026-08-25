@@ -31,35 +31,6 @@ check: setup-database
 clippy: setup-database
     cargo clippy -- -D warnings
 
-# shared release logic — bump version, update Cargo.toml, commit, tag
-_release type do_push="":
-    @current=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/'); \
-    IFS=. read major minor patch <<< "$current"; \
-    case "{{type}}" in \
-        patch) next="$major.$minor.$((patch + 1))" ;; \
-        minor) next="$major.$((minor + 1)).0" ;; \
-        major) next="$((major + 1)).0.0" ;; \
-        *) echo "Invalid bump type: {{type}}"; exit 1 ;; \
-    esac; \
-    echo "Releasing $current → $next"; \
-    read -p "Proceed? [y/N] " confirm; \
-    case "$confirm" in \
-        [yY]*) ;; \
-        *) echo "Aborted."; exit 1 ;; \
-    esac; \
-    sed -i.bak "s/^version = \"$current\"/version = \"$next\"/" Cargo.toml && rm -f Cargo.toml.bak; \
-    cargo check; \
-    git add Cargo.toml Cargo.lock; \
-    git commit -m "v$next"; \
-    git tag "v$next"; \
-    if [ "{{do_push}}" = "push" ]; then \
-        git push origin main "v$next"; \
-    else \
-        echo ""; \
-        echo "Release prepared locally. To publish, run:"; \
-        echo "  git push origin main v$next"; \
-    fi
-
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]
 release-patch:
@@ -89,6 +60,35 @@ release-minor-and-push:
 [group('release')]
 release-major-and-push:
     @just _release major push
+
+# shared release logic — bump version, update Cargo.toml, commit, tag
+_release type do_push="":
+    @current=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/'); \
+    IFS=. read major minor patch <<< "$current"; \
+    case "{{type}}" in \
+        patch) next="$major.$minor.$((patch + 1))" ;; \
+        minor) next="$major.$((minor + 1)).0" ;; \
+        major) next="$((major + 1)).0.0" ;; \
+        *) echo "Invalid bump type: {{type}}"; exit 1 ;; \
+    esac; \
+    echo "Releasing $current → $next"; \
+    read -p "Proceed? [y/N] " confirm; \
+    case "$confirm" in \
+        [yY]*) ;; \
+        *) echo "Aborted."; exit 1 ;; \
+    esac; \
+    sed -i.bak "s/^version = \"$current\"/version = \"$next\"/" Cargo.toml && rm -f Cargo.toml.bak; \
+    cargo check; \
+    git add Cargo.toml Cargo.lock; \
+    git commit -m "v$next"; \
+    git tag "v$next"; \
+    if [ "{{do_push}}" = "push" ]; then \
+        git push origin main "v$next"; \
+    else \
+        echo ""; \
+        echo "Release prepared locally. To publish, run:"; \
+        echo "  git push origin main v$next"; \
+    fi
 
 # build an optimized release binary
 [group('build')]
