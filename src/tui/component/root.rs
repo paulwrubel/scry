@@ -234,8 +234,13 @@ impl Root {
             ])
             .spacing(Spacing::Overlap(1)),
         );
-        let [task_list_area, task_details_area] = task_area
-            .layout(&Layout::horizontal([Constraint::Fill(1); 2]).spacing(Spacing::Overlap(1)));
+        let [task_list_area, task_details_area] = task_area.layout(
+            &Layout::horizontal([
+                Constraint::Fill(1),
+                Constraint::Fill(if task_area.width >= 80 { 1 } else { 0 }),
+            ])
+            .spacing(Spacing::Overlap(if task_area.width >= 80 { 1 } else { 0 })),
+        );
 
         // create the base bordered block
         let block = Block::default()

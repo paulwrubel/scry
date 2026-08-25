@@ -6,9 +6,6 @@ use ratatui::layout::{Constraint, Layout};
 use ratatui::widgets::{Block, Borders};
 
 pub struct CreateTask {
-    // task_id: i64,
-    // task_title: String,
-    // is_confirmation_option_highlighted: bool,
     title_input: InputBlock,
     create_task_button: Button,
 }
