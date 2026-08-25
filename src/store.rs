@@ -89,7 +89,7 @@ pub trait TaskStore {
     async fn rename_status(
         &self,
         project_id: ProjectID,
-        old_name: &str,
+        status_id: StatusID,
         new_name: &str,
     ) -> Result<(), StorageError>;
 

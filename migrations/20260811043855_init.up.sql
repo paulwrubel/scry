@@ -10,13 +10,12 @@ CREATE TABLE IF NOT EXISTS statuses (
     project_id   INTEGER NOT NULL REFERENCES projects(id),
     name         TEXT NOT NULL,
     position     INTEGER NOT NULL DEFAULT 0,
-    is_completed BOOLEAN NOT NULL DEFAULT 0,
-    is_entry     BOOLEAN NOT NULL DEFAULT 0,
     color        TEXT,
+    style        TEXT,
     UNIQUE(project_id, name)
 );
-INSERT INTO statuses (id, project_id, name, position, is_completed, is_entry) VALUES (1, 1, 'todo', 0, 0, 1);
-INSERT INTO statuses (id, project_id, name, position, is_completed, is_entry) VALUES (2, 1, 'done', 1, 1, 0);
+INSERT INTO statuses (id, project_id, name, position, style) VALUES (1, 1, 'todo', 0, 'default');
+INSERT INTO statuses (id, project_id, name, position, style) VALUES (2, 1, 'done', 1, 'completed');
 
 CREATE TABLE IF NOT EXISTS tasks (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +28,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 CREATE TABLE IF NOT EXISTS config (
-    key TEXT PRIMARY KEY,
+    key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
 INSERT OR REPLACE INTO config (key, value) VALUES ('active_project', 'default');

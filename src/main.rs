@@ -10,6 +10,8 @@ use config::ScryConfig;
 use error::AppError;
 use store::{TaskStore, sqlite::SqliteStore};
 
+use crate::models::Style;
+
 #[derive(Parser)]
 #[command(name = "scry", about = "A task manager for the terminal", version)]
 struct Cli {
@@ -229,7 +231,7 @@ async fn main() -> Result<(), AppError> {
 
                 println!("{} ({}):", status_def.name, status_tasks.len());
                 for task in &status_tasks {
-                    let icon = if status_def.is_completed {
+                    let icon = if status_def.style == Style::Completed {
                         "[x]"
                     } else {
                         "[ ]"
@@ -322,13 +324,15 @@ async fn main() -> Result<(), AppError> {
                     }
                 }
                 StatusCommand::Rename { old_name, new_name } => {
-                    store
-                        .rename_status(project_id, &old_name, &new_name)
-                        .await?;
-                    println!(
-                        "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
-                        old_name, new_name, project_name
-                    );
+                    if let Some(status) = store.get_status_by_name(project_id, &old_name).await? {
+                        store
+                            .rename_status(project_id, status.id, &new_name)
+                            .await?;
+                        println!(
+                            "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
+                            old_name, new_name, project_name
+                        );
+                    }
                 }
             },
         },

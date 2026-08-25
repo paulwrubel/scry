@@ -1,39 +1,90 @@
+use std::fmt::Display;
+
 use chrono::{DateTime, Utc};
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 pub type TaskID = i64;
 pub type ProjectID = i64;
 pub type StatusID = i64;
 
-/// Canonical list of all supported status colors: (name, ratatui Color).
-pub const STATUS_COLORS: &[(&str, ratatui::style::Color)] = &[
-    ("Red", ratatui::style::Color::Red),
-    ("Green", ratatui::style::Color::Green),
-    ("Yellow", ratatui::style::Color::Yellow),
-    ("Blue", ratatui::style::Color::Blue),
-    ("Magenta", ratatui::style::Color::Magenta),
-    ("Cyan", ratatui::style::Color::Cyan),
-    ("Gray", ratatui::style::Color::Gray),
-    ("DarkGray", ratatui::style::Color::DarkGray),
-    ("LightRed", ratatui::style::Color::LightRed),
-    ("LightGreen", ratatui::style::Color::LightGreen),
-    ("LightYellow", ratatui::style::Color::LightYellow),
-    ("LightBlue", ratatui::style::Color::LightBlue),
-    ("LightMagenta", ratatui::style::Color::LightMagenta),
-    ("LightCyan", ratatui::style::Color::LightCyan),
-    ("White", ratatui::style::Color::White),
-];
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
+pub enum Color {
+    Black,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    Magenta,
+    Cyan,
+    Gray,
+    DarkGray,
+    LightRed,
+    LightGreen,
+    LightYellow,
+    LightBlue,
+    LightMagenta,
+    LightCyan,
+    White,
+}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Color(pub String);
+impl Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            self.to_possible_value()
+                .expect("Color has no skipped variants")
+                .get_name(),
+        )
+    }
+}
 
-impl From<&Color> for ratatui::style::Color {
-    fn from(c: &Color) -> Self {
-        STATUS_COLORS
-            .iter()
-            .find(|(name, _)| *name == c.0.as_str())
-            .map(|(_, color)| *color)
-            .unwrap_or(Self::Reset)
+impl From<Color> for ratatui::style::Color {
+    fn from(color: Color) -> Self {
+        match color {
+            Color::Black => Self::Black,
+            Color::Red => Self::Red,
+            Color::Green => Self::Green,
+            Color::Yellow => Self::Yellow,
+            Color::Blue => Self::Blue,
+            Color::Magenta => Self::Magenta,
+            Color::Cyan => Self::Cyan,
+            Color::Gray => Self::Gray,
+            Color::DarkGray => Self::DarkGray,
+            Color::LightRed => Self::LightRed,
+            Color::LightGreen => Self::LightGreen,
+            Color::LightYellow => Self::LightYellow,
+            Color::LightBlue => Self::LightBlue,
+            Color::LightMagenta => Self::LightMagenta,
+            Color::LightCyan => Self::LightCyan,
+            Color::White => Self::White,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Style {
+    Default,
+    Completed,
+}
+
+impl From<&str> for Style {
+    fn from(value: &str) -> Self {
+        match value {
+            "completed" => Style::Completed,
+            _ => Style::Default,
+        }
+    }
+}
+
+impl From<Option<&str>> for Style {
+    fn from(value: Option<&str>) -> Self {
+        value.unwrap_or_default().into()
+    }
+}
+
+impl From<Option<String>> for Style {
+    fn from(value: Option<String>) -> Self {
+        value.unwrap_or_default().as_str().into()
     }
 }
 
@@ -50,9 +101,8 @@ pub struct Status {
     pub project_id: ProjectID,
     pub name: String,
     pub position: i32,
-    pub is_completed: bool,
-    pub is_entry: bool,
     pub color: Option<Color>,
+    pub style: Style,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,5 +1,5 @@
 use crate::{
-    models::{StatusID, TaskID},
+    models::{Color, StatusID, TaskID},
     tui::component::popup::ConfirmDeleteEntity,
 };
 
@@ -32,18 +32,15 @@ pub enum Action {
     // ── project settings ──
     #[allow(dead_code)]
     RenameProject(String),
-    #[allow(dead_code)]
     RenameStatus {
-        old_name: String,
+        id: StatusID,
         new_name: String,
     },
-    #[allow(dead_code)]
     AddStatus(String),
     DeleteStatus(StatusID),
-    #[allow(dead_code)]
     SetStatusColor {
         status_id: i64,
-        color: Option<String>,
+        color: Option<Color>,
     },
     ReorderStatus {
         id: StatusID,

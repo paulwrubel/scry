@@ -152,12 +152,8 @@ impl<S: TaskStore + Sync> App<S> {
                     Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::RenameStatus { old_name, new_name } => {
-                match Self::block_on(self.store.rename_status(
-                    self.project_id,
-                    &old_name,
-                    &new_name,
-                )) {
+            Action::RenameStatus { id, new_name } => {
+                match Self::block_on(self.store.rename_status(self.project_id, id, &new_name)) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }
@@ -175,7 +171,8 @@ impl<S: TaskStore + Sync> App<S> {
                 }
             }
             Action::SetStatusColor { status_id, color } => {
-                match Self::block_on(self.store.set_status_color(status_id, color.as_deref())) {
+                let color_str = color.as_ref().map(|c| c.to_string());
+                match Self::block_on(self.store.set_status_color(status_id, color_str.as_deref())) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }

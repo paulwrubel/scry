@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use clap::ValueEnum;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
@@ -79,7 +80,8 @@ impl TaskStore for SqliteStore {
             r#"
                 SELECT id
                 FROM statuses
-                WHERE project_id = ? AND is_entry = 1
+                WHERE project_id = ?
+                ORDER BY position ASC
                 LIMIT 1
             "#,
             project_id,
@@ -376,8 +378,8 @@ impl TaskStore for SqliteStore {
 
         sqlx::query!(
             r#"
-                INSERT INTO statuses (project_id, name, position, is_completed, is_entry)
-                VALUES (?, 'todo', 0, 0, 1), (?, 'done', 1, 1, 0)
+                INSERT INTO statuses (project_id, name, position, style)
+                VALUES (?, 'todo', 0, 'default'), (?, 'done', 1, 'completed')
             "#,
             project.id,
             project.id,
@@ -600,9 +602,8 @@ impl TaskStore for SqliteStore {
                     project_id AS "project_id: i64",
                     name,
                     position AS "position: i32",
-                    is_completed AS "is_completed: bool",
-                    is_entry AS "is_entry: bool",
-                    color
+                    color,
+                    style
                 FROM statuses
                 WHERE project_id = ? AND id = ?
             "#,
@@ -618,9 +619,8 @@ impl TaskStore for SqliteStore {
                 project_id: r.project_id,
                 name: r.name,
                 position: r.position,
-                is_completed: r.is_completed,
-                is_entry: r.is_entry,
-                color: r.color.map(Color),
+                color: r.color.and_then(|c| Color::from_str(&c, false).ok()),
+                style: r.style.into(),
             })
         })
     }
@@ -640,9 +640,9 @@ impl TaskStore for SqliteStore {
 
         let inserted = sqlx::query!(
             r#"
-                INSERT INTO statuses (project_id, name, position, is_completed, is_entry)
-                VALUES (?, ?, ?, 0, 0)
-                RETURNING id, project_id, name, position, is_completed, is_entry, color
+                INSERT INTO statuses (project_id, name, position)
+                VALUES (?, ?, ?)
+                RETURNING id, project_id, name, position, color, style
             "#,
             project_id,
             name,
@@ -652,14 +652,13 @@ impl TaskStore for SqliteStore {
         .await;
 
         match inserted {
-            Ok(row) => Ok(Status {
-                id: row.id.expect("RETURNING guarantees id"),
-                project_id: row.project_id,
-                name: row.name,
-                position: row.position as i32,
-                is_completed: row.is_completed,
-                is_entry: row.is_entry,
-                color: row.color.map(Color),
+            Ok(r) => Ok(Status {
+                id: r.id.expect("RETURNING guarantees id"),
+                project_id: r.project_id,
+                name: r.name,
+                position: r.position as i32,
+                color: r.color.and_then(|c| Color::from_str(&c, false).ok()),
+                style: r.style.into(),
             }),
             Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
                 "status '{}' already exists",
@@ -766,22 +765,22 @@ impl TaskStore for SqliteStore {
     async fn rename_status(
         &self,
         project_id: ProjectID,
-        old_name: &str,
+        status_id: StatusID,
         new_name: &str,
     ) -> Result<(), StorageError> {
-        let exists = self
-            .resolve_status_id(project_id, old_name)
+        if self
+            .get_status_by_id(project_id, status_id)
             .await?
-            .is_some();
-        if !exists {
+            .is_none()
+        {
             return Err(StorageError::NotFound(format!(
-                "status '{}' not found",
-                old_name
+                "status with id '{}' not found",
+                status_id
             )));
         }
 
         if self
-            .resolve_status_id(project_id, new_name)
+            .get_status_by_name(project_id, new_name)
             .await?
             .is_some()
         {
@@ -795,11 +794,11 @@ impl TaskStore for SqliteStore {
             r#"
                 UPDATE statuses
                 SET name = ?
-                WHERE project_id = ? AND name = ?
+                WHERE project_id = ? AND id = ?
             "#,
             new_name,
             project_id,
-            old_name,
+            status_id,
         )
         .execute(&self.pool)
         .await
@@ -816,9 +815,8 @@ impl TaskStore for SqliteStore {
                     project_id AS "project_id: i64",
                     name,
                     position AS "position: i32",
-                    is_completed AS "is_completed: bool",
-                    is_entry AS "is_entry: bool",
-                    color
+                    color,
+                    style
                 FROM statuses
                 WHERE project_id = ?
                 ORDER BY position ASC
@@ -835,9 +833,8 @@ impl TaskStore for SqliteStore {
                     project_id: r.project_id,
                     name: r.name,
                     position: r.position,
-                    is_completed: r.is_completed,
-                    is_entry: r.is_entry,
-                    color: r.color.map(Color),
+                    color: r.color.and_then(|c| Color::from_str(&c, false).ok()),
+                    style: r.style.into(),
                 })
                 .collect()
         })
@@ -855,9 +852,8 @@ impl TaskStore for SqliteStore {
                     project_id AS "project_id: i64",
                     name,
                     position AS "position: i32",
-                    is_completed AS "is_completed: bool",
-                    is_entry AS "is_entry: bool",
-                    color
+                    color,
+                    style
                 FROM statuses
                 WHERE project_id = ? AND name = ?
             "#,
@@ -873,9 +869,8 @@ impl TaskStore for SqliteStore {
                 project_id: r.project_id,
                 name: r.name,
                 position: r.position,
-                is_completed: r.is_completed,
-                is_entry: r.is_entry,
-                color: r.color.map(Color),
+                color: r.color.and_then(|c| Color::from_str(&c, false).ok()),
+                style: r.style.into(),
             })
         })
     }

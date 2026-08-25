@@ -29,12 +29,12 @@ impl<'a> From<TaskStatusList<'a>> for Vec<Line<'a>> {
         );
 
         let status = &value.status_tasks.status;
-        let status_color = status.color.as_ref().map(Into::into).unwrap_or_default();
+        let status_color = status.color.map(Into::into).unwrap_or_default();
         let task_lines = value.status_tasks.tasks.iter().map(|task| {
             TaskLine::new(
                 task,
                 status_color,
-                status.is_completed,
+                status.style,
                 Some(task.id) == value.selected_task_id,
             )
             .into()
