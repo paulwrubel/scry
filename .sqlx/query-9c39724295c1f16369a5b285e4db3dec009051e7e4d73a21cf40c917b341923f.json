@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id\n                FROM statuses\n                WHERE project_id = ? AND is_entry = 1\n                LIMIT 1\n            ",
+  "query": "\n                SELECT id\n                FROM statuses\n                WHERE project_id = ?\n                ORDER BY position ASC\n                LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "436720ba0cb48e6346e873687f7c7d4d5e59092016b440dc05ab849f18660f66"
+  "hash": "9c39724295c1f16369a5b285e4db3dec009051e7e4d73a21cf40c917b341923f"
 }

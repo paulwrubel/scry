@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT\n                    id AS \"id: i64\",\n                    project_id AS \"project_id: i64\",\n                    name,\n                    position AS \"position: i32\",\n                    is_completed AS \"is_completed: bool\",\n                    is_entry AS \"is_entry: bool\",\n                    color\n                FROM statuses\n                WHERE project_id = ? AND id = ?\n            ",
+  "query": "\n                SELECT\n                    id AS \"id: i64\",\n                    project_id AS \"project_id: i64\",\n                    name,\n                    position AS \"position: i32\",\n                    color,\n                    style\n                FROM statuses\n                WHERE project_id = ? AND id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -48,35 +48,24 @@
         }
       },
       {
-        "name": "is_completed: bool",
-        "ordinal": 4,
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "statuses",
-            "name": "is_completed"
-          }
-        }
-      },
-      {
-        "name": "is_entry: bool",
-        "ordinal": 5,
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "statuses",
-            "name": "is_entry"
-          }
-        }
-      },
-      {
         "name": "color",
-        "ordinal": 6,
+        "ordinal": 4,
         "type_info": "Text",
         "origin": {
           "Table": {
             "table": "statuses",
             "name": "color"
+          }
+        }
+      },
+      {
+        "name": "style",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "statuses",
+            "name": "style"
           }
         }
       }
@@ -89,10 +78,9 @@
       false,
       false,
       false,
-      false,
-      false,
+      true,
       true
     ]
   },
-  "hash": "13f1a3c00ac7231f9bcb3288a6b0726d167cf4594234633dbadeb1e1d48e593c"
+  "hash": "b37cd7abaf308d23b960fbf5b3bb0d0bc65c81bdc08295de34e83e096b852019"
 }

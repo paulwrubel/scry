@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n                INSERT INTO statuses (project_id, name, position, is_completed, is_entry)\n                VALUES (?, ?, ?, 0, 0)\n                RETURNING id, project_id, name, position, is_completed, is_entry, color\n            ",
+  "query": "\n                SELECT\n                    id AS \"id: i64\",\n                    project_id AS \"project_id: i64\",\n                    name,\n                    position AS \"position: i32\",\n                    color,\n                    style\n                FROM statuses\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id: i64",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
@@ -15,7 +15,7 @@
         }
       },
       {
-        "name": "project_id",
+        "name": "project_id: i64",
         "ordinal": 1,
         "type_info": "Integer",
         "origin": {
@@ -37,7 +37,7 @@
         }
       },
       {
-        "name": "position",
+        "name": "position: i32",
         "ordinal": 3,
         "type_info": "Integer",
         "origin": {
@@ -48,30 +48,8 @@
         }
       },
       {
-        "name": "is_completed",
-        "ordinal": 4,
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "statuses",
-            "name": "is_completed"
-          }
-        }
-      },
-      {
-        "name": "is_entry",
-        "ordinal": 5,
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "statuses",
-            "name": "is_entry"
-          }
-        }
-      },
-      {
         "name": "color",
-        "ordinal": 6,
+        "ordinal": 4,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -79,20 +57,30 @@
             "name": "color"
           }
         }
+      },
+      {
+        "name": "style",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "statuses",
+            "name": "style"
+          }
+        }
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 1
     },
     "nullable": [
-      null,
       false,
       false,
       false,
       false,
-      false,
+      true,
       true
     ]
   },
-  "hash": "b3673036ff0b10ba8bd83c9e1a20b5bf980476a310de001667b8a8950eeb1398"
+  "hash": "fa00db4aa3be1ac2632aa40b47f5e01c6da76fe52ced9a4c3d03e8d4efdfb066"
 }

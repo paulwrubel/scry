@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT\n                    id AS \"id: i64\",\n                    project_id AS \"project_id: i64\",\n                    name,\n                    position AS \"position: i32\",\n                    is_completed AS \"is_completed: bool\",\n                    is_entry AS \"is_entry: bool\",\n                    color\n                FROM statuses\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
+  "query": "\n                SELECT\n                    id AS \"id: i64\",\n                    project_id AS \"project_id: i64\",\n                    name,\n                    position AS \"position: i32\",\n                    color,\n                    style\n                FROM statuses\n                WHERE project_id = ? AND name = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -48,30 +48,8 @@
         }
       },
       {
-        "name": "is_completed: bool",
-        "ordinal": 4,
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "statuses",
-            "name": "is_completed"
-          }
-        }
-      },
-      {
-        "name": "is_entry: bool",
-        "ordinal": 5,
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "statuses",
-            "name": "is_entry"
-          }
-        }
-      },
-      {
         "name": "color",
-        "ordinal": 6,
+        "ordinal": 4,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -79,20 +57,30 @@
             "name": "color"
           }
         }
+      },
+      {
+        "name": "style",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "statuses",
+            "name": "style"
+          }
+        }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false,
       false,
       false,
       false,
-      false,
-      false,
+      true,
       true
     ]
   },
-  "hash": "c90281046b7890da3cb258ac69beb94d98deca3468292466114cf0ab6bd577a1"
+  "hash": "59d6f4e717a7ef3dbd3a4341cec225b07ccfde269a855c9cc376cdb781e69eb5"
 }
