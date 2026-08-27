@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id\n                FROM statuses\n                WHERE project_id = ?\n                ORDER BY position ASC\n                LIMIT 1\n            ",
+  "query": "\n                INSERT INTO statuses (project_id, name, position, color, style)\n                VALUES (?, ?, ?, ?, ?)\n                RETURNING id\n            ",
   "describe": {
     "columns": [
       {
@@ -16,11 +16,11 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 5
     },
     "nullable": [
-      false
+      null
     ]
   },
-  "hash": "9c39724295c1f16369a5b285e4db3dec009051e7e4d73a21cf40c917b341923f"
+  "hash": "8f946125650db2ab321c52e7d943bbdc1d5bf1ad048ba3e1847a7a57be2bf5f3"
 }

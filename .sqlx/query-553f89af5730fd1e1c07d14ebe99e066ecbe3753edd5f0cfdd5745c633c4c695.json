@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT COUNT(*) AS \"count: i64\"\n                FROM tasks\n                WHERE project_id = ? AND status_id = ?\n            ",
+  "query": "\n                SELECT COUNT(*) AS \"count: i64\"\n                FROM tasks\n                WHERE status_id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -11,11 +11,11 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false
     ]
   },
-  "hash": "6510e19af5d84c85666380868223ca8ddf0d48e9940edb24401027be964d2b68"
+  "hash": "553f89af5730fd1e1c07d14ebe99e066ecbe3753edd5f0cfdd5745c633c4c695"
 }

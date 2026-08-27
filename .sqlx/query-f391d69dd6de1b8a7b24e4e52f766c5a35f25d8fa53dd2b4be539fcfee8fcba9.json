@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE statuses\n                SET position = position + ?\n                WHERE project_id = ? AND position >= ? AND position <= ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "f391d69dd6de1b8a7b24e4e52f766c5a35f25d8fa53dd2b4be539fcfee8fcba9"
+}

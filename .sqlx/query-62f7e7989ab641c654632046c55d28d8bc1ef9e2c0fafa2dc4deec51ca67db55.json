@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT\n                    id AS \"id: i64\",\n                    project_id AS \"project_id: i64\",\n                    name,\n                    position AS \"position: i32\",\n                    color,\n                    style\n                FROM statuses\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    name,\n                    position,\n                    color,\n                    style\n                FROM statuses\n                WHERE project_id = ?\n                ORDER BY position ASC\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id: i64",
+        "name": "id",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
@@ -15,7 +15,7 @@
         }
       },
       {
-        "name": "project_id: i64",
+        "name": "project_id",
         "ordinal": 1,
         "type_info": "Integer",
         "origin": {
@@ -37,7 +37,7 @@
         }
       },
       {
-        "name": "position: i32",
+        "name": "position",
         "ordinal": 3,
         "type_info": "Integer",
         "origin": {
@@ -82,5 +82,5 @@
       true
     ]
   },
-  "hash": "fa00db4aa3be1ac2632aa40b47f5e01c6da76fe52ced9a4c3d03e8d4efdfb066"
+  "hash": "62f7e7989ab641c654632046c55d28d8bc1ef9e2c0fafa2dc4deec51ca67db55"
 }

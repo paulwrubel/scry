@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id\n                FROM statuses\n                WHERE project_id = ? AND name = ?\n            ",
+  "query": "\n                INSERT INTO projects (name, created_at)\n                VALUES (?, ?)\n                RETURNING id\n            ",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "statuses",
+            "table": "projects",
             "name": "id"
           }
         }
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "98fbe47488e2ee9b1f871851e7dfaf390bfdab1b76511a19351866a0540c3964"
+  "hash": "ac153d855aec9b2644acda5185231ca5cc8b1a79b838c6ab25eeb9d33cc61588"
 }

@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n                            SELECT\n                                t.id AS \"id: i64\",\n                                t.title,\n                                t.description,\n                                t.created_at AS \"created_at: DateTime<Utc>\",\n                                t.project_id AS \"project_id: i64\",\n                                t.status_id AS \"status_id: i64\",\n                                t.position AS \"position: i32\"\n                            FROM tasks t\n                            WHERE t.project_id = ? AND t.status_id = ?\n                            ORDER BY t.position ASC, t.id ASC\n                        ",
+  "query": "\n                SELECT\n                    t.id,\n                    t.title,\n                    t.description,\n                    t.created_at,\n                    t.project_id,\n                    t.status_id,\n                    t.position\n                FROM tasks t\n                WHERE t.id = ?\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id: i64",
+        "name": "id",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
@@ -37,7 +37,7 @@
         }
       },
       {
-        "name": "created_at: DateTime<Utc>",
+        "name": "created_at",
         "ordinal": 3,
         "type_info": "Text",
         "origin": {
@@ -48,7 +48,7 @@
         }
       },
       {
-        "name": "project_id: i64",
+        "name": "project_id",
         "ordinal": 4,
         "type_info": "Integer",
         "origin": {
@@ -59,7 +59,7 @@
         }
       },
       {
-        "name": "status_id: i64",
+        "name": "status_id",
         "ordinal": 5,
         "type_info": "Integer",
         "origin": {
@@ -70,7 +70,7 @@
         }
       },
       {
-        "name": "position: i32",
+        "name": "position",
         "ordinal": 6,
         "type_info": "Integer",
         "origin": {
@@ -82,7 +82,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false,
@@ -94,5 +94,5 @@
       false
     ]
   },
-  "hash": "745f5ba15b733d969f727fc4884507d7c6716f85ca21f8e08e77b4dcad856a6e"
+  "hash": "8f26c30c2b65ec7232780a855701a03198ca168d33c07fdb123e16852c6352aa"
 }
