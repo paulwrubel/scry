@@ -1,45 +1,89 @@
 use crate::{
     models::TaskID,
-    tui::component::{StatusTasks, TaskLine},
+    tui::component::{StatusTasks, TaskLine, shared::truncate_string_to_width},
 };
-use ratatui::{style::Style, text::Line};
+use ratatui::{
+    style::{Color, Stylize},
+    text::{Line, Span, Text},
+};
 
 pub struct TaskStatusList<'a> {
     status_tasks: &'a StatusTasks,
     selected_task_id: Option<TaskID>,
+    area_width: u16,
 }
 
 impl<'a> TaskStatusList<'a> {
-    pub fn new(status_tasks: &'a StatusTasks, selected_task_id: Option<TaskID>) -> Self {
+    pub fn new(
+        status_tasks: &'a StatusTasks,
+        selected_task_id: Option<TaskID>,
+        area_width: u16,
+    ) -> Self {
         Self {
             status_tasks,
             selected_task_id,
+            area_width,
         }
     }
 }
 
-impl<'a> From<TaskStatusList<'a>> for Vec<Line<'a>> {
+impl<'a> From<TaskStatusList<'a>> for Text<'a> {
     fn from(value: TaskStatusList<'a>) -> Self {
-        let status_name = &value.status_tasks.status.name;
+        let status: &crate::models::Status = &value.status_tasks.status;
+        let status_name = &status.name;
         let task_count = value.status_tasks.tasks.len();
 
-        let header_line = Line::styled(
-            format!("{status_name} ({task_count}):"),
-            Style::default().underlined().bold(),
+        let status_color = status.color.map_or(Color::default(), |c| c.into());
+
+        let mut text = Text::default();
+
+        let task_count_str = format!("[{task_count}]");
+        let status_name_str = truncate_string_to_width(
+            status_name.clone(),
+            value
+                .area_width
+                .saturating_sub(task_count_str.chars().count() as u16)
+                .saturating_sub(1)
+                .into(),
+        );
+        text.push_line(
+            Line::from(vec![
+                Span::from(status_name_str.clone()).italic(),
+                Span::from(
+                    " ".repeat(
+                        value
+                            .area_width
+                            .saturating_sub(
+                                // status name is truncated above, there's no risk here
+                                status_name_str.chars().count() as u16
+                                // and for task count, this is essentially statically bounded
+                                    + task_count_str.chars().count() as u16,
+                            )
+                            .into(),
+                    ),
+                ),
+                Span::from(task_count_str),
+            ])
+            .fg(status_color),
+        );
+        text.push_line(
+            Line::from("─".repeat(value.area_width.into()))
+                .fg(status_color)
+                .dim(),
         );
 
-        let status = &value.status_tasks.status;
-        let status_color = status.color.map(Into::into).unwrap_or_default();
-        let task_lines = value.status_tasks.tasks.iter().map(|task| {
-            TaskLine::new(
-                task,
-                status_color,
+        for task_text in value.status_tasks.tasks.iter().map(|task| {
+            Text::from(Line::from(TaskLine::new(
+                task.clone(),
+                None,
                 status.style,
                 Some(task.id) == value.selected_task_id,
-            )
-            .into()
-        });
+                value.area_width,
+            )))
+        }) {
+            text += task_text;
+        }
 
-        vec![header_line].into_iter().chain(task_lines).collect()
+        text
     }
 }

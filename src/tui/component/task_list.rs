@@ -1,8 +1,8 @@
 use crate::models::TaskID;
 use crate::tui::component::TaskStatusList;
 use crate::tui::component::{ProjectStatusTasks, RenderContext};
-use ratatui::layout::Rect;
-use ratatui::text::Line;
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::text::{Line, Text};
 use ratatui::widgets::Paragraph;
 use std::iter;
 
@@ -26,8 +26,21 @@ impl TaskList {
         project_status_tasks: &ProjectStatusTasks,
         selected_task_id: Option<TaskID>,
     ) {
+        let horizontal_padding = (1, 1);
+        let vertical_padding = (1, 0);
+        let [_, task_list_content_area, _] = ctx.area.layout(&Layout::horizontal([
+            Constraint::Length(horizontal_padding.0), // padding
+            Constraint::Min(0),                       // content
+            Constraint::Length(horizontal_padding.1), // padding
+        ]));
+        let [_, task_list_content_area, _] = task_list_content_area.layout(&Layout::vertical([
+            Constraint::Length(vertical_padding.0), // padding
+            Constraint::Min(0),                     // content
+            Constraint::Length(vertical_padding.1), // padding
+        ]));
+
         self.adjust_scroll_offset_for_selected_task(
-            ctx.area,
+            task_list_content_area,
             project_status_tasks,
             selected_task_id,
         );
@@ -36,15 +49,20 @@ impl TaskList {
             .status_tasks
             .iter()
             .flat_map(|status_tasks| {
-                iter::once(Line::default()).chain(Vec::from(TaskStatusList::new(
-                    status_tasks,
-                    selected_task_id,
-                )))
+                iter::once(Line::default()).chain(
+                    Text::from(TaskStatusList::new(
+                        status_tasks,
+                        selected_task_id,
+                        task_list_content_area.width,
+                    ))
+                    .lines,
+                )
             })
             .skip(1) // drop the leading blank before the first status
             .collect();
 
-        ctx.render(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
+        ctx.with_area(task_list_content_area)
+            .render(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
     }
 
     fn line_index_from_task_id(project_status_tasks: &ProjectStatusTasks, task_id: TaskID) -> u16 {

@@ -3,7 +3,7 @@ use crate::tui::component::RenderContext;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Paragraph, Wrap};
 
 pub struct TaskDetails<'a> {
     task: &'a Task,
@@ -64,6 +64,6 @@ impl<'a> TaskDetails<'a> {
         ]));
 
         ctx.with_area(details_area)
-            .render(Paragraph::new(details_text));
+            .render(Paragraph::new(details_text).wrap(Wrap { trim: false }));
     }
 }

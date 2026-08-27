@@ -1,44 +1,62 @@
-use crate::models::{self, Task};
+use crate::{
+    models::{Color as ScryColor, Style as ScryStyle, Task},
+    tui::component::shared::truncate_string_to_width,
+};
 use ratatui::{
     style::{Color, Style},
-    text::Line,
+    text::{Line, Span},
 };
 
-pub struct TaskLine<'a> {
-    task: &'a Task,
-    color: Color,
-    style: models::Style,
+pub struct TaskLine {
+    task: Task,
+    color: Option<ScryColor>,
+    style: ScryStyle,
     is_selected: bool,
+    area_width: u16,
 }
 
-impl<'a> TaskLine<'a> {
-    pub fn new(task: &'a Task, color: Color, style: models::Style, is_selected: bool) -> Self {
+impl TaskLine {
+    pub fn new(
+        task: Task,
+        color: Option<ScryColor>,
+        style: ScryStyle,
+        is_selected: bool,
+        area_width: u16,
+    ) -> Self {
         Self {
             task,
             color,
             style,
             is_selected,
+            area_width,
         }
     }
 }
 
-impl<'a> From<TaskLine<'a>> for Line<'a> {
+impl From<TaskLine> for Line<'_> {
     fn from(value: TaskLine) -> Self {
-        let Task { title, .. } = value.task;
+        let prefix = vec![
+            Span::from(if matches!(value.style, ScryStyle::Completed) {
+                "[x]"
+            } else {
+                "[ ]"
+            }),
+            Span::from(" "),
+        ];
 
-        let checkbox = if value.style == models::Style::Completed {
-            "[x]"
-        } else {
-            "[ ]"
-        };
-
-        Line::styled(
-            format!("{checkbox} {title}"),
+        let prefix_length: usize = prefix.iter().map(|s| s.width()).sum();
+        let task_span = Span::styled(
+            truncate_string_to_width(
+                value.task.title.clone(),
+                usize::from(value.area_width).saturating_sub(prefix_length),
+            ),
             if value.is_selected {
                 Style::default().reversed()
             } else {
-                Style::default().fg(value.color)
+                Style::default().fg(value.color.map_or(Color::default(), |c| c.into()))
             },
-        )
+        );
+
+        Line::from(prefix.into_iter().chain([task_span]).collect::<Vec<_>>())
     }
 }

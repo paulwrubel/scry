@@ -262,24 +262,11 @@ impl Root {
         // render the task list content
         //
         // todo: move this padding stuff unti the actual task_list component
-        let horizontal_padding = (1, 0);
-        let vertical_padding = (1, 0);
-        let [_, task_list_content_area, _] =
-            block.inner(task_list_area).layout(&Layout::horizontal([
-                Constraint::Length(horizontal_padding.0), // padding
-                Constraint::Min(0),                       // content
-                Constraint::Length(horizontal_padding.1), // padding
-            ]));
-        let [_, task_list_content_area, _] = task_list_content_area.layout(&Layout::vertical([
-            Constraint::Length(vertical_padding.0), // padding
-            Constraint::Min(0),                     // content
-            Constraint::Length(vertical_padding.1), // padding
-        ]));
 
         let project_status_tasks: ProjectStatusTasks = ctx.state.into();
         let selected_task = self.task_from_selected_task(&project_status_tasks);
         self.task_list.render(
-            &mut ctx.with_area(task_list_content_area),
+            &mut ctx.with_area(block.inner(task_list_area)),
             &project_status_tasks,
             selected_task.map(|t| t.id),
         );
