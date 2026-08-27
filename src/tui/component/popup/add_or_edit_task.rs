@@ -21,7 +21,14 @@ impl AddOrEditTask {
                 .with_title(String::from("Title"))
                 .with_placeholder_text(String::from("Do the laundry"))
                 .with_text(task.as_ref().map(|t| t.title.clone()).unwrap_or_default()),
-            create_task_button: Button::new(false, String::from("Create Task")),
+            create_task_button: Button::new(
+                false,
+                String::from(if task.is_none() {
+                    "Create Task"
+                } else {
+                    "Edit Task"
+                }),
+            ),
 
             task,
         }
@@ -65,7 +72,15 @@ impl AddOrEditTask {
         let content_area = ctx.render_popup_frame(
             Constraint::Percentage(50),
             Constraint::Percentage(60),
-            Some(Block::default().borders(Borders::ALL).title("Create Task")),
+            Some(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(if self.task.is_none() {
+                        "Create Task"
+                    } else {
+                        "Edit Task"
+                    }),
+            ),
         );
 
         let [title_input_area, _, create_button_area] = content_area.layout(&Layout::vertical([
@@ -108,7 +123,7 @@ impl AddOrEditTask {
                         title: self.title_input.buffer_text().to_string(),
                         description: None,
                         status_id: first_status.id,
-                        position: last_position.unwrap_or(-1) + 1,
+                        position: last_position.map_or(0, |p| p + 1),
                         created_at: DateTime::default(), // dummy, overwritten on insert
                     }))
                 }

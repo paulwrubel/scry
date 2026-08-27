@@ -162,14 +162,15 @@ impl Root {
                 }
             }
             (_, KeyCode::Char(',') | KeyCode::Char('<')) if let Some(task) = selected => {
-                // statuses is ordered by position; take the one after the task's current status
+                // statuses is ordered by position; take the one before the task's current status
                 let previous_status = state
                     .statuses
                     .iter()
                     .position(|status| status.id == task.status_id)
-                    .and_then(|index| state.statuses.get(index - 1));
+                    .and_then(|index| index.checked_sub(1))
+                    .and_then(|index| state.statuses.get(index));
 
-                // nothing to move to if the task is already in the last status
+                // nothing to move to if the task is already in the first status
                 previous_status.map_or(vec![], |status| {
                     self.handle_action(
                         state,

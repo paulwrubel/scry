@@ -92,6 +92,7 @@ pub trait TaskStore {
     /// List all projects.
     async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError>;
 
+    #[allow(dead_code)]
     async fn update_project(&self, project: Project) -> Result<Project, StorageError>;
 
     async fn delete_project(&self, name: String) -> Result<(), StorageError>;

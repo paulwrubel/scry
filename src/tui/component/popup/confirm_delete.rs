@@ -33,8 +33,8 @@ impl ConfirmDelete {
 
     pub fn render(&self, ctx: &mut RenderContext) {
         let content_area = ctx.render_popup_frame(
-            Constraint::Percentage(30),
-            Constraint::Percentage(15),
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
             Some(
                 Block::default()
                     .borders(Borders::ALL)
