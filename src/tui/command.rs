@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::models;
+use crate::models::{Color, Status, Style};
 use crate::tui::Action;
 use crate::tui::component::popup::ConfirmDeleteEntity;
 use crate::tui::component::{ProjectStatusTasks, State};
@@ -53,12 +53,20 @@ enum StatusCommand {
     SetColor {
         /// Name of the Status to set the color for
         name: String,
-        color: models::Color,
+        /// Color for the Status
+        color: Color,
     },
     /// Reset the color for a Status in this project
     ResetColor {
         /// Name of the Status to reset the color for
         name: String,
+    },
+    /// Set the style for a Status in this project
+    SetStyle {
+        /// Name of the Status to set the style for
+        name: String,
+        /// Style for the Status
+        style: Style,
     },
 }
 
@@ -76,7 +84,17 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
     let project_status_tasks = ProjectStatusTasks::from(state);
     match command {
         Command::Status(status_command) => match status_command {
-            StatusCommand::Add { name } => vec![Action::AddStatus(name)],
+            StatusCommand::Add { name } => {
+                let position = state.statuses.iter().map(|s| s.position).max().unwrap_or(0) + 1;
+                vec![Action::CreateStatus(Status {
+                    id: 0,
+                    project_id: state.project.id,
+                    name,
+                    position,
+                    color: None,
+                    style: Style::Default,
+                })]
+            }
             StatusCommand::Delete { name } => {
                 if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
                     let status_tasks = project_status_tasks.tasks_in_status(status.id);
@@ -102,10 +120,11 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
             StatusCommand::Rename { old, new } => {
                 if let Some(status) = state.statuses.iter().find(|s| s.name == old) {
                     if state.statuses.iter().find(|s| s.name == new).is_none() {
-                        vec![Action::RenameStatus {
+                        vec![Action::UpdateStatus(Status {
                             id: status.id,
-                            new_name: new,
-                        }]
+                            name: new,
+                            ..status.clone()
+                        })]
                     } else {
                         vec![Action::OpenPopupErrorInfo(format![
                             "status with name \"{}\" already exists in project",
@@ -121,10 +140,15 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
             }
             StatusCommand::MoveUp { name } => {
                 if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
-                    vec![Action::ReorderStatus {
-                        id: status.id,
-                        new_position: status.position.saturating_sub(1),
-                    }]
+                    if status.position == 0 {
+                        vec![]
+                    } else {
+                        vec![Action::UpdateStatus(Status {
+                            id: status.id,
+                            position: status.position.saturating_sub(1),
+                            ..status.clone()
+                        })]
+                    }
                 } else {
                     vec![Action::OpenPopupErrorInfo(format![
                         "no status with name \"{}\" found in project",
@@ -134,10 +158,16 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
             }
             StatusCommand::MoveDown { name } => {
                 if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
-                    vec![Action::ReorderStatus {
-                        id: status.id,
-                        new_position: status.position.saturating_add(1),
-                    }]
+                    let max_position = state.statuses.iter().map(|s| s.position).max().unwrap_or(0);
+                    if status.position >= max_position {
+                        vec![]
+                    } else {
+                        vec![Action::UpdateStatus(Status {
+                            id: status.id,
+                            position: status.position.saturating_add(1),
+                            ..status.clone()
+                        })]
+                    }
                 } else {
                     vec![Action::OpenPopupErrorInfo(format![
                         "no status with name \"{}\" found in project",
@@ -147,10 +177,11 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
             }
             StatusCommand::SetColor { name, color } => {
                 if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
-                    vec![Action::SetStatusColor {
-                        status_id: status.id,
+                    vec![Action::UpdateStatus(Status {
+                        id: status.id,
                         color: Some(color),
-                    }]
+                        ..status.clone()
+                    })]
                 } else {
                     vec![Action::OpenPopupErrorInfo(format![
                         "no status with name \"{}\" found in project",
@@ -160,10 +191,25 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
             }
             StatusCommand::ResetColor { name } => {
                 if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
-                    vec![Action::SetStatusColor {
-                        status_id: status.id,
+                    vec![Action::UpdateStatus(Status {
+                        id: status.id,
                         color: None,
-                    }]
+                        ..status.clone()
+                    })]
+                } else {
+                    vec![Action::OpenPopupErrorInfo(format![
+                        "no status with name \"{}\" found in project",
+                        name
+                    ])]
+                }
+            }
+            StatusCommand::SetStyle { name, style } => {
+                if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
+                    vec![Action::UpdateStatus(Status {
+                        id: status.id,
+                        style,
+                        ..status.clone()
+                    })]
                 } else {
                     vec![Action::OpenPopupErrorInfo(format![
                         "no status with name \"{}\" found in project",

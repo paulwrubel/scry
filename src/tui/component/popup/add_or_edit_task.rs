@@ -1,23 +1,29 @@
+use crate::models::Task;
 use crate::tui::action::Action;
-use crate::tui::component::{Button, InputBlock};
+use crate::tui::component::{Button, InputBlock, ProjectStatusTasks};
 use crate::tui::component::{RenderContext, State};
+use chrono::DateTime;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::widgets::{Block, Borders};
 
-pub struct CreateTask {
+pub struct AddOrEditTask {
     title_input: InputBlock,
     create_task_button: Button,
+
+    task: Option<Task>,
 }
 
-impl CreateTask {
-    pub fn new() -> Self {
+impl AddOrEditTask {
+    pub fn new(task: Option<Task>) -> Self {
         Self {
             title_input: InputBlock::new(true)
                 .with_title(String::from("Title"))
-                .with_placeholder_text(String::from("Do the laundry")),
-
+                .with_placeholder_text(String::from("Do the laundry"))
+                .with_text(task.as_ref().map(|t| t.title.clone()).unwrap_or_default()),
             create_task_button: Button::new(false, String::from("Create Task")),
+
+            task,
         }
     }
 
@@ -28,17 +34,10 @@ impl CreateTask {
         }
 
         match (key.modifiers, key.code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('s')) => {
-                if !self.title_input.buffer_text().is_empty() {
-                    Some(Action::AddTask(self.title_input.buffer_text().to_string()))
-                } else {
-                    None
-                }
-            }
+            (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.handle_create_or_update(state),
             (_, KeyCode::Enter) => {
-                if self.create_task_button.is_focused && !self.title_input.buffer_text().is_empty()
-                {
-                    Some(Action::AddTask(self.title_input.buffer_text().to_string()))
+                if self.create_task_button.is_focused {
+                    self.handle_create_or_update(state)
                 } else {
                     None
                 }
@@ -80,5 +79,46 @@ impl CreateTask {
 
         self.create_task_button
             .render(&mut ctx.with_area(create_button_area));
+    }
+
+    fn handle_create_or_update(&self, state: &State) -> Option<Action> {
+        if self.is_valid() {
+            match &self.task {
+                Some(task) => Some(Action::UpdateTask(Task {
+                    title: self.title_input.buffer_text().to_string(),
+                    ..task.clone()
+                })),
+                None => {
+                    let project_status_tasks = ProjectStatusTasks::from(state);
+
+                    let Some(first_status) = state.statuses.first() else {
+                        // no status to put a task in!
+                        return None;
+                    };
+
+                    let last_position = project_status_tasks
+                        .tasks_in_status(first_status.id)
+                        .iter()
+                        .map(|t| t.position)
+                        .max();
+
+                    Some(Action::CreateTask(Task {
+                        id: 0, // dummy id
+                        project_id: state.project.id,
+                        title: self.title_input.buffer_text().to_string(),
+                        description: None,
+                        status_id: first_status.id,
+                        position: last_position.unwrap_or(-1) + 1,
+                        created_at: DateTime::default(), // dummy, overwritten on insert
+                    }))
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        !self.title_input.buffer_text().is_empty()
     }
 }

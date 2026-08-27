@@ -22,11 +22,12 @@ impl Hints {
         // initize hints with status, always-available actions
         let mut actions: Vec<[String; 2]> = vec![
             ["[/]", " commands"].map(|s| s.to_string()),
-            ["[a]", "dd task"].map(|s| s.to_string()),
+            ["[a]", "dd"].map(|s| s.to_string()),
         ];
 
         // add delete actions if any task is selected
         if selected_task_id.is_some() {
+            actions.push(["[e]", "dit"].map(|s| s.to_string()));
             actions.push(["[d]", "elete"].map(|s| s.to_string()));
         }
 

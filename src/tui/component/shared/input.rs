@@ -43,15 +43,15 @@ impl Input {
         }
     }
 
-    // pub fn with_text(self, text: String) -> Self {
-    //     let length = text.len();
+    pub fn with_text(self, text: String) -> Self {
+        let length = text.len();
 
-    //     Self {
-    //         buffer: text,
-    //         cursor_position: length,
-    //         ..self
-    //     }
-    // }
+        Self {
+            buffer: text,
+            cursor_position: length,
+            ..self
+        }
+    }
 
     // pub fn reset(&mut self) {
     //     self.buffer = String::new();

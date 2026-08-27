@@ -118,8 +118,8 @@ impl State {
             .ok_or(StorageError::NotFound(format!(
                 "Project not found for id {project_id}"
             )))?;
-        let statuses = store.list_statuses(project_id).await?;
-        let tasks = store.list_tasks(project_id, None).await?;
+        let statuses = store.get_all_statuses_by_project_id(project_id).await?;
+        let tasks = store.get_all_tasks_by_project_id(project_id).await?;
 
         Ok(Self {
             project,

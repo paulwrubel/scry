@@ -3,7 +3,10 @@ use crate::store::TaskStore;
 use crate::tui::action::Action;
 use crate::tui::component::RenderContext;
 use crate::tui::component::Root;
-use crate::{error::AppError, tui::component::State};
+use crate::{
+    error::{AppError, StorageError},
+    tui::component::State,
+};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::{
@@ -128,62 +131,75 @@ impl<S: TaskStore + Sync> App<S> {
         match action {
             Action::Quit => self.is_running = false,
 
-            Action::AddTask(title) => {
-                match Self::block_on(self.store.add_task(&title, self.project_id)) {
+            // popup lifecycle and command input are handled internally by Root
+            Action::OpenPopupConfirmDelete(_) => {}
+            Action::OpenPopupCreateTask(_) => {}
+            Action::OpenPopupErrorInfo(_) => {}
+            Action::DismissPopup => {}
+            Action::CloseCommandInput => {}
+
+            Action::CreateTask(task) => {
+                match Self::block_on(self.store.create_task(
+                    task.project_id,
+                    task.title,
+                    task.description,
+                    task.status_id,
+                    task.position,
+                )) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::MoveTask { task_id, status_id } => {
-                match Self::block_on(self.store.move_task(task_id, self.project_id, status_id)) {
+            Action::UpdateTask(task) => {
+                match Self::block_on(self.store.update_and_autoposition_task(task)) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::DeleteTask(task_id) => {
-                match Self::block_on(self.store.delete_task(task_id, self.project_id)) {
+            Action::DeleteTask(task_id) => match Self::block_on(self.store.delete_task(task_id)) {
+                Ok(_) => {}
+                Err(e) => self.root.set_status(e.to_string()),
+            },
+            Action::CreateStatus(status) => {
+                match Self::block_on(self.store.create_status(
+                    status.project_id,
+                    status.name,
+                    status.position,
+                    status.color,
+                    status.style,
+                )) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::RenameProject(new_name) => {
-                match Self::block_on(self.store.rename_project(self.project_id, &new_name)) {
+            Action::UpdateStatus(status) => {
+                match Self::block_on(async {
+                    let current =
+                        self.store
+                            .get_status_by_id(status.id)
+                            .await?
+                            .ok_or_else(|| {
+                                StorageError::NotFound(format!(
+                                    "status with id '{}' not found",
+                                    status.id
+                                ))
+                            })?;
+                    if current.position == status.position {
+                        self.store.update_status(status).await.map(|_| ())
+                    } else {
+                        self.store
+                            .reorder_status(status.project_id, status.id, status.position)
+                            .await
+                    }
+                }) {
                     Ok(_) => {}
                     Err(e) => self.root.set_status(e.to_string()),
                 }
             }
-            Action::RenameStatus { id, new_name } => {
-                match Self::block_on(self.store.rename_status(self.project_id, id, &new_name)) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
-                }
-            }
-            Action::AddStatus(name) => {
-                match Self::block_on(self.store.add_status(self.project_id, &name)) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
-                }
-            }
-            Action::DeleteStatus(id) => {
-                match Self::block_on(self.store.delete_status(self.project_id, id)) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
-                }
-            }
-            Action::SetStatusColor { status_id, color } => {
-                let color_str = color.as_ref().map(|c| c.to_string());
-                match Self::block_on(self.store.set_status_color(status_id, color_str.as_deref())) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
-                }
-            }
-            Action::ReorderStatus { id, new_position } => {
-                match Self::block_on(self.store.reorder_status(self.project_id, id, new_position)) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
-                }
-            }
-            _ => {}
+            Action::DeleteStatus(id) => match Self::block_on(self.store.delete_status(id)) {
+                Ok(_) => {}
+                Err(e) => self.root.set_status(e.to_string()),
+            },
         }
     }
 

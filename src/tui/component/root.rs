@@ -1,6 +1,6 @@
 use crate::models::{Task, TaskID};
 use crate::tui::action::Action;
-use crate::tui::component::popup::{ConfirmDelete, ConfirmDeleteEntity, CreateTask, ErrorInfo};
+use crate::tui::component::popup::{AddOrEditTask, ConfirmDelete, ConfirmDeleteEntity, ErrorInfo};
 use crate::tui::component::{
     CommandInput, Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskDetails, TaskList,
 };
@@ -53,8 +53,8 @@ impl Root {
 
                         vec![]
                     }
-                    Action::OpenPopupCreateTask => {
-                        self.popup = Some(Popup::CreateTask(CreateTask::new()));
+                    Action::OpenPopupCreateTask(task) => {
+                        self.popup = Some(Popup::AddOrEditTask(AddOrEditTask::new(task)));
                         vec![]
                     }
                     Action::OpenPopupErrorInfo(error_text) => {
@@ -73,7 +73,11 @@ impl Root {
                     }
 
                     // Store actions that also dismiss the popup before bubbling
-                    Action::MoveTask { .. } | Action::AddTask(_) | Action::DeleteStatus(_) => {
+                    Action::CreateTask(_)
+                    | Action::UpdateTask(_)
+                    | Action::CreateStatus(_)
+                    | Action::UpdateStatus(_)
+                    | Action::DeleteStatus(_) => {
                         self.popup = None;
                         vec![action]
                     }
@@ -138,7 +142,14 @@ impl Root {
                 vec![]
             }
             (KeyModifiers::NONE, KeyCode::Char('a')) => {
-                self.handle_action(state, Action::OpenPopupCreateTask)
+                self.handle_action(state, Action::OpenPopupCreateTask(None))
+            }
+            (KeyModifiers::NONE, KeyCode::Char('e')) => {
+                if let Some(task) = selected {
+                    self.handle_action(state, Action::OpenPopupCreateTask(Some(task.clone())))
+                } else {
+                    vec![]
+                }
             }
             (_, KeyCode::Char('d')) if self.task_list.is_focused => {
                 if let Some(task) = selected {
@@ -162,10 +173,10 @@ impl Root {
                 previous_status.map_or(vec![], |status| {
                     self.handle_action(
                         state,
-                        Action::MoveTask {
-                            task_id: task.id,
+                        Action::UpdateTask(Task {
                             status_id: status.id,
-                        },
+                            ..task.clone()
+                        }),
                     )
                 })
             }
@@ -181,10 +192,10 @@ impl Root {
                 next_status.map_or(vec![], |status| {
                     self.handle_action(
                         state,
-                        Action::MoveTask {
-                            task_id: task.id,
+                        Action::UpdateTask(Task {
                             status_id: status.id,
-                        },
+                            ..task.clone()
+                        }),
                     )
                 })
             }

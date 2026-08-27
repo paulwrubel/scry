@@ -1,5 +1,5 @@
 use crate::{
-    models::{Color, StatusID, TaskID},
+    models::{Status, StatusID, Task, TaskID},
     tui::component::popup::ConfirmDeleteEntity,
 };
 
@@ -10,40 +10,22 @@ pub enum Action {
     // ── lifecycle ──
     Quit,
 
-    // ── input bar ──
-    AddTask(String),
-
     // ── popup lifecycle ──
     OpenPopupConfirmDelete(ConfirmDeleteEntity),
-    OpenPopupCreateTask,
+    OpenPopupCreateTask(Option<Task>),
     OpenPopupErrorInfo(String),
     DismissPopup,
 
     // ── commands ──
     CloseCommandInput,
 
-    // ── task operations ──
-    MoveTask {
-        task_id: TaskID,
-        status_id: StatusID,
-    },
+    // ── tasks ──
+    CreateTask(Task),
+    UpdateTask(Task),
     DeleteTask(TaskID),
 
-    // ── project settings ──
-    #[allow(dead_code)]
-    RenameProject(String),
-    RenameStatus {
-        id: StatusID,
-        new_name: String,
-    },
-    AddStatus(String),
+    // ── statuses ──
+    CreateStatus(Status),
+    UpdateStatus(Status),
     DeleteStatus(StatusID),
-    SetStatusColor {
-        status_id: i64,
-        color: Option<Color>,
-    },
-    ReorderStatus {
-        id: StatusID,
-        new_position: i32,
-    },
 }

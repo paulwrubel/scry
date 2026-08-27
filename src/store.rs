@@ -1,122 +1,73 @@
 use async_trait::async_trait;
 
 use crate::error::StorageError;
-use crate::models::{Project, ProjectID, Status, StatusID, Task, TaskID};
+use crate::models::{Color, Project, ProjectID, Status, StatusID, Style, Task, TaskID};
 
 #[async_trait]
 pub trait TaskStore {
-    /// Add a new task to a project. The task is created in the project's entry status.
-    async fn add_task(&self, title: &str, project_id: ProjectID) -> Result<Task, StorageError>;
-
-    /// Move a task to a new status. Alias for `update_task(id, project_id, Some(status_name))`.
-    async fn move_task(
+    /// Add a new task.
+    async fn create_task(
         &self,
-        id: TaskID,
         project_id: ProjectID,
-        status_id: StatusID,
-    ) -> Result<Option<Task>, StorageError> {
-        self.update_task(id, project_id, status_id).await
-    }
+        title: String,
+        description: Option<String>,
+        status_id: i64,
+        position: i32,
+    ) -> Result<Task, StorageError>;
 
-    /// Update task properties. Currently only `status_name` is supported;
-    /// future flags (title, due, priority) will be added here.
-    async fn update_task(
-        &self,
-        id: TaskID,
-        project_id: ProjectID,
-        status_id: StatusID,
-    ) -> Result<Option<Task>, StorageError>;
+    /// Get a task by its id
+    async fn get_task_by_id(&self, id: TaskID) -> Result<Option<Task>, StorageError>;
 
-    /// Delete a task permanently.
-    async fn delete_task(&self, id: TaskID, project_id: ProjectID) -> Result<bool, StorageError>;
-
-    /// Show full details for a single task.
-    async fn show_task(
-        &self,
-        id: TaskID,
-        project_id: ProjectID,
-    ) -> Result<Option<Task>, StorageError>;
-
-    /// List tasks in a project, optionally filtered by status.
+    /// List tasks in a project
+    ///
     /// Results are ordered by position ascending, then task ID ascending.
-    async fn list_tasks(
+    async fn get_all_tasks_by_project_id(
         &self,
         project_id: ProjectID,
-        status_name: Option<&str>,
     ) -> Result<Vec<Task>, StorageError>;
 
-    /// Create a new project with default statuses (todo, done).
-    /// The new project becomes the active project.
-    async fn create_project(&self, name: &str) -> Result<Project, StorageError>;
+    /// List tasks in a status
+    ///
+    /// Results are ordered by position ascending, then task ID ascending.
+    async fn get_all_tasks_by_status_id(
+        &self,
+        status_id: StatusID,
+    ) -> Result<Vec<Task>, StorageError>;
 
-    /// Delete a project and all its tasks. The "default" project cannot be deleted.
-    /// If the deleted project was active, the active project resets to "default".
-    async fn delete_project(&self, name: &str) -> Result<(), StorageError>;
+    /// Edit an existing task, writing the position of the Task to the DB exactly
+    async fn update_task(&self, task: Task) -> Result<Task, StorageError>;
 
-    /// List all projects. The active project should be marked separately by the caller.
-    async fn list_projects(&self) -> Result<Vec<Project>, StorageError>;
+    /// Edit an existing task, auto-updating the position to by the maximum+1 of the new target status, if changed.
+    ///
+    /// Callers generally should lean on calling this method instead of the generic update when in doubt.
+    async fn update_and_autoposition_task(&self, task: Task) -> Result<Task, StorageError>;
 
-    /// Look up a project by name.
-    async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError>;
+    /// Delete a task
+    async fn delete_task(&self, id: TaskID) -> Result<(), StorageError>;
 
-    /// Look up a project by ID.
-    #[allow(dead_code)]
-    async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError>;
-
-    /// Get the currently active project.
-    async fn get_active_project(&self) -> Result<Project, StorageError>;
-
-    /// Set the active project. Persisted across sessions.
-    async fn set_active_project(&self, name: &str) -> Result<(), StorageError>;
-
-    async fn get_status_by_id(
+    async fn create_status(
         &self,
         project_id: ProjectID,
-        status_id: StatusID,
+        name: String,
+        position: i32,
+        color: Option<Color>,
+        style: Style,
+    ) -> Result<Status, StorageError>;
+
+    async fn get_status_by_id(&self, id: StatusID) -> Result<Option<Status>, StorageError>;
+
+    async fn get_status_by_project_id_and_status_name(
+        &self,
+        project_id: ProjectID,
+        status_name: String,
     ) -> Result<Option<Status>, StorageError>;
 
-    /// Add a new status to a project. Appended after existing statuses.
-    async fn add_status(&self, project_id: ProjectID, name: &str) -> Result<Status, StorageError>;
-
-    /// Deletes a status from a project.
-    async fn delete_status(
+    async fn get_all_statuses_by_project_id(
         &self,
         project_id: ProjectID,
-        status_id: StatusID,
-    ) -> Result<(), StorageError>;
+    ) -> Result<Vec<Status>, StorageError>;
 
-    /// Rename a status within a project. All tasks referencing the old name are updated.
-    async fn rename_status(
-        &self,
-        project_id: ProjectID,
-        status_id: StatusID,
-        new_name: &str,
-    ) -> Result<(), StorageError>;
-
-    /// List all statuses for a project, ordered by position.
-    async fn list_statuses(&self, project_id: ProjectID) -> Result<Vec<Status>, StorageError>;
-
-    /// Look up a status in a project by name.
-    async fn get_status_by_name(
-        &self,
-        project_id: ProjectID,
-        name: &str,
-    ) -> Result<Option<Status>, StorageError>;
-
-    /// Set the color of a status. Pass `None` to clear the color.
-    async fn set_status_color(
-        &self,
-        status_id: i64,
-        color: Option<&str>,
-    ) -> Result<(), StorageError>;
-
-    /// Rename a project. If this is the active project, the active-project
-    /// config is updated to the new name.
-    async fn rename_project(
-        &self,
-        project_id: ProjectID,
-        new_name: &str,
-    ) -> Result<(), StorageError>;
+    async fn update_status(&self, status: Status) -> Result<Status, StorageError>;
 
     /// Move a status to a new position (0-based) within its project.
     /// Other statuses are shifted to accommodate the new position.
@@ -127,6 +78,29 @@ pub trait TaskStore {
         status_id: StatusID,
         new_position: i32,
     ) -> Result<(), StorageError>;
+
+    async fn delete_status(&self, id: StatusID) -> Result<(), StorageError>;
+
+    /// Create a new project.
+    async fn create_project(&self, name: String) -> Result<Project, StorageError>;
+
+    async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError>;
+
+    /// Look up a project by name.
+    async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError>;
+
+    /// List all projects.
+    async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError>;
+
+    async fn update_project(&self, project: Project) -> Result<Project, StorageError>;
+
+    async fn delete_project(&self, name: String) -> Result<(), StorageError>;
+
+    /// Get the currently active project.
+    async fn get_active_project(&self) -> Result<Project, StorageError>;
+
+    /// Set the active project. Persisted across sessions.
+    async fn set_active_project(&self, name: &str) -> Result<(), StorageError>;
 }
 
 pub mod sqlite;

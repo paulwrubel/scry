@@ -61,10 +61,20 @@ impl From<Color> for ratatui::style::Color {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 pub enum Style {
     Default,
     Completed,
+}
+
+impl Display for Style {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            self.to_possible_value()
+                .expect("Style has no skipped variants")
+                .get_name(),
+        )
+    }
 }
 
 impl From<&str> for Style {

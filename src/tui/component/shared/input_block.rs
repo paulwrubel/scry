@@ -36,12 +36,12 @@ impl InputBlock {
         }
     }
 
-    // pub fn with_text(self, text: String) -> Self {
-    //     Self {
-    //         input: self.input.with_text(text),
-    //         ..self
-    //     }
-    // }
+    pub fn with_text(self, text: String) -> Self {
+        Self {
+            input: self.input.with_text(text),
+            ..self
+        }
+    }
 
     // pub fn reset(&mut self) {
     //     self.input.reset();
