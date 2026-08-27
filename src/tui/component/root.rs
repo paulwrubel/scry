@@ -54,7 +54,7 @@ impl Root {
                         vec![]
                     }
                     Action::OpenPopupCreateTask(task) => {
-                        self.popup = Some(Popup::AddOrEditTask(AddOrEditTask::new(task)));
+                        self.popup = Some(Popup::AddOrEditTask(Box::new(AddOrEditTask::new(task))));
                         vec![]
                     }
                     Action::OpenPopupErrorInfo(error_text) => {

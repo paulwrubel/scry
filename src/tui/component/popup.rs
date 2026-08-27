@@ -13,7 +13,7 @@ use ratatui::crossterm::event::KeyEvent;
 
 pub enum Popup {
     ConfirmDelete(ConfirmDelete),
-    AddOrEditTask(AddOrEditTask),
+    AddOrEditTask(Box<AddOrEditTask>),
     ErrorInfo(ErrorInfo),
 }
 

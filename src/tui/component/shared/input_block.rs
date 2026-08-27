@@ -1,24 +1,39 @@
 use crate::tui::action::Action;
-use crate::tui::component::shared::Input;
 use crate::tui::component::{RenderContext, State};
-use ratatui::crossterm::event::KeyEvent;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::Style;
+use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders};
+use ratatui_textarea::{CursorMove, TextArea, WrapMode};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InputMode {
+    SingleLine,
+    Viewing,
+    Editing,
+}
+
+#[derive(Debug, Clone)]
 pub struct InputBlock {
     pub is_focused: bool,
     title: Option<String>,
+    mode: InputMode,
 
-    input: Input,
+    textarea: TextArea<'static>,
 }
 
 impl InputBlock {
-    pub fn new(is_focused: bool) -> Self {
+    pub fn new(is_focused: bool, is_multiline: bool) -> Self {
         Self {
             is_focused,
             title: None,
+            mode: if is_multiline {
+                InputMode::Viewing
+            } else {
+                InputMode::SingleLine
+            },
 
-            input: Input::new(is_focused),
+            textarea: TextArea::default(),
         }
     }
 
@@ -29,58 +44,99 @@ impl InputBlock {
         }
     }
 
-    pub fn with_placeholder_text(self, placeholder_text: String) -> Self {
-        Self {
-            input: self.input.with_placeholder_text(placeholder_text),
-            ..self
-        }
+    pub fn with_placeholder_text(mut self, placeholder_text: String) -> Self {
+        self.textarea.set_placeholder_text(placeholder_text);
+        self
     }
 
     pub fn with_text(self, text: String) -> Self {
-        Self {
-            input: self.input.with_text(text),
-            ..self
-        }
+        let mut textarea = TextArea::new(text.split('\n').map(str::to_string).collect());
+        textarea.move_cursor(CursorMove::End);
+        Self { textarea, ..self }
     }
 
-    // pub fn reset(&mut self) {
-    //     self.input.reset();
-    // }
-
     pub fn focus(&mut self) {
-        self.input.focus();
+        self.textarea.move_cursor(CursorMove::End);
+        self.mode = match &self.mode {
+            InputMode::Viewing | InputMode::Editing => InputMode::Viewing,
+            InputMode::SingleLine => InputMode::SingleLine,
+        };
         self.is_focused = true;
     }
 
     pub fn blur(&mut self) {
-        self.input.blur();
+        self.mode = match &self.mode {
+            InputMode::Viewing | InputMode::Editing => InputMode::Viewing,
+            InputMode::SingleLine => InputMode::SingleLine,
+        };
         self.is_focused = false;
     }
 
-    pub fn buffer_text(&self) -> &str {
-        self.input.buffer_text()
+    pub fn is_editing(&self) -> bool {
+        self.mode == InputMode::Editing
     }
 
-    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
+    pub fn buffer_text(&self) -> String {
+        self.textarea.lines().join("\n")
+    }
+
+    pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
         if !self.is_focused {
             return None;
         }
-        self.input.handle_event(state, key)
+        match (key.modifiers, key.code, &self.mode) {
+            (KeyModifiers::NONE, KeyCode::Enter, InputMode::Viewing) => {
+                self.mode = InputMode::Editing;
+                None
+            }
+            (_, KeyCode::Esc, InputMode::Editing) => {
+                self.mode = InputMode::Viewing;
+                None
+            }
+            // single-line inputs never receive newline keys
+            (_, KeyCode::Enter, InputMode::SingleLine)
+            | (KeyModifiers::CONTROL, KeyCode::Char('m'), InputMode::SingleLine) => None,
+            // in normal mode a multiline input only responds to Enter (above);
+            // everything else bubbles so the parent can change focus
+            (_, _, InputMode::Viewing) => None,
+            // anything else, we send to the textarea
+            _ => {
+                self.textarea.input(key);
+                None
+            }
+        }
     }
 
     pub fn render(&self, ctx: &mut RenderContext) {
-        let style = if self.is_focused {
-            Style::default()
-        } else {
-            Style::default().dim()
+        let (border_style, text_style) = match (self.is_focused, self.mode) {
+            (true, InputMode::Viewing) => (Style::default(), Style::default().dim()),
+            (true, _) => (Style::default(), Style::default()),
+            (false, _) => (Style::default().dim(), Style::default().dim()),
         };
 
-        let mut block = Block::default().borders(Borders::ALL).border_style(style);
+        let mut block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(border_style);
         if let Some(title) = &self.title {
-            block = block.title(title.as_str())
-        };
+            block = block.title(title.as_str());
+        }
+        if self.mode == InputMode::Editing {
+            block = block.title_bottom(Line::from("editing - esc to stop").right_aligned())
+        } else if self.is_focused && self.mode == InputMode::Viewing {
+            block = block.title_bottom(Line::from("enter to edit").right_aligned())
+        }
 
-        self.input.render(&mut ctx.with_area(block.inner(ctx.area)));
-        ctx.render(&block);
+        let mut textarea = self.textarea.clone();
+        textarea.set_block(block);
+        textarea.set_style(text_style);
+        if !self.is_focused {
+            textarea.set_cursor_line_style(text_style);
+            textarea.set_cursor_style(text_style);
+        }
+        if matches!(self.mode, InputMode::Viewing | InputMode::Editing) {
+            textarea.set_wrap_mode(WrapMode::Glyph);
+        }
+
+        ctx.render(&textarea);
     }
 }

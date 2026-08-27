@@ -1,17 +1,20 @@
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent},
+    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+    layout::{Constraint, Layout},
     style::Style,
+    widgets::Paragraph,
 };
+use ratatui_textarea::TextArea;
 
 use crate::tui::{
     Action, command,
-    component::{RenderContext, State, shared::Input},
+    component::{RenderContext, State},
 };
 
 pub struct CommandInput {
     pub is_focused: bool,
 
-    input: Input,
+    textarea: TextArea<'static>,
 }
 
 impl CommandInput {
@@ -19,29 +22,30 @@ impl CommandInput {
         Self {
             is_focused,
 
-            input: Input::new(is_focused)
-                .with_prefix_text(String::from("/"), Style::default().dim()),
+            textarea: TextArea::default(),
         }
     }
 
     pub fn reset(&mut self) {
-        self.input =
-            Input::new(self.is_focused).with_prefix_text(String::from("/"), Style::default().dim())
+        self.textarea = TextArea::default();
     }
 
     pub fn focus(&mut self) {
-        self.input.focus();
         self.is_focused = true;
     }
 
     pub fn blur(&mut self) {
-        self.input.blur();
         self.is_focused = false;
     }
 
     pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Vec<Action> {
-        // input never sends an Action
-        self.input.handle_event(state, key);
+        // Enter is handled below (submit); never let it insert a newline
+        match (key.modifiers, key.code) {
+            (_, KeyCode::Enter) | (KeyModifiers::CONTROL, KeyCode::Char('m')) => {}
+            _ => {
+                self.textarea.input(key);
+            }
+        }
 
         match (key.modifiers, key.code) {
             (_, KeyCode::Esc) => vec![Action::CloseCommandInput],
@@ -62,12 +66,27 @@ impl CommandInput {
     }
 
     pub fn render(&self, ctx: &mut RenderContext) {
-        self.input.render(ctx);
+        let style = if self.is_focused {
+            Style::default()
+        } else {
+            Style::default().dim()
+        };
+
+        let [prefix_area, input_area] =
+            Layout::horizontal([Constraint::Length(1), Constraint::Min(0)]).areas(ctx.area);
+        ctx.with_area(prefix_area)
+            .render(Paragraph::new("/").style(style));
+
+        let mut textarea = self.textarea.clone();
+        textarea.set_style(style);
+        textarea.set_cursor_line_style(Style::default());
+
+        ctx.with_area(input_area).render(&textarea);
     }
 
     fn process_command_text(&self, state: &State) -> Vec<Action> {
-        let text = self.input.buffer_text();
+        let text = self.textarea.lines().join("\n");
 
-        command::parse_command(state, text)
+        command::parse_command(state, &text)
     }
 }

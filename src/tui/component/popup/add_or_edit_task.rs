@@ -9,6 +9,7 @@ use ratatui::widgets::{Block, Borders};
 
 pub struct AddOrEditTask {
     title_input: InputBlock,
+    description_input: InputBlock,
     create_task_button: Button,
 
     task: Option<Task>,
@@ -17,10 +18,25 @@ pub struct AddOrEditTask {
 impl AddOrEditTask {
     pub fn new(task: Option<Task>) -> Self {
         Self {
-            title_input: InputBlock::new(true)
+            title_input: InputBlock::new(true, false)
                 .with_title(String::from("Title"))
                 .with_placeholder_text(String::from("Do the laundry"))
                 .with_text(task.as_ref().map(|t| t.title.clone()).unwrap_or_default()),
+            description_input: InputBlock::new(false, true)
+                .with_title(String::from("Description"))
+                .with_placeholder_text(String::from(
+                    r#"There's a lot of laundry to do...
+
+1. Delicates
+2. Towels
+3. Whites
+"#,
+                ))
+                .with_text(
+                    task.as_ref()
+                        .map(|t| t.description.clone().unwrap_or_default())
+                        .unwrap_or_default(),
+                ),
             create_task_button: Button::new(
                 false,
                 String::from(if task.is_none() {
@@ -35,9 +51,16 @@ impl AddOrEditTask {
     }
 
     pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
+        // capture the description input's edit mode before forwarding, so the
+        // match below can avoid fighting it for Esc/Up/Down
+        let description_editing =
+            self.description_input.is_focused && self.description_input.is_editing();
+
         if self.title_input.is_focused {
             // InputBlock always returns None, so no need to propagate
             self.title_input.handle_event(state, key);
+        } else if self.description_input.is_focused {
+            self.description_input.handle_event(state, key);
         }
 
         match (key.modifiers, key.code) {
@@ -49,20 +72,45 @@ impl AddOrEditTask {
                     None
                 }
             }
-            (_, KeyCode::Esc) => Some(Action::DismissPopup),
-            (_, KeyCode::Up) => {
-                if self.create_task_button.is_focused {
-                    self.create_task_button.blur();
-                    self.title_input.focus();
+            (_, KeyCode::Esc) => {
+                if description_editing {
+                    // the multiline input already exited edit mode
+                    None
+                } else {
+                    Some(Action::DismissPopup)
                 }
-                None
+            }
+            (_, KeyCode::Up) => {
+                if description_editing {
+                    // the multiline input moved the cursor up
+                    None
+                } else if self.description_input.is_focused {
+                    self.description_input.blur();
+                    self.title_input.focus();
+                    None
+                } else if self.create_task_button.is_focused {
+                    self.create_task_button.blur();
+                    self.description_input.focus();
+                    None
+                } else {
+                    None
+                }
             }
             (_, KeyCode::Down) => {
-                if self.title_input.is_focused {
+                if description_editing {
+                    // the multiline input moved the cursor down
+                    None
+                } else if self.title_input.is_focused {
                     self.title_input.blur();
+                    self.description_input.focus();
+                    None
+                } else if self.description_input.is_focused {
+                    self.description_input.blur();
                     self.create_task_button.focus();
+                    None
+                } else {
+                    None
                 }
-                None
             }
             _ => None,
         }
@@ -83,8 +131,14 @@ impl AddOrEditTask {
             ),
         );
 
-        let [title_input_area, _, create_button_area] = content_area.layout(&Layout::vertical([
+        let [
+            title_input_area,
+            description_input_area,
+            _,
+            create_button_area,
+        ] = content_area.layout(&Layout::vertical([
             Constraint::Length(3),
+            Constraint::Min(3),
             Constraint::Fill(1), // remaining space
             Constraint::Length(1),
         ]));
@@ -92,15 +146,24 @@ impl AddOrEditTask {
         self.title_input
             .render(&mut ctx.with_area(title_input_area));
 
+        self.description_input
+            .render(&mut ctx.with_area(description_input_area));
+
         self.create_task_button
             .render(&mut ctx.with_area(create_button_area));
     }
 
     fn handle_create_or_update(&self, state: &State) -> Option<Action> {
         if self.is_valid() {
+            let title = self.title_input.buffer_text();
+            let description = {
+                let text = self.description_input.buffer_text();
+                if text.is_empty() { None } else { Some(text) }
+            };
             match &self.task {
                 Some(task) => Some(Action::UpdateTask(Task {
-                    title: self.title_input.buffer_text().to_string(),
+                    title,
+                    description,
                     ..task.clone()
                 })),
                 None => {
@@ -120,8 +183,8 @@ impl AddOrEditTask {
                     Some(Action::CreateTask(Task {
                         id: 0, // dummy id
                         project_id: state.project.id,
-                        title: self.title_input.buffer_text().to_string(),
-                        description: None,
+                        title,
+                        description,
                         status_id: first_status.id,
                         position: last_position.map_or(0, |p| p + 1),
                         created_at: DateTime::default(), // dummy, overwritten on insert

@@ -2,7 +2,7 @@ use crate::models::Task;
 use crate::tui::component::RenderContext;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Stylize;
-use ratatui::text::{Line, Span};
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
 
 pub struct TaskDetails<'a> {
@@ -33,29 +33,37 @@ impl<'a> TaskDetails<'a> {
             .area
             .layout(&Layout::vertical([Constraint::Min(1)]).horizontal_margin(1));
 
-        let mut details_lines = Vec::new();
+        let mut details_text = Text::default();
 
         // title
-        details_lines.push(Line::from(vec![
+        details_text.push_line(Line::from(vec![
             Span::from(self.task.title.clone()).bold(),
             Span::from(format!(" #{}", self.task.id)).dim().italic(),
         ]));
+        details_text.push_line(Line::default());
 
         // description
-        if let Some(desc) = self.task.description.clone() {
-            details_lines.push(Line::from(desc));
+        if let Some(desc) = &self.task.description {
+            for line in desc.lines() {
+                details_text.push_line(Line::from(vec![
+                    Span::raw("    "), // indent
+                    Span::raw(line),
+                ]));
+            }
         };
+        details_text.push_line(Line::default());
 
         // info
-        details_lines.append(&mut vec![
-            Line::from(vec![
-                Span::from("Status:      "),
-                Span::from(status.name.clone()),
-            ]),
-            Line::from(vec![Span::from("Created at:  "), Span::from(created)]),
-        ]);
+        details_text.push_line(Line::from(vec![
+            Span::from("Status:      "),
+            Span::from(status.name.clone()),
+        ]));
+        details_text.push_line(Line::from(vec![
+            Span::from("Created at:  "),
+            Span::from(created),
+        ]));
 
         ctx.with_area(details_area)
-            .render(Paragraph::new(details_lines));
+            .render(Paragraph::new(details_text));
     }
 }
