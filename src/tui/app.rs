@@ -9,6 +9,9 @@ use crate::tui::state::ProjectState;
 
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
+use ratatui::crossterm::event::{
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 use ratatui::crossterm::{
     cursor::{SetCursorStyle, Show},
     event::{self, Event, KeyEventKind},
@@ -59,6 +62,7 @@ impl<S: TaskStore + Sync> App<S> {
         execute!(
             stdout,
             EnterAlternateScreen,
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES),
             SetCursorStyle::BlinkingBlock,
             Show
         )
@@ -70,7 +74,12 @@ impl<S: TaskStore + Sync> App<S> {
         let original_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             let _ = disable_raw_mode();
-            let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
+            let _ = execute!(
+                std::io::stdout(),
+                SetCursorStyle::DefaultUserShape,
+                PopKeyboardEnhancementFlags,
+                LeaveAlternateScreen,
+            );
             original_hook(info);
         }));
 
@@ -83,8 +92,13 @@ impl<S: TaskStore + Sync> App<S> {
         disable_raw_mode()
             .map_err(|e| AppError::Internal(format!("failed to disable raw mode: {}", e)))?;
 
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)
-            .map_err(|e| AppError::Internal(format!("failed to leave alternate screen: {}", e)))?;
+        execute!(
+            terminal.backend_mut(),
+            SetCursorStyle::DefaultUserShape,
+            PopKeyboardEnhancementFlags,
+            LeaveAlternateScreen,
+        )
+        .map_err(|e| AppError::Internal(format!("failed to leave alternate screen: {}", e)))?;
 
         terminal
             .show_cursor()
