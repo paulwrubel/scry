@@ -12,6 +12,11 @@ use ratatui::symbols::merge::MergeStrategy;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders};
 
+const VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
+    Some(version) => version,
+    None => "unknown",
+};
+
 #[derive(Debug, Clone, Copy)]
 enum SelectedTask {
     First,
@@ -314,7 +319,7 @@ impl Root {
         );
         // hints block
         ctx.with_area(hints_area)
-            .render(block.title_bottom(Line::from(" scry ").right_aligned()));
+            .render(block.title_bottom(Line::from(format!(" scry {VERSION} ")).right_aligned()));
 
         // popup last (on top of everything)
         if let Some(ref popup) = self.popup {
