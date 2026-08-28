@@ -1,7 +1,7 @@
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     layout::{Constraint, Layout},
-    style::Style,
+    style::{Style, Stylize},
     widgets::Paragraph,
 };
 use ratatui_textarea::TextArea;
@@ -72,15 +72,16 @@ impl CommandInput {
             Style::default().dim()
         };
 
-        let [prefix_area, input_area] =
-            Layout::horizontal([Constraint::Length(1), Constraint::Min(0)]).areas(ctx.area);
-        ctx.with_area(prefix_area)
-            .render(Paragraph::new("/").style(style));
+        let [prefix_area, input_area] = ctx.area.layout(&Layout::horizontal([
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ]));
 
         let mut textarea = self.textarea.clone();
         textarea.set_style(style);
         textarea.set_cursor_line_style(Style::default());
 
+        ctx.with_area(prefix_area).render(Paragraph::new("/").dim());
         ctx.with_area(input_area).render(&textarea);
     }
 
