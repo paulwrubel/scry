@@ -4,6 +4,9 @@ pub use button::Button;
 mod input_block;
 pub use input_block::InputBlock;
 
+mod single_selector;
+pub use single_selector::SingleSelector;
+
 pub fn truncate_string_to_width(s: String, max_width: usize) -> String {
     if s.chars().count() <= max_width {
         s

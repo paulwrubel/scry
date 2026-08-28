@@ -1,4 +1,3 @@
-use crate::tui::action::Action;
 use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::{Style, Stylize};
@@ -83,29 +82,27 @@ impl InputBlock {
         self.textarea.lines().join("\n")
     }
 
-    pub fn handle_event(&mut self, _state: &ProjectState, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, _state: &ProjectState, key: KeyEvent) {
         if !self.is_focused {
-            return None;
+            return;
         }
+
         match (key.modifiers, key.code, &self.mode) {
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Enter, InputMode::Viewing) => {
                 self.mode = InputMode::Editing;
-                None
             }
             (_, KeyCode::Esc, InputMode::Editing) => {
                 self.mode = InputMode::Viewing;
-                None
             }
             // single-line inputs never receive newline keys
             (_, KeyCode::Enter, InputMode::SingleLine)
-            | (KeyModifiers::CONTROL, KeyCode::Char('m'), InputMode::SingleLine) => None,
+            | (KeyModifiers::CONTROL, KeyCode::Char('m'), InputMode::SingleLine) => {}
             // in normal mode a multiline input only responds to Enter (above);
             // everything else bubbles so the parent can change focus
-            (_, _, InputMode::Viewing) => None,
+            (_, _, InputMode::Viewing) => {}
             // anything else, we send to the textarea
             _ => {
                 self.textarea.input(key);
-                None
             }
         }
     }

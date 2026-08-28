@@ -61,7 +61,12 @@ impl Root {
                         vec![]
                     }
                     Action::OpenPopupAddOrEditTask(task) => {
-                        self.popup = Some(Popup::AddOrEditTask(Box::new(AddOrEditTask::new(task))));
+                        if state.statuses().next().is_some() {
+                            self.popup = Some(Popup::AddOrEditTask(Box::new(
+                                AddOrEditTask::new(state, task)
+                                    .expect("There exists at least one status"),
+                            )));
+                        }
                         vec![]
                     }
                     Action::OpenPopupConfirmDelete(entity) => {

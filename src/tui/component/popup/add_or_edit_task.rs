@@ -1,58 +1,108 @@
+use std::collections::HashMap;
+
 use crate::models::Task;
 use crate::tui::action::Action;
+use crate::tui::component::shared::SingleSelector;
 use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
 use crate::tui::state::TaskWithNotes;
 use chrono::DateTime;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout};
+use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders};
+
+const TASK_PLACEHOLDER_TEXT: &str = "Do the laundry";
+const DESCRIPTION_PLACEHOLDER_TEXT: &str = r#"There's a lot of laundry to do...
+
+1. Delicates
+2. Towels
+3. Whites
+"#;
 
 pub struct AddOrEditTask {
     title_input: InputBlock,
     description_input: InputBlock,
+    status_selector: SingleSelector<String>,
     confirm_button: Button,
 
     task: Option<TaskWithNotes>,
 }
 
 impl AddOrEditTask {
-    pub fn new(task: Option<TaskWithNotes>) -> Self {
-        Self {
-            title_input: InputBlock::new(true, false)
-                .with_title(String::from("Title"))
-                .with_placeholder_text(String::from("Do the laundry"))
-                .with_text(
-                    task.as_ref()
-                        .map(|task| task.title.clone())
-                        .unwrap_or_default(),
-                ),
-            description_input: InputBlock::new(false, true)
-                .with_title(String::from("Description"))
-                .with_placeholder_text(String::from(
-                    r#"There's a lot of laundry to do...
+    pub fn new(state: &ProjectState, task: Option<TaskWithNotes>) -> Result<Self, &'static str> {
+        let status_names: Vec<String> = state.statuses().map(|s| s.name.clone()).collect();
+        let selected_index = state
+            .statuses()
+            .enumerate()
+            .find_map(|(index, status)| {
+                state.project().entry_status_id.and_then(|entry_status_id| {
+                    if entry_status_id == status.id {
+                        Some(index)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or(0);
 
-1. Delicates
-2. Towels
-3. Whites
-"#,
-                ))
-                .with_text(
-                    task.as_ref()
-                        .map(|t| t.description.clone().unwrap_or_default())
-                        .unwrap_or_default(),
-                ),
-            confirm_button: Button::new(
-                false,
-                String::from(if task.is_none() {
-                    "Add Task"
-                } else {
-                    "Edit Task"
-                }),
-            ),
+        if status_names.is_empty() {
+            return Err("Cannot create a task without any statuses");
+        }
+
+        let status_styles: HashMap<String, Style> = state
+            .statuses()
+            .map(|s| {
+                let style = s
+                    .color
+                    .map_or(Style::default(), |c| Style::default().fg(c.into()));
+                (s.name.clone(), style)
+            })
+            .collect();
+
+        let title_input = InputBlock::new(true, false)
+            .with_title(String::from("Title"))
+            .with_placeholder_text(String::from(TASK_PLACEHOLDER_TEXT))
+            .with_text(
+                task.as_ref()
+                    .map(|task| task.title.clone())
+                    .unwrap_or_default(),
+            );
+
+        let description_input = InputBlock::new(false, true)
+            .with_title(String::from("Description"))
+            .with_placeholder_text(String::from(DESCRIPTION_PLACEHOLDER_TEXT))
+            .with_text(
+                task.as_ref()
+                    .map(|t| t.description.clone().unwrap_or_default())
+                    .unwrap_or_default(),
+            );
+
+        let status_selector =
+            SingleSelector::new_with_item_style(false, status_names, move |status_name| {
+                status_styles.get(status_name).copied().unwrap_or_default()
+            })
+            .expect("status_names is validated above as non-empty")
+            .with_selected_index(selected_index)
+            .expect("index guaranteed inside options");
+
+        let confirm_button = Button::new(
+            false,
+            String::from(if task.is_none() {
+                "Add Task"
+            } else {
+                "Edit Task"
+            }),
+        );
+
+        Ok(Self {
+            title_input,
+            description_input,
+            status_selector,
+            confirm_button,
 
             task,
-        }
+        })
     }
 
     pub fn handle_event(&mut self, state: &ProjectState, key: KeyEvent) -> Option<Action> {
@@ -66,6 +116,8 @@ impl AddOrEditTask {
             self.title_input.handle_event(state, key);
         } else if self.description_input.is_focused {
             self.description_input.handle_event(state, key);
+        } else if self.status_selector.is_focused {
+            self.status_selector.handle_event(state, key);
         }
 
         match (key.modifiers, key.code) {
@@ -80,7 +132,7 @@ impl AddOrEditTask {
                     None
                 }
             }
-            (_, KeyCode::Esc) => {
+            (_, KeyCode::Esc) if !description_editing => {
                 if description_editing {
                     // the multiline input already exited edit mode
                     None
@@ -88,39 +140,63 @@ impl AddOrEditTask {
                     Some(Action::DismissPopup)
                 }
             }
-            (_, KeyCode::Up) => {
-                if description_editing {
-                    // the multiline input moved the cursor up
-                    None
-                } else if self.description_input.is_focused {
-                    self.description_input.blur();
-                    self.title_input.focus();
-                    None
-                } else if self.confirm_button.is_focused {
-                    self.confirm_button.blur();
-                    self.description_input.focus();
-                    None
-                } else {
-                    None
-                }
-            }
-            (_, KeyCode::Down) => {
-                if description_editing {
-                    // the multiline input moved the cursor down
-                    None
-                } else if self.title_input.is_focused {
-                    self.title_input.blur();
-                    self.description_input.focus();
-                    None
-                } else if self.description_input.is_focused {
-                    self.description_input.blur();
-                    self.confirm_button.focus();
-                    None
-                } else {
-                    None
-                }
+            // focus only moves if we're not editing, since the input owns the cursor
+            (_, KeyCode::Up | KeyCode::Down) if !description_editing => {
+                match key.code {
+                    KeyCode::Up => {
+                        self.move_focus_up();
+                    }
+                    KeyCode::Down => {
+                        self.move_focus_down();
+                    }
+                    _ => {}
+                };
+
+                None
             }
             _ => None,
+        }
+    }
+
+    fn move_focus_up(&mut self) -> bool {
+        if self.description_input.is_focused {
+            self.description_input.blur();
+            self.title_input.focus();
+
+            true
+        } else if self.status_selector.is_focused {
+            self.status_selector.blur();
+            self.description_input.focus();
+
+            true
+        } else if self.confirm_button.is_focused {
+            self.confirm_button.blur();
+            self.status_selector.focus();
+
+            true
+        } else {
+            false
+        }
+    }
+
+    fn move_focus_down(&mut self) -> bool {
+        if self.title_input.is_focused {
+            self.title_input.blur();
+            self.description_input.focus();
+
+            true
+        } else if self.description_input.is_focused {
+            self.description_input.blur();
+            self.status_selector.focus();
+
+            true
+        } else if self.status_selector.is_focused {
+            self.status_selector.blur();
+            self.confirm_button.focus();
+
+            true
+        } else {
+            false
         }
     }
 
@@ -142,11 +218,13 @@ impl AddOrEditTask {
         let [
             title_input_area,
             description_input_area,
+            status_selected_area,
             _,
             confirm_button_area,
         ] = content_area.layout(&Layout::vertical([
             Constraint::Length(3),
             Constraint::Min(3),
+            Constraint::Length(1),
             Constraint::Fill(1), // remaining space
             Constraint::Length(1),
         ]));
@@ -156,6 +234,9 @@ impl AddOrEditTask {
 
         self.description_input
             .render(&mut ctx.with_area(description_input_area));
+
+        self.status_selector
+            .render(&mut ctx.with_area(status_selected_area));
 
         self.confirm_button
             .render(&mut ctx.with_area(confirm_button_area));

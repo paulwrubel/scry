@@ -106,6 +106,11 @@ impl ProjectState {
         self.statuses().find(|s| s.id == status_id)
     }
 
+    #[allow(dead_code)]
+    pub fn get_status_by_name(&self, status_name: &str) -> Option<&Status> {
+        self.statuses().find(|s| s.name == status_name)
+    }
+
     pub fn tasks_in_status(&self, status_id: StatusID) -> Vec<&TaskWithNotes> {
         self.statuses_with_tasks
             .iter()
