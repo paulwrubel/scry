@@ -71,7 +71,7 @@ _release type do_push="":
         major) next="$((major + 1)).0.0" ;; \
         *) echo "Invalid bump type: {{type}}"; exit 1 ;; \
     esac; \
-    echo "Releasing $current → $next"; \
+    echo "Releasing $current --> $next"; \
     read -p "Proceed? [y/N] " confirm; \
     case "$confirm" in \
         [yY]*) ;; \
