@@ -25,7 +25,7 @@ pub struct App<S: TaskStore + Sync> {
     is_running: bool,
 
     // domain state
-    config: ScryConfig,
+    _config: ScryConfig,
     store: S,
     project_id: ProjectID,
 }
@@ -35,7 +35,8 @@ impl<S: TaskStore + Sync> App<S> {
         App {
             root: Root::new(),
             is_running: true,
-            config,
+
+            _config: config,
             store,
             project_id,
         }
