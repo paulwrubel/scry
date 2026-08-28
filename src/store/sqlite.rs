@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::error::StorageError;
 use crate::models::{
-    Color, Note, NoteID, Project, ProjectID, Status, StatusID, Style, Task, TaskID,
+    Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Task, TaskID,
 };
 use crate::store::TaskStore;
 
@@ -83,7 +83,7 @@ fn status_from_fields(
     name: String,
     position: i64,
     color: Option<String>,
-    style: Option<String>,
+    style: String,
 ) -> Status {
     Status {
         id,
@@ -91,7 +91,7 @@ fn status_from_fields(
         name,
         position: position as i32,
         color: color.and_then(|c| Color::from_str(&c, false).ok()),
-        style: style.into(),
+        style: style.as_str().into(),
     }
 }
 
@@ -512,7 +512,7 @@ impl TaskStore for SqliteStore {
         name: String,
         position: i32,
         color: Option<Color>,
-        style: Style,
+        style: StatusStyle,
     ) -> Result<Status, StorageError> {
         let inserted = sqlx::query!(
             r#"

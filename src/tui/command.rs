@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::models::{Color, Project, Status, Style};
+use crate::models::{Color, Project, Status, StatusStyle};
 use crate::tui::Action;
 use crate::tui::component::popup::ConfirmDeleteEntity;
 use crate::tui::state::ProjectState;
@@ -69,7 +69,7 @@ enum StatusCommand {
         /// Name of the Status to set the style for
         name: String,
         /// Style for the Status
-        style: Style,
+        style: StatusStyle,
     },
 }
 
@@ -105,7 +105,7 @@ pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
                     name,
                     position,
                     color: None,
-                    style: Style::Default,
+                    style: StatusStyle::None,
                 })]
             }
             StatusCommand::Delete { name } => {

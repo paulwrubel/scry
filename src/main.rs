@@ -10,7 +10,7 @@ use config::ScryConfig;
 use error::AppError;
 use store::{TaskStore, sqlite::SqliteStore};
 
-use crate::models::{Status, Style, Task};
+use crate::models::{Status, StatusStyle, Task};
 
 #[derive(Parser)]
 #[command(name = "scry", about = "A task manager for the terminal", version)]
@@ -267,7 +267,9 @@ async fn main() -> Result<(), AppError> {
 
                 println!("{} ({}):", status_def.name, status_tasks.len());
                 for task in &status_tasks {
-                    let icon = if status_def.style == Style::Completed {
+                    let icon = if status_def.style == StatusStyle::Checked
+                        || status_def.style == StatusStyle::Strikethrough
+                    {
                         "[x]"
                     } else {
                         "[ ]"
@@ -344,7 +346,7 @@ async fn main() -> Result<(), AppError> {
                             name,
                             statuses.len() as i32,
                             None,
-                            Style::Default,
+                            StatusStyle::None,
                         )
                         .await?;
                     println!(

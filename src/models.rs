@@ -62,13 +62,18 @@ impl From<Color> for ratatui::style::Color {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
-pub enum Style {
-    Default,
-    Completed,
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+pub enum StatusStyle {
+    #[default]
+    #[value(alias("default"))]
+    None,
+    Unchecked,
+    Checked,
+    #[value(alias("strike"))]
+    Strikethrough,
 }
 
-impl Display for Style {
+impl Display for StatusStyle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(
             self.to_possible_value()
@@ -78,24 +83,9 @@ impl Display for Style {
     }
 }
 
-impl From<&str> for Style {
+impl From<&str> for StatusStyle {
     fn from(value: &str) -> Self {
-        match value {
-            "completed" => Style::Completed,
-            _ => Style::Default,
-        }
-    }
-}
-
-impl From<Option<&str>> for Style {
-    fn from(value: Option<&str>) -> Self {
-        value.unwrap_or_default().into()
-    }
-}
-
-impl From<Option<String>> for Style {
-    fn from(value: Option<String>) -> Self {
-        value.unwrap_or_default().as_str().into()
+        Self::from_str(value, false).unwrap_or_default()
     }
 }
 
@@ -114,7 +104,7 @@ pub struct Status {
     pub name: String,
     pub position: i32,
     pub color: Option<Color>,
-    pub style: Style,
+    pub style: StatusStyle,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

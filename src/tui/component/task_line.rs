@@ -1,5 +1,7 @@
+use std::iter;
+
 use crate::{
-    models::{Color as ScryColor, Style as ScryStyle},
+    models::{Color as ScryColor, StatusStyle},
     tui::{component::shared::truncate_string_to_width, state::TaskWithNotes},
 };
 use ratatui::{
@@ -10,7 +12,7 @@ use ratatui::{
 pub struct TaskLine {
     task: TaskWithNotes,
     color: Option<ScryColor>,
-    style: ScryStyle,
+    style: StatusStyle,
     is_selected: bool,
     area_width: u16,
 }
@@ -19,7 +21,7 @@ impl TaskLine {
     pub fn new(
         task: TaskWithNotes,
         color: Option<ScryColor>,
-        style: ScryStyle,
+        style: StatusStyle,
         is_selected: bool,
         area_width: u16,
     ) -> Self {
@@ -35,28 +37,30 @@ impl TaskLine {
 
 impl From<TaskLine> for Line<'_> {
     fn from(value: TaskLine) -> Self {
-        let prefix = vec![
-            Span::from(if matches!(value.style, ScryStyle::Completed) {
-                "[x]"
-            } else {
-                "[ ]"
-            }),
-            Span::from(" "),
-        ];
+        let prefix = Span::from(match value.style {
+            StatusStyle::None | StatusStyle::Strikethrough => "",
+            StatusStyle::Unchecked => "[ ] ",
+            StatusStyle::Checked => "[x] ",
+        });
 
-        let prefix_length: usize = prefix.iter().map(|s| s.width()).sum();
+        let mut text_style =
+            Style::default().fg(value.color.map_or(Color::default(), |c| c.into()));
+        if value.is_selected {
+            text_style = text_style.reversed()
+        };
+        if value.style == StatusStyle::Strikethrough {
+            text_style = text_style.crossed_out()
+        }
+
+        let prefix_length: usize = prefix.width();
         let task_span = Span::styled(
             truncate_string_to_width(
                 value.task.title.clone(),
                 usize::from(value.area_width).saturating_sub(prefix_length),
             ),
-            if value.is_selected {
-                Style::default().reversed()
-            } else {
-                Style::default().fg(value.color.map_or(Color::default(), |c| c.into()))
-            },
+            text_style,
         );
 
-        Line::from(prefix.into_iter().chain([task_span]).collect::<Vec<_>>())
+        Line::from(iter::once(prefix).chain([task_span]).collect::<Vec<_>>())
     }
 }
