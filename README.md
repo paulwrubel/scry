@@ -103,7 +103,13 @@ scry -p myapp move 1 "in progress"
 
 ## Configuration
 
-On first run, scry creates `~/.config/scry/config.toml` with available options. The active project is persisted automatically.
+scry reads configuration from `$XDG_CONFIG_HOME/scry/config.toml` (falling back to `~/.config/scry/config.toml`) if the file exists. The file is never created automatically — create it manually only if you want to override the defaults.
+
+Available options:
+
+- `database_url` — set the database URL, e.g. `database_url = "postgres://user:pass@localhost/scry"`. If unset, scry uses the `DATABASE_URL` environment variable, falling back to a SQLite database (see [Database](#database)).
+
+The active project is persisted automatically.
 
 ## Database
 

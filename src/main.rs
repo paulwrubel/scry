@@ -122,13 +122,12 @@ enum StatusCommand {
 async fn main() -> Result<(), AppError> {
     let cli = Cli::parse();
     let config = ScryConfig::load()?;
-    let db_url = config.resolve_database_url();
-    let store = SqliteStore::new(&db_url).await?;
+    let store = SqliteStore::new(&config.database_url).await?;
 
     let (project_id, project_name) = resolve_project(&store, cli.project.as_deref()).await?;
 
     let Some(command) = cli.command else {
-        let mut app = tui::App::new(store, project_id);
+        let mut app = tui::App::new(config, store, project_id);
         return app.run().await;
     };
 

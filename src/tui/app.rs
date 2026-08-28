@@ -1,3 +1,4 @@
+use crate::config::ScryConfig;
 use crate::models::ProjectID;
 use crate::store::TaskStore;
 use crate::tui::action::Action;
@@ -24,15 +25,17 @@ pub struct App<S: TaskStore + Sync> {
     is_running: bool,
 
     // domain state
+    config: ScryConfig,
     store: S,
     project_id: ProjectID,
 }
 
 impl<S: TaskStore + Sync> App<S> {
-    pub fn new(store: S, project_id: ProjectID) -> Self {
+    pub fn new(config: ScryConfig, store: S, project_id: ProjectID) -> Self {
         App {
             root: Root::new(),
             is_running: true,
+            config,
             store,
             project_id,
         }
@@ -80,11 +83,8 @@ impl<S: TaskStore + Sync> App<S> {
         disable_raw_mode()
             .map_err(|e| AppError::Internal(format!("failed to disable raw mode: {}", e)))?;
 
-        execute!(
-            terminal.backend_mut(),
-            LeaveAlternateScreen
-        )
-        .map_err(|e| AppError::Internal(format!("failed to leave alternate screen: {}", e)))?;
+        execute!(terminal.backend_mut(), LeaveAlternateScreen)
+            .map_err(|e| AppError::Internal(format!("failed to leave alternate screen: {}", e)))?;
 
         terminal
             .show_cursor()
