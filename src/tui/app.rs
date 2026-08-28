@@ -11,7 +11,7 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::{
     cursor::{SetCursorStyle, Show},
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
+    event::{self, Event, KeyEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -56,7 +56,6 @@ impl<S: TaskStore + Sync> App<S> {
         execute!(
             stdout,
             EnterAlternateScreen,
-            EnableMouseCapture,
             SetCursorStyle::BlinkingBlock,
             Show
         )
@@ -68,7 +67,7 @@ impl<S: TaskStore + Sync> App<S> {
         let original_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             let _ = disable_raw_mode();
-            let _ = execute!(std::io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+            let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
             original_hook(info);
         }));
 
@@ -83,8 +82,7 @@ impl<S: TaskStore + Sync> App<S> {
 
         execute!(
             terminal.backend_mut(),
-            LeaveAlternateScreen,
-            DisableMouseCapture
+            LeaveAlternateScreen
         )
         .map_err(|e| AppError::Internal(format!("failed to leave alternate screen: {}", e)))?;
 
