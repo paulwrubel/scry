@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id, name, created_at\n                FROM projects\n                ORDER BY name ASC\n            ",
+  "query": "\n                SELECT id, name, entry_status_id, created_at\n                FROM projects\n                ORDER BY name ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -26,8 +26,19 @@
         }
       },
       {
-        "name": "created_at",
+        "name": "entry_status_id",
         "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "entry_status_id"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -43,8 +54,9 @@
     "nullable": [
       false,
       false,
+      true,
       false
     ]
   },
-  "hash": "f26a422ee2168ca5105b1debe193b166b0e5c0f1f199fe2f27572641118bb772"
+  "hash": "5fb5013f556b40bb507cb67d8db8c2d128f2462d7e3793fd1affa76d7be3c14e"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                INSERT INTO projects (name, created_at)\n                VALUES (?, ?)\n                RETURNING id\n            ",
+  "query": "\n                INSERT INTO projects (name, entry_status_id, created_at)\n                VALUES (?, ?, ?)\n                RETURNING id\n            ",
   "describe": {
     "columns": [
       {
@@ -16,11 +16,11 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       false
     ]
   },
-  "hash": "ac153d855aec9b2644acda5185231ca5cc8b1a79b838c6ab25eeb9d33cc61588"
+  "hash": "8e80179f93d4b2232416daab0db22fb37312dc9aae4926013cba02ebf329a21f"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id, name, created_at\n                FROM projects\n                WHERE id = ?\n            ",
+  "query": "\n                SELECT id, name, entry_status_id, created_at\n                FROM projects\n                WHERE id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -26,8 +26,19 @@
         }
       },
       {
-        "name": "created_at",
+        "name": "entry_status_id",
         "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "entry_status_id"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -43,8 +54,9 @@
     "nullable": [
       false,
       false,
+      true,
       false
     ]
   },
-  "hash": "f42428f892388389e5ca3f8ef2f4d4f8ed005a9c42e3b9cdf9bdde9f08429c87"
+  "hash": "d45aadf695d6d841fc30e23da9321e78baa30d9c04aaa0dd8f9e45ab1c494121"
 }
