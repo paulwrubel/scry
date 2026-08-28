@@ -68,6 +68,9 @@ impl AddOrEditTask {
         }
 
         match (key.modifiers, key.code) {
+            #[cfg(target_os = "macos")]
+            (KeyModifiers::SUPER, KeyCode::Char('s')) => self.handle_create_or_update(state),
+            #[cfg(not(target_os = "macos"))]
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.handle_create_or_update(state),
             (_, KeyCode::Enter) => {
                 if self.confirm_button.is_focused {
