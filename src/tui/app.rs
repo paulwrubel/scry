@@ -5,7 +5,7 @@ use crate::tui::component::RenderContext;
 use crate::tui::component::Root;
 use crate::{
     error::{AppError, StorageError},
-    tui::component::State,
+    tui::component::ProjectState,
 };
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -100,7 +100,7 @@ impl<S: TaskStore + Sync> App<S> {
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<(), AppError> {
         while self.is_running {
-            let state = State::load_from_store(&self.store, self.project_id).await?;
+            let state = ProjectState::load_from_store(&self.store, self.project_id).await?;
 
             terminal
                 .draw(|f| {
@@ -115,9 +115,12 @@ impl<S: TaskStore + Sync> App<S> {
 
             match event::read().map_err(|e| AppError::Internal(format!("event error: {}", e)))? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    self.root.clear_status();
                     for action in self.root.handle_event(&state, key) {
-                        self.process_action(action);
+                        if let Some(action) = self.process_action(action) {
+                            // popup-opening actions (e.g. error popups) go back through Root,
+                            // which owns the popup lifecycle
+                            self.root.handle_action(&state, action);
+                        }
                     }
                 }
                 Event::Resize(_, _) => {}
@@ -127,16 +130,20 @@ impl<S: TaskStore + Sync> App<S> {
         Ok(())
     }
 
-    fn process_action(&mut self, action: Action) {
+    fn process_action(&mut self, action: Action) -> Option<Action> {
         match action {
-            Action::Quit => self.is_running = false,
+            Action::Quit => {
+                self.is_running = false;
+                None
+            }
 
             // popup lifecycle and command input are handled internally by Root
-            Action::OpenPopupConfirmDelete(_) => {}
-            Action::OpenPopupCreateTask(_) => {}
-            Action::OpenPopupErrorInfo(_) => {}
-            Action::DismissPopup => {}
-            Action::CloseCommandInput => {}
+            Action::OpenPopupAddNote(_)
+            | Action::OpenPopupAddOrEditTask(_)
+            | Action::OpenPopupConfirmDelete(_)
+            | Action::OpenPopupErrorInfo(_)
+            | Action::DismissPopup
+            | Action::CloseCommandInput => None,
 
             Action::CreateTask(task) => {
                 match Self::block_on(self.store.create_task(
@@ -146,19 +153,19 @@ impl<S: TaskStore + Sync> App<S> {
                     task.status_id,
                     task.position,
                 )) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
             Action::UpdateTask(task) => {
                 match Self::block_on(self.store.update_and_autoposition_task(task)) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
             Action::DeleteTask(task_id) => match Self::block_on(self.store.delete_task(task_id)) {
-                Ok(_) => {}
-                Err(e) => self.root.set_status(e.to_string()),
+                Ok(_) => None,
+                Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
             },
             Action::CreateStatus(status) => {
                 match Self::block_on(self.store.create_status(
@@ -168,8 +175,8 @@ impl<S: TaskStore + Sync> App<S> {
                     status.color,
                     status.style,
                 )) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
             Action::UpdateStatus(status) => {
@@ -192,14 +199,20 @@ impl<S: TaskStore + Sync> App<S> {
                             .await
                     }
                 }) {
-                    Ok(_) => {}
-                    Err(e) => self.root.set_status(e.to_string()),
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
             Action::DeleteStatus(id) => match Self::block_on(self.store.delete_status(id)) {
-                Ok(_) => {}
-                Err(e) => self.root.set_status(e.to_string()),
+                Ok(_) => None,
+                Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
             },
+            Action::CreateNote(note) => {
+                match Self::block_on(self.store.create_note(note.task_id, note.contents)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
         }
     }
 

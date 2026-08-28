@@ -8,7 +8,7 @@ use ratatui_textarea::TextArea;
 
 use crate::tui::{
     Action, command,
-    component::{RenderContext, State},
+    component::{ProjectState, RenderContext},
 };
 
 pub struct CommandInput {
@@ -38,7 +38,7 @@ impl CommandInput {
         self.is_focused = false;
     }
 
-    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Vec<Action> {
+    pub fn handle_event(&mut self, state: &ProjectState, key: KeyEvent) -> Vec<Action> {
         // Enter is handled below (submit); never let it insert a newline
         match (key.modifiers, key.code) {
             (_, KeyCode::Enter) | (KeyModifiers::CONTROL, KeyCode::Char('m')) => {}
@@ -84,7 +84,7 @@ impl CommandInput {
         ctx.with_area(input_area).render(&textarea);
     }
 
-    fn process_command_text(&self, state: &State) -> Vec<Action> {
+    fn process_command_text(&self, state: &ProjectState) -> Vec<Action> {
         let text = self.textarea.lines().join("\n");
 
         command::parse_command(state, &text)

@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
+pub type NoteID = i64;
 pub type TaskID = i64;
 pub type ProjectID = i64;
 pub type StatusID = i64;
@@ -123,5 +124,13 @@ pub struct Task {
     pub description: Option<String>,
     pub status_id: i64,
     pub position: i32,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Note {
+    pub id: NoteID,
+    pub task_id: TaskID,
+    pub contents: String,
     pub created_at: DateTime<Utc>,
 }

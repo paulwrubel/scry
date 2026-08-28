@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS notes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id     INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    contents    TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);

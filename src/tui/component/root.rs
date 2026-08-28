@@ -1,8 +1,10 @@
 use crate::models::{Task, TaskID};
 use crate::tui::action::Action;
-use crate::tui::component::popup::{AddOrEditTask, ConfirmDelete, ConfirmDeleteEntity, ErrorInfo};
+use crate::tui::component::popup::{
+    AddNote, AddOrEditTask, ConfirmDelete, ConfirmDeleteEntity, ErrorInfo,
+};
 use crate::tui::component::{
-    CommandInput, Hints, Popup, ProjectStatusTasks, RenderContext, State, TaskDetails, TaskList,
+    CommandInput, Hints, Popup, ProjectState, RenderContext, TaskDetails, TaskList, TaskWithNotes,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Spacing};
@@ -38,23 +40,27 @@ impl Root {
         }
     }
 
-    fn handle_action(&mut self, state: &State, action: Action) -> Vec<Action> {
+    pub fn handle_action(&mut self, state: &ProjectState, action: Action) -> Vec<Action> {
         self.handle_actions(state, vec![action])
     }
 
-    fn handle_actions(&mut self, state: &State, actions: Vec<Action>) -> Vec<Action> {
+    fn handle_actions(&mut self, state: &ProjectState, actions: Vec<Action>) -> Vec<Action> {
         actions
             .into_iter()
             .flat_map(|action| {
                 match action {
                     // UI actions — handled here, never reach the coordinator
+                    Action::OpenPopupAddNote(task_id) => {
+                        self.popup = Some(Popup::AddNote(Box::new(AddNote::new(task_id))));
+                        vec![]
+                    }
+                    Action::OpenPopupAddOrEditTask(task) => {
+                        self.popup = Some(Popup::AddOrEditTask(Box::new(AddOrEditTask::new(task))));
+                        vec![]
+                    }
                     Action::OpenPopupConfirmDelete(entity) => {
                         self.popup = Some(Popup::ConfirmDelete(ConfirmDelete::new(entity)));
 
-                        vec![]
-                    }
-                    Action::OpenPopupCreateTask(task) => {
-                        self.popup = Some(Popup::AddOrEditTask(Box::new(AddOrEditTask::new(task))));
                         vec![]
                     }
                     Action::OpenPopupErrorInfo(error_text) => {
@@ -77,24 +83,21 @@ impl Root {
                     | Action::UpdateTask(_)
                     | Action::CreateStatus(_)
                     | Action::UpdateStatus(_)
-                    | Action::DeleteStatus(_) => {
+                    | Action::DeleteStatus(_)
+                    | Action::CreateNote(_) => {
                         self.popup = None;
                         vec![action]
                     }
                     Action::DeleteTask(task_id) => {
                         self.popup = None;
 
-                        let project_status_tasks: ProjectStatusTasks = state.into();
-
                         // these really should match, i don't see how they couldn't, but still, we'll make sure
-                        if let Some(st) = self.task_from_selected_task(&project_status_tasks)
-                            && st.id == task_id
+                        if let Some(task) = self.task_from_selected_task(state)
+                            && task.id == task_id
                         {
-                            if let Some(next) = project_status_tasks.next_task(task_id) {
+                            if let Some(next) = state.next_task(task_id) {
                                 self.selected_task = Some(SelectedTask::ID(next.id))
-                            } else if let Some(previous) =
-                                project_status_tasks.previous_task(task_id)
-                            {
+                            } else if let Some(previous) = state.previous_task(task_id) {
                                 self.selected_task = Some(SelectedTask::ID(previous.id))
                             } else {
                                 self.selected_task = Some(SelectedTask::First)
@@ -111,7 +114,7 @@ impl Root {
             .collect::<Vec<_>>()
     }
 
-    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Vec<Action> {
+    pub fn handle_event(&mut self, state: &ProjectState, key: KeyEvent) -> Vec<Action> {
         let code = key.code;
 
         // if we get a quit request, we do that, regardless of anything else
@@ -133,8 +136,7 @@ impl Root {
         }
 
         // global keys are handled ONLY if nothing above handled the event
-        let project_status_tasks: ProjectStatusTasks = state.into();
-        let selected = self.task_from_selected_task(&project_status_tasks);
+        let selected = self.task_from_selected_task(state);
         match (key.modifiers, code) {
             (KeyModifiers::NONE, KeyCode::Char('/')) => {
                 self.command_input.focus();
@@ -142,11 +144,11 @@ impl Root {
                 vec![]
             }
             (KeyModifiers::NONE, KeyCode::Char('a')) => {
-                self.handle_action(state, Action::OpenPopupCreateTask(None))
+                self.handle_action(state, Action::OpenPopupAddOrEditTask(None))
             }
             (KeyModifiers::NONE, KeyCode::Char('e')) => {
                 if let Some(task) = selected {
-                    self.handle_action(state, Action::OpenPopupCreateTask(Some(task.clone())))
+                    self.handle_action(state, Action::OpenPopupAddOrEditTask(Some(task.clone())))
                 } else {
                     vec![]
                 }
@@ -155,8 +157,15 @@ impl Root {
                 if let Some(task) = selected {
                     self.handle_action(
                         state,
-                        Action::OpenPopupConfirmDelete(ConfirmDeleteEntity::Task(task.clone())),
+                        Action::OpenPopupConfirmDelete(ConfirmDeleteEntity::Task(Task::from(task))),
                     )
+                } else {
+                    vec![]
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Char('n')) if self.task_list.is_focused => {
+                if let Some(task) = selected {
+                    self.handle_action(state, Action::OpenPopupAddNote(task.id))
                 } else {
                     vec![]
                 }
@@ -164,11 +173,10 @@ impl Root {
             (_, KeyCode::Char(',') | KeyCode::Char('<')) if let Some(task) = selected => {
                 // statuses is ordered by position; take the one before the task's current status
                 let previous_status = state
-                    .statuses
-                    .iter()
+                    .statuses()
                     .position(|status| status.id == task.status_id)
                     .and_then(|index| index.checked_sub(1))
-                    .and_then(|index| state.statuses.get(index));
+                    .and_then(|index| state.statuses().nth(index));
 
                 // nothing to move to if the task is already in the first status
                 previous_status.map_or(vec![], |status| {
@@ -176,7 +184,7 @@ impl Root {
                         state,
                         Action::UpdateTask(Task {
                             status_id: status.id,
-                            ..task.clone()
+                            ..Task::from(task)
                         }),
                     )
                 })
@@ -184,10 +192,9 @@ impl Root {
             (_, KeyCode::Char('.') | KeyCode::Char('>')) if let Some(task) = selected => {
                 // statuses is ordered by position; take the one after the task's current status
                 let next_status = state
-                    .statuses
-                    .iter()
+                    .statuses()
                     .position(|status| status.id == task.status_id)
-                    .and_then(|index| state.statuses.get(index + 1));
+                    .and_then(|index| state.statuses().nth(index + 1));
 
                 // nothing to move to if the task is already in the last status
                 next_status.map_or(vec![], |status| {
@@ -195,7 +202,7 @@ impl Root {
                         state,
                         Action::UpdateTask(Task {
                             status_id: status.id,
-                            ..task.clone()
+                            ..Task::from(task)
                         }),
                     )
                 })
@@ -204,12 +211,12 @@ impl Root {
                 if self.task_list.is_focused =>
             {
                 // first, check if anything at all is selected
-                if let Some(task) = self.task_from_selected_task(&project_status_tasks) {
+                if let Some(task) = self.task_from_selected_task(state) {
                     // if the user is holding shift, just go to the top
                     if modifier == KeyModifiers::SHIFT {
                         self.selected_task = Some(SelectedTask::First)
                     // otherwise, if there's a previous task, select it
-                    } else if let Some(prev) = project_status_tasks.previous_task(task.id) {
+                    } else if let Some(prev) = state.previous_task(task.id) {
                         self.selected_task = Some(SelectedTask::ID(prev.id));
                     }
                 }
@@ -220,12 +227,12 @@ impl Root {
                 if self.task_list.is_focused =>
             {
                 // first, check if anything at all is selected
-                if let Some(task) = self.task_from_selected_task(&project_status_tasks) {
+                if let Some(task) = self.task_from_selected_task(state) {
                     // if the user is holding shift, just go to the top
                     if modifier == KeyModifiers::SHIFT {
                         self.selected_task = Some(SelectedTask::Last)
                     // otherwise, if there's a previous task, select it
-                    } else if let Some(next) = project_status_tasks.next_task(task.id) {
+                    } else if let Some(next) = state.next_task(task.id) {
                         self.selected_task = Some(SelectedTask::ID(next.id));
                     }
                 }
@@ -263,12 +270,10 @@ impl Root {
         //
         // todo: move this padding stuff unti the actual task_list component
 
-        let project_status_tasks: ProjectStatusTasks = ctx.state.into();
-        let selected_task = self.task_from_selected_task(&project_status_tasks);
+        let selected_task = self.task_from_selected_task(ctx.state);
         self.task_list.render(
             &mut ctx.with_area(block.inner(task_list_area)),
-            &project_status_tasks,
-            selected_task.map(|t| t.id),
+            selected_task.map(|task| task.id),
         );
         // task list block
         let project_name = &ctx.state.project.name;
@@ -305,7 +310,7 @@ impl Root {
             .layout(&Layout::horizontal([Constraint::Min(0)]).horizontal_margin(1));
         self.hints.render(
             &mut ctx.with_area(hints_content_area),
-            selected_task.map(|t| t.id),
+            selected_task.map(|task| task.id),
         );
         // hints block
         ctx.with_area(hints_area)
@@ -317,23 +322,12 @@ impl Root {
         }
     }
 
-    pub fn set_status(&mut self, msg: String) {
-        self.hints.set_message(msg);
-    }
-
-    pub fn clear_status(&mut self) {
-        self.hints.set_message(String::new());
-    }
-
-    fn task_from_selected_task<'a>(
-        &self,
-        project_status_tasks: &'a ProjectStatusTasks,
-    ) -> Option<&'a Task> {
+    fn task_from_selected_task<'a>(&self, state: &'a ProjectState) -> Option<&'a TaskWithNotes> {
         match self.selected_task {
             Some(st) => match st {
-                SelectedTask::First => project_status_tasks.first(),
-                SelectedTask::Last => project_status_tasks.last(),
-                SelectedTask::ID(task_id) => project_status_tasks.get_task_by_id(task_id),
+                SelectedTask::First => state.first(),
+                SelectedTask::Last => state.last(),
+                SelectedTask::ID(task_id) => state.get_task_by_id(task_id),
             },
             None => None,
         }

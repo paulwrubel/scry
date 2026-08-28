@@ -5,7 +5,9 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
 use crate::error::StorageError;
-use crate::models::{Color, Project, ProjectID, Status, StatusID, Style, Task, TaskID};
+use crate::models::{
+    Color, Note, NoteID, Project, ProjectID, Status, StatusID, Style, Task, TaskID,
+};
 use crate::store::TaskStore;
 
 #[derive(Clone)]
@@ -27,7 +29,8 @@ impl SqliteStore {
 
         let connect_options = SqliteConnectOptions::new()
             .filename(db_path)
-            .create_if_missing(true);
+            .create_if_missing(true)
+            .foreign_keys(true);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
@@ -100,6 +103,24 @@ fn project_from_fields(id: i64, name: String, created_at: String) -> Result<Proj
     Ok(Project {
         id,
         name,
+        created_at,
+    })
+}
+
+fn note_from_fields(
+    id: i64,
+    task_id: i64,
+    contents: String,
+    created_at: String,
+) -> Result<Note, StorageError> {
+    let created_at = DateTime::parse_from_rfc3339(&created_at)
+        .map_err(|e| StorageError::Database(format!("invalid note created_at: {}", e)))?
+        .with_timezone(&Utc);
+
+    Ok(Note {
+        id,
+        task_id,
+        contents,
         created_at,
     })
 }
@@ -337,6 +358,144 @@ impl TaskStore for SqliteStore {
         .execute(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to delete task: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn create_note(&self, task_id: TaskID, contents: String) -> Result<Note, StorageError> {
+        let created_at = Utc::now();
+
+        let row = sqlx::query!(
+            r#"
+                INSERT INTO notes (task_id, contents, created_at)
+                VALUES (?, ?, ?)
+                RETURNING id
+            "#,
+            &task_id,
+            &contents,
+            created_at.to_rfc3339(),
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to add note: {}", e)))?;
+
+        Ok(Note {
+            id: row.id.expect("RETURNING guarantees id"),
+            task_id,
+            contents,
+            created_at,
+        })
+    }
+
+    async fn get_note_by_id(&self, id: NoteID) -> Result<Option<Note>, StorageError> {
+        let row = sqlx::query!(
+            r#"
+                SELECT
+                    n.id,
+                    n.task_id,
+                    n.contents,
+                    n.created_at
+                FROM notes n
+                WHERE n.id = ?
+            "#,
+            id,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to show note: {}", e)))?;
+
+        Ok(match row {
+            Some(r) => Some(note_from_fields(r.id, r.task_id, r.contents, r.created_at)?),
+            None => None,
+        })
+    }
+
+    async fn get_all_notes_by_task_id(&self, task_id: TaskID) -> Result<Vec<Note>, StorageError> {
+        let rows = sqlx::query!(
+            r#"
+                SELECT
+                    n.id,
+                    n.task_id,
+                    n.contents,
+                    n.created_at
+                FROM notes n
+                WHERE n.task_id = ?
+                ORDER BY n.created_at ASC
+            "#,
+            task_id,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to list notes: {}", e)))?;
+
+        rows.into_iter()
+            .map(|r| note_from_fields(r.id, r.task_id, r.contents, r.created_at))
+            .collect::<Result<Vec<Note>, _>>()
+    }
+
+    async fn get_all_notes_by_project_id(
+        &self,
+        project_id: ProjectID,
+    ) -> Result<Vec<Note>, StorageError> {
+        let rows = sqlx::query!(
+            r#"
+                SELECT
+                    n.id,
+                    n.task_id,
+                    n.contents,
+                    n.created_at
+                FROM notes n
+                JOIN tasks t ON t.id = n.task_id
+                WHERE t.project_id = ?
+                ORDER BY n.created_at ASC
+            "#,
+            project_id,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to list notes: {}", e)))?;
+
+        rows.into_iter()
+            .map(|r| note_from_fields(r.id, r.task_id, r.contents, r.created_at))
+            .collect::<Result<Vec<Note>, _>>()
+    }
+
+    async fn update_note(&self, note: Note) -> Result<Note, StorageError> {
+        let result = sqlx::query!(
+            r#"
+                UPDATE notes
+                SET contents = ?
+                WHERE id = ?
+            "#,
+            &note.contents,
+            &note.id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to update note: {}", e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StorageError::NotFound("note not found".to_string()));
+        }
+
+        Ok(note)
+    }
+
+    async fn delete_note(&self, id: NoteID) -> Result<(), StorageError> {
+        let result = sqlx::query!(
+            r#"
+                DELETE FROM notes
+                WHERE id = ?
+            "#,
+            id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to delete note: {}", e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StorageError::NotFound("note not found".to_string()));
+        }
 
         Ok(())
     }

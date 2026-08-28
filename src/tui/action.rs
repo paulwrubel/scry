@@ -1,6 +1,6 @@
 use crate::{
-    models::{Status, StatusID, Task, TaskID},
-    tui::component::popup::ConfirmDeleteEntity,
+    models::{Note, Status, StatusID, Task, TaskID},
+    tui::component::{TaskWithNotes, popup::ConfirmDeleteEntity},
 };
 
 /// Cross-cutting actions that components emit to the parent coordinator.
@@ -11,8 +11,9 @@ pub enum Action {
     Quit,
 
     // ── popup lifecycle ──
+    OpenPopupAddNote(TaskID),
+    OpenPopupAddOrEditTask(Option<TaskWithNotes>),
     OpenPopupConfirmDelete(ConfirmDeleteEntity),
-    OpenPopupCreateTask(Option<Task>),
     OpenPopupErrorInfo(String),
     DismissPopup,
 
@@ -28,4 +29,7 @@ pub enum Action {
     CreateStatus(Status),
     UpdateStatus(Status),
     DeleteStatus(StatusID),
+
+    // ── notes ──
+    CreateNote(Note),
 }

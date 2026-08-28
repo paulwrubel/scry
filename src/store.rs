@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 
 use crate::error::StorageError;
-use crate::models::{Color, Project, ProjectID, Status, StatusID, Style, Task, TaskID};
+use crate::models::{
+    Color, Note, NoteID, Project, ProjectID, Status, StatusID, Style, Task, TaskID,
+};
 
 #[async_trait]
 pub trait TaskStore {
@@ -44,6 +46,35 @@ pub trait TaskStore {
 
     /// Delete a task
     async fn delete_task(&self, id: TaskID) -> Result<(), StorageError>;
+
+    async fn create_note(&self, task_id: TaskID, contents: String) -> Result<Note, StorageError>;
+
+    // The note read/update/delete methods below are not wired into the UI yet;
+    // they are scaffolding for the future note editing and deletion features.
+    #[allow(dead_code)]
+    async fn get_note_by_id(&self, id: NoteID) -> Result<Option<Note>, StorageError>;
+
+    /// List notes assigned to a Task
+    ///
+    /// Results are ordered by created date ascending.
+    #[allow(dead_code)]
+    async fn get_all_notes_by_task_id(&self, task_id: TaskID) -> Result<Vec<Note>, StorageError>;
+
+    /// List all notes in a project
+    ///
+    /// Results are ordered by created date ascending.
+    async fn get_all_notes_by_project_id(
+        &self,
+        project_id: ProjectID,
+    ) -> Result<Vec<Note>, StorageError>;
+
+    /// Edit an existing note
+    #[allow(dead_code)]
+    async fn update_note(&self, note: Note) -> Result<Note, StorageError>;
+
+    /// Delete a note
+    #[allow(dead_code)]
+    async fn delete_note(&self, id: NoteID) -> Result<(), StorageError>;
 
     async fn create_status(
         &self,

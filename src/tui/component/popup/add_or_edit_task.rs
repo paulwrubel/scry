@@ -1,7 +1,7 @@
 use crate::models::Task;
 use crate::tui::action::Action;
-use crate::tui::component::{Button, InputBlock, ProjectStatusTasks};
-use crate::tui::component::{RenderContext, State};
+use crate::tui::component::{Button, InputBlock, TaskWithNotes};
+use crate::tui::component::{ProjectState, RenderContext};
 use chrono::DateTime;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout};
@@ -10,18 +10,22 @@ use ratatui::widgets::{Block, Borders};
 pub struct AddOrEditTask {
     title_input: InputBlock,
     description_input: InputBlock,
-    create_task_button: Button,
+    confirm_button: Button,
 
-    task: Option<Task>,
+    task: Option<TaskWithNotes>,
 }
 
 impl AddOrEditTask {
-    pub fn new(task: Option<Task>) -> Self {
+    pub fn new(task: Option<TaskWithNotes>) -> Self {
         Self {
             title_input: InputBlock::new(true, false)
                 .with_title(String::from("Title"))
                 .with_placeholder_text(String::from("Do the laundry"))
-                .with_text(task.as_ref().map(|t| t.title.clone()).unwrap_or_default()),
+                .with_text(
+                    task.as_ref()
+                        .map(|task| task.title.clone())
+                        .unwrap_or_default(),
+                ),
             description_input: InputBlock::new(false, true)
                 .with_title(String::from("Description"))
                 .with_placeholder_text(String::from(
@@ -37,10 +41,10 @@ impl AddOrEditTask {
                         .map(|t| t.description.clone().unwrap_or_default())
                         .unwrap_or_default(),
                 ),
-            create_task_button: Button::new(
+            confirm_button: Button::new(
                 false,
                 String::from(if task.is_none() {
-                    "Create Task"
+                    "Add Task"
                 } else {
                     "Edit Task"
                 }),
@@ -50,7 +54,7 @@ impl AddOrEditTask {
         }
     }
 
-    pub fn handle_event(&mut self, state: &State, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, state: &ProjectState, key: KeyEvent) -> Option<Action> {
         // capture the description input's edit mode before forwarding, so the
         // match below can avoid fighting it for Esc/Up/Down
         let description_editing =
@@ -66,7 +70,7 @@ impl AddOrEditTask {
         match (key.modifiers, key.code) {
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.handle_create_or_update(state),
             (_, KeyCode::Enter) => {
-                if self.create_task_button.is_focused {
+                if self.confirm_button.is_focused {
                     self.handle_create_or_update(state)
                 } else {
                     None
@@ -88,8 +92,8 @@ impl AddOrEditTask {
                     self.description_input.blur();
                     self.title_input.focus();
                     None
-                } else if self.create_task_button.is_focused {
-                    self.create_task_button.blur();
+                } else if self.confirm_button.is_focused {
+                    self.confirm_button.blur();
                     self.description_input.focus();
                     None
                 } else {
@@ -106,7 +110,7 @@ impl AddOrEditTask {
                     None
                 } else if self.description_input.is_focused {
                     self.description_input.blur();
-                    self.create_task_button.focus();
+                    self.confirm_button.focus();
                     None
                 } else {
                     None
@@ -124,7 +128,7 @@ impl AddOrEditTask {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(if self.task.is_none() {
-                        "Create Task"
+                        "Add Task"
                     } else {
                         "Edit Task"
                     }),
@@ -135,7 +139,7 @@ impl AddOrEditTask {
             title_input_area,
             description_input_area,
             _,
-            create_button_area,
+            confirm_button_area,
         ] = content_area.layout(&Layout::vertical([
             Constraint::Length(3),
             Constraint::Min(3),
@@ -149,11 +153,11 @@ impl AddOrEditTask {
         self.description_input
             .render(&mut ctx.with_area(description_input_area));
 
-        self.create_task_button
-            .render(&mut ctx.with_area(create_button_area));
+        self.confirm_button
+            .render(&mut ctx.with_area(confirm_button_area));
     }
 
-    fn handle_create_or_update(&self, state: &State) -> Option<Action> {
+    fn handle_create_or_update(&self, state: &ProjectState) -> Option<Action> {
         if self.is_valid() {
             let title = self.title_input.buffer_text();
             let description = {
@@ -164,17 +168,15 @@ impl AddOrEditTask {
                 Some(task) => Some(Action::UpdateTask(Task {
                     title,
                     description,
-                    ..task.clone()
+                    ..Task::from(task)
                 })),
                 None => {
-                    let project_status_tasks = ProjectStatusTasks::from(state);
-
-                    let Some(first_status) = state.statuses.first() else {
+                    let Some(first_status) = state.statuses().next() else {
                         // no status to put a task in!
                         return None;
                     };
 
-                    let last_position = project_status_tasks
+                    let last_position = state
                         .tasks_in_status(first_status.id)
                         .iter()
                         .map(|t| t.position)

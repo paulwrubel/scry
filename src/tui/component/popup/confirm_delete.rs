@@ -1,6 +1,6 @@
 use crate::models::{Status, Task};
 use crate::tui::action::Action;
-use crate::tui::component::{RenderContext, State};
+use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Flex, Layout};
 use ratatui::style::Stylize;
@@ -20,7 +20,7 @@ impl ConfirmDelete {
         Self(entity)
     }
 
-    pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, _state: &ProjectState, key: KeyEvent) -> Option<Action> {
         match key.code {
             KeyCode::Esc | KeyCode::Char('n') => Some(Action::DismissPopup),
             KeyCode::Delete | KeyCode::Char('y') => match &self.0 {

@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 
 use crate::models::{Color, Status, Style};
 use crate::tui::Action;
+use crate::tui::component::ProjectState;
 use crate::tui::component::popup::ConfirmDeleteEntity;
-use crate::tui::component::{ProjectStatusTasks, State};
 
 /// The TUI commands
 #[derive(Parser)]
@@ -71,7 +71,7 @@ enum StatusCommand {
 }
 
 /// Parse a command line (without the leading "/") into an Action to emit.
-pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
+pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
     let Some(tokens) = shlex::split(line).filter(|t| !t.is_empty()) else {
         return vec![];
     };
@@ -81,14 +81,13 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
         Err(err) => return vec![Action::OpenPopupErrorInfo(err.to_string())],
     };
 
-    let project_status_tasks = ProjectStatusTasks::from(state);
     match command {
         Command::Status(status_command) => match status_command {
             StatusCommand::Add { name } => {
-                let position = state.statuses.iter().map(|s| s.position).max().unwrap_or(0) + 1;
+                let position = state.statuses().map(|s| s.position).max().unwrap_or(0) + 1;
                 vec![Action::CreateStatus(Status {
                     id: 0,
-                    project_id: state.project.id,
+                    project_id: state.project().id,
                     name,
                     position,
                     color: None,
@@ -96,8 +95,8 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
                 })]
             }
             StatusCommand::Delete { name } => {
-                if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
-                    let status_tasks = project_status_tasks.tasks_in_status(status.id);
+                if let Some(status) = state.statuses().find(|s| s.name == name) {
+                    let status_tasks = state.tasks_in_status(status.id);
                     if status_tasks.is_empty() {
                         vec![Action::OpenPopupConfirmDelete(ConfirmDeleteEntity::Status(
                             status.clone(),
@@ -118,8 +117,8 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
                 }
             }
             StatusCommand::Rename { old, new } => {
-                if let Some(status) = state.statuses.iter().find(|s| s.name == old) {
-                    if state.statuses.iter().find(|s| s.name == new).is_none() {
+                if let Some(status) = state.statuses().find(|s| s.name == old) {
+                    if state.statuses().find(|s| s.name == new).is_none() {
                         vec![Action::UpdateStatus(Status {
                             id: status.id,
                             name: new,
@@ -139,7 +138,7 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
                 }
             }
             StatusCommand::MoveUp { name } => {
-                if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
+                if let Some(status) = state.statuses().find(|s| s.name == name) {
                     if status.position == 0 {
                         vec![]
                     } else {
@@ -157,8 +156,8 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
                 }
             }
             StatusCommand::MoveDown { name } => {
-                if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
-                    let max_position = state.statuses.iter().map(|s| s.position).max().unwrap_or(0);
+                if let Some(status) = state.statuses().find(|s| s.name == name) {
+                    let max_position = state.statuses().map(|s| s.position).max().unwrap_or(0);
                     if status.position >= max_position {
                         vec![]
                     } else {
@@ -176,7 +175,7 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
                 }
             }
             StatusCommand::SetColor { name, color } => {
-                if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
+                if let Some(status) = state.statuses().find(|s| s.name == name) {
                     vec![Action::UpdateStatus(Status {
                         id: status.id,
                         color: Some(color),
@@ -190,7 +189,7 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
                 }
             }
             StatusCommand::ResetColor { name } => {
-                if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
+                if let Some(status) = state.statuses().find(|s| s.name == name) {
                     vec![Action::UpdateStatus(Status {
                         id: status.id,
                         color: None,
@@ -204,7 +203,7 @@ pub fn parse_command(state: &State, line: &str) -> Vec<Action> {
                 }
             }
             StatusCommand::SetStyle { name, style } => {
-                if let Some(status) = state.statuses.iter().find(|s| s.name == name) {
+                if let Some(status) = state.statuses().find(|s| s.name == name) {
                     vec![Action::UpdateStatus(Status {
                         id: status.id,
                         style,

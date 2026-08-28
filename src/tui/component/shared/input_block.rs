@@ -1,8 +1,8 @@
 use crate::tui::action::Action;
-use crate::tui::component::{RenderContext, State};
+use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::style::Style;
-use ratatui::text::Line;
+use ratatui::style::{Style, Stylize};
+use ratatui::text::{Line, Text};
 use ratatui::widgets::{Block, Borders};
 use ratatui_textarea::{CursorMove, TextArea, WrapMode};
 
@@ -45,12 +45,15 @@ impl InputBlock {
     }
 
     pub fn with_placeholder_text(mut self, placeholder_text: String) -> Self {
-        self.textarea.set_placeholder_text(placeholder_text);
+        self.textarea
+            .set_styled_placeholder(Text::from(placeholder_text).dim());
         self
     }
 
     pub fn with_text(self, text: String) -> Self {
-        let mut textarea = TextArea::new(text.split('\n').map(str::to_string).collect());
+        let mut textarea = self.textarea.clone();
+        textarea.clear();
+        textarea.insert_str(text);
         textarea.move_cursor(CursorMove::End);
         Self { textarea, ..self }
     }
@@ -80,7 +83,7 @@ impl InputBlock {
         self.textarea.lines().join("\n")
     }
 
-    pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, _state: &ProjectState, key: KeyEvent) -> Option<Action> {
         if !self.is_focused {
             return None;
         }
@@ -121,17 +124,18 @@ impl InputBlock {
             block = block.title(title.as_str());
         }
         if self.mode == InputMode::Editing {
-            block = block.title_bottom(Line::from("editing - esc to stop").right_aligned())
+            block = block.title_bottom(Line::from(" [Esc] to stop editing ").right_aligned())
         } else if self.is_focused && self.mode == InputMode::Viewing {
-            block = block.title_bottom(Line::from("enter to edit").right_aligned())
+            block = block.title_bottom(Line::from(" [Enter] to edit ").right_aligned())
         }
 
         let mut textarea = self.textarea.clone();
         textarea.set_block(block);
         textarea.set_style(text_style);
-        if !self.is_focused {
-            textarea.set_cursor_line_style(text_style);
-            textarea.set_cursor_style(text_style);
+        if !self.is_focused || self.mode == InputMode::Viewing {
+            // no cursor
+            textarea.set_cursor_line_style(Style::default());
+            textarea.set_cursor_style(Style::default());
         }
         if matches!(self.mode, InputMode::Viewing | InputMode::Editing) {
             textarea.set_wrap_mode(WrapMode::Glyph);

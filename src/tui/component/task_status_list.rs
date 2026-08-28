@@ -1,6 +1,6 @@
 use crate::{
     models::TaskID,
-    tui::component::{StatusTasks, TaskLine, shared::truncate_string_to_width},
+    tui::component::{StatusWithTasks, TaskLine, shared::truncate_string_to_width},
 };
 use ratatui::{
     style::{Color, Stylize},
@@ -8,19 +8,19 @@ use ratatui::{
 };
 
 pub struct TaskStatusList<'a> {
-    status_tasks: &'a StatusTasks,
+    status_with_tasks: &'a StatusWithTasks,
     selected_task_id: Option<TaskID>,
     area_width: u16,
 }
 
 impl<'a> TaskStatusList<'a> {
     pub fn new(
-        status_tasks: &'a StatusTasks,
+        status_with_tasks: &'a StatusWithTasks,
         selected_task_id: Option<TaskID>,
         area_width: u16,
     ) -> Self {
         Self {
-            status_tasks,
+            status_with_tasks,
             selected_task_id,
             area_width,
         }
@@ -29,9 +29,9 @@ impl<'a> TaskStatusList<'a> {
 
 impl<'a> From<TaskStatusList<'a>> for Text<'a> {
     fn from(value: TaskStatusList<'a>) -> Self {
-        let status: &crate::models::Status = &value.status_tasks.status;
+        let status: &crate::models::Status = &value.status_with_tasks.status;
         let status_name = &status.name;
-        let task_count = value.status_tasks.tasks.len();
+        let task_count = value.status_with_tasks.tasks_with_notes.len();
 
         let status_color = status.color.map_or(Color::default(), |c| c.into());
 
@@ -72,7 +72,7 @@ impl<'a> From<TaskStatusList<'a>> for Text<'a> {
                 .dim(),
         );
 
-        for task_text in value.status_tasks.tasks.iter().map(|task| {
+        for task_text in value.status_with_tasks.tasks_with_notes.iter().map(|task| {
             Text::from(Line::from(TaskLine::new(
                 task.clone(),
                 None,

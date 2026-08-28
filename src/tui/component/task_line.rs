@@ -1,6 +1,6 @@
 use crate::{
-    models::{Color as ScryColor, Style as ScryStyle, Task},
-    tui::component::shared::truncate_string_to_width,
+    models::{Color as ScryColor, Style as ScryStyle},
+    tui::component::{TaskWithNotes, shared::truncate_string_to_width},
 };
 use ratatui::{
     style::{Color, Style},
@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 pub struct TaskLine {
-    task: Task,
+    task: TaskWithNotes,
     color: Option<ScryColor>,
     style: ScryStyle,
     is_selected: bool,
@@ -17,7 +17,7 @@ pub struct TaskLine {
 
 impl TaskLine {
     pub fn new(
-        task: Task,
+        task: TaskWithNotes,
         color: Option<ScryColor>,
         style: ScryStyle,
         is_selected: bool,

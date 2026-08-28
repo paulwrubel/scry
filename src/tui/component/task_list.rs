@@ -1,6 +1,6 @@
 use crate::models::TaskID;
 use crate::tui::component::TaskStatusList;
-use crate::tui::component::{ProjectStatusTasks, RenderContext};
+use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Text};
 use ratatui::widgets::Paragraph;
@@ -20,12 +20,7 @@ impl TaskList {
         }
     }
 
-    pub fn render(
-        &mut self,
-        ctx: &mut RenderContext,
-        project_status_tasks: &ProjectStatusTasks,
-        selected_task_id: Option<TaskID>,
-    ) {
+    pub fn render(&mut self, ctx: &mut RenderContext, selected_task_id: Option<TaskID>) {
         let horizontal_padding = (1, 1);
         let vertical_padding = (1, 0);
         let [_, task_list_content_area, _] = ctx.area.layout(&Layout::horizontal([
@@ -41,12 +36,13 @@ impl TaskList {
 
         self.adjust_scroll_offset_for_selected_task(
             task_list_content_area,
-            project_status_tasks,
+            ctx.state,
             selected_task_id,
         );
 
-        let task_list_lines: Vec<Line> = project_status_tasks
-            .status_tasks
+        let task_list_lines: Vec<Line> = ctx
+            .state
+            .statuses_with_tasks
             .iter()
             .flat_map(|status_tasks| {
                 iter::once(Line::default()).chain(
@@ -65,12 +61,12 @@ impl TaskList {
             .render(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
     }
 
-    fn line_index_from_task_id(project_status_tasks: &ProjectStatusTasks, task_id: TaskID) -> u16 {
+    fn line_index_from_task_id(state: &ProjectState, task_id: TaskID) -> u16 {
         let mut line_index = 0;
-        for status in &project_status_tasks.status_tasks {
+        for status in &state.statuses_with_tasks {
             // the status header counts as a line
             line_index += 1;
-            for task in &status.tasks {
+            for task in &status.tasks_with_notes {
                 if task.id == task_id {
                     return line_index;
                 }
@@ -86,13 +82,12 @@ impl TaskList {
     fn adjust_scroll_offset_for_selected_task(
         &mut self,
         area: Rect,
-        project_status_tasks: &ProjectStatusTasks,
+        state: &ProjectState,
         selected_task_id: Option<TaskID>,
     ) {
         // todo
         if let Some(task_id) = selected_task_id {
-            let line_to_ensure_visibility =
-                Self::line_index_from_task_id(project_status_tasks, task_id);
+            let line_to_ensure_visibility = Self::line_index_from_task_id(state, task_id);
 
             let min_visible_index = self.scroll_offset;
             let max_visible_index = min_visible_index + area.height - 1;
@@ -104,7 +99,7 @@ impl TaskList {
             }
 
             if line_to_ensure_visibility == self.scroll_offset
-                && let Some(iis) = project_status_tasks.index_in_status(task_id)
+                && let Some(iis) = state.index_in_status(task_id)
                 && iis == 0
             {
                 // header visibility!

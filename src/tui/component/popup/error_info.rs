@@ -1,5 +1,5 @@
 use crate::tui::action::Action;
-use crate::tui::component::{RenderContext, State};
+use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Style, Stylize};
@@ -15,7 +15,7 @@ impl ErrorInfo {
         Self { error_text }
     }
 
-    pub fn handle_event(&mut self, _state: &State, key: KeyEvent) -> Option<Action> {
+    pub fn handle_event(&mut self, _state: &ProjectState, key: KeyEvent) -> Option<Action> {
         match key.code {
             // press basically anything to dismiss!
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char(_) => Some(Action::DismissPopup),
