@@ -96,6 +96,29 @@ impl ProjectState {
         })
     }
 
+    pub fn with_substring_filter(self, filter: String) -> Self {
+        Self {
+            project: self.project,
+            statuses_with_tasks: self
+                .statuses_with_tasks
+                .into_iter()
+                .map(|swt| {
+                    let filtered_tasks: Vec<TaskWithNotes> = swt
+                        .tasks_with_notes
+                        .into_iter()
+                        .filter(|task| task.title.to_lowercase().contains(&filter.to_lowercase()))
+                        .collect();
+
+                    StatusWithTasks {
+                        status: swt.status,
+                        is_entry: swt.is_entry,
+                        tasks_with_notes: filtered_tasks,
+                    }
+                })
+                .collect(),
+        }
+    }
+
     pub fn project(&self) -> &Project {
         &self.project
     }

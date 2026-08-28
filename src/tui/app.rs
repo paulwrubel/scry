@@ -112,7 +112,12 @@ impl<S: TaskStore + Sync> App<S> {
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<(), AppError> {
         while self.is_running {
-            let state = ProjectState::load_from_store(&self.store, self.project_id).await?;
+            let mut state = ProjectState::load_from_store(&self.store, self.project_id).await?;
+
+            let filter = self.root.current_filter();
+            if !filter.is_empty() {
+                state = state.with_substring_filter(filter)
+            }
 
             terminal
                 .draw(|f| {
@@ -149,13 +154,13 @@ impl<S: TaskStore + Sync> App<S> {
                 None
             }
 
-            // popup lifecycle and command input are handled internally by Root
             Action::OpenPopupAddNote(_)
             | Action::OpenPopupAddOrEditTask(_)
             | Action::OpenPopupConfirmDelete(_)
             | Action::OpenPopupErrorInfo(_)
             | Action::DismissPopup
-            | Action::CloseCommandInput => None,
+            | Action::CloseCommandInput
+            | Action::CloseFilterInput => None,
 
             Action::CreateTask(task) => {
                 match Self::block_on(self.store.create_task(

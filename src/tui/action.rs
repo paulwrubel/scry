@@ -12,15 +12,14 @@ pub enum Action {
     // ── lifecycle ──
     Quit,
 
-    // ── popup lifecycle ──
     OpenPopupAddNote(TaskID),
     OpenPopupAddOrEditTask(Option<TaskWithNotes>),
     OpenPopupConfirmDelete(ConfirmDeleteEntity),
     OpenPopupErrorInfo(String),
     DismissPopup,
 
-    // ── commands ──
     CloseCommandInput,
+    CloseFilterInput,
 
     // ── tasks ──
     CreateTask(Task),

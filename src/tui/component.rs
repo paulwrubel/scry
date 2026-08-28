@@ -1,6 +1,9 @@
 mod command_input;
 pub use command_input::CommandInput;
 
+mod filter_input;
+pub use filter_input::FilterInput;
+
 mod hints;
 pub use hints::Hints;
 

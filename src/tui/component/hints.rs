@@ -17,7 +17,13 @@ impl Hints {
         let mut hints = vec![];
 
         // initialize hints with static, always-available actions
-        hints.push(vec!["[/] ".to_span(), "commands".dim()]);
+        hints.push(vec!["[/] ".to_span(), "filter".dim()]);
+
+        #[cfg(target_os = "macos")]
+        hints.push(vec!["[Cmd+/] ".to_span(), "command".dim()]);
+        #[cfg(not(target_os = "macos"))]
+        hints.push(vec!["[Ctrl+/] ".to_span(), "command".dim()]);
+
         hints.push(vec!["[a]".to_span(), "dd".dim()]);
 
         // add select actions if any task is selected

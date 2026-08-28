@@ -4,7 +4,7 @@ use crate::tui::component::popup::{
     AddNote, AddOrEditTask, ConfirmDelete, ConfirmDeleteEntity, ErrorInfo,
 };
 use crate::tui::component::{
-    CommandInput, Hints, Popup, ProjectState, RenderContext, TaskDetails, TaskList,
+    CommandInput, FilterInput, Hints, Popup, ProjectState, RenderContext, TaskDetails, TaskList,
 };
 use crate::tui::state::TaskWithNotes;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -28,6 +28,7 @@ enum SelectedTask {
 pub struct Root {
     task_list: TaskList,
     command_input: CommandInput,
+    filter_input: FilterInput,
     hints: Hints,
     popup: Option<Popup>,
 
@@ -39,11 +40,16 @@ impl Root {
         Self {
             task_list: TaskList::new(true),
             command_input: CommandInput::new(false),
+            filter_input: FilterInput::new(false),
             hints: Hints::new(),
             popup: None,
 
             selected_task: Some(SelectedTask::First),
         }
+    }
+
+    pub fn current_filter(&self) -> String {
+        self.filter_input.current_filter()
     }
 
     pub fn handle_action(&mut self, state: &ProjectState, action: Action) -> Vec<Action> {
@@ -88,6 +94,10 @@ impl Root {
                         self.command_input.blur();
                         vec![]
                     }
+                    Action::CloseFilterInput => {
+                        self.filter_input.blur();
+                        vec![]
+                    }
 
                     // Store actions that also dismiss the popup before bubbling
                     Action::CreateTask(_)
@@ -95,7 +105,8 @@ impl Root {
                     | Action::CreateStatus(_)
                     | Action::UpdateStatus(_)
                     | Action::DeleteStatus(_)
-                    | Action::CreateNote(_) => {
+                    | Action::CreateNote(_)
+                    | Action::UpdateProject(_) => {
                         self.popup = None;
                         vec![action]
                     }
@@ -117,9 +128,8 @@ impl Root {
 
                         vec![action]
                     }
-
                     // unhandled actions bubble up unchanged
-                    _ => vec![action],
+                    Action::Quit => vec![action],
                 }
             })
             .collect::<Vec<_>>()
@@ -140,9 +150,12 @@ impl Root {
                 .map_or(vec![], |a| self.handle_action(state, a));
         }
 
-        // if the command input is focused, send the event there
+        // if some input is focused, it eats all input
         if self.command_input.is_focused {
             let actions = self.command_input.handle_event(state, key);
+            return self.handle_actions(state, actions);
+        } else if self.filter_input.is_focused {
+            let actions = self.filter_input.handle_event(state, key);
             return self.handle_actions(state, actions);
         }
 
@@ -150,6 +163,24 @@ impl Root {
         let selected = self.task_from_selected_task(state);
         match (key.modifiers, code) {
             (KeyModifiers::NONE, KeyCode::Char('/')) => {
+                self.filter_input.focus();
+
+                vec![]
+            }
+            // Esc should clear the filter
+            (_, KeyCode::Esc) => {
+                self.filter_input.reset();
+
+                vec![]
+            }
+            #[cfg(target_os = "macos")]
+            (KeyModifiers::SUPER, KeyCode::Char('/')) => {
+                self.command_input.focus();
+
+                vec![]
+            }
+            #[cfg(not(target_os = "macos"))]
+            (KeyModifiers::CONTROL, KeyCode::Char('/')) => {
                 self.command_input.focus();
 
                 vec![]
@@ -272,15 +303,24 @@ impl Root {
             .spacing(Spacing::Overlap(if task_area.width >= 80 { 1 } else { 0 })),
         );
 
+        let should_render_filter =
+            self.filter_input.is_focused || !self.filter_input.current_filter().is_empty();
+
+        // conditionally make space for filter input/display
+        let [filter_input_area, task_list_area] = task_list_area.layout(
+            &Layout::vertical([
+                Constraint::Length(if should_render_filter { 3 } else { 1 }),
+                Constraint::Fill(1),
+            ])
+            .spacing(Spacing::Overlap(1)),
+        );
+
         // create the base bordered block
         let block = Block::default()
             .borders(Borders::ALL)
             .merge_borders(MergeStrategy::Exact);
 
         // render the task list content
-        //
-        // todo: move this padding stuff unti the actual task_list component
-
         let selected_task = self.task_from_selected_task(ctx.state);
         self.task_list.render(
             &mut ctx.with_area(block.inner(task_list_area)),
@@ -315,6 +355,18 @@ impl Root {
                 .render(block.clone().title(Line::from(" command ")));
         }
 
+        // filter input area
+        if should_render_filter {
+            let [filter_input_content_area] = block
+                .inner(filter_input_area)
+                .layout(&Layout::horizontal([Constraint::Min(0)]).horizontal_margin(1));
+            self.filter_input
+                .render(&mut ctx.with_area(filter_input_content_area));
+            // command input block
+            ctx.with_area(filter_input_area)
+                .render(block.clone().title(Line::from(" filter ")));
+        }
+
         // hints border and content
         let [hints_content_area] = block
             .inner(hints_area)
@@ -338,7 +390,7 @@ impl Root {
             Some(st) => match st {
                 SelectedTask::First => state.first(),
                 SelectedTask::Last => state.last(),
-                SelectedTask::ID(task_id) => state.get_task_by_id(task_id),
+                SelectedTask::ID(task_id) => state.get_task_by_id(task_id).or(state.first()),
             },
             None => None,
         }
