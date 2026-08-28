@@ -104,6 +104,7 @@ impl ProjectState {
         self.tasks().find(|t| t.id == task_id)
     }
 
+    #[allow(dead_code)]
     pub fn get_status_by_id(&self, status_id: StatusID) -> Option<&Status> {
         self.statuses().find(|s| s.id == status_id)
     }

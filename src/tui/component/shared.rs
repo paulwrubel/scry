@@ -6,6 +6,7 @@ pub use input_block::InputBlock;
 
 mod single_selector;
 pub use single_selector::SingleSelector;
+pub use single_selector::SingleSelectorItem;
 
 pub fn truncate_string_to_width(s: String, max_width: usize) -> String {
     if s.chars().count() <= max_width {

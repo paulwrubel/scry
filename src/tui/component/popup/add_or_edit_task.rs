@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
-use crate::models::Task;
+use crate::models::{Status, Task};
 use crate::tui::action::Action;
-use crate::tui::component::shared::SingleSelector;
+use crate::tui::component::shared::{SingleSelector, SingleSelectorItem};
 use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
 use crate::tui::state::TaskWithNotes;
@@ -23,7 +21,7 @@ const DESCRIPTION_PLACEHOLDER_TEXT: &str = r#"There's a lot of laundry to do...
 pub struct AddOrEditTask {
     title_input: InputBlock,
     description_input: InputBlock,
-    status_selector: SingleSelector<String>,
+    status_selector: SingleSelector<Status, String>,
     confirm_button: Button,
 
     task: Option<TaskWithNotes>,
@@ -31,7 +29,6 @@ pub struct AddOrEditTask {
 
 impl AddOrEditTask {
     pub fn new(state: &ProjectState, task: Option<TaskWithNotes>) -> Result<Self, &'static str> {
-        let status_names: Vec<String> = state.statuses().map(|s| s.name.clone()).collect();
         let selected_index = state
             .statuses()
             .enumerate()
@@ -46,19 +43,9 @@ impl AddOrEditTask {
             })
             .unwrap_or(0);
 
-        if status_names.is_empty() {
+        if state.statuses().next().is_none() {
             return Err("Cannot create a task without any statuses");
         }
-
-        let status_styles: HashMap<String, Style> = state
-            .statuses()
-            .map(|s| {
-                let style = s
-                    .color
-                    .map_or(Style::default(), |c| Style::default().fg(c.into()));
-                (s.name.clone(), style)
-            })
-            .collect();
 
         let title_input = InputBlock::new(true, false)
             .with_title(String::from("Title"))
@@ -78,10 +65,17 @@ impl AddOrEditTask {
                     .unwrap_or_default(),
             );
 
-        let status_selector =
-            SingleSelector::new_with_item_style(false, status_names, move |status_name| {
-                status_styles.get(status_name).copied().unwrap_or_default()
+        let status_selector_options: Vec<SingleSelectorItem<Status, String>> = state
+            .statuses()
+            .map(|s| SingleSelectorItem {
+                value: s.clone(),
+                label: s.name.clone(),
+                label_style: s
+                    .color
+                    .map_or(Style::default(), |c| Style::default().fg(c.into())),
             })
+            .collect();
+        let status_selector = SingleSelector::new(false, status_selector_options)
             .expect("status_names is validated above as non-empty")
             .with_selected_index(selected_index)
             .expect("index guaranteed inside options");
@@ -249,21 +243,17 @@ impl AddOrEditTask {
                 let text = self.description_input.buffer_text();
                 if text.is_empty() { None } else { Some(text) }
             };
+            let status_id = self.status_selector.current_selection().value.id;
             match &self.task {
                 Some(task) => Some(Action::UpdateTask(Task {
                     title,
                     description,
+                    status_id,
                     ..Task::from(task)
                 })),
                 None => {
-                    let status = state
-                        .project()
-                        .entry_status_id
-                        .and_then(|id| state.get_status_by_id(id))
-                        .or_else(|| state.statuses().next())?;
-
                     let last_position = state
-                        .tasks_in_status(status.id)
+                        .tasks_in_status(status_id)
                         .iter()
                         .map(|t| t.position)
                         .max();
@@ -273,7 +263,7 @@ impl AddOrEditTask {
                         project_id: state.project().id,
                         title,
                         description,
-                        status_id: status.id,
+                        status_id,
                         position: last_position.map_or(0, |p| p + 1),
                         created_at: DateTime::default(), // dummy, overwritten on insert
                     }))

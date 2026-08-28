@@ -6,32 +6,33 @@ use ratatui::{
 };
 use std::fmt::Display;
 
-pub struct SingleSelector<T: Display> {
-    pub is_focused: bool,
-
-    options: Vec<T>,
-    selected_index: usize,
-    item_style_fn: Box<dyn Fn(&T) -> Style>,
+pub struct SingleSelectorItem<V, L: Display> {
+    pub(crate) value: V,
+    pub(crate) label: L,
+    pub(crate) label_style: Style,
 }
 
-impl<T: Display> SingleSelector<T> {
-    pub fn new_with_item_style<F>(
+pub struct SingleSelector<V, L: Display> {
+    pub is_focused: bool,
+
+    options: Vec<SingleSelectorItem<V, L>>,
+    selected_index: usize,
+}
+
+impl<V, L: Display> SingleSelector<V, L> {
+    pub fn new(
         is_focused: bool,
-        options: Vec<T>,
-        item_style_fn: F,
-    ) -> Result<Self, &'static str>
-    where
-        F: Fn(&T) -> Style + 'static,
-    {
+        options: Vec<SingleSelectorItem<V, L>>,
+    ) -> Result<Self, &'static str> {
         if options.is_empty() {
             return Err("Options must not be empty");
         }
 
         Ok(Self {
             is_focused,
+
             options,
             selected_index: 0,
-            item_style_fn: Box::new(item_style_fn),
         })
     }
 
@@ -46,6 +47,10 @@ impl<T: Display> SingleSelector<T> {
         }
     }
 
+    pub fn current_selection(&self) -> &SingleSelectorItem<V, L> {
+        &self.options[self.selected_index]
+    }
+
     pub fn focus(&mut self) {
         self.is_focused = true;
     }
@@ -53,6 +58,7 @@ impl<T: Display> SingleSelector<T> {
     pub fn blur(&mut self) {
         self.is_focused = false;
     }
+
     pub fn handle_event(&mut self, _state: &ProjectState, key: KeyEvent) {
         if !self.is_focused {
             return;
@@ -84,7 +90,7 @@ impl<T: Display> SingleSelector<T> {
         ctx.render(
             Line::from(vec![
                 Span::from("< "),
-                Span::styled(selected.to_string(), (self.item_style_fn)(selected)),
+                Span::styled(selected.label.to_string(), selected.label_style),
                 Span::from(" >"),
             ])
             .style(style)
