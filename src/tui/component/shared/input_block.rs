@@ -88,7 +88,7 @@ impl InputBlock {
             return None;
         }
         match (key.modifiers, key.code, &self.mode) {
-            (KeyModifiers::NONE, KeyCode::Enter, InputMode::Viewing) => {
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Enter, InputMode::Viewing) => {
                 self.mode = InputMode::Editing;
                 None
             }
