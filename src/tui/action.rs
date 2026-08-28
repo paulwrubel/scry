@@ -1,3 +1,4 @@
+use crate::models::Project;
 use crate::tui::state::TaskWithNotes;
 use crate::{
     models::{Note, Status, StatusID, Task, TaskID},
@@ -26,11 +27,14 @@ pub enum Action {
     UpdateTask(Task),
     DeleteTask(TaskID),
 
+    // ── notes ──
+    CreateNote(Note),
+
     // ── statuses ──
     CreateStatus(Status),
     UpdateStatus(Status),
     DeleteStatus(StatusID),
 
-    // ── notes ──
-    CreateNote(Note),
+    // ── projects ──
+    UpdateProject(Project),
 }

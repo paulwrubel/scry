@@ -15,6 +15,7 @@ pub struct ProjectState {
 #[derive(Debug, Clone)]
 pub struct StatusWithTasks {
     pub(crate) status: Status,
+    pub(crate) is_entry: bool,
     pub(crate) tasks_with_notes: Vec<TaskWithNotes>,
 }
 #[derive(Debug, Clone)]
@@ -79,6 +80,7 @@ impl ProjectState {
                 .iter()
                 .map(|status| StatusWithTasks {
                     status: status.clone(),
+                    is_entry: project.entry_status_id == Some(status.id),
                     tasks_with_notes: tasks
                         .iter()
                         .filter(|task| task.status_id == status.id)
@@ -106,7 +108,6 @@ impl ProjectState {
         self.statuses().find(|s| s.id == status_id)
     }
 
-    #[allow(dead_code)]
     pub fn get_status_by_name(&self, status_name: &str) -> Option<&Status> {
         self.statuses().find(|s| s.name == status_name)
     }

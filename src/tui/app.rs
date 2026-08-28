@@ -165,6 +165,12 @@ impl<S: TaskStore + Sync> App<S> {
                 Ok(_) => None,
                 Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
             },
+            Action::CreateNote(note) => {
+                match Self::block_on(self.store.create_note(note.task_id, note.contents)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
             Action::CreateStatus(status) => {
                 match Self::block_on(self.store.create_status(
                     status.project_id,
@@ -205,8 +211,8 @@ impl<S: TaskStore + Sync> App<S> {
                 Ok(_) => None,
                 Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
             },
-            Action::CreateNote(note) => {
-                match Self::block_on(self.store.create_note(note.task_id, note.contents)) {
+            Action::UpdateProject(project) => {
+                match Self::block_on(self.store.update_project(project)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }

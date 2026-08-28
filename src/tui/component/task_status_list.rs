@@ -33,6 +33,7 @@ impl<'a> TaskStatusList<'a> {
 impl<'a> From<TaskStatusList<'a>> for Text<'a> {
     fn from(value: TaskStatusList<'a>) -> Self {
         let status: &crate::models::Status = &value.status_with_tasks.status;
+        let is_entry = value.status_with_tasks.is_entry;
         let status_name = &status.name;
         let task_count = value.status_with_tasks.tasks_with_notes.len();
 
@@ -40,7 +41,11 @@ impl<'a> From<TaskStatusList<'a>> for Text<'a> {
 
         let mut text = Text::default();
 
-        let task_count_str = format!("[{task_count}]");
+        let task_count_str = if is_entry {
+            format!("* [{task_count}]")
+        } else {
+            format!("[{task_count}]")
+        };
         let status_name_str = truncate_string_to_width(
             status_name.clone(),
             value
