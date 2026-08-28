@@ -1,7 +1,8 @@
 use crate::models::Task;
 use crate::tui::action::Action;
-use crate::tui::component::{Button, InputBlock, TaskWithNotes};
+use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
+use crate::tui::state::TaskWithNotes;
 use chrono::DateTime;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout};
@@ -174,23 +175,24 @@ impl AddOrEditTask {
                     ..Task::from(task)
                 })),
                 None => {
-                    let Some(first_status) = state.statuses().next() else {
-                        // no status to put a task in!
-                        return None;
-                    };
+                    let status = state
+                        .project()
+                        .entry_status_id
+                        .and_then(|id| state.get_status_by_id(id))
+                        .or_else(|| state.statuses().next())?;
 
                     let last_position = state
-                        .tasks_in_status(first_status.id)
+                        .tasks_in_status(status.id)
                         .iter()
                         .map(|t| t.position)
                         .max();
 
                     Some(Action::CreateTask(Task {
                         id: 0, // dummy id
-                        project_id: state.project.id,
+                        project_id: state.project().id,
                         title,
                         description,
-                        status_id: first_status.id,
+                        status_id: status.id,
                         position: last_position.map_or(0, |p| p + 1),
                         created_at: DateTime::default(), // dummy, overwritten on insert
                     }))

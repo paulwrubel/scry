@@ -4,8 +4,9 @@ use crate::tui::component::popup::{
     AddNote, AddOrEditTask, ConfirmDelete, ConfirmDeleteEntity, ErrorInfo,
 };
 use crate::tui::component::{
-    CommandInput, Hints, Popup, ProjectState, RenderContext, TaskDetails, TaskList, TaskWithNotes,
+    CommandInput, Hints, Popup, ProjectState, RenderContext, TaskDetails, TaskList,
 };
+use crate::tui::state::TaskWithNotes;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Spacing};
 use ratatui::symbols::merge::MergeStrategy;
@@ -281,7 +282,7 @@ impl Root {
             selected_task.map(|task| task.id),
         );
         // task list block
-        let project_name = &ctx.state.project.name;
+        let project_name = &ctx.state.project().name;
         ctx.with_area(task_list_area).render(
             block
                 .clone()

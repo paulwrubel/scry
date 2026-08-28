@@ -292,7 +292,7 @@ async fn main() -> Result<(), AppError> {
                 }
             }
             ProjectCommand::Create { name } => {
-                let project = store.create_project(name).await?;
+                let project = store.create_project(name, None).await?;
                 println!("Created project \"{}\"", project.name);
                 println!(
                     "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."

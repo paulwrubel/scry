@@ -113,7 +113,11 @@ pub trait TaskStore {
     async fn delete_status(&self, id: StatusID) -> Result<(), StorageError>;
 
     /// Create a new project.
-    async fn create_project(&self, name: String) -> Result<Project, StorageError>;
+    async fn create_project(
+        &self,
+        name: String,
+        entry_status_id: Option<StatusID>,
+    ) -> Result<Project, StorageError>;
 
     async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError>;
 

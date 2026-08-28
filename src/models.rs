@@ -103,6 +103,7 @@ impl From<Option<String>> for Style {
 pub struct Project {
     pub id: ProjectID,
     pub name: String,
+    pub entry_status_id: Option<StatusID>,
     pub created_at: DateTime<Utc>,
 }
 

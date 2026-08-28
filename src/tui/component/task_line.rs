@@ -1,6 +1,6 @@
 use crate::{
     models::{Color as ScryColor, Style as ScryStyle},
-    tui::component::{TaskWithNotes, shared::truncate_string_to_width},
+    tui::{component::shared::truncate_string_to_width, state::TaskWithNotes},
 };
 use ratatui::{
     style::{Color, Style},

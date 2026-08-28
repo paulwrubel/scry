@@ -1,4 +1,5 @@
-use crate::tui::component::{RenderContext, TaskWithNotes};
+use crate::tui::component::RenderContext;
+use crate::tui::state::TaskWithNotes;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, Text};

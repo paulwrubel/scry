@@ -1,6 +1,7 @@
+use crate::tui::state::TaskWithNotes;
 use crate::{
     models::{Note, Status, StatusID, Task, TaskID},
-    tui::component::{TaskWithNotes, popup::ConfirmDeleteEntity},
+    tui::component::popup::ConfirmDeleteEntity,
 };
 
 /// Cross-cutting actions that components emit to the parent coordinator.
