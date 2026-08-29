@@ -1,7 +1,7 @@
 use std::iter;
 
 use crate::tui::component::RenderContext;
-use crate::tui::component::shared::ColoredTags;
+use crate::tui::component::shared::{ColoredTags, DATETIME_FORMAT_STR};
 use crate::tui::state::TaskWithNotes;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Stylize;
@@ -28,7 +28,7 @@ impl<'a> TaskDetails<'a> {
             .task
             .created_at
             .with_timezone(&chrono::Local)
-            .format("%Y-%m-%d %I:%M %p")
+            .format(DATETIME_FORMAT_STR)
             .to_string();
 
         let [details_area] = ctx
@@ -76,7 +76,7 @@ impl<'a> TaskDetails<'a> {
             let date_span = Span::from(
                 note.created_at
                     .with_timezone(&chrono::Local)
-                    .format("%b %d, %Y at %I:%M %P")
+                    .format(DATETIME_FORMAT_STR)
                     .to_string(),
             );
             let second_line_width = 1;
