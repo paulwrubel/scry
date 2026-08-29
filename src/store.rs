@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use crate::error::StorageError;
 use crate::models::{
-    Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Task, TaskID,
+    Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task, TaskID,
 };
 
 #[async_trait]
@@ -15,6 +15,7 @@ pub trait TaskStore {
         description: Option<String>,
         status_id: i64,
         position: i32,
+        tags: Tags,
     ) -> Result<Task, StorageError>;
 
     /// Get a task by its id

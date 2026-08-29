@@ -93,8 +93,7 @@ impl<V, L: Display> SingleSelector<V, L> {
                 Span::styled(selected.label.to_string(), selected.label_style),
                 Span::from(" >"),
             ])
-            .style(style)
-            .centered(),
+            .style(style),
         );
     }
 }

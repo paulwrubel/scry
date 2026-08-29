@@ -4,6 +4,7 @@ use chrono::Utc;
 use crate::error::StorageError;
 use crate::models::Note;
 use crate::models::StatusID;
+use crate::models::Tags;
 use crate::models::{Project, ProjectID, Status, Task, TaskID};
 use crate::store::TaskStore;
 
@@ -26,6 +27,7 @@ pub struct TaskWithNotes {
     pub(crate) description: Option<String>,
     pub(crate) status_id: i64,
     pub(crate) position: i32,
+    pub(crate) tags: Tags,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) notes: Vec<Note>,
 }
@@ -39,6 +41,7 @@ impl TaskWithNotes {
             description: task.description.clone(),
             status_id: task.status_id,
             position: task.position,
+            tags: task.tags.clone(),
             created_at: task.created_at,
             notes: notes.into_iter().collect(),
         }
@@ -54,6 +57,7 @@ impl From<&TaskWithNotes> for Task {
             description: value.description.clone(),
             status_id: value.status_id,
             position: value.position,
+            tags: value.tags.clone(),
             created_at: value.created_at,
         }
     }

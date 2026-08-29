@@ -4,7 +4,6 @@ use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Text};
 use ratatui::widgets::Paragraph;
-use std::iter;
 
 pub struct TaskList {
     pub is_focused: bool,
@@ -40,22 +39,19 @@ impl TaskList {
             selected_task_id,
         );
 
-        let task_list_lines: Vec<Line> = ctx
-            .state
-            .statuses_with_tasks
-            .iter()
-            .flat_map(|status_tasks| {
-                iter::once(Line::default()).chain(
-                    Text::from(TaskStatusList::new(
-                        status_tasks,
-                        selected_task_id,
-                        task_list_content_area.width,
-                    ))
-                    .lines,
-                )
-            })
-            .skip(1) // drop the leading blank before the first status
-            .collect();
+        let task_list_lines: Vec<Line> = itertools::Itertools::intersperse(
+            ctx.state.statuses_with_tasks.iter().map(|status_tasks| {
+                Text::from(TaskStatusList::new(
+                    status_tasks,
+                    selected_task_id,
+                    task_list_content_area.width,
+                ))
+                .lines
+            }),
+            vec![Line::default()],
+        )
+        .flatten()
+        .collect();
 
         ctx.with_area(task_list_content_area)
             .render(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));

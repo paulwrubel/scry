@@ -1,8 +1,8 @@
-use std::fmt::Display;
-
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 pub type NoteID = i64;
 pub type TaskID = i64;
@@ -89,6 +89,72 @@ impl From<&str> for StatusStyle {
     }
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Tags(pub(crate) Vec<String>);
+
+impl Tags {
+    pub fn iter(&self) -> std::slice::Iter<'_, String> {
+        self.0.iter()
+    }
+}
+
+impl Display for Tags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.iter().join(","))
+    }
+}
+
+impl From<&str> for Tags {
+    fn from(value: &str) -> Self {
+        value.split(',').collect::<Vec<_>>().into()
+    }
+}
+
+impl From<Vec<&str>> for Tags {
+    fn from(value: Vec<&str>) -> Self {
+        value.into_iter().map(String::from).collect_vec().into()
+    }
+}
+
+impl From<Vec<String>> for Tags {
+    fn from(mut value: Vec<String>) -> Self {
+        value.sort();
+
+        Self(
+            value
+                .into_iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unique()
+                .collect_vec(),
+        )
+    }
+}
+
+impl From<Tags> for Vec<String> {
+    fn from(value: Tags) -> Self {
+        value.0
+    }
+}
+
+impl IntoIterator for Tags {
+    type Item = String;
+    type IntoIter = std::vec::IntoIter<String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Tags {
+    type Item = &'a String;
+    type IntoIter = std::slice::Iter<'a, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectID,
@@ -115,6 +181,7 @@ pub struct Task {
     pub description: Option<String>,
     pub status_id: i64,
     pub position: i32,
+    pub tags: Tags,
     pub created_at: DateTime<Utc>,
 }
 

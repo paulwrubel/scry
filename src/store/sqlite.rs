@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::error::StorageError;
 use crate::models::{
-    Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Task, TaskID,
+    Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task, TaskID,
 };
 use crate::store::TaskStore;
 
@@ -53,6 +53,7 @@ fn is_unique_violation(e: &sqlx::Error) -> bool {
         .unwrap_or(false)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn task_from_fields(
     id: i64,
     project_id: ProjectID,
@@ -60,6 +61,7 @@ fn task_from_fields(
     description: Option<String>,
     status_id: i64,
     position: i64,
+    tags: String,
     created_at: String,
 ) -> Result<Task, StorageError> {
     let created_at = DateTime::parse_from_rfc3339(&created_at)
@@ -73,6 +75,7 @@ fn task_from_fields(
         description,
         status_id,
         position: position as i32,
+        tags: Tags::from(tags.as_str()),
         created_at,
     })
 }
@@ -140,13 +143,14 @@ impl TaskStore for SqliteStore {
         description: Option<String>,
         status_id: i64,
         position: i32,
+        tags: Tags,
     ) -> Result<Task, StorageError> {
         let created_at = Utc::now();
 
         let row = sqlx::query!(
             r#"
-                INSERT INTO tasks (title, description, created_at, project_id, status_id, position)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO tasks (title, description, created_at, project_id, status_id, position, tags)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
             "#,
             &title,
@@ -155,6 +159,7 @@ impl TaskStore for SqliteStore {
             &project_id,
             &status_id,
             &position,
+            tags.to_string(),
         )
         .fetch_one(&self.pool)
         .await
@@ -167,6 +172,7 @@ impl TaskStore for SqliteStore {
             description,
             status_id,
             position,
+            tags,
             created_at,
         })
     }
@@ -181,7 +187,8 @@ impl TaskStore for SqliteStore {
                     t.created_at,
                     t.project_id,
                     t.status_id,
-                    t.position
+                    t.position,
+                    t.tags
                 FROM tasks t
                 WHERE t.id = ?
             "#,
@@ -199,6 +206,7 @@ impl TaskStore for SqliteStore {
                 r.description,
                 r.status_id,
                 r.position,
+                r.tags,
                 r.created_at,
             )?),
             None => None,
@@ -218,7 +226,8 @@ impl TaskStore for SqliteStore {
                     t.created_at,
                     t.project_id,
                     t.status_id,
-                    t.position
+                    t.position,
+                    t.tags
                 FROM tasks t
                 WHERE t.project_id = ?
                 ORDER BY t.position ASC, t.id ASC
@@ -238,6 +247,7 @@ impl TaskStore for SqliteStore {
                     r.description,
                     r.status_id,
                     r.position,
+                    r.tags,
                     r.created_at,
                 )
             })
@@ -257,7 +267,8 @@ impl TaskStore for SqliteStore {
                     t.created_at,
                     t.project_id,
                     t.status_id,
-                    t.position
+                    t.position,
+                    t.tags
                 FROM tasks t
                 WHERE t.status_id = ?
                 ORDER BY t.position ASC, t.id ASC
@@ -277,6 +288,7 @@ impl TaskStore for SqliteStore {
                     r.description,
                     r.status_id,
                     r.position,
+                    r.tags,
                     r.created_at,
                 )
             })
@@ -287,13 +299,14 @@ impl TaskStore for SqliteStore {
         let result = sqlx::query!(
             r#"
                 UPDATE tasks
-                SET title = ?, description = ?, status_id = ?, position = ?
+                SET title = ?, description = ?, status_id = ?, position = ?, tags = ?
                 WHERE id = ?
             "#,
             &task.title,
             &task.description,
             &task.status_id,
             &task.position,
+            task.tags.to_string(),
             &task.id,
         )
         .execute(&self.pool)
@@ -325,7 +338,7 @@ impl TaskStore for SqliteStore {
                     SELECT COALESCE(MAX(position), -1) + 1
                     FROM tasks
                     WHERE status_id = ?
-                )
+                ), tags = ?
                 WHERE id = ?
                 RETURNING position
             "#,
@@ -333,6 +346,7 @@ impl TaskStore for SqliteStore {
             &task.description,
             &task.status_id,
             &task.status_id,
+            task.tags.to_string(),
             &task.id,
         )
         .fetch_one(&self.pool)
@@ -343,13 +357,8 @@ impl TaskStore for SqliteStore {
         })?;
 
         Ok(Task {
-            id: task.id,
-            project_id: task.project_id,
-            title: task.title,
-            description: task.description,
-            status_id: task.status_id,
             position: row.position as i32,
-            created_at: task.created_at,
+            ..task
         })
     }
 

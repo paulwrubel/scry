@@ -1,4 +1,4 @@
-use crate::models::{Status, Task};
+use crate::models::{Status, Tags, Task};
 use crate::tui::action::Action;
 use crate::tui::component::shared::{SingleSelector, SingleSelectorItem};
 use crate::tui::component::{Button, InputBlock};
@@ -17,11 +17,13 @@ const DESCRIPTION_PLACEHOLDER_TEXT: &str = r#"There's a lot of laundry to do...
 2. Towels
 3. Whites
 "#;
+const TAGS_PLACEHOLDER_TEXT: &str = "work,chores,travel";
 
 pub struct AddOrEditTask {
     title_input: InputBlock,
     description_input: InputBlock,
     status_selector: SingleSelector<Status, String>,
+    tags_input: InputBlock,
     confirm_button: Button,
 
     task: Option<TaskWithNotes>,
@@ -48,7 +50,7 @@ impl AddOrEditTask {
         }
 
         let title_input = InputBlock::new(true, false)
-            .with_title(String::from("Title"))
+            .with_title(String::from("Title*"))
             .with_placeholder_text(String::from(TASK_PLACEHOLDER_TEXT))
             .with_text(
                 task.as_ref()
@@ -80,6 +82,15 @@ impl AddOrEditTask {
             .with_selected_index(selected_index)
             .expect("index guaranteed inside options");
 
+        let tags_input = InputBlock::new(false, false)
+            .with_title(String::from("Tags (Comma Separated)"))
+            .with_placeholder_text(String::from(TAGS_PLACEHOLDER_TEXT))
+            .with_text(
+                task.as_ref()
+                    .map(|task| task.tags.to_string().clone())
+                    .unwrap_or_default(),
+            );
+
         let confirm_button = Button::new(
             false,
             String::from(if task.is_none() {
@@ -93,6 +104,7 @@ impl AddOrEditTask {
             title_input,
             description_input,
             status_selector,
+            tags_input,
             confirm_button,
 
             task,
@@ -112,6 +124,8 @@ impl AddOrEditTask {
             self.description_input.handle_event(state, key);
         } else if self.status_selector.is_focused {
             self.status_selector.handle_event(state, key);
+        } else if self.tags_input.is_focused {
+            self.tags_input.handle_event(state, key);
         }
 
         match (key.modifiers, key.code) {
@@ -163,9 +177,14 @@ impl AddOrEditTask {
             self.description_input.focus();
 
             true
+        } else if self.tags_input.is_focused {
+            self.tags_input.blur();
+            self.status_selector.focus();
+
+            true
         } else if self.confirm_button.is_focused {
             self.confirm_button.blur();
-            self.status_selector.focus();
+            self.tags_input.focus();
 
             true
         } else {
@@ -186,6 +205,11 @@ impl AddOrEditTask {
             true
         } else if self.status_selector.is_focused {
             self.status_selector.blur();
+            self.tags_input.focus();
+
+            true
+        } else if self.tags_input.is_focused {
+            self.tags_input.blur();
             self.confirm_button.focus();
 
             true
@@ -213,12 +237,14 @@ impl AddOrEditTask {
             title_input_area,
             description_input_area,
             status_selected_area,
+            tags_input_area,
             _,
             confirm_button_area,
         ] = content_area.layout(&Layout::vertical([
             Constraint::Length(3),
             Constraint::Min(3),
             Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Fill(1), // remaining space
             Constraint::Length(1),
         ]));
@@ -232,6 +258,8 @@ impl AddOrEditTask {
         self.status_selector
             .render(&mut ctx.with_area(status_selected_area));
 
+        self.tags_input.render(&mut ctx.with_area(tags_input_area));
+
         self.confirm_button
             .render(&mut ctx.with_area(confirm_button_area));
     }
@@ -244,11 +272,14 @@ impl AddOrEditTask {
                 if text.is_empty() { None } else { Some(text) }
             };
             let status_id = self.status_selector.current_selection().value.id;
+            let tags = Tags::from(self.tags_input.buffer_text().as_str());
+
             match &self.task {
                 Some(task) => Some(Action::UpdateTask(Task {
                     title,
                     description,
                     status_id,
+                    tags,
                     ..Task::from(task)
                 })),
                 None => {
@@ -265,6 +296,7 @@ impl AddOrEditTask {
                         description,
                         status_id,
                         position: last_position.map_or(0, |p| p + 1),
+                        tags,
                         created_at: DateTime::default(), // dummy, overwritten on insert
                     }))
                 }

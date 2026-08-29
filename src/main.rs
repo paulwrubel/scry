@@ -10,7 +10,7 @@ use config::ScryConfig;
 use error::AppError;
 use store::{TaskStore, sqlite::SqliteStore};
 
-use crate::models::{Status, StatusStyle, Task};
+use crate::models::{Status, StatusStyle, Tags, Task};
 
 #[derive(Parser)]
 #[command(name = "scry", about = "A task manager for the terminal", version)]
@@ -142,7 +142,14 @@ async fn main() -> Result<(), AppError> {
                 .await?
                 .len() as i32;
             let task = store
-                .create_task(project_id, description, None, first_status.id, position)
+                .create_task(
+                    project_id,
+                    description,
+                    None,
+                    first_status.id,
+                    position,
+                    Tags::default(),
+                )
                 .await?;
             println!(
                 "Created task {} in \"{}\" [{}]: {}",

@@ -162,26 +162,19 @@ impl Root {
         // global keys are handled ONLY if nothing above handled the event
         let selected = self.task_from_selected_task(state);
         match (key.modifiers, code) {
-            (KeyModifiers::NONE, KeyCode::Char('/')) => {
-                self.filter_input.focus();
-
-                vec![]
-            }
             // Esc should clear the filter
             (_, KeyCode::Esc) => {
                 self.filter_input.reset();
 
                 vec![]
             }
-            #[cfg(target_os = "macos")]
-            (KeyModifiers::SUPER, KeyCode::Char('/')) => {
+            (KeyModifiers::NONE, KeyCode::Char('/')) => {
                 self.command_input.focus();
 
                 vec![]
             }
-            #[cfg(not(target_os = "macos"))]
-            (KeyModifiers::CONTROL, KeyCode::Char('/')) => {
-                self.command_input.focus();
+            (KeyModifiers::NONE, KeyCode::Char('f')) => {
+                self.filter_input.focus();
 
                 vec![]
             }

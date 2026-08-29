@@ -1,4 +1,7 @@
+use std::iter;
+
 use crate::tui::component::RenderContext;
+use crate::tui::component::shared::ColoredTags;
 use crate::tui::state::TaskWithNotes;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Stylize;
@@ -57,6 +60,11 @@ impl<'a> TaskDetails<'a> {
             Span::from("Status:      "),
             Span::from(status.name.clone()),
         ]));
+        details_text.push_line(Line::from(
+            iter::once(Span::from("Tags:        "))
+                .chain(ColoredTags::new(self.task.tags.clone()).spans())
+                .collect::<Vec<Span>>(),
+        ));
         details_text.push_line(Line::from(vec![
             Span::from("Created at:  "),
             Span::from(created),

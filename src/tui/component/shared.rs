@@ -8,6 +8,9 @@ mod single_selector;
 pub use single_selector::SingleSelector;
 pub use single_selector::SingleSelectorItem;
 
+mod colored_tags;
+pub use colored_tags::ColoredTags;
+
 pub fn truncate_string_to_width(s: String, max_width: usize) -> String {
     if s.chars().count() <= max_width {
         s

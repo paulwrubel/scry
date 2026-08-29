@@ -169,6 +169,7 @@ impl<S: TaskStore + Sync> App<S> {
                     task.description,
                     task.status_id,
                     task.position,
+                    task.tags,
                 )) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
