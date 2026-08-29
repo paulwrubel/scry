@@ -2,7 +2,8 @@ use crate::models::TaskID;
 use crate::tui::component::TaskStatusList;
 use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::text::{Line, Text};
+use ratatui::style::Stylize;
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
 
 pub struct TaskList {
@@ -19,19 +20,21 @@ impl TaskList {
         }
     }
 
-    pub fn render(&mut self, ctx: &mut RenderContext, selected_task_id: Option<TaskID>) {
-        let horizontal_padding = (1, 1);
-        let vertical_padding = (1, 0);
-        let [_, task_list_content_area, _] = ctx.area.layout(&Layout::horizontal([
-            Constraint::Length(horizontal_padding.0), // padding
-            Constraint::Min(0),                       // content
-            Constraint::Length(horizontal_padding.1), // padding
-        ]));
-        let [_, task_list_content_area, _] = task_list_content_area.layout(&Layout::vertical([
-            Constraint::Length(vertical_padding.0), // padding
-            Constraint::Min(0),                     // content
-            Constraint::Length(vertical_padding.1), // padding
-        ]));
+    pub fn render(
+        &mut self,
+        ctx: &mut RenderContext,
+        selected_task_id: Option<TaskID>,
+        active_filter: String,
+    ) {
+        let [task_list_content_area] = ctx
+            .area
+            .layout(&Layout::horizontal([Constraint::Min(0)]).horizontal_margin(1));
+        let [active_filter_area, task_list_content_area, _] =
+            task_list_content_area.layout(&Layout::vertical([
+                Constraint::Length(1),
+                Constraint::Min(0),    // content
+                Constraint::Length(1), // padding
+            ]));
 
         self.adjust_scroll_offset_for_selected_task(
             task_list_content_area,
@@ -53,6 +56,16 @@ impl TaskList {
         .flatten()
         .collect();
 
+        if !active_filter.is_empty() {
+            ctx.with_area(active_filter_area).render(Paragraph::new(
+                Line::from(vec![
+                    Span::from("filtering for "),
+                    Span::from(active_filter).bold(),
+                    Span::from(" (Esc to clear)"),
+                ])
+                .right_aligned(),
+            ));
+        }
         ctx.with_area(task_list_content_area)
             .render(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
     }

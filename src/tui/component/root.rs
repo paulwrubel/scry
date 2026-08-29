@@ -296,13 +296,10 @@ impl Root {
             .spacing(Spacing::Overlap(if task_area.width >= 80 { 1 } else { 0 })),
         );
 
-        let should_render_filter =
-            self.filter_input.is_focused || !self.filter_input.current_filter().is_empty();
-
         // conditionally make space for filter input/display
         let [filter_input_area, task_list_area] = task_list_area.layout(
             &Layout::vertical([
-                Constraint::Length(if should_render_filter { 3 } else { 1 }),
+                Constraint::Length(if self.filter_input.is_focused { 3 } else { 1 }),
                 Constraint::Fill(1),
             ])
             .spacing(Spacing::Overlap(1)),
@@ -318,6 +315,7 @@ impl Root {
         self.task_list.render(
             &mut ctx.with_area(block.inner(task_list_area)),
             selected_task.map(|task| task.id),
+            self.filter_input.current_filter(),
         );
         // task list block
         let project_name = &ctx.state.project().name;
@@ -349,7 +347,7 @@ impl Root {
         }
 
         // filter input area
-        if should_render_filter {
+        if self.filter_input.is_focused {
             let [filter_input_content_area] = block
                 .inner(filter_input_area)
                 .layout(&Layout::horizontal([Constraint::Min(0)]).horizontal_margin(1));

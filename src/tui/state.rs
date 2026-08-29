@@ -107,11 +107,16 @@ impl ProjectState {
                 .statuses_with_tasks
                 .into_iter()
                 .map(|swt| {
-                    let filtered_tasks: Vec<TaskWithNotes> = swt
-                        .tasks_with_notes
-                        .into_iter()
-                        .filter(|task| task.title.to_lowercase().contains(&filter.to_lowercase()))
-                        .collect();
+                    let filtered_tasks: Vec<TaskWithNotes> =
+                        swt.tasks_with_notes
+                            .into_iter()
+                            .filter(|task| {
+                                task.title.to_lowercase().contains(&filter.to_lowercase())
+                                    || task.tags.iter().any(|tag| {
+                                        tag.to_lowercase().contains(&filter.to_lowercase())
+                                    })
+                            })
+                            .collect();
 
                     StatusWithTasks {
                         status: swt.status,

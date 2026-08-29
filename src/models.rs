@@ -123,7 +123,7 @@ impl From<Vec<String>> for Tags {
         Self(
             value
                 .into_iter()
-                .map(|s| s.trim().to_string())
+                .map(|s| s.trim().to_lowercase())
                 .filter(|s| !s.is_empty())
                 .unique()
                 .collect_vec(),
