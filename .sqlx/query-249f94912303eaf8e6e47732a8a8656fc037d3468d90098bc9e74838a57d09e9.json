@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE tasks\n                SET title = ?, description = ?, status_id = ?, position = (\n                    SELECT COALESCE(MAX(position), -1) + 1\n                    FROM tasks\n                    WHERE status_id = ?\n                ), tags = ?\n                WHERE id = ?\n                RETURNING position\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "position",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "position"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "249f94912303eaf8e6e47732a8a8656fc037d3468d90098bc9e74838a57d09e9"
+}

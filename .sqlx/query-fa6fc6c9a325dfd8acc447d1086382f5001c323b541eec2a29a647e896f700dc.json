@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT\n                    t.id,\n                    t.title,\n                    t.description,\n                    t.created_at,\n                    t.project_id,\n                    t.status_id,\n                    t.position\n                FROM tasks t\n                WHERE t.project_id = ?\n                ORDER BY t.position ASC, t.id ASC\n            ",
+  "query": "\n                SELECT\n                    t.id,\n                    t.title,\n                    t.description,\n                    t.created_at,\n                    t.project_id,\n                    t.status_id,\n                    t.position,\n                    t.tags\n                FROM tasks t\n                WHERE t.id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -79,6 +79,17 @@
             "name": "position"
           }
         }
+      },
+      {
+        "name": "tags",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "tags"
+          }
+        }
       }
     ],
     "parameters": {
@@ -91,8 +102,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "64c408c170167f678200ae98c7085a4b45bc24b7391729d234ee84f07a097b3c"
+  "hash": "fa6fc6c9a325dfd8acc447d1086382f5001c323b541eec2a29a647e896f700dc"
 }
