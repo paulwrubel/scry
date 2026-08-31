@@ -27,6 +27,7 @@ enum SelectedTask {
 
 pub struct Root {
     task_list: TaskList,
+    task_details: TaskDetails,
     command_input: CommandInput,
     filter_input: FilterInput,
     hints: Hints,
@@ -37,14 +38,17 @@ pub struct Root {
 
 impl Root {
     pub fn new() -> Self {
+        let selected_task = Some(SelectedTask::First);
+
         Self {
             task_list: TaskList::new(true),
+            task_details: TaskDetails::new(None),
             command_input: CommandInput::new(false),
             filter_input: FilterInput::new(false),
             hints: Hints::new(),
             popup: None,
 
-            selected_task: Some(SelectedTask::First),
+            selected_task,
         }
     }
 
@@ -158,6 +162,9 @@ impl Root {
             let actions = self.filter_input.handle_event(state, key);
             return self.handle_actions(state, actions);
         }
+
+        // this is for handling internal scrolling
+        self.task_details.handle_event(state, key);
 
         // global keys are handled ONLY if nothing above handled the event
         let selected = self.task_from_selected_task(state);
@@ -279,6 +286,9 @@ impl Root {
     }
 
     pub fn render(&mut self, ctx: &mut RenderContext) {
+        let selected_task = self.task_from_selected_task(ctx.state);
+        self.task_details.set_task(selected_task.clone());
+
         // main pane and hints
         let [task_area, command_input_area, hints_area] = ctx.area.layout(
             &Layout::vertical([
@@ -311,10 +321,9 @@ impl Root {
             .merge_borders(MergeStrategy::Exact);
 
         // render the task list content
-        let selected_task = self.task_from_selected_task(ctx.state);
         self.task_list.render(
             &mut ctx.with_area(block.inner(task_list_area)),
-            selected_task.map(|task| task.id),
+            selected_task.as_ref().map(|task| task.id),
             self.filter_input.current_filter(),
         );
         // task list block
@@ -327,9 +336,8 @@ impl Root {
 
         // task details
         let task_details_content_area = block.inner(task_details_area);
-        if let Some(selected_task) = selected_task {
-            TaskDetails::new(selected_task).render(&mut ctx.with_area(task_details_content_area));
-        }
+        self.task_details
+            .render(&mut ctx.with_area(task_details_content_area));
         // task details block
         ctx.with_area(task_details_area)
             .render(block.clone().title(Line::from(" Task Details ").centered()));
@@ -376,13 +384,14 @@ impl Root {
         }
     }
 
-    fn task_from_selected_task<'a>(&self, state: &'a ProjectState) -> Option<&'a TaskWithNotes> {
+    fn task_from_selected_task(&self, state: &ProjectState) -> Option<TaskWithNotes> {
         match self.selected_task {
             Some(st) => match st {
                 SelectedTask::First => state.first(),
                 SelectedTask::Last => state.last(),
                 SelectedTask::ID(task_id) => state.get_task_by_id(task_id).or(state.first()),
-            },
+            }
+            .cloned(),
             None => None,
         }
     }

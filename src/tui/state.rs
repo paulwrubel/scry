@@ -48,6 +48,12 @@ impl TaskWithNotes {
     }
 }
 
+impl From<TaskWithNotes> for Task {
+    fn from(value: TaskWithNotes) -> Self {
+        (&value).into()
+    }
+}
+
 impl From<&TaskWithNotes> for Task {
     fn from(value: &TaskWithNotes) -> Self {
         Self {
