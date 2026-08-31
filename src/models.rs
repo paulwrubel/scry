@@ -77,7 +77,7 @@ impl Display for StatusStyle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(
             self.to_possible_value()
-                .expect("Style has no skipped variants")
+                .expect("StatusStyle has no skipped variants")
                 .get_name(),
         )
     }
@@ -155,11 +155,50 @@ impl<'a> IntoIterator for &'a Tags {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+pub enum TaskSortingMode {
+    #[default]
+    #[value(aliases([
+        "default",
+        "alpha",
+        "lex",
+        "lexical",
+        "lexicographical"
+    ]))]
+    Alphabetical,
+    #[value(aliases([
+        "alpha-nocase",
+        "alphanocase",
+        "alphaci",
+    ]))]
+    AlphabeticalCaseInsensitive,
+    Id,
+    #[value(alias("pos"))]
+    Position,
+}
+
+impl Display for TaskSortingMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            self.to_possible_value()
+                .expect("TaskSortingMode has no skipped variants")
+                .get_name(),
+        )
+    }
+}
+
+impl From<&str> for TaskSortingMode {
+    fn from(value: &str) -> Self {
+        Self::from_str(value, false).unwrap_or_default()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectID,
     pub name: String,
     pub entry_status_id: Option<StatusID>,
+    pub task_sorting_mode: TaskSortingMode,
     pub created_at: DateTime<Utc>,
 }
 

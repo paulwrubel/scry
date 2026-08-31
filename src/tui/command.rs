@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::models::{Color, Project, Status, StatusStyle};
+use crate::models::{Color, Project, Status, StatusStyle, TaskSortingMode};
 use crate::tui::Action;
 use crate::tui::component::popup::ConfirmDeleteEntity;
 use crate::tui::state::ProjectState;
@@ -16,26 +16,29 @@ use crate::tui::state::ProjectState;
     disable_help_subcommand = true
 )]
 enum Command {
-    #[command(subcommand)]
+    #[command(subcommand, alias("s"))]
     Status(StatusCommand),
 
-    #[command(subcommand)]
+    #[command(subcommand, alias("p"))]
     Project(ProjectCommand),
 }
 
 #[derive(Subcommand)]
 enum StatusCommand {
     /// Add a Status to this project
+    #[command(aliases(["a"]))]
     Add {
         /// Name of the Status to add
         name: String,
     },
     /// Delete a Status from this project
+    #[command(aliases(["d"]))]
     Delete {
         /// Name of the Status to delete
         name: String,
     },
     /// Rename a Status in this project
+    #[command(aliases(["r"]))]
     Rename {
         /// Current name of the status
         old: String,
@@ -43,16 +46,19 @@ enum StatusCommand {
         new: String,
     },
     /// Move a Status up in the ordering for the project
+    #[command(aliases(["up", "mu", "u"]))]
     MoveUp {
         /// Name of the Status to move up
         name: String,
     },
     /// Move a Status down in the ordering for the project
+    #[command(aliases(["down", "md", "d"]))]
     MoveDown {
         /// Name of the Status to move down
         name: String,
     },
     /// Set the color for a Status in this project
+    #[command(aliases(["color", "sc"]))]
     SetColor {
         /// Name of the Status to set the color for
         name: String,
@@ -60,11 +66,13 @@ enum StatusCommand {
         color: Color,
     },
     /// Reset the color for a Status in this project
+    #[command(alias("rs"))]
     ResetColor {
         /// Name of the Status to reset the color for
         name: String,
     },
     /// Set the style for a Status in this project
+    #[command(alias("ss"))]
     SetStyle {
         /// Name of the Status to set the style for
         name: String,
@@ -76,12 +84,22 @@ enum StatusCommand {
 #[derive(Subcommand)]
 enum ProjectCommand {
     /// Set a Status as the "entry" Status, meaning new tasks will default to this status
+    #[command(aliases(["entry-status", "ses"]))]
     SetEntryStatus {
         /// Name of the Status to add
         status_name: String,
     },
     /// Reset a Status as the "entry" Status, meaning new tasks will default to the first status instead
+    #[command(alias("res"))]
     ResetEntryStatus,
+    /// Set the sorting mode for tasks in this project.
+    ///
+    /// The default mode is alphabetical
+    #[command(aliases(["setsort", "set-sort", "sort", "ss", "s"]))]
+    SetTaskSortingMode {
+        /// The sorting mode to use for tasks
+        task_sorting_mode: TaskSortingMode,
+    },
 }
 
 /// Parse a command line (without the leading "/") into an Action to emit.
@@ -248,6 +266,12 @@ pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
             ProjectCommand::ResetEntryStatus => {
                 vec![Action::UpdateProject(Project {
                     entry_status_id: None,
+                    ..state.project().clone()
+                })]
+            }
+            ProjectCommand::SetTaskSortingMode { task_sorting_mode } => {
+                vec![Action::UpdateProject(Project {
+                    task_sorting_mode,
                     ..state.project().clone()
                 })]
             }

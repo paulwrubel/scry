@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use crate::error::StorageError;
 use crate::models::{
     Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task, TaskID,
+    TaskSortingMode,
 };
 
 #[async_trait]
@@ -118,6 +119,7 @@ pub trait TaskStore {
         &self,
         name: String,
         entry_status_id: Option<StatusID>,
+        task_sorting_mode: TaskSortingMode,
     ) -> Result<Project, StorageError>;
 
     async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError>;
@@ -128,7 +130,6 @@ pub trait TaskStore {
     /// List all projects.
     async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError>;
 
-    #[allow(dead_code)]
     async fn update_project(&self, project: Project) -> Result<Project, StorageError>;
 
     async fn delete_project(&self, name: String) -> Result<(), StorageError>;

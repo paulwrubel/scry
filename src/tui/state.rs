@@ -5,6 +5,7 @@ use crate::error::StorageError;
 use crate::models::Note;
 use crate::models::StatusID;
 use crate::models::Tags;
+use crate::models::TaskSortingMode;
 use crate::models::{Project, ProjectID, Status, Task, TaskID};
 use crate::store::TaskStore;
 
@@ -19,6 +20,7 @@ pub struct StatusWithTasks {
     pub(crate) is_entry: bool,
     pub(crate) tasks_with_notes: Vec<TaskWithNotes>,
 }
+
 #[derive(Debug, Clone)]
 pub struct TaskWithNotes {
     pub(crate) id: TaskID,
@@ -88,10 +90,8 @@ impl ProjectState {
             project: project.clone(),
             statuses_with_tasks: statuses
                 .iter()
-                .map(|status| StatusWithTasks {
-                    status: status.clone(),
-                    is_entry: project.entry_status_id == Some(status.id),
-                    tasks_with_notes: tasks
+                .map(|status| {
+                    let mut subtasks: Vec<_> = tasks
                         .iter()
                         .filter(|task| task.status_id == status.id)
                         .map(|task| {
@@ -100,7 +100,20 @@ impl ProjectState {
                                 notes.iter().filter(|note| note.task_id == task.id).cloned(),
                             )
                         })
-                        .collect(),
+                        .collect();
+                    subtasks.sort_by(|a, b| match project.task_sorting_mode {
+                        TaskSortingMode::Alphabetical => a.title.cmp(&b.title),
+                        TaskSortingMode::AlphabeticalCaseInsensitive => {
+                            a.title.to_lowercase().cmp(&b.title.to_lowercase())
+                        }
+                        TaskSortingMode::Id => a.id.cmp(&b.id),
+                        TaskSortingMode::Position => a.position.cmp(&b.position),
+                    });
+                    StatusWithTasks {
+                        status: status.clone(),
+                        is_entry: project.entry_status_id == Some(status.id),
+                        tasks_with_notes: subtasks,
+                    }
                 })
                 .collect(),
         })

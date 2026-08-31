@@ -7,6 +7,7 @@ use std::path::Path;
 use crate::error::StorageError;
 use crate::models::{
     Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task, TaskID,
+    TaskSortingMode,
 };
 use crate::store::TaskStore;
 
@@ -102,6 +103,7 @@ fn project_from_fields(
     id: i64,
     name: String,
     entry_status_id: Option<StatusID>,
+    task_sorting_mode: String,
     created_at: String,
 ) -> Result<Project, StorageError> {
     let created_at = DateTime::parse_from_rfc3339(&created_at)
@@ -112,6 +114,7 @@ fn project_from_fields(
         id,
         name,
         entry_status_id,
+        task_sorting_mode: task_sorting_mode.as_str().into(),
         created_at,
     })
 }
@@ -808,17 +811,19 @@ impl TaskStore for SqliteStore {
         &self,
         name: String,
         entry_status_id: Option<StatusID>,
+        task_sorting_mode: TaskSortingMode,
     ) -> Result<Project, StorageError> {
         let created_at = Utc::now();
 
         let result = sqlx::query!(
             r#"
-                INSERT INTO projects (name, entry_status_id, created_at)
-                VALUES (?, ?, ?)
+                INSERT INTO projects (name, entry_status_id, task_sorting_mode, created_at)
+                VALUES (?, ?, ?, ?)
                 RETURNING id
             "#,
             &name,
             entry_status_id,
+            task_sorting_mode.to_string(),
             created_at.to_rfc3339(),
         )
         .fetch_one(&self.pool)
@@ -829,6 +834,7 @@ impl TaskStore for SqliteStore {
                 id: r.id,
                 name: name.clone(),
                 entry_status_id,
+                task_sorting_mode,
                 created_at,
             },
             Err(e) if is_unique_violation(&e) => {
@@ -851,7 +857,7 @@ impl TaskStore for SqliteStore {
     async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, created_at
+                SELECT id, name, entry_status_id, task_sorting_mode, created_at
                 FROM projects
                 WHERE id = ?
             "#,
@@ -866,6 +872,7 @@ impl TaskStore for SqliteStore {
                 r.id,
                 r.name,
                 r.entry_status_id,
+                r.task_sorting_mode,
                 r.created_at,
             )?),
             None => None,
@@ -875,7 +882,7 @@ impl TaskStore for SqliteStore {
     async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, created_at
+                SELECT id, name, entry_status_id, task_sorting_mode, created_at
                 FROM projects
                 WHERE name = ?
             "#,
@@ -890,6 +897,7 @@ impl TaskStore for SqliteStore {
                 r.id,
                 r.name,
                 r.entry_status_id,
+                r.task_sorting_mode,
                 r.created_at,
             )?),
             None => None,
@@ -899,7 +907,7 @@ impl TaskStore for SqliteStore {
     async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError> {
         let rows = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, created_at
+                SELECT id, name, entry_status_id, task_sorting_mode, created_at
                 FROM projects
                 ORDER BY name ASC
             "#,
@@ -909,7 +917,15 @@ impl TaskStore for SqliteStore {
         .map_err(|e| StorageError::Database(format!("failed to list projects: {}", e)))?;
 
         rows.into_iter()
-            .map(|r| project_from_fields(r.id, r.name, r.entry_status_id, r.created_at))
+            .map(|r| {
+                project_from_fields(
+                    r.id,
+                    r.name,
+                    r.entry_status_id,
+                    r.task_sorting_mode,
+                    r.created_at,
+                )
+            })
             .collect::<Result<Vec<Project>, _>>()
     }
 
@@ -917,11 +933,12 @@ impl TaskStore for SqliteStore {
         let result = sqlx::query!(
             r#"
                 UPDATE projects
-                SET name = ?, entry_status_id = ?
+                SET name = ?, entry_status_id = ?, task_sorting_mode = ?
                 WHERE id = ?
             "#,
             &project.name,
             &project.entry_status_id,
+            &project.task_sorting_mode.to_string(),
             &project.id,
         )
         .execute(&self.pool)

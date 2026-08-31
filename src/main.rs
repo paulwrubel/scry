@@ -10,7 +10,7 @@ use config::ScryConfig;
 use error::AppError;
 use store::{TaskStore, sqlite::SqliteStore};
 
-use crate::models::{Status, StatusStyle, Tags, Task};
+use crate::models::{Status, StatusStyle, Tags, Task, TaskSortingMode};
 
 #[derive(Parser)]
 #[command(name = "scry", about = "A task manager for the terminal", version)]
@@ -301,7 +301,9 @@ async fn main() -> Result<(), AppError> {
                 }
             }
             ProjectCommand::Create { name } => {
-                let project = store.create_project(name, None).await?;
+                let project = store
+                    .create_project(name, None, TaskSortingMode::default())
+                    .await?;
                 println!("Created project \"{}\"", project.name);
                 println!(
                     "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."
