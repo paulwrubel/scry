@@ -34,20 +34,6 @@ pub struct AddOrEditTask<'a> {
 
 impl AddOrEditTask<'_> {
     pub fn new(state: &ProjectState, task: Option<TaskWithNotes>) -> Result<Self, &'static str> {
-        let selected_status_index = state
-            .statuses()
-            .enumerate()
-            .find_map(|(index, status)| {
-                state.project().entry_status_id.and_then(|entry_status_id| {
-                    if entry_status_id == status.id {
-                        Some(index)
-                    } else {
-                        None
-                    }
-                })
-            })
-            .unwrap_or(0);
-
         if state.statuses().next().is_none() {
             return Err("Cannot create a task without any statuses");
         }
@@ -55,11 +41,7 @@ impl AddOrEditTask<'_> {
         let title_input = InputBlock::new(true, false)
             .with_title(String::from("Title*"))
             .with_placeholder_text(String::from(TASK_PLACEHOLDER_TEXT))
-            .with_text(
-                task.as_ref()
-                    .map(|task| task.title.clone())
-                    .unwrap_or_default(),
-            );
+            .with_text(task.as_ref().map(|t| t.title.clone()).unwrap_or_default());
 
         let description_input = InputBlock::new(false, true)
             .with_title(String::from("Description"))
@@ -84,6 +66,15 @@ impl AddOrEditTask<'_> {
             ) // medium
             .expect("index guaranteed inside options");
 
+        let task_status_index = task
+            .as_ref()
+            .and_then(|t| state.statuses().position(|s| s.id == t.status_id));
+        let selected_status_index = task_status_index
+            .or(state
+                .project()
+                .entry_status_id
+                .and_then(|entry_status_id| state.statuses().position(|s| s.id == entry_status_id)))
+            .unwrap_or(0);
         let status_selector_options: Vec<SingleSelectorItem<Status>> = state
             .statuses()
             .map(|s| SingleSelectorItem {
