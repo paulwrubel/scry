@@ -1,4 +1,5 @@
 use crate::models::Project;
+use crate::store::TaskToCreate;
 use crate::tui::state::TaskWithNotes;
 use crate::{
     models::{Note, Status, StatusID, Task, TaskID},
@@ -22,7 +23,7 @@ pub enum Action {
     CloseFilterInput,
 
     // ── tasks ──
-    CreateTask(Task),
+    CreateTask(TaskToCreate),
     UpdateTask(Task),
     DeleteTask(TaskID),
 

@@ -90,6 +90,10 @@ impl TaskDetails {
 
         // info
         details_text.push_line(Line::from(vec![
+            Span::from("Priority:    "),
+            Span::from(task.priority),
+        ]));
+        details_text.push_line(Line::from(vec![
             Span::from("Status:      "),
             Span::from(status.name.clone()),
         ]));

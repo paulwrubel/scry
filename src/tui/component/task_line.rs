@@ -7,7 +7,7 @@ use crate::{
 };
 use ratatui::{
     style::{Color, Style},
-    text::{Line, Span},
+    text::{Line, Span, ToSpan},
 };
 
 pub struct TaskLine {
@@ -15,6 +15,7 @@ pub struct TaskLine {
     color: Option<ScryColor>,
     style: StatusStyle,
     is_selected: bool,
+    show_priority: bool,
     area_width: u16,
 }
 
@@ -24,6 +25,7 @@ impl TaskLine {
         color: Option<ScryColor>,
         style: StatusStyle,
         is_selected: bool,
+        show_priority: bool,
         area_width: u16,
     ) -> Self {
         Self {
@@ -31,6 +33,7 @@ impl TaskLine {
             color,
             style,
             is_selected,
+            show_priority,
             area_width,
         }
     }
@@ -40,11 +43,15 @@ impl From<TaskLine> for Line<'_> {
     fn from(value: TaskLine) -> Self {
         let total_width = usize::from(value.area_width);
 
-        let prefix = vec![Span::from(match value.style {
+        let mut prefix = vec![Span::from(match value.style {
             StatusStyle::None | StatusStyle::Strikethrough => "",
             StatusStyle::Unchecked => "[ ] ",
             StatusStyle::Checked => "[x] ",
         })];
+        if value.show_priority {
+            prefix.push(value.task.priority.short_span());
+            prefix.push(" ".to_span());
+        }
         let suffix = ColoredTags::new(value.task.tags).spans();
 
         let mut text_style =

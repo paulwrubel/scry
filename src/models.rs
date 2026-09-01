@@ -1,8 +1,11 @@
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use itertools::Itertools;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use ratatui::{style::Style, text::Span};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use strum::IntoEnumIterator;
 
 pub type NoteID = i64;
 pub type TaskID = i64;
@@ -155,6 +158,81 @@ impl<'a> IntoIterator for &'a Tags {
     }
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    TryFromPrimitive,
+    IntoPrimitive,
+    strum::Display,
+    strum::EnumIter,
+)]
+#[repr(i64)]
+pub enum Priority {
+    Minimal = 5,
+    Low = 4,
+    #[default]
+    Medium = 3,
+    High = 2,
+    Critical = 1,
+}
+
+impl Priority {
+    pub fn color(&self) -> Color {
+        match self {
+            Priority::Critical => Color::Red,
+            Priority::High => Color::Yellow,
+            Priority::Medium => Color::Cyan,
+            Priority::Low => Color::Blue,
+            Priority::Minimal => Color::Magenta,
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        Self::iter()
+            .cycle()
+            .skip_while(|p| p != self)
+            .nth(1)
+            .expect("should cycle forever")
+    }
+
+    pub fn previous(&self) -> Self {
+        Self::iter()
+            .rev()
+            .cycle()
+            .skip_while(|p| p != self)
+            .nth(1)
+            .expect("should cycle forever")
+    }
+
+    pub fn index(&self) -> usize {
+        Self::iter().position(|p| p == *self).expect("must match")
+    }
+
+    pub fn short_span(&self) -> Span<'static> {
+        Span::styled(
+            format!("p{}", i64::from(*self)),
+            Style::default().fg(self.color().into()),
+        )
+    }
+}
+
+impl From<Priority> for Span<'_> {
+    fn from(value: Priority) -> Self {
+        Span::styled(
+            format!("p{} - {}", i64::from(value), value),
+            Style::default().fg(value.color().into()),
+        )
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 pub enum TaskSortingMode {
     #[default]
@@ -175,6 +253,8 @@ pub enum TaskSortingMode {
     Id,
     #[value(alias("pos"))]
     Position,
+    #[value(alias("pri"))]
+    Priority,
 }
 
 impl Display for TaskSortingMode {
@@ -199,6 +279,7 @@ pub struct Project {
     pub name: String,
     pub entry_status_id: Option<StatusID>,
     pub task_sorting_mode: TaskSortingMode,
+    pub show_priority: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -218,6 +299,7 @@ pub struct Task {
     pub project_id: ProjectID,
     pub title: String,
     pub description: Option<String>,
+    pub priority: Priority,
     pub status_id: i64,
     pub position: i32,
     pub tags: Tags,

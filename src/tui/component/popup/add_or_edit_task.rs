@@ -1,14 +1,16 @@
-use crate::models::{Status, Tags, Task};
+use crate::models::{Priority, Status, Tags, Task};
+use crate::store::TaskToCreate;
 use crate::tui::action::Action;
 use crate::tui::component::shared::{SingleSelector, SingleSelectorItem};
 use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
 use crate::tui::state::TaskWithNotes;
-use chrono::DateTime;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Style;
+use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders};
+use strum::IntoEnumIterator;
 
 const TASK_PLACEHOLDER_TEXT: &str = "Do the laundry";
 const DESCRIPTION_PLACEHOLDER_TEXT: &str = r#"There's a lot of laundry to do...
@@ -19,19 +21,20 @@ const DESCRIPTION_PLACEHOLDER_TEXT: &str = r#"There's a lot of laundry to do...
 "#;
 const TAGS_PLACEHOLDER_TEXT: &str = "work,chores,travel";
 
-pub struct AddOrEditTask {
+pub struct AddOrEditTask<'a> {
     title_input: InputBlock,
     description_input: InputBlock,
-    status_selector: SingleSelector<Status, String>,
+    priority_selector: SingleSelector<'a, Priority>,
+    status_selector: SingleSelector<'a, Status>,
     tags_input: InputBlock,
     confirm_button: Button,
 
     task: Option<TaskWithNotes>,
 }
 
-impl AddOrEditTask {
+impl AddOrEditTask<'_> {
     pub fn new(state: &ProjectState, task: Option<TaskWithNotes>) -> Result<Self, &'static str> {
-        let selected_index = state
+        let selected_status_index = state
             .statuses()
             .enumerate()
             .find_map(|(index, status)| {
@@ -67,19 +70,34 @@ impl AddOrEditTask {
                     .unwrap_or_default(),
             );
 
-        let status_selector_options: Vec<SingleSelectorItem<Status, String>> = state
+        let priority_selector_options: Vec<SingleSelectorItem<Priority>> = Priority::iter()
+            .map(|p| SingleSelectorItem {
+                value: p,
+                span: p.into(),
+            })
+            .collect();
+        let priority_selector = SingleSelector::new(false, priority_selector_options)
+            .expect("priority_selector_options is guaranteed to be as long as the variant count")
+            .with_selected_index(
+                task.as_ref()
+                    .map_or(Priority::Medium.index(), |t| t.priority.index()),
+            ) // medium
+            .expect("index guaranteed inside options");
+
+        let status_selector_options: Vec<SingleSelectorItem<Status>> = state
             .statuses()
             .map(|s| SingleSelectorItem {
                 value: s.clone(),
-                label: s.name.clone(),
-                label_style: s
-                    .color
-                    .map_or(Style::default(), |c| Style::default().fg(c.into())),
+                span: Span::styled(
+                    s.name.clone(),
+                    s.color
+                        .map_or(Style::default(), |c| Style::default().fg(c.into())),
+                ),
             })
             .collect();
         let status_selector = SingleSelector::new(false, status_selector_options)
-            .expect("status_names is validated above as non-empty")
-            .with_selected_index(selected_index)
+            .expect("this popup is only reachable when some status exists")
+            .with_selected_index(selected_status_index)
             .expect("index guaranteed inside options");
 
         let tags_input = InputBlock::new(false, false)
@@ -103,6 +121,7 @@ impl AddOrEditTask {
         Ok(Self {
             title_input,
             description_input,
+            priority_selector,
             status_selector,
             tags_input,
             confirm_button,
@@ -122,6 +141,8 @@ impl AddOrEditTask {
             self.title_input.handle_event(state, key);
         } else if self.description_input.is_focused {
             self.description_input.handle_event(state, key);
+        } else if self.priority_selector.is_focused {
+            self.priority_selector.handle_event(state, key);
         } else if self.status_selector.is_focused {
             self.status_selector.handle_event(state, key);
         } else if self.tags_input.is_focused {
@@ -172,9 +193,14 @@ impl AddOrEditTask {
             self.title_input.focus();
 
             true
+        } else if self.priority_selector.is_focused {
+            self.priority_selector.blur();
+            self.description_input.focus();
+
+            true
         } else if self.status_selector.is_focused {
             self.status_selector.blur();
-            self.description_input.focus();
+            self.priority_selector.focus();
 
             true
         } else if self.tags_input.is_focused {
@@ -200,6 +226,11 @@ impl AddOrEditTask {
             true
         } else if self.description_input.is_focused {
             self.description_input.blur();
+            self.priority_selector.focus();
+
+            true
+        } else if self.priority_selector.is_focused {
+            self.priority_selector.blur();
             self.status_selector.focus();
 
             true
@@ -236,13 +267,15 @@ impl AddOrEditTask {
         let [
             title_input_area,
             description_input_area,
-            status_selected_area,
+            priority_selector_area,
+            status_selector_area,
             tags_input_area,
             _,
             confirm_button_area,
         ] = content_area.layout(&Layout::vertical([
             Constraint::Length(3),
             Constraint::Min(3),
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(3),
             Constraint::Fill(1), // remaining space
@@ -255,8 +288,11 @@ impl AddOrEditTask {
         self.description_input
             .render(&mut ctx.with_area(description_input_area));
 
+        self.priority_selector
+            .render(&mut ctx.with_area(priority_selector_area));
+
         self.status_selector
-            .render(&mut ctx.with_area(status_selected_area));
+            .render(&mut ctx.with_area(status_selector_area));
 
         self.tags_input.render(&mut ctx.with_area(tags_input_area));
 
@@ -271,6 +307,7 @@ impl AddOrEditTask {
                 let text = self.description_input.buffer_text();
                 if text.is_empty() { None } else { Some(text) }
             };
+            let priority = self.priority_selector.current_selection().value;
             let status_id = self.status_selector.current_selection().value.id;
             let tags = Tags::from(self.tags_input.buffer_text().as_str());
 
@@ -278,6 +315,7 @@ impl AddOrEditTask {
                 Some(task) => Some(Action::UpdateTask(Task {
                     title,
                     description,
+                    priority,
                     status_id,
                     tags,
                     ..Task::from(task)
@@ -289,15 +327,14 @@ impl AddOrEditTask {
                         .map(|t| t.position)
                         .max();
 
-                    Some(Action::CreateTask(Task {
-                        id: 0, // dummy id
+                    Some(Action::CreateTask(TaskToCreate {
                         project_id: state.project().id,
                         title,
                         description,
+                        priority,
                         status_id,
                         position: last_position.map_or(0, |p| p + 1),
                         tags,
-                        created_at: DateTime::default(), // dummy, overwritten on insert
                     }))
                 }
             }

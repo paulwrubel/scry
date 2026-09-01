@@ -3,6 +3,7 @@ use chrono::Utc;
 
 use crate::error::StorageError;
 use crate::models::Note;
+use crate::models::Priority;
 use crate::models::StatusID;
 use crate::models::Tags;
 use crate::models::TaskSortingMode;
@@ -27,6 +28,7 @@ pub struct TaskWithNotes {
     pub(crate) project_id: ProjectID,
     pub(crate) title: String,
     pub(crate) description: Option<String>,
+    pub(crate) priority: Priority,
     pub(crate) status_id: i64,
     pub(crate) position: i32,
     pub(crate) tags: Tags,
@@ -41,6 +43,7 @@ impl TaskWithNotes {
             project_id: task.project_id,
             title: task.title.clone(),
             description: task.description.clone(),
+            priority: task.priority,
             status_id: task.status_id,
             position: task.position,
             tags: task.tags.clone(),
@@ -63,6 +66,7 @@ impl From<&TaskWithNotes> for Task {
             project_id: value.project_id,
             title: value.title.clone(),
             description: value.description.clone(),
+            priority: value.priority,
             status_id: value.status_id,
             position: value.position,
             tags: value.tags.clone(),
@@ -108,6 +112,7 @@ impl ProjectState {
                         }
                         TaskSortingMode::Id => a.id.cmp(&b.id),
                         TaskSortingMode::Position => a.position.cmp(&b.position),
+                        TaskSortingMode::Priority => a.priority.cmp(&b.priority),
                     });
                     StatusWithTasks {
                         status: status.clone(),

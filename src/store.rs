@@ -2,22 +2,24 @@ use async_trait::async_trait;
 
 use crate::error::StorageError;
 use crate::models::{
-    Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task, TaskID,
-    TaskSortingMode,
+    Color, Note, NoteID, Priority, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task,
+    TaskID, TaskSortingMode,
 };
+
+pub(crate) struct TaskToCreate {
+    pub(crate) project_id: ProjectID,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) priority: Priority,
+    pub(crate) status_id: i64,
+    pub(crate) position: i32,
+    pub(crate) tags: Tags,
+}
 
 #[async_trait]
 pub trait TaskStore {
     /// Add a new task.
-    async fn create_task(
-        &self,
-        project_id: ProjectID,
-        title: String,
-        description: Option<String>,
-        status_id: i64,
-        position: i32,
-        tags: Tags,
-    ) -> Result<Task, StorageError>;
+    async fn create_task(&self, task_to_create: TaskToCreate) -> Result<Task, StorageError>;
 
     /// Get a task by its id
     async fn get_task_by_id(&self, id: TaskID) -> Result<Option<Task>, StorageError>;
@@ -120,6 +122,7 @@ pub trait TaskStore {
         name: String,
         entry_status_id: Option<StatusID>,
         task_sorting_mode: TaskSortingMode,
+        show_priority: bool,
     ) -> Result<Project, StorageError>;
 
     async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError>;

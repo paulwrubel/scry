@@ -10,7 +10,10 @@ use config::ScryConfig;
 use error::AppError;
 use store::{TaskStore, sqlite::SqliteStore};
 
-use crate::models::{Status, StatusStyle, Tags, Task, TaskSortingMode};
+use crate::{
+    models::{Priority, Status, StatusStyle, Tags, Task, TaskSortingMode},
+    store::TaskToCreate,
+};
 
 #[derive(Parser)]
 #[command(name = "scry", about = "A task manager for the terminal", version)]
@@ -27,8 +30,8 @@ struct Cli {
 enum Command {
     /// Add a new task
     Add {
-        /// The task description
-        description: String,
+        /// The task title
+        title: String,
     },
     /// Move a task to a new status (alias for update --status)
     Move {
@@ -132,7 +135,7 @@ async fn main() -> Result<(), AppError> {
     };
 
     match command {
-        Command::Add { description } => {
+        Command::Add { title } => {
             let statuses = store.get_all_statuses_by_project_id(project_id).await?;
             let first_status = statuses
                 .first()
@@ -142,14 +145,15 @@ async fn main() -> Result<(), AppError> {
                 .await?
                 .len() as i32;
             let task = store
-                .create_task(
+                .create_task(TaskToCreate {
                     project_id,
-                    description,
-                    None,
-                    first_status.id,
+                    title,
+                    description: None,
+                    priority: Priority::default(),
+                    status_id: first_status.id,
                     position,
-                    Tags::default(),
-                )
+                    tags: Tags::default(),
+                })
                 .await?;
             println!(
                 "Created task {} in \"{}\" [{}]: {}",
@@ -302,7 +306,7 @@ async fn main() -> Result<(), AppError> {
             }
             ProjectCommand::Create { name } => {
                 let project = store
-                    .create_project(name, None, TaskSortingMode::default())
+                    .create_project(name, None, TaskSortingMode::default(), false)
                     .await?;
                 println!("Created project \"{}\"", project.name);
                 println!(

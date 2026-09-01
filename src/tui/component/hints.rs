@@ -12,18 +12,19 @@ impl Hints {
 
     pub fn render(&self, ctx: &mut RenderContext, selected_task_id: Option<TaskID>) {
         // each "hint" is a Text, since parts are styled differently
-        let mut hints = vec![];
-
-        // initialize hints with static, always-available actions
-        hints.push(vec!["[/] ".to_span(), "command".dim()]);
-        hints.push(vec!["[f]".to_span(), "ilter".dim()]);
-        hints.push(vec!["[a]".to_span(), "dd".dim()]);
+        let mut hints = vec![
+            // initialize hints with static, always-available actions
+            vec!["[/] ".to_span(), "command".dim()],
+            vec!["[f]".to_span(), "ilter".dim()],
+            vec!["[a]".to_span(), "dd".dim()],
+        ];
 
         // add select actions if any task is selected
         if selected_task_id.is_some() {
             hints.push(vec!["[e]".to_span(), "dit".dim()]);
             hints.push(vec!["[d]".to_span(), "elete".dim()]);
             hints.push(vec!["[n]".to_span(), "ote".dim()]);
+            hints.push(vec!["[p]".to_span(), "riority".dim()]);
         }
 
         // try to find the status of the selected task, if one is selected

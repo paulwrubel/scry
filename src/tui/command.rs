@@ -100,6 +100,12 @@ enum ProjectCommand {
         /// The sorting mode to use for tasks
         task_sorting_mode: TaskSortingMode,
     },
+    /// Show the priority level in the task title line
+    #[command(aliases(["sp"]))]
+    ShowPriority,
+    /// Hide the priority level in the task title line
+    #[command(aliases(["hp"]))]
+    HidePriority,
 }
 
 /// Parse a command line (without the leading "/") into an Action to emit.
@@ -274,6 +280,26 @@ pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
                     task_sorting_mode,
                     ..state.project().clone()
                 })]
+            }
+            ProjectCommand::ShowPriority => {
+                if !state.project().show_priority {
+                    vec![Action::UpdateProject(Project {
+                        show_priority: true,
+                        ..state.project().clone()
+                    })]
+                } else {
+                    vec![]
+                }
+            }
+            ProjectCommand::HidePriority => {
+                if state.project().show_priority {
+                    vec![Action::UpdateProject(Project {
+                        show_priority: false,
+                        ..state.project().clone()
+                    })]
+                } else {
+                    vec![]
+                }
             }
         },
     }

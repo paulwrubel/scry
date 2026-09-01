@@ -6,10 +6,10 @@ use std::path::Path;
 
 use crate::error::StorageError;
 use crate::models::{
-    Color, Note, NoteID, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task, TaskID,
-    TaskSortingMode,
+    Color, Note, NoteID, Priority, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task,
+    TaskID, TaskSortingMode,
 };
-use crate::store::TaskStore;
+use crate::store::{TaskStore, TaskToCreate};
 
 #[derive(Clone)]
 pub struct SqliteStore {
@@ -60,6 +60,7 @@ fn task_from_fields(
     project_id: ProjectID,
     title: String,
     description: Option<String>,
+    priority: i64,
     status_id: i64,
     position: i64,
     tags: String,
@@ -74,6 +75,8 @@ fn task_from_fields(
         project_id,
         title,
         description,
+        priority: Priority::try_from(priority)
+            .map_err(|e| StorageError::Database(format!("invalid priority i64 value: {e}")))?,
         status_id,
         position: position as i32,
         tags: Tags::from(tags.as_str()),
@@ -104,6 +107,7 @@ fn project_from_fields(
     name: String,
     entry_status_id: Option<StatusID>,
     task_sorting_mode: String,
+    show_priority: bool,
     created_at: String,
 ) -> Result<Project, StorageError> {
     let created_at = DateTime::parse_from_rfc3339(&created_at)
@@ -115,6 +119,7 @@ fn project_from_fields(
         name,
         entry_status_id,
         task_sorting_mode: task_sorting_mode.as_str().into(),
+        show_priority,
         created_at,
     })
 }
@@ -139,30 +144,23 @@ fn note_from_fields(
 
 #[async_trait]
 impl TaskStore for SqliteStore {
-    async fn create_task(
-        &self,
-        project_id: ProjectID,
-        title: String,
-        description: Option<String>,
-        status_id: i64,
-        position: i32,
-        tags: Tags,
-    ) -> Result<Task, StorageError> {
+    async fn create_task(&self, task: TaskToCreate) -> Result<Task, StorageError> {
         let created_at = Utc::now();
 
         let row = sqlx::query!(
             r#"
-                INSERT INTO tasks (title, description, created_at, project_id, status_id, position, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO tasks (project_id, title, description, priority, status_id, position, tags, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
             "#,
-            &title,
-            &description,
+            &task.project_id,
+            &task.title,
+            &task.description,
+            i64::from(task.priority),
+            &task.status_id,
+            &task.position,
+            task.tags.to_string(),
             created_at.to_rfc3339(),
-            &project_id,
-            &status_id,
-            &position,
-            tags.to_string(),
         )
         .fetch_one(&self.pool)
         .await
@@ -170,12 +168,13 @@ impl TaskStore for SqliteStore {
 
         Ok(Task {
             id: row.id.expect("RETURNING guarantees id"),
-            project_id,
-            title,
-            description,
-            status_id,
-            position,
-            tags,
+            project_id: task.project_id,
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            status_id: task.status_id,
+            position: task.position,
+            tags: task.tags,
             created_at,
         })
     }
@@ -184,16 +183,17 @@ impl TaskStore for SqliteStore {
         let row = sqlx::query!(
             r#"
                 SELECT
-                    t.id,
-                    t.title,
-                    t.description,
-                    t.created_at,
-                    t.project_id,
-                    t.status_id,
-                    t.position,
-                    t.tags
-                FROM tasks t
-                WHERE t.id = ?
+                    id,
+                    project_id,
+                    title,
+                    description,
+                    priority,
+                    status_id,
+                    position,
+                    tags,
+                    created_at
+                FROM tasks
+                WHERE id = ?
             "#,
             id,
         )
@@ -207,6 +207,7 @@ impl TaskStore for SqliteStore {
                 r.project_id,
                 r.title,
                 r.description,
+                r.priority,
                 r.status_id,
                 r.position,
                 r.tags,
@@ -223,17 +224,18 @@ impl TaskStore for SqliteStore {
         let rows = sqlx::query!(
             r#"
                 SELECT
-                    t.id,
-                    t.title,
-                    t.description,
-                    t.created_at,
-                    t.project_id,
-                    t.status_id,
-                    t.position,
-                    t.tags
-                FROM tasks t
-                WHERE t.project_id = ?
-                ORDER BY t.position ASC, t.id ASC
+                    id,
+                    project_id,
+                    title,
+                    description,
+                    priority,
+                    status_id,
+                    position,
+                    tags,
+                    created_at
+                FROM tasks
+                WHERE project_id = ?
+                ORDER BY position ASC, id ASC
             "#,
             project_id,
         )
@@ -248,6 +250,7 @@ impl TaskStore for SqliteStore {
                     r.project_id,
                     r.title,
                     r.description,
+                    r.priority,
                     r.status_id,
                     r.position,
                     r.tags,
@@ -264,17 +267,18 @@ impl TaskStore for SqliteStore {
         let rows = sqlx::query!(
             r#"
                 SELECT
-                    t.id,
-                    t.title,
-                    t.description,
-                    t.created_at,
-                    t.project_id,
-                    t.status_id,
-                    t.position,
-                    t.tags
-                FROM tasks t
-                WHERE t.status_id = ?
-                ORDER BY t.position ASC, t.id ASC
+                    id,
+                    project_id,
+                    title,
+                    description,
+                    priority,
+                    status_id,
+                    position,
+                    tags,
+                    created_at
+                FROM tasks
+                WHERE status_id = ?
+                ORDER BY position ASC, id ASC
             "#,
             status_id,
         )
@@ -289,6 +293,7 @@ impl TaskStore for SqliteStore {
                     r.project_id,
                     r.title,
                     r.description,
+                    r.priority,
                     r.status_id,
                     r.position,
                     r.tags,
@@ -302,11 +307,18 @@ impl TaskStore for SqliteStore {
         let result = sqlx::query!(
             r#"
                 UPDATE tasks
-                SET title = ?, description = ?, status_id = ?, position = ?, tags = ?
+                SET 
+                    title = ?, 
+                    description = ?, 
+                    priority = ?, 
+                    status_id = ?, 
+                    position = ?, 
+                    tags = ?
                 WHERE id = ?
             "#,
             &task.title,
             &task.description,
+            i64::from(task.priority),
             &task.status_id,
             &task.position,
             task.tags.to_string(),
@@ -337,16 +349,22 @@ impl TaskStore for SqliteStore {
         let row = sqlx::query!(
             r#"
                 UPDATE tasks
-                SET title = ?, description = ?, status_id = ?, position = (
-                    SELECT COALESCE(MAX(position), -1) + 1
-                    FROM tasks
-                    WHERE status_id = ?
-                ), tags = ?
+                SET 
+                    title = ?,
+                    description = ?,
+                    priority = ?,
+                    status_id = ?,
+                    position = (
+                        SELECT COALESCE(MAX(position), -1) + 1
+                        FROM tasks
+                        WHERE status_id = ?
+                    ), tags = ?
                 WHERE id = ?
                 RETURNING position
             "#,
             &task.title,
             &task.description,
+            i64::from(task.priority),
             &task.status_id,
             &task.status_id,
             task.tags.to_string(),
@@ -812,18 +830,20 @@ impl TaskStore for SqliteStore {
         name: String,
         entry_status_id: Option<StatusID>,
         task_sorting_mode: TaskSortingMode,
+        show_priority: bool,
     ) -> Result<Project, StorageError> {
         let created_at = Utc::now();
 
         let result = sqlx::query!(
             r#"
-                INSERT INTO projects (name, entry_status_id, task_sorting_mode, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO projects (name, entry_status_id, task_sorting_mode, show_priority, created_at)
+                VALUES (?, ?, ?, ?, ?)
                 RETURNING id
             "#,
             &name,
             entry_status_id,
             task_sorting_mode.to_string(),
+            show_priority,
             created_at.to_rfc3339(),
         )
         .fetch_one(&self.pool)
@@ -835,6 +855,7 @@ impl TaskStore for SqliteStore {
                 name: name.clone(),
                 entry_status_id,
                 task_sorting_mode,
+                show_priority,
                 created_at,
             },
             Err(e) if is_unique_violation(&e) => {
@@ -857,7 +878,7 @@ impl TaskStore for SqliteStore {
     async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, created_at
+                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 WHERE id = ?
             "#,
@@ -873,6 +894,7 @@ impl TaskStore for SqliteStore {
                 r.name,
                 r.entry_status_id,
                 r.task_sorting_mode,
+                r.show_priority,
                 r.created_at,
             )?),
             None => None,
@@ -882,7 +904,7 @@ impl TaskStore for SqliteStore {
     async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, created_at
+                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 WHERE name = ?
             "#,
@@ -898,6 +920,7 @@ impl TaskStore for SqliteStore {
                 r.name,
                 r.entry_status_id,
                 r.task_sorting_mode,
+                r.show_priority,
                 r.created_at,
             )?),
             None => None,
@@ -907,7 +930,7 @@ impl TaskStore for SqliteStore {
     async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError> {
         let rows = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, created_at
+                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 ORDER BY name ASC
             "#,
@@ -923,6 +946,7 @@ impl TaskStore for SqliteStore {
                     r.name,
                     r.entry_status_id,
                     r.task_sorting_mode,
+                    r.show_priority,
                     r.created_at,
                 )
             })
@@ -933,12 +957,13 @@ impl TaskStore for SqliteStore {
         let result = sqlx::query!(
             r#"
                 UPDATE projects
-                SET name = ?, entry_status_id = ?, task_sorting_mode = ?
+                SET name = ?, entry_status_id = ?, task_sorting_mode = ?, show_priority = ?
                 WHERE id = ?
             "#,
             &project.name,
             &project.entry_status_id,
             &project.task_sorting_mode.to_string(),
+            &project.show_priority,
             &project.id,
         )
         .execute(&self.pool)

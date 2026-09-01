@@ -14,14 +14,14 @@ use crate::tui::Action;
 use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::crossterm::event::KeyEvent;
 
-pub enum Popup {
+pub enum Popup<'a> {
     AddNote(Box<AddNote>),
-    AddOrEditTask(Box<AddOrEditTask>),
+    AddOrEditTask(Box<AddOrEditTask<'a>>),
     ConfirmDelete(ConfirmDelete),
     ErrorInfo(ErrorInfo),
 }
 
-impl Popup {
+impl Popup<'_> {
     pub fn handle_event(&mut self, state: &ProjectState, key: KeyEvent) -> Option<Action> {
         match self {
             Popup::AddNote(p) => p.handle_event(state, key),

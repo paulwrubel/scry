@@ -25,18 +25,18 @@ enum SelectedTask {
     ID(TaskID),
 }
 
-pub struct Root {
+pub struct Root<'a> {
     task_list: TaskList,
     task_details: TaskDetails,
     command_input: CommandInput,
     filter_input: FilterInput,
     hints: Hints,
-    popup: Option<Popup>,
+    popup: Option<Popup<'a>>,
 
     selected_task: Option<SelectedTask>,
 }
 
-impl Root {
+impl Root<'_> {
     pub fn new() -> Self {
         let selected_task = Some(SelectedTask::First);
 
@@ -208,6 +208,19 @@ impl Root {
             (KeyModifiers::NONE, KeyCode::Char('n')) if self.task_list.is_focused => {
                 if let Some(task) = selected {
                     self.handle_action(state, Action::OpenPopupAddNote(task.id))
+                } else {
+                    vec![]
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Char('p')) if self.task_list.is_focused => {
+                if let Some(task) = selected {
+                    self.handle_action(
+                        state,
+                        Action::UpdateTask(Task {
+                            priority: task.priority.next(),
+                            ..Task::from(task)
+                        }),
+                    )
                 } else {
                     vec![]
                 }

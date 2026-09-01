@@ -47,6 +47,7 @@ impl TaskList {
                 Text::from(TaskStatusList::new(
                     status_tasks,
                     selected_task_id,
+                    ctx.state.project().show_priority,
                     task_list_content_area.width,
                 ))
                 .lines

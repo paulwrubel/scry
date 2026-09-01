@@ -22,8 +22,8 @@ use std::future::Future;
 use tokio::runtime::Handle;
 
 /// Terminal lifecycle and domain logic. UI orchestration lives in Root.
-pub struct App<S: TaskStore + Sync> {
-    root: Root,
+pub struct App<'a, S: TaskStore + Sync> {
+    root: Root<'a>,
     is_running: bool,
 
     // domain state
@@ -32,7 +32,7 @@ pub struct App<S: TaskStore + Sync> {
     project_id: ProjectID,
 }
 
-impl<S: TaskStore + Sync> App<S> {
+impl<S: TaskStore + Sync> App<'_, S> {
     pub fn new(config: ScryConfig, store: S, project_id: ProjectID) -> Self {
         App {
             root: Root::new(),
@@ -162,15 +162,8 @@ impl<S: TaskStore + Sync> App<S> {
             | Action::CloseCommandInput
             | Action::CloseFilterInput => None,
 
-            Action::CreateTask(task) => {
-                match Self::block_on(self.store.create_task(
-                    task.project_id,
-                    task.title,
-                    task.description,
-                    task.status_id,
-                    task.position,
-                    task.tags,
-                )) {
+            Action::CreateTask(task_to_create) => {
+                match Self::block_on(self.store.create_task(task_to_create)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }

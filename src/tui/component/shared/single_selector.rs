@@ -4,25 +4,23 @@ use ratatui::{
     style::Style,
     text::{Line, Span},
 };
-use std::fmt::Display;
 
-pub struct SingleSelectorItem<V, L: Display> {
+pub struct SingleSelectorItem<'a, V> {
     pub(crate) value: V,
-    pub(crate) label: L,
-    pub(crate) label_style: Style,
+    pub(crate) span: Span<'a>,
 }
 
-pub struct SingleSelector<V, L: Display> {
+pub struct SingleSelector<'a, V> {
     pub is_focused: bool,
 
-    options: Vec<SingleSelectorItem<V, L>>,
+    options: Vec<SingleSelectorItem<'a, V>>,
     selected_index: usize,
 }
 
-impl<V, L: Display> SingleSelector<V, L> {
+impl<'a, V> SingleSelector<'a, V> {
     pub fn new(
         is_focused: bool,
-        options: Vec<SingleSelectorItem<V, L>>,
+        options: Vec<SingleSelectorItem<'a, V>>,
     ) -> Result<Self, &'static str> {
         if options.is_empty() {
             return Err("Options must not be empty");
@@ -47,7 +45,7 @@ impl<V, L: Display> SingleSelector<V, L> {
         }
     }
 
-    pub fn current_selection(&self) -> &SingleSelectorItem<V, L> {
+    pub fn current_selection(&self) -> &SingleSelectorItem<'a, V> {
         &self.options[self.selected_index]
     }
 
@@ -90,7 +88,7 @@ impl<V, L: Display> SingleSelector<V, L> {
         ctx.render(
             Line::from(vec![
                 Span::from("< "),
-                Span::styled(selected.label.to_string(), selected.label_style),
+                selected.span.clone(),
                 Span::from(" >"),
             ])
             .style(style),

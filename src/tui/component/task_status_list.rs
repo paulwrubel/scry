@@ -13,6 +13,7 @@ use ratatui::{
 pub struct TaskStatusList<'a> {
     status_with_tasks: &'a StatusWithTasks,
     selected_task_id: Option<TaskID>,
+    show_priority: bool,
     area_width: u16,
 }
 
@@ -20,11 +21,13 @@ impl<'a> TaskStatusList<'a> {
     pub fn new(
         status_with_tasks: &'a StatusWithTasks,
         selected_task_id: Option<TaskID>,
+        show_priority: bool,
         area_width: u16,
     ) -> Self {
         Self {
             status_with_tasks,
             selected_task_id,
+            show_priority,
             area_width,
         }
     }
@@ -86,6 +89,7 @@ impl<'a> From<TaskStatusList<'a>> for Text<'a> {
                 None,
                 status.style,
                 Some(task.id) == value.selected_task_id,
+                value.show_priority,
                 value.area_width,
             )))
         }) {
