@@ -28,7 +28,7 @@ impl ColoredTags {
                 let index = hash as usize % TAG_COLORS.len();
 
                 tag.clone()
-                    .bold()
+                    .italic()
                     .fg(Color::from_str(TAG_COLORS[index]).expect("probably won't fail i think"))
             }),
             Span::from(" "),

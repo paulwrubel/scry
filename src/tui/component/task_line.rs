@@ -52,7 +52,10 @@ impl From<TaskLine> for Line<'_> {
             prefix.push(value.task.priority.short_span());
             prefix.push(" ".to_span());
         }
-        let suffix = ColoredTags::new(value.task.tags).spans();
+        let mut suffix = ColoredTags::new(value.task.tags).spans();
+        if !suffix.is_empty() {
+            suffix.insert(0, Span::from(" "));
+        }
 
         let mut text_style =
             Style::default().fg(value.color.map_or(Color::default(), |c| c.into()));
