@@ -390,9 +390,9 @@ impl Root<'_> {
         let project_name = &ctx.state.project().name;
         let sorting_mode = &ctx.state.project().task_sorting_mode;
         ctx.with_area(task_list_area).render(
-            block.clone().title(
-                Line::from(format!(" {} ─── ⇵  {} ", project_name, sorting_mode)).centered(),
-            ),
+            block
+                .clone()
+                .title(Line::from(format!(" {} ─ ⇵ {} ", project_name, sorting_mode)).centered()),
         );
 
         // task details
