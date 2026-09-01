@@ -111,7 +111,7 @@ impl ProjectState {
                             a.title.to_lowercase().cmp(&b.title.to_lowercase())
                         }
                         TaskSortingMode::Id => a.id.cmp(&b.id),
-                        TaskSortingMode::Position => a.position.cmp(&b.position),
+                        TaskSortingMode::Manual => a.position.cmp(&b.position),
                         TaskSortingMode::Priority => a.priority.cmp(&b.priority),
                     });
                     StatusWithTasks {

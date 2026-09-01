@@ -119,6 +119,7 @@ impl<S: TaskStore + Sync> App<'_, S> {
                 state = state.with_substring_filter(filter)
             }
 
+            self.root.bind_selected_task(&state);
             terminal
                 .draw(|f| {
                     let area = f.area();

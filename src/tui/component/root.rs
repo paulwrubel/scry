@@ -4,6 +4,7 @@ use crate::tui::action::Action;
 use crate::tui::component::popup::{
     AddNote, AddOrEditTask, ConfirmDelete, ConfirmDeleteEntity, ErrorInfo,
 };
+use crate::tui::component::shared::CONTROL_OR_COMMAND;
 use crate::tui::component::{
     CommandInput, FilterInput, Hints, Popup, ProjectState, RenderContext, TaskDetails, TaskList,
 };
@@ -55,6 +56,24 @@ impl Root<'_> {
 
     pub fn select_task(&mut self, selected_task: SelectedTask) {
         self.selected_task = Some(selected_task)
+    }
+
+    pub fn bind_selected_task(&mut self, state: &ProjectState) {
+        match self.selected_task {
+            Some(SelectedTask::First) => self.select_task(
+                state
+                    .first()
+                    .map(|t| SelectedTask::Id(t.id))
+                    .unwrap_or(SelectedTask::First),
+            ),
+            Some(SelectedTask::Last) => self.select_task(
+                state
+                    .last()
+                    .map(|t| SelectedTask::Id(t.id))
+                    .unwrap_or(SelectedTask::Last),
+            ),
+            _ => {}
+        }
     }
 
     pub fn current_filter(&self) -> String {
@@ -279,12 +298,20 @@ impl Root<'_> {
             {
                 // first, check if anything at all is selected
                 if let Some(task) = self.task_from_selected_task(state) {
-                    // if the user is holding shift, just go to the top
-                    if modifier == KeyModifiers::SHIFT {
-                        self.select_task(SelectedTask::First);
-                    // otherwise, if there's a previous task, select it
-                    } else if let Some(previous) = state.previous_task(task.id) {
-                        self.select_task(SelectedTask::Id(previous.id));
+                    match modifier {
+                        // if the user is holding ctrl/cmd and manual positioning is enabled, move the task up in position
+                        CONTROL_OR_COMMAND => {
+                            return vec![
+                                // TODO: Move task up
+                            ];
+                        }
+                        // if the user is holding shift, just go to the top
+                        KeyModifiers::SHIFT => self.select_task(SelectedTask::First),
+                        // otherwise, if there's a previous task, select it
+                        KeyModifiers::NONE if let Some(previous) = state.previous_task(task.id) => {
+                            self.select_task(SelectedTask::Id(previous.id))
+                        }
+                        _ => {}
                     }
                 }
 
@@ -295,12 +322,20 @@ impl Root<'_> {
             {
                 // first, check if anything at all is selected
                 if let Some(task) = self.task_from_selected_task(state) {
-                    // if the user is holding shift, just go to the top
-                    if modifier == KeyModifiers::SHIFT {
-                        self.select_task(SelectedTask::Last);
-                    // otherwise, if there's a previous task, select it
-                    } else if let Some(next) = state.next_task(task.id) {
-                        self.select_task(SelectedTask::Id(next.id));
+                    match modifier {
+                        // if the user is holding ctrl/cmd and manual positioning is enabled, move the task down in position
+                        CONTROL_OR_COMMAND => {
+                            return vec![
+                                // TODO: Move task down
+                            ];
+                        }
+                        // if the user is holding shift, just go to the bottom
+                        KeyModifiers::SHIFT => self.select_task(SelectedTask::Last),
+                        // otherwise, if there's a previous task, select it
+                        KeyModifiers::NONE if let Some(next) = state.next_task(task.id) => {
+                            self.select_task(SelectedTask::Id(next.id))
+                        }
+                        _ => {}
                     }
                 }
 
@@ -353,10 +388,11 @@ impl Root<'_> {
         );
         // task list block
         let project_name = &ctx.state.project().name;
+        let sorting_mode = &ctx.state.project().task_sorting_mode;
         ctx.with_area(task_list_area).render(
-            block
-                .clone()
-                .title(Line::from(format!(" {} ", project_name)).centered()),
+            block.clone().title(
+                Line::from(format!(" {} ─── ⇵  {} ", project_name, sorting_mode)).centered(),
+            ),
         );
 
         // task details

@@ -251,9 +251,9 @@ pub enum TaskSortingMode {
     ]))]
     AlphabeticalCaseInsensitive,
     Id,
-    #[value(alias("pos"))]
-    Position,
-    #[value(alias("pri"))]
+    #[value(aliases(["none","position","pos"]))]
+    Manual,
+    #[value(aliases(["pri"]))]
     Priority,
 }
 
