@@ -45,7 +45,7 @@ impl InputBlock {
 
     pub fn with_placeholder_text(mut self, placeholder_text: String) -> Self {
         self.textarea
-            .set_styled_placeholder(Text::from(placeholder_text).dim());
+            .set_styled_placeholder(Text::from(placeholder_text).dim().italic());
         self
     }
 
@@ -109,7 +109,7 @@ impl InputBlock {
 
     pub fn render(&self, ctx: &mut RenderContext) {
         let (border_style, text_style) = match (self.is_focused, self.mode) {
-            (true, InputMode::Viewing) => (Style::default(), Style::default().dim()),
+            (true, InputMode::Viewing) => (Style::default(), Style::default()),
             (true, _) => (Style::default(), Style::default()),
             (false, _) => (Style::default().dim(), Style::default().dim()),
         };
