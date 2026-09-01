@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT\n                    t.id,\n                    t.title,\n                    t.description,\n                    t.created_at,\n                    t.project_id,\n                    t.status_id,\n                    t.position,\n                    t.tags\n                FROM tasks t\n                WHERE t.id = ?\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    status_id,\n                    position,\n                    tags,\n                    created_at\n                FROM tasks\n                WHERE status_id = ?\n                ORDER BY position ASC, id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -15,8 +15,19 @@
         }
       },
       {
-        "name": "title",
+        "name": "project_id",
         "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -27,7 +38,7 @@
       },
       {
         "name": "description",
-        "ordinal": 2,
+        "ordinal": 3,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -37,24 +48,13 @@
         }
       },
       {
-        "name": "created_at",
-        "ordinal": 3,
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "tasks",
-            "name": "created_at"
-          }
-        }
-      },
-      {
-        "name": "project_id",
+        "name": "priority",
         "ordinal": 4,
         "type_info": "Integer",
         "origin": {
           "Table": {
             "table": "tasks",
-            "name": "project_id"
+            "name": "priority"
           }
         }
       },
@@ -90,12 +90,24 @@
             "name": "tags"
           }
         }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "created_at"
+          }
+        }
       }
     ],
     "parameters": {
       "Right": 1
     },
     "nullable": [
+      false,
       false,
       false,
       true,
@@ -106,5 +118,5 @@
       false
     ]
   },
-  "hash": "fa6fc6c9a325dfd8acc447d1086382f5001c323b541eec2a29a647e896f700dc"
+  "hash": "28df1c40db4dec33a86320468159cba80d03b3fb528b560a02de65e7788398e9"
 }

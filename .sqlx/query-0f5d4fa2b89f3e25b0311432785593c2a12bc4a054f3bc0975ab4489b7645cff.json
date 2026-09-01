@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE projects\n                SET name = ?, entry_status_id = ?, task_sorting_mode = ?, show_priority = ?\n                WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "0f5d4fa2b89f3e25b0311432785593c2a12bc4a054f3bc0975ab4489b7645cff"
+}

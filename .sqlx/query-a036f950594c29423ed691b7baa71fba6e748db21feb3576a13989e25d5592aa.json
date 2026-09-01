@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT id, name, entry_status_id, created_at\n                FROM projects\n                WHERE id = ?\n            ",
+  "query": "\n                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at\n                FROM projects\n                ORDER BY name ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -37,8 +37,30 @@
         }
       },
       {
-        "name": "created_at",
+        "name": "task_sorting_mode",
         "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "task_sorting_mode"
+          }
+        }
+      },
+      {
+        "name": "show_priority",
+        "ordinal": 4,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "show_priority"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 5,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -49,14 +71,16 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       false,
       false,
       true,
+      false,
+      false,
       false
     ]
   },
-  "hash": "d45aadf695d6d841fc30e23da9321e78baa30d9c04aaa0dd8f9e45ab1c494121"
+  "hash": "a036f950594c29423ed691b7baa71fba6e748db21feb3576a13989e25d5592aa"
 }
