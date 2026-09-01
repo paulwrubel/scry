@@ -1,4 +1,4 @@
-use crate::models::TaskID;
+use crate::models::TaskId;
 use crate::tui::component::RenderContext;
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, ToSpan};
@@ -10,7 +10,7 @@ impl Hints {
         Hints
     }
 
-    pub fn render(&self, ctx: &mut RenderContext, selected_task_id: Option<TaskID>) {
+    pub fn render(&self, ctx: &mut RenderContext, selected_task_id: Option<TaskId>) {
         // each "hint" is a Text, since parts are styled differently
         let mut hints = vec![
             // initialize hints with static, always-available actions
@@ -23,6 +23,7 @@ impl Hints {
         if selected_task_id.is_some() {
             hints.push(vec!["[e]".to_span(), "dit".dim()]);
             hints.push(vec!["[d]".to_span(), "elete".dim()]);
+            hints.push(vec!["d".dim(), "[u]".to_span(), "plicate".dim()]);
             hints.push(vec!["[n]".to_span(), "ote".dim()]);
             hints.push(vec!["[p]".to_span(), "riority".dim()]);
         }

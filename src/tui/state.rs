@@ -4,10 +4,10 @@ use chrono::Utc;
 use crate::error::StorageError;
 use crate::models::Note;
 use crate::models::Priority;
-use crate::models::StatusID;
+use crate::models::StatusId;
 use crate::models::Tags;
 use crate::models::TaskSortingMode;
-use crate::models::{Project, ProjectID, Status, Task, TaskID};
+use crate::models::{Project, ProjectId, Status, Task, TaskId};
 use crate::store::TaskStore;
 
 #[derive(Debug, Clone)]
@@ -24,8 +24,8 @@ pub struct StatusWithTasks {
 
 #[derive(Debug, Clone)]
 pub struct TaskWithNotes {
-    pub(crate) id: TaskID,
-    pub(crate) project_id: ProjectID,
+    pub(crate) id: TaskId,
+    pub(crate) project_id: ProjectId,
     pub(crate) title: String,
     pub(crate) description: Option<String>,
     pub(crate) priority: Priority,
@@ -78,7 +78,7 @@ impl From<&TaskWithNotes> for Task {
 impl ProjectState {
     pub async fn load_from_store(
         store: &dyn TaskStore,
-        project_id: ProjectID,
+        project_id: ProjectId,
     ) -> Result<Self, StorageError> {
         let project = store
             .get_project_by_id(project_id)
@@ -156,12 +156,12 @@ impl ProjectState {
         &self.project
     }
 
-    pub fn get_task_by_id(&self, task_id: TaskID) -> Option<&TaskWithNotes> {
+    pub fn get_task_by_id(&self, task_id: TaskId) -> Option<&TaskWithNotes> {
         self.tasks().find(|t| t.id == task_id)
     }
 
     #[allow(dead_code)]
-    pub fn get_status_by_id(&self, status_id: StatusID) -> Option<&Status> {
+    pub fn get_status_by_id(&self, status_id: StatusId) -> Option<&Status> {
         self.statuses().find(|s| s.id == status_id)
     }
 
@@ -169,7 +169,7 @@ impl ProjectState {
         self.statuses().find(|s| s.name == status_name)
     }
 
-    pub fn tasks_in_status(&self, status_id: StatusID) -> Vec<&TaskWithNotes> {
+    pub fn tasks_in_status(&self, status_id: StatusId) -> Vec<&TaskWithNotes> {
         self.statuses_with_tasks
             .iter()
             .find_map(|st| {
@@ -199,7 +199,7 @@ impl ProjectState {
     /// Get the Task immediately following the one with the provided ID in the order.
     ///
     /// It may return None if there is no following Task.
-    pub fn next_task(&self, task_id: TaskID) -> Option<&TaskWithNotes> {
+    pub fn next_task(&self, task_id: TaskId) -> Option<&TaskWithNotes> {
         let mut tasks = self.tasks();
 
         while let Some(task) = tasks.next() {
@@ -214,7 +214,7 @@ impl ProjectState {
     /// Get the Task immediately preceding the one with the provided ID in the order.
     ///
     /// It may return None if there is no preceding Task.
-    pub fn previous_task(&self, task_id: TaskID) -> Option<&TaskWithNotes> {
+    pub fn previous_task(&self, task_id: TaskId) -> Option<&TaskWithNotes> {
         let mut tasks = self.tasks().rev();
 
         while let Some(task) = tasks.next() {
@@ -229,7 +229,7 @@ impl ProjectState {
     /// Get the Status immediately following the one with the provided ID in the order.
     ///
     /// It may return None if there is no following Status.
-    pub fn next_status(&self, status_id: StatusID) -> Option<&Status> {
+    pub fn next_status(&self, status_id: StatusId) -> Option<&Status> {
         let mut statuses = self.statuses();
 
         while let Some(status) = statuses.next() {
@@ -244,7 +244,7 @@ impl ProjectState {
     /// Get the Status immediately preceding the one with the provided ID in the order.
     ///
     /// It may return None if there is no preceding Status.
-    pub fn previous_status(&self, status_id: StatusID) -> Option<&Status> {
+    pub fn previous_status(&self, status_id: StatusId) -> Option<&Status> {
         let mut statuses = self.statuses().rev();
 
         while let Some(status) = statuses.next() {
@@ -256,7 +256,7 @@ impl ProjectState {
         None
     }
 
-    pub fn index_in_status(&self, task_id: TaskID) -> Option<usize> {
+    pub fn index_in_status(&self, task_id: TaskId) -> Option<usize> {
         self.statuses_with_tasks
             .iter()
             .flat_map(|status| status.tasks_with_notes.iter().enumerate())

@@ -6,8 +6,8 @@ use std::path::Path;
 
 use crate::error::StorageError;
 use crate::models::{
-    Color, Note, NoteID, Priority, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task,
-    TaskID, TaskSortingMode,
+    Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
+    TaskId, TaskSortingMode,
 };
 use crate::store::{TaskStore, TaskToCreate};
 
@@ -57,7 +57,7 @@ fn is_unique_violation(e: &sqlx::Error) -> bool {
 #[allow(clippy::too_many_arguments)]
 fn task_from_fields(
     id: i64,
-    project_id: ProjectID,
+    project_id: ProjectId,
     title: String,
     description: Option<String>,
     priority: i64,
@@ -86,7 +86,7 @@ fn task_from_fields(
 
 fn status_from_fields(
     id: i64,
-    project_id: ProjectID,
+    project_id: ProjectId,
     name: String,
     position: i64,
     color: Option<String>,
@@ -105,7 +105,7 @@ fn status_from_fields(
 fn project_from_fields(
     id: i64,
     name: String,
-    entry_status_id: Option<StatusID>,
+    entry_status_id: Option<StatusId>,
     task_sorting_mode: String,
     show_priority: bool,
     created_at: String,
@@ -179,7 +179,7 @@ impl TaskStore for SqliteStore {
         })
     }
 
-    async fn get_task_by_id(&self, id: TaskID) -> Result<Option<Task>, StorageError> {
+    async fn get_task_by_id(&self, id: TaskId) -> Result<Option<Task>, StorageError> {
         let row = sqlx::query!(
             r#"
                 SELECT
@@ -219,7 +219,7 @@ impl TaskStore for SqliteStore {
 
     async fn get_all_tasks_by_project_id(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
     ) -> Result<Vec<Task>, StorageError> {
         let rows = sqlx::query!(
             r#"
@@ -262,7 +262,7 @@ impl TaskStore for SqliteStore {
 
     async fn get_all_tasks_by_status_id(
         &self,
-        status_id: StatusID,
+        status_id: StatusId,
     ) -> Result<Vec<Task>, StorageError> {
         let rows = sqlx::query!(
             r#"
@@ -383,7 +383,7 @@ impl TaskStore for SqliteStore {
         })
     }
 
-    async fn delete_task(&self, id: TaskID) -> Result<(), StorageError> {
+    async fn delete_task(&self, id: TaskId) -> Result<(), StorageError> {
         sqlx::query!(
             r#"
                 DELETE FROM tasks
@@ -398,7 +398,7 @@ impl TaskStore for SqliteStore {
         Ok(())
     }
 
-    async fn create_note(&self, task_id: TaskID, contents: String) -> Result<Note, StorageError> {
+    async fn create_note(&self, task_id: TaskId, contents: String) -> Result<Note, StorageError> {
         let created_at = Utc::now();
 
         let row = sqlx::query!(
@@ -423,7 +423,7 @@ impl TaskStore for SqliteStore {
         })
     }
 
-    async fn get_note_by_id(&self, id: NoteID) -> Result<Option<Note>, StorageError> {
+    async fn get_note_by_id(&self, id: NoteId) -> Result<Option<Note>, StorageError> {
         let row = sqlx::query!(
             r#"
                 SELECT
@@ -446,7 +446,7 @@ impl TaskStore for SqliteStore {
         })
     }
 
-    async fn get_all_notes_by_task_id(&self, task_id: TaskID) -> Result<Vec<Note>, StorageError> {
+    async fn get_all_notes_by_task_id(&self, task_id: TaskId) -> Result<Vec<Note>, StorageError> {
         let rows = sqlx::query!(
             r#"
                 SELECT
@@ -471,7 +471,7 @@ impl TaskStore for SqliteStore {
 
     async fn get_all_notes_by_project_id(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
     ) -> Result<Vec<Note>, StorageError> {
         let rows = sqlx::query!(
             r#"
@@ -517,7 +517,7 @@ impl TaskStore for SqliteStore {
         Ok(note)
     }
 
-    async fn delete_note(&self, id: NoteID) -> Result<(), StorageError> {
+    async fn delete_note(&self, id: NoteId) -> Result<(), StorageError> {
         let result = sqlx::query!(
             r#"
                 DELETE FROM notes
@@ -538,7 +538,7 @@ impl TaskStore for SqliteStore {
 
     async fn create_status(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
         name: String,
         position: i32,
         color: Option<Color>,
@@ -579,7 +579,7 @@ impl TaskStore for SqliteStore {
         }
     }
 
-    async fn get_status_by_id(&self, id: StatusID) -> Result<Option<Status>, StorageError> {
+    async fn get_status_by_id(&self, id: StatusId) -> Result<Option<Status>, StorageError> {
         sqlx::query!(
             r#"
                 SELECT
@@ -604,7 +604,7 @@ impl TaskStore for SqliteStore {
 
     async fn get_status_by_project_id_and_status_name(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
         status_name: String,
     ) -> Result<Option<Status>, StorageError> {
         sqlx::query!(
@@ -632,7 +632,7 @@ impl TaskStore for SqliteStore {
 
     async fn get_all_statuses_by_project_id(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
     ) -> Result<Vec<Status>, StorageError> {
         sqlx::query!(
             r#"
@@ -712,8 +712,8 @@ impl TaskStore for SqliteStore {
 
     async fn reorder_status(
         &self,
-        project_id: ProjectID,
-        status_id: StatusID,
+        project_id: ProjectId,
+        status_id: StatusId,
         new_position: i32,
     ) -> Result<(), StorageError> {
         let status = self.get_status_by_id(status_id).await?;
@@ -783,7 +783,7 @@ impl TaskStore for SqliteStore {
         Ok(())
     }
 
-    async fn delete_status(&self, id: StatusID) -> Result<(), StorageError> {
+    async fn delete_status(&self, id: StatusId) -> Result<(), StorageError> {
         if self.get_status_by_id(id).await?.is_none() {
             return Err(StorageError::NotFound(format!(
                 "status with id '{}' not found",
@@ -828,7 +828,7 @@ impl TaskStore for SqliteStore {
     async fn create_project(
         &self,
         name: String,
-        entry_status_id: Option<StatusID>,
+        entry_status_id: Option<StatusId>,
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
     ) -> Result<Project, StorageError> {
@@ -875,7 +875,7 @@ impl TaskStore for SqliteStore {
         Ok(project)
     }
 
-    async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError> {
+    async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
                 SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at

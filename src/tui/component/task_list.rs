@@ -1,4 +1,4 @@
-use crate::models::TaskID;
+use crate::models::TaskId;
 use crate::tui::component::TaskStatusList;
 use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -23,7 +23,7 @@ impl TaskList {
     pub fn render(
         &mut self,
         ctx: &mut RenderContext,
-        selected_task_id: Option<TaskID>,
+        selected_task_id: Option<TaskId>,
         active_filter: String,
     ) {
         let [task_list_content_area] = ctx
@@ -71,7 +71,7 @@ impl TaskList {
             .render(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
     }
 
-    fn line_index_from_task_id(state: &ProjectState, task_id: TaskID) -> u16 {
+    fn line_index_from_task_id(state: &ProjectState, task_id: TaskId) -> u16 {
         let mut line_index = 0;
         for status in &state.statuses_with_tasks {
             // the status header counts as a line
@@ -93,7 +93,7 @@ impl TaskList {
         &mut self,
         area: Rect,
         state: &ProjectState,
-        selected_task_id: Option<TaskID>,
+        selected_task_id: Option<TaskId>,
     ) {
         // todo
         if let Some(task_id) = selected_task_id {

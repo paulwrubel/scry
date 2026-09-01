@@ -2,12 +2,13 @@ use async_trait::async_trait;
 
 use crate::error::StorageError;
 use crate::models::{
-    Color, Note, NoteID, Priority, Project, ProjectID, Status, StatusID, StatusStyle, Tags, Task,
-    TaskID, TaskSortingMode,
+    Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
+    TaskId, TaskSortingMode,
 };
+use crate::tui::state::TaskWithNotes;
 
 pub(crate) struct TaskToCreate {
-    pub(crate) project_id: ProjectID,
+    pub(crate) project_id: ProjectId,
     pub(crate) title: String,
     pub(crate) description: Option<String>,
     pub(crate) priority: Priority,
@@ -16,20 +17,48 @@ pub(crate) struct TaskToCreate {
     pub(crate) tags: Tags,
 }
 
+impl From<&Task> for TaskToCreate {
+    fn from(value: &Task) -> Self {
+        Self {
+            project_id: value.project_id,
+            title: value.title.clone(),
+            description: value.description.clone(),
+            priority: value.priority,
+            status_id: value.status_id,
+            position: value.position,
+            tags: value.tags.clone(),
+        }
+    }
+}
+
+impl From<&TaskWithNotes> for TaskToCreate {
+    fn from(value: &TaskWithNotes) -> Self {
+        Self {
+            project_id: value.project_id,
+            title: value.title.clone(),
+            description: value.description.clone(),
+            priority: value.priority,
+            status_id: value.status_id,
+            position: value.position,
+            tags: value.tags.clone(),
+        }
+    }
+}
+
 #[async_trait]
 pub trait TaskStore {
     /// Add a new task.
     async fn create_task(&self, task_to_create: TaskToCreate) -> Result<Task, StorageError>;
 
     /// Get a task by its id
-    async fn get_task_by_id(&self, id: TaskID) -> Result<Option<Task>, StorageError>;
+    async fn get_task_by_id(&self, id: TaskId) -> Result<Option<Task>, StorageError>;
 
     /// List tasks in a project
     ///
     /// Results are ordered by position ascending, then task ID ascending.
     async fn get_all_tasks_by_project_id(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
     ) -> Result<Vec<Task>, StorageError>;
 
     /// List tasks in a status
@@ -37,7 +66,7 @@ pub trait TaskStore {
     /// Results are ordered by position ascending, then task ID ascending.
     async fn get_all_tasks_by_status_id(
         &self,
-        status_id: StatusID,
+        status_id: StatusId,
     ) -> Result<Vec<Task>, StorageError>;
 
     /// Edit an existing task, writing the position of the Task to the DB exactly
@@ -49,27 +78,27 @@ pub trait TaskStore {
     async fn update_and_autoposition_task(&self, task: Task) -> Result<Task, StorageError>;
 
     /// Delete a task
-    async fn delete_task(&self, id: TaskID) -> Result<(), StorageError>;
+    async fn delete_task(&self, id: TaskId) -> Result<(), StorageError>;
 
-    async fn create_note(&self, task_id: TaskID, contents: String) -> Result<Note, StorageError>;
+    async fn create_note(&self, task_id: TaskId, contents: String) -> Result<Note, StorageError>;
 
     // The note read/update/delete methods below are not wired into the UI yet;
     // they are scaffolding for the future note editing and deletion features.
     #[allow(dead_code)]
-    async fn get_note_by_id(&self, id: NoteID) -> Result<Option<Note>, StorageError>;
+    async fn get_note_by_id(&self, id: NoteId) -> Result<Option<Note>, StorageError>;
 
     /// List notes assigned to a Task
     ///
     /// Results are ordered by created date ascending.
     #[allow(dead_code)]
-    async fn get_all_notes_by_task_id(&self, task_id: TaskID) -> Result<Vec<Note>, StorageError>;
+    async fn get_all_notes_by_task_id(&self, task_id: TaskId) -> Result<Vec<Note>, StorageError>;
 
     /// List all notes in a project
     ///
     /// Results are ordered by created date ascending.
     async fn get_all_notes_by_project_id(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
     ) -> Result<Vec<Note>, StorageError>;
 
     /// Edit an existing note
@@ -78,28 +107,28 @@ pub trait TaskStore {
 
     /// Delete a note
     #[allow(dead_code)]
-    async fn delete_note(&self, id: NoteID) -> Result<(), StorageError>;
+    async fn delete_note(&self, id: NoteId) -> Result<(), StorageError>;
 
     async fn create_status(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
         name: String,
         position: i32,
         color: Option<Color>,
         style: StatusStyle,
     ) -> Result<Status, StorageError>;
 
-    async fn get_status_by_id(&self, id: StatusID) -> Result<Option<Status>, StorageError>;
+    async fn get_status_by_id(&self, id: StatusId) -> Result<Option<Status>, StorageError>;
 
     async fn get_status_by_project_id_and_status_name(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
         status_name: String,
     ) -> Result<Option<Status>, StorageError>;
 
     async fn get_all_statuses_by_project_id(
         &self,
-        project_id: ProjectID,
+        project_id: ProjectId,
     ) -> Result<Vec<Status>, StorageError>;
 
     async fn update_status(&self, status: Status) -> Result<Status, StorageError>;
@@ -109,23 +138,23 @@ pub trait TaskStore {
     /// The new position is clamped to [0, number of statuses - 1].
     async fn reorder_status(
         &self,
-        project_id: ProjectID,
-        status_id: StatusID,
+        project_id: ProjectId,
+        status_id: StatusId,
         new_position: i32,
     ) -> Result<(), StorageError>;
 
-    async fn delete_status(&self, id: StatusID) -> Result<(), StorageError>;
+    async fn delete_status(&self, id: StatusId) -> Result<(), StorageError>;
 
     /// Create a new project.
     async fn create_project(
         &self,
         name: String,
-        entry_status_id: Option<StatusID>,
+        entry_status_id: Option<StatusId>,
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
     ) -> Result<Project, StorageError>;
 
-    async fn get_project_by_id(&self, id: ProjectID) -> Result<Option<Project>, StorageError>;
+    async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, StorageError>;
 
     /// Look up a project by name.
     async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError>;

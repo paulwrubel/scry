@@ -1,5 +1,5 @@
 use crate::{
-    models::TaskID,
+    models::TaskId,
     tui::{
         component::{TaskLine, shared::truncate_string_to_width},
         state::StatusWithTasks,
@@ -12,7 +12,7 @@ use ratatui::{
 
 pub struct TaskStatusList<'a> {
     status_with_tasks: &'a StatusWithTasks,
-    selected_task_id: Option<TaskID>,
+    selected_task_id: Option<TaskId>,
     show_priority: bool,
     area_width: u16,
 }
@@ -20,7 +20,7 @@ pub struct TaskStatusList<'a> {
 impl<'a> TaskStatusList<'a> {
     pub fn new(
         status_with_tasks: &'a StatusWithTasks,
-        selected_task_id: Option<TaskID>,
+        selected_task_id: Option<TaskId>,
         show_priority: bool,
         area_width: u16,
     ) -> Self {

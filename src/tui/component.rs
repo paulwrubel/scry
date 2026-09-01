@@ -12,6 +12,7 @@ pub use popup::Popup;
 
 mod root;
 pub use root::Root;
+pub(crate) use root::SelectedTask;
 
 mod shared;
 pub use shared::Button;

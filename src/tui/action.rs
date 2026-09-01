@@ -2,7 +2,7 @@ use crate::models::Project;
 use crate::store::TaskToCreate;
 use crate::tui::state::TaskWithNotes;
 use crate::{
-    models::{Note, Status, StatusID, Task, TaskID},
+    models::{Note, Status, StatusId, Task, TaskId},
     tui::component::popup::ConfirmDeleteEntity,
 };
 
@@ -13,7 +13,7 @@ pub enum Action {
     // ── lifecycle ──
     Quit,
 
-    OpenPopupAddNote(TaskID),
+    OpenPopupAddNote(TaskId),
     OpenPopupAddOrEditTask(Option<TaskWithNotes>),
     OpenPopupConfirmDelete(ConfirmDeleteEntity),
     OpenPopupErrorInfo(String),
@@ -25,7 +25,7 @@ pub enum Action {
     // ── tasks ──
     CreateTask(TaskToCreate),
     UpdateTask(Task),
-    DeleteTask(TaskID),
+    DeleteTask(TaskId),
 
     // ── notes ──
     CreateNote(Note),
@@ -33,7 +33,7 @@ pub enum Action {
     // ── statuses ──
     CreateStatus(Status),
     UpdateStatus(Status),
-    DeleteStatus(StatusID),
+    DeleteStatus(StatusId),
 
     // ── projects ──
     UpdateProject(Project),

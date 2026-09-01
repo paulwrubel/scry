@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use strum::IntoEnumIterator;
 
-pub type NoteID = i64;
-pub type TaskID = i64;
-pub type ProjectID = i64;
-pub type StatusID = i64;
+pub type NoteId = i64;
+pub type TaskId = i64;
+pub type ProjectId = i64;
+pub type StatusId = i64;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
 pub enum Color {
@@ -275,9 +275,9 @@ impl From<&str> for TaskSortingMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
-    pub id: ProjectID,
+    pub id: ProjectId,
     pub name: String,
-    pub entry_status_id: Option<StatusID>,
+    pub entry_status_id: Option<StatusId>,
     pub task_sorting_mode: TaskSortingMode,
     pub show_priority: bool,
     pub created_at: DateTime<Utc>,
@@ -285,8 +285,8 @@ pub struct Project {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Status {
-    pub id: StatusID,
-    pub project_id: ProjectID,
+    pub id: StatusId,
+    pub project_id: ProjectId,
     pub name: String,
     pub position: i32,
     pub color: Option<Color>,
@@ -295,8 +295,8 @@ pub struct Status {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
-    pub id: TaskID,
-    pub project_id: ProjectID,
+    pub id: TaskId,
+    pub project_id: ProjectId,
     pub title: String,
     pub description: Option<String>,
     pub priority: Priority,
@@ -308,8 +308,8 @@ pub struct Task {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Note {
-    pub id: NoteID,
-    pub task_id: TaskID,
+    pub id: NoteId,
+    pub task_id: TaskId,
     pub contents: String,
     pub created_at: DateTime<Utc>,
 }

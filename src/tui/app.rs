@@ -1,10 +1,10 @@
 use crate::config::ScryConfig;
 use crate::error::{AppError, StorageError};
-use crate::models::ProjectID;
+use crate::models::ProjectId;
 use crate::store::TaskStore;
 use crate::tui::action::Action;
-use crate::tui::component::RenderContext;
 use crate::tui::component::Root;
+use crate::tui::component::{RenderContext, SelectedTask};
 use crate::tui::state::ProjectState;
 
 use ratatui::Terminal;
@@ -29,11 +29,11 @@ pub struct App<'a, S: TaskStore + Sync> {
     // domain state
     _config: ScryConfig,
     store: S,
-    project_id: ProjectID,
+    project_id: ProjectId,
 }
 
 impl<S: TaskStore + Sync> App<'_, S> {
-    pub fn new(config: ScryConfig, store: S, project_id: ProjectID) -> Self {
+    pub fn new(config: ScryConfig, store: S, project_id: ProjectId) -> Self {
         App {
             root: Root::new(),
             is_running: true,
@@ -164,7 +164,10 @@ impl<S: TaskStore + Sync> App<'_, S> {
 
             Action::CreateTask(task_to_create) => {
                 match Self::block_on(self.store.create_task(task_to_create)) {
-                    Ok(_) => None,
+                    Ok(task) => {
+                        self.root.select_task(SelectedTask::Id(task.id));
+                        None
+                    }
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }

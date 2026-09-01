@@ -1,4 +1,5 @@
-use crate::models::{Task, TaskID};
+use crate::models::{Task, TaskId};
+use crate::store::TaskToCreate;
 use crate::tui::action::Action;
 use crate::tui::component::popup::{
     AddNote, AddOrEditTask, ConfirmDelete, ConfirmDeleteEntity, ErrorInfo,
@@ -19,10 +20,10 @@ const VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
 };
 
 #[derive(Debug, Clone, Copy)]
-enum SelectedTask {
+pub(crate) enum SelectedTask {
     First,
     Last,
-    ID(TaskID),
+    Id(TaskId),
 }
 
 pub struct Root<'a> {
@@ -50,6 +51,10 @@ impl Root<'_> {
 
             selected_task,
         }
+    }
+
+    pub fn select_task(&mut self, selected_task: SelectedTask) {
+        self.selected_task = Some(selected_task)
     }
 
     pub fn current_filter(&self) -> String {
@@ -122,11 +127,11 @@ impl Root<'_> {
                             && task.id == task_id
                         {
                             if let Some(next) = state.next_task(task_id) {
-                                self.selected_task = Some(SelectedTask::ID(next.id))
+                                self.select_task(SelectedTask::Id(next.id))
                             } else if let Some(previous) = state.previous_task(task_id) {
-                                self.selected_task = Some(SelectedTask::ID(previous.id))
+                                self.select_task(SelectedTask::Id(previous.id))
                             } else {
-                                self.selected_task = Some(SelectedTask::First)
+                                self.select_task(SelectedTask::First)
                             }
                         }
 
@@ -196,11 +201,18 @@ impl Root<'_> {
                 }
             }
             (_, KeyCode::Char('d')) if self.task_list.is_focused => {
-                if let Some(task) = selected {
+                if let Some(task) = &selected {
                     self.handle_action(
                         state,
                         Action::OpenPopupConfirmDelete(ConfirmDeleteEntity::Task(Task::from(task))),
                     )
+                } else {
+                    vec![]
+                }
+            }
+            (_, KeyCode::Char('u')) if self.task_list.is_focused => {
+                if let Some(task) = &selected {
+                    self.handle_action(state, Action::CreateTask(TaskToCreate::from(task)))
                 } else {
                     vec![]
                 }
@@ -269,10 +281,10 @@ impl Root<'_> {
                 if let Some(task) = self.task_from_selected_task(state) {
                     // if the user is holding shift, just go to the top
                     if modifier == KeyModifiers::SHIFT {
-                        self.selected_task = Some(SelectedTask::First)
+                        self.select_task(SelectedTask::First);
                     // otherwise, if there's a previous task, select it
-                    } else if let Some(prev) = state.previous_task(task.id) {
-                        self.selected_task = Some(SelectedTask::ID(prev.id));
+                    } else if let Some(previous) = state.previous_task(task.id) {
+                        self.select_task(SelectedTask::Id(previous.id));
                     }
                 }
 
@@ -285,10 +297,10 @@ impl Root<'_> {
                 if let Some(task) = self.task_from_selected_task(state) {
                     // if the user is holding shift, just go to the top
                     if modifier == KeyModifiers::SHIFT {
-                        self.selected_task = Some(SelectedTask::Last)
+                        self.select_task(SelectedTask::Last);
                     // otherwise, if there's a previous task, select it
                     } else if let Some(next) = state.next_task(task.id) {
-                        self.selected_task = Some(SelectedTask::ID(next.id));
+                        self.select_task(SelectedTask::Id(next.id));
                     }
                 }
 
@@ -402,7 +414,7 @@ impl Root<'_> {
             Some(st) => match st {
                 SelectedTask::First => state.first(),
                 SelectedTask::Last => state.last(),
-                SelectedTask::ID(task_id) => state.get_task_by_id(task_id).or(state.first()),
+                SelectedTask::Id(task_id) => state.get_task_by_id(task_id).or(state.first()),
             }
             .cloned(),
             None => None,

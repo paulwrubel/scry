@@ -1,4 +1,4 @@
-use crate::models::{Note, TaskID};
+use crate::models::{Note, TaskId};
 use crate::tui::action::Action;
 use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
@@ -11,11 +11,11 @@ pub struct AddNote {
     contents_input: InputBlock,
     confirm_button: Button,
 
-    task_id: TaskID,
+    task_id: TaskId,
 }
 
 impl AddNote {
-    pub fn new(task_id: TaskID) -> Self {
+    pub fn new(task_id: TaskId) -> Self {
         Self {
             contents_input: InputBlock::new(true, true)
                 .with_title(String::from("Note"))
