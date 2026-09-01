@@ -95,15 +95,15 @@ impl InputBlock {
                 self.mode = InputMode::Viewing;
             }
             // single-line inputs never receive newline keys
-            (_, KeyCode::Enter, InputMode::SingleLine)
-            | (KeyModifiers::CONTROL, KeyCode::Char('m'), InputMode::SingleLine) => {}
+            (_, KeyCode::Enter, InputMode::SingleLine) => {}
             // in normal mode a multiline input only responds to Enter (above);
             // everything else bubbles so the parent can change focus
             (_, _, InputMode::Viewing) => {}
             // anything else, we send to the textarea
-            _ => {
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, _, _) => {
                 self.textarea.input(key);
             }
+            _ => {}
         }
     }
 
