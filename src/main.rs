@@ -338,6 +338,7 @@ async fn main() -> Result<(), AppError> {
                 };
 
                 let project = create_project(&store, name, template.copied()).await?;
+
                 println!("Created project \"{}\"", project.name);
                 if template.is_none() {
                     println!(
