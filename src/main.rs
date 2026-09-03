@@ -82,9 +82,9 @@ enum ProjectCommand {
     },
     /// Create a new project
     Create {
-        /// Show only tasks in a specific status
+        /// The name of a template for the project
         #[arg(short = 't')]
-        template: Option<String>,
+        template_name: Option<String>,
         /// The project name
         name: String,
     },
@@ -321,27 +321,33 @@ async fn main() -> Result<(), AppError> {
                 store.set_active_project(&name).await?;
                 println!("Using project \"{}\"", name);
             }
-            ProjectCommand::Create { name, template } => {
-                let template = template
-                    .map(|template_name| PROJECT_TEMPLATES.iter().find(|t| t.name == template_name))
-                    .to_owned();
-
-                if template.is_some_and(|t| t.is_none()) {
-                } else {
-                    let template = template.map(|t| t.expect("validated in if condition"));
-
-                    let project = create_project(&store, name, template.copied()).await?;
-                    println!("Created project \"{}\"", project.name);
-                    if template.is_none() {
-                        println!(
-                            "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."
-                        );
+            ProjectCommand::Create {
+                name,
+                template_name,
+            } => {
+                let template: Option<&ProjectTemplate> = match template_name {
+                    Some(requested) => {
+                        let Some(template) = PROJECT_TEMPLATES.iter().find(|t| t.name == requested)
+                        else {
+                            eprintln!("Unknown template name: \"{}\".", requested);
+                            return Ok(());
+                        };
+                        Some(template)
                     }
+                    None => None,
+                };
+
+                let project = create_project(&store, name, template.copied()).await?;
+                println!("Created project \"{}\"", project.name);
+                if template.is_none() {
                     println!(
-                        "Make it active with 'scry project use \"{}\"'.",
-                        project.name
+                        "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."
                     );
                 }
+                println!(
+                    "Make it active with 'scry project use \"{}\"'.",
+                    project.name
+                );
             }
             ProjectCommand::Delete { name, force } => {
                 if !force {
@@ -459,16 +465,18 @@ async fn create_project(
     name: String,
     template: Option<ProjectTemplate>,
 ) -> Result<Project, AppError> {
-    // base project (will be updated later if a template is provided)
     let project = store
         .create_project(name, None, TaskSortingMode::default(), false)
-        .await
-        .map_err(AppError::Store)?;
+        .await?;
 
-    let project = if let Some(template) = template {
-        let mut statuses = vec![];
-        for status in template.statuses {
-            let created_status = store
+    let Some(template) = template else {
+        return Ok(project);
+    };
+
+    let mut statuses = vec![];
+    for status in template.statuses {
+        statuses.push(
+            store
                 .create_status(
                     project.id,
                     status.name.to_string(),
@@ -476,31 +484,20 @@ async fn create_project(
                     status.color,
                     status.style,
                 )
-                .await?;
-            statuses.push(created_status);
-        }
+                .await?,
+        );
+    }
 
-        let entry_status_id = template.entry_status_name.and_then(|entry_status_name| {
-            statuses.iter().find_map(|s| {
-                if s.name == entry_status_name {
-                    Some(s.id)
-                } else {
-                    None
-                }
-            })
-        });
+    let entry_status_id = template
+        .entry_status_name
+        .and_then(|name| statuses.iter().find(|s| s.name == name).map(|s| s.id));
 
-        store
-            .update_project(Project {
-                entry_status_id,
-                task_sorting_mode: template.task_sorting_mode,
-                show_priority: template.show_priority,
-                ..project
-            })
-            .await?
-    } else {
-        project
-    };
-
-    Ok(project)
+    Ok(store
+        .update_project(Project {
+            entry_status_id,
+            task_sorting_mode: template.task_sorting_mode,
+            show_priority: template.show_priority,
+            ..project
+        })
+        .await?)
 }
