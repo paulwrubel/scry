@@ -273,6 +273,72 @@ impl From<&str> for TaskSortingMode {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ProjectTemplate {
+    pub(crate) name: &'static str,
+    pub(crate) entry_status_name: Option<&'static str>,
+    pub(crate) task_sorting_mode: TaskSortingMode,
+    pub(crate) show_priority: bool,
+    pub(crate) statuses: &'static [ProjectTemplateStatus],
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ProjectTemplateStatus {
+    pub(crate) name: &'static str,
+    pub(crate) position: i32,
+    pub(crate) color: Option<Color>,
+    pub(crate) style: StatusStyle,
+}
+
+pub(crate) const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
+    ProjectTemplate {
+        name: "todolist",
+        entry_status_name: Some("todo"),
+        task_sorting_mode: TaskSortingMode::Manual,
+        show_priority: false,
+        statuses: &[
+            ProjectTemplateStatus {
+                name: "todo",
+                position: 0,
+                color: None,
+                style: StatusStyle::Unchecked,
+            },
+            ProjectTemplateStatus {
+                name: "done",
+                position: 1,
+                color: Some(Color::Green),
+                style: StatusStyle::Checked,
+            },
+        ],
+    },
+    ProjectTemplate {
+        name: "kanban",
+        entry_status_name: Some("backlog"),
+        task_sorting_mode: TaskSortingMode::Priority,
+        show_priority: true,
+        statuses: &[
+            ProjectTemplateStatus {
+                name: "in-progress",
+                position: 0,
+                color: Some(Color::Blue),
+                style: StatusStyle::None,
+            },
+            ProjectTemplateStatus {
+                name: "backlog",
+                position: 1,
+                color: None,
+                style: StatusStyle::None,
+            },
+            ProjectTemplateStatus {
+                name: "done",
+                position: 2,
+                color: Some(Color::Green),
+                style: StatusStyle::Strikethrough,
+            },
+        ],
+    },
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectId,
