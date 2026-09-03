@@ -11,7 +11,7 @@ use error::AppError;
 use store::{TaskStore, sqlite::SqliteStore};
 
 use crate::{
-    models::{Priority, Status, StatusStyle, Tags, Task, TaskSortingMode},
+    models::{Priority, Project, Status, StatusStyle, Tags, Task, TaskSortingMode},
     store::TaskToCreate,
 };
 
@@ -73,10 +73,24 @@ enum Command {
 enum ProjectCommand {
     /// List all projects
     List,
+    /// Show the currently active project
+    Current,
+    /// Set the active project
+    Use {
+        /// The project name
+        name: String,
+    },
     /// Create a new project
     Create {
         /// The project name
         name: String,
+    },
+    /// Rename a project
+    Rename {
+        /// The current project name
+        old_name: String,
+        /// The new project name
+        new_name: String,
     },
     /// Delete a project and all its tasks
     Delete {
@@ -86,13 +100,6 @@ enum ProjectCommand {
         #[arg(short, long)]
         force: bool,
     },
-    /// Set the active project
-    Use {
-        /// The project name
-        name: String,
-    },
-    /// Show the currently active project
-    Current,
     /// Manage statuses within a project
     #[command(subcommand)]
     Status(StatusCommand),
@@ -127,16 +134,16 @@ async fn main() -> Result<(), AppError> {
     let config = ScryConfig::load()?;
     let store = SqliteStore::new(&config.database_url).await?;
 
-    let (project_id, project_name) = resolve_project(&store, cli.project.as_deref()).await?;
+    let project = resolve_project(&store, cli.project.as_deref()).await?;
 
     let Some(command) = cli.command else {
-        let mut app = tui::App::new(config, store, project_id);
+        let mut app = tui::App::new(config, store, project.id);
         return app.run().await;
     };
 
     match command {
         Command::Add { title } => {
-            let statuses = store.get_all_statuses_by_project_id(project_id).await?;
+            let statuses = store.get_all_statuses_by_project_id(project.id).await?;
             let first_status = statuses
                 .first()
                 .ok_or_else(|| AppError::Internal("project has no statuses".to_string()))?;
@@ -146,7 +153,7 @@ async fn main() -> Result<(), AppError> {
                 .len() as i32;
             let task = store
                 .create_task(TaskToCreate {
-                    project_id,
+                    project_id: project.id,
                     title,
                     description: None,
                     priority: Priority::default(),
@@ -158,7 +165,7 @@ async fn main() -> Result<(), AppError> {
             println!(
                 "Created task {} in \"{}\" [{}]: {}",
                 task.id,
-                project_name,
+                project.name,
                 statuses
                     .iter()
                     .find(|s| s.id == task.status_id)
@@ -169,14 +176,14 @@ async fn main() -> Result<(), AppError> {
         }
         Command::Move { id, status } => {
             let Some(status) = store
-                .get_status_by_project_id_and_status_name(project_id, status.clone())
+                .get_status_by_project_id_and_status_name(project.id, status.clone())
                 .await?
             else {
-                eprintln!("Status \"{}\" not found in \"{}\"", status, project_name);
+                eprintln!("Status \"{}\" not found in \"{}\"", status, project.name);
                 return Ok(());
             };
             let Some(task) = store.get_task_by_id(id).await? else {
-                eprintln!("Task {} not found in \"{}\"", id, project_name);
+                eprintln!("Task {} not found in \"{}\"", id, project.name);
                 return Ok(());
             };
             let task = store
@@ -193,17 +200,17 @@ async fn main() -> Result<(), AppError> {
                 return Ok(());
             };
             let Some(status) = store
-                .get_status_by_project_id_and_status_name(project_id, status_name.clone())
+                .get_status_by_project_id_and_status_name(project.id, status_name.clone())
                 .await?
             else {
                 eprintln!(
                     "Status \"{}\" not found in \"{}\"",
-                    status_name, project_name
+                    status_name, project.name
                 );
                 return Ok(());
             };
             let Some(task) = store.get_task_by_id(id).await? else {
-                eprintln!("Task {} not found in \"{}\"", id, project_name);
+                eprintln!("Task {} not found in \"{}\"", id, project.name);
                 return Ok(());
             };
             let task = store
@@ -216,15 +223,15 @@ async fn main() -> Result<(), AppError> {
         }
         Command::Delete { id } => {
             if store.get_task_by_id(id).await?.is_none() {
-                eprintln!("Task {} not found in \"{}\"", id, project_name);
+                eprintln!("Task {} not found in \"{}\"", id, project.name);
                 return Ok(());
             }
             store.delete_task(id).await?;
-            println!("Deleted task {} from \"{}\"", id, project_name);
+            println!("Deleted task {} from \"{}\"", id, project.name);
         }
         Command::Show { id } => match store.get_task_by_id(id).await? {
             Some(task) => {
-                let status_defs = store.get_all_statuses_by_project_id(project_id).await?;
+                let status_defs = store.get_all_statuses_by_project_id(project.id).await?;
                 let status_name = status_defs
                     .iter()
                     .find(|s| s.id == task.status_id)
@@ -232,7 +239,7 @@ async fn main() -> Result<(), AppError> {
                     .unwrap_or("unknown");
 
                 println!("Task {}", task.id);
-                println!("  Project:   {}", project_name);
+                println!("  Project:   {}", project.name);
                 println!("  Title:     {}", task.title);
                 println!("  Status:    {}", status_name);
                 println!(
@@ -242,22 +249,22 @@ async fn main() -> Result<(), AppError> {
                         .format("%Y-%m-%d %I:%M %p %Z")
                 );
             }
-            None => eprintln!("Task {} not found in \"{}\"", id, project_name),
+            None => eprintln!("Task {} not found in \"{}\"", id, project.name),
         },
         Command::List { status } => {
             let tasks = match &status {
                 Some(name) => match store
-                    .get_status_by_project_id_and_status_name(project_id, name.clone())
+                    .get_status_by_project_id_and_status_name(project.id, name.clone())
                     .await?
                 {
                     Some(status_def) => store.get_all_tasks_by_status_id(status_def.id).await?,
                     None => vec![],
                 },
-                None => store.get_all_tasks_by_project_id(project_id).await?,
+                None => store.get_all_tasks_by_project_id(project.id).await?,
             };
-            let statuses = store.get_all_statuses_by_project_id(project_id).await?;
+            let statuses = store.get_all_statuses_by_project_id(project.id).await?;
 
-            println!("project \"{}\"\n", project_name);
+            println!("project \"{}\"\n", project.name);
 
             if tasks.is_empty() {
                 println!("No tasks.");
@@ -299,10 +306,17 @@ async fn main() -> Result<(), AppError> {
                     println!("No projects. Run 'scry project create <name>' to create one.");
                 } else {
                     for p in &projects {
-                        let marker = if p.id == project_id { "* " } else { "  " };
+                        let marker = if p.id == project.id { "* " } else { "  " };
                         println!("  {}{}", marker, p.name);
                     }
                 }
+            }
+            ProjectCommand::Current => {
+                println!("{}", project.name);
+            }
+            ProjectCommand::Use { name } => {
+                store.set_active_project(&name).await?;
+                println!("Using project \"{}\"", name);
             }
             ProjectCommand::Create { name } => {
                 let project = store
@@ -336,26 +350,28 @@ async fn main() -> Result<(), AppError> {
                     println!("Using project \"{}\"", new_active.name);
                 }
             }
-            ProjectCommand::Use { name } => {
-                store.set_active_project(&name).await?;
-                println!("Using project \"{}\"", name);
-            }
-            ProjectCommand::Current => {
-                println!("{}", project_name);
+            ProjectCommand::Rename { old_name, new_name } => {
+                store
+                    .update_project(Project {
+                        name: new_name.clone(),
+                        ..project
+                    })
+                    .await?;
+                println!("Renamed project \"{}\" --> \"{}\"", old_name, new_name);
             }
             ProjectCommand::Status(status_cmd) => match status_cmd {
                 StatusCommand::List => {
-                    let statuses = store.get_all_statuses_by_project_id(project_id).await?;
-                    println!("Statuses for \"{}\":", project_name);
+                    let statuses = store.get_all_statuses_by_project_id(project.id).await?;
+                    println!("Statuses for \"{}\":", project.name);
                     for s in &statuses {
                         println!("  {}", s.name);
                     }
                 }
                 StatusCommand::Add { name } => {
-                    let statuses = store.get_all_statuses_by_project_id(project_id).await?;
+                    let statuses = store.get_all_statuses_by_project_id(project.id).await?;
                     let status = store
                         .create_status(
-                            project_id,
+                            project.id,
                             name,
                             statuses.len() as i32,
                             None,
@@ -364,12 +380,12 @@ async fn main() -> Result<(), AppError> {
                         .await?;
                     println!(
                         "Added status \"{}\" to project \"{}\"",
-                        status.name, project_name
+                        status.name, project.name
                     );
                 }
                 StatusCommand::Remove { name } => {
                     if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project_id, name.clone())
+                        .get_status_by_project_id_and_status_name(project.id, name.clone())
                         .await?
                     {
                         let tasks_in_status = store.get_all_tasks_by_status_id(status.id).await?;
@@ -377,7 +393,7 @@ async fn main() -> Result<(), AppError> {
                             store.delete_status(status.id).await?;
                             println!(
                                 "Removed status \"{}\" from project \"{}\"",
-                                name, project_name
+                                name, project.name
                             );
                         } else {
                             eprintln!(
@@ -390,7 +406,7 @@ async fn main() -> Result<(), AppError> {
                 }
                 StatusCommand::Rename { old_name, new_name } => {
                     if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project_id, old_name.clone())
+                        .get_status_by_project_id_and_status_name(project.id, old_name.clone())
                         .await?
                     {
                         store
@@ -401,7 +417,7 @@ async fn main() -> Result<(), AppError> {
                             .await?;
                         println!(
                             "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
-                            old_name, new_name, project_name
+                            old_name, new_name, project.name
                         );
                     }
                 }
@@ -413,18 +429,15 @@ async fn main() -> Result<(), AppError> {
 }
 
 /// Resolve which project to use: --project flag takes precedence over active project.
-async fn resolve_project(
-    store: &SqliteStore,
-    flag: Option<&str>,
-) -> Result<(i64, String), AppError> {
+async fn resolve_project(store: &SqliteStore, flag: Option<&str>) -> Result<Project, AppError> {
     if let Some(name) = flag {
         let project = store
             .get_project_by_name(name)
             .await?
             .ok_or_else(|| AppError::Internal(format!("project '{}' not found", name)))?;
-        Ok((project.id, project.name))
+        Ok(project)
     } else {
         let project = store.get_active_project().await?;
-        Ok((project.id, project.name))
+        Ok(project)
     }
 }
