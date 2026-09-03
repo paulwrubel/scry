@@ -172,13 +172,8 @@ impl ProjectState {
     pub fn tasks_in_status(&self, status_id: StatusId) -> Vec<&TaskWithNotes> {
         self.statuses_with_tasks
             .iter()
-            .find_map(|st| {
-                if st.status.id == status_id {
-                    Some(st.tasks_with_notes.iter().collect())
-                } else {
-                    None
-                }
-            })
+            .find(|st| st.status.id == status_id)
+            .map(|st| st.tasks_with_notes.iter().collect())
             .unwrap_or_default()
     }
 
@@ -202,13 +197,8 @@ impl ProjectState {
     pub fn next_task(&self, task_id: TaskId) -> Option<&TaskWithNotes> {
         let mut tasks = self.tasks();
 
-        while let Some(task) = tasks.next() {
-            if task.id == task_id {
-                return tasks.next();
-            }
-        }
-
-        None
+        tasks.find(|task| task.id == task_id)?;
+        tasks.next()
     }
 
     /// Get the Task immediately preceding the one with the provided ID in the order.
@@ -217,13 +207,8 @@ impl ProjectState {
     pub fn previous_task(&self, task_id: TaskId) -> Option<&TaskWithNotes> {
         let mut tasks = self.tasks().rev();
 
-        while let Some(task) = tasks.next() {
-            if task.id == task_id {
-                return tasks.next();
-            }
-        }
-
-        None
+        tasks.find(|task| task.id == task_id)?;
+        tasks.next()
     }
 
     /// Get the Status immediately following the one with the provided ID in the order.
@@ -232,13 +217,8 @@ impl ProjectState {
     pub fn next_status(&self, status_id: StatusId) -> Option<&Status> {
         let mut statuses = self.statuses();
 
-        while let Some(status) = statuses.next() {
-            if status.id == status_id {
-                return statuses.next();
-            }
-        }
-
-        None
+        statuses.find(|status| status.id == status_id)?;
+        statuses.next()
     }
 
     /// Get the Status immediately preceding the one with the provided ID in the order.
@@ -247,13 +227,8 @@ impl ProjectState {
     pub fn previous_status(&self, status_id: StatusId) -> Option<&Status> {
         let mut statuses = self.statuses().rev();
 
-        while let Some(status) = statuses.next() {
-            if status.id == status_id {
-                return statuses.next();
-            }
-        }
-
-        None
+        statuses.find(|status| status.id == status_id)?;
+        statuses.next()
     }
 
     pub fn index_in_status(&self, task_id: TaskId) -> Option<usize> {

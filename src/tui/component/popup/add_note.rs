@@ -50,14 +50,8 @@ impl AddNote {
                     None
                 }
             }
-            (_, KeyCode::Esc) => {
-                if editing {
-                    // the multiline input already exited edit mode
-                    None
-                } else {
-                    Some(Action::DismissPopup)
-                }
-            }
+            // if still editing, the multiline input already consumed Esc to exit edit mode
+            (_, KeyCode::Esc) if !editing => Some(Action::DismissPopup),
             (_, KeyCode::Up) => {
                 if editing {
                     // the multiline input moved the cursor up
@@ -108,18 +102,16 @@ impl AddNote {
     }
 
     fn handle_create_or_update(&self, _state: &ProjectState) -> Option<Action> {
-        if self.is_valid() {
+        self.is_valid().then(|| {
             let contents = self.contents_input.buffer_text();
 
-            Some(Action::CreateNote(Note {
+            Action::CreateNote(Note {
                 id: 0, // dummy id
                 task_id: self.task_id,
                 contents,
                 created_at: DateTime::default(), // dummy, overwritten on insert
-            }))
-        } else {
-            None
-        }
+            })
+        })
     }
 
     fn is_valid(&self) -> bool {

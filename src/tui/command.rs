@@ -156,7 +156,7 @@ pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
             }
             StatusCommand::Rename { old, new } => {
                 if let Some(status) = state.get_status_by_name(&old) {
-                    if state.statuses().find(|s| s.name == new).is_none() {
+                    if !state.statuses().any(|s| s.name == new) {
                         vec![Action::UpdateStatus(Status {
                             id: status.id,
                             name: new,

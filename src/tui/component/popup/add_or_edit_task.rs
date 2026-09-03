@@ -48,7 +48,7 @@ impl AddOrEditTask<'_> {
             .with_placeholder_text(String::from(DESCRIPTION_PLACEHOLDER_TEXT))
             .with_text(
                 task.as_ref()
-                    .map(|t| t.description.clone().unwrap_or_default())
+                    .and_then(|t| t.description.clone())
                     .unwrap_or_default(),
             );
 
@@ -149,14 +149,7 @@ impl AddOrEditTask<'_> {
                     None
                 }
             }
-            (_, KeyCode::Esc) if !description_editing => {
-                if description_editing {
-                    // the multiline input already exited edit mode
-                    None
-                } else {
-                    Some(Action::DismissPopup)
-                }
-            }
+            (_, KeyCode::Esc) if !description_editing => Some(Action::DismissPopup),
             // focus only moves if we're not editing, since the input owns the cursor
             (_, KeyCode::Up | KeyCode::Down) if !description_editing => {
                 match key.code {
@@ -291,10 +284,7 @@ impl AddOrEditTask<'_> {
     fn handle_create_or_update(&self, state: &ProjectState) -> Option<Action> {
         if self.is_valid() {
             let title = self.title_input.buffer_text();
-            let description = {
-                let text = self.description_input.buffer_text();
-                if text.is_empty() { None } else { Some(text) }
-            };
+            let description = Some(self.description_input.buffer_text()).filter(|t| !t.is_empty());
             let priority = self.priority_selector.current_selection().value;
             let status_id = self.status_selector.current_selection().value.id;
             let tags = Tags::from(self.tags_input.buffer_text().as_str());

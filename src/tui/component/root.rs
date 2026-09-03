@@ -95,11 +95,8 @@ impl Root<'_> {
                         vec![]
                     }
                     Action::OpenPopupAddOrEditTask(task) => {
-                        if state.statuses().next().is_some() {
-                            self.popup = Some(Popup::AddOrEditTask(Box::new(
-                                AddOrEditTask::new(state, task)
-                                    .expect("There exists at least one status"),
-                            )));
+                        if let Ok(popup) = AddOrEditTask::new(state, task) {
+                            self.popup = Some(Popup::AddOrEditTask(Box::new(popup)));
                         }
                         vec![]
                     }
@@ -446,14 +443,12 @@ impl Root<'_> {
     }
 
     fn task_from_selected_task(&self, state: &ProjectState) -> Option<TaskWithNotes> {
-        match self.selected_task {
-            Some(st) => match st {
+        self.selected_task
+            .and_then(|st| match st {
                 SelectedTask::First => state.first(),
                 SelectedTask::Last => state.last(),
                 SelectedTask::Id(task_id) => state.get_task_by_id(task_id).or(state.first()),
-            }
-            .cloned(),
-            None => None,
-        }
+            })
+            .cloned()
     }
 }
