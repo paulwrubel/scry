@@ -1,10 +1,10 @@
 use crate::models::{Priority, Status, Tags, Task};
+use crate::state::TaskWithNotes;
 use crate::store::TaskToCreate;
 use crate::tui::action::Action;
 use crate::tui::component::shared::{CONTROL_OR_COMMAND, SingleSelector, SingleSelectorItem};
 use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
-use crate::tui::state::TaskWithNotes;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Style;

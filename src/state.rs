@@ -10,6 +10,9 @@ use crate::models::TaskSortingMode;
 use crate::models::{Project, ProjectId, Status, Task, TaskId};
 use crate::store::TaskStore;
 
+// Aug 9, 2026 at 4:40pm
+pub const DATETIME_FORMAT_STR: &str = "%b %-d, %Y at %-I:%M%P";
+
 #[derive(Debug, Clone)]
 pub struct ProjectState {
     project: Project,
@@ -160,7 +163,6 @@ impl ProjectState {
         self.tasks().find(|t| t.id == task_id)
     }
 
-    #[allow(dead_code)]
     pub fn get_status_by_id(&self, status_id: StatusId) -> Option<&Status> {
         self.statuses().find(|s| s.id == status_id)
     }

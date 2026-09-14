@@ -30,7 +30,7 @@ pub use task_list::TaskList;
 mod task_status_list;
 pub use task_status_list::TaskStatusList;
 
-use crate::tui::state::ProjectState;
+use crate::state::ProjectState;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Flex, Layout, Margin, Rect};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};

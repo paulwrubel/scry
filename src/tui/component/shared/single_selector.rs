@@ -1,4 +1,5 @@
-use crate::tui::{component::RenderContext, state::ProjectState};
+use crate::state::ProjectState;
+use crate::tui::component::RenderContext;
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     style::Style,

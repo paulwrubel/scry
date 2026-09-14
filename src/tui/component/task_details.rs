@@ -1,6 +1,7 @@
+use crate::state::DATETIME_FORMAT_STR;
+use crate::state::{ProjectState, TaskWithNotes};
 use crate::tui::component::RenderContext;
-use crate::tui::component::shared::{ColoredTags, DATETIME_FORMAT_STR};
-use crate::tui::state::{ProjectState, TaskWithNotes};
+use crate::tui::component::shared::ColoredTags;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Stylize;

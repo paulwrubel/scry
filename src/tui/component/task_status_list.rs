@@ -1,9 +1,7 @@
 use crate::{
     models::TaskId,
-    tui::{
-        component::{TaskLine, shared::truncate_string_to_width},
-        state::StatusWithTasks,
-    },
+    state::StatusWithTasks,
+    tui::component::{TaskLine, shared::truncate_string_to_width},
 };
 use ratatui::{
     style::{Color, Stylize},

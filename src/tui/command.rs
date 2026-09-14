@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
 
 use crate::models::{Color, Project, Status, StatusStyle, TaskSortingMode};
+use crate::state::ProjectState;
 use crate::tui::Action;
 use crate::tui::component::popup::ConfirmDeleteEntity;
-use crate::tui::state::ProjectState;
 
 /// The TUI commands
 #[derive(Parser)]

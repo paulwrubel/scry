@@ -1,11 +1,11 @@
 use crate::config::ScryConfig;
 use crate::error::{AppError, StorageError};
 use crate::models::ProjectId;
+use crate::state::ProjectState;
 use crate::store::TaskStore;
 use crate::tui::action::Action;
 use crate::tui::component::Root;
 use crate::tui::component::{RenderContext, SelectedTask};
-use crate::tui::state::ProjectState;
 
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
