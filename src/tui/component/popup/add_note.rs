@@ -4,6 +4,7 @@ use crate::tui::component::shared::CONTROL_OR_COMMAND;
 use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
 use chrono::DateTime;
+use indoc::indoc;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::widgets::{Block, Borders};
@@ -20,12 +21,11 @@ impl AddNote {
         Self {
             contents_input: InputBlock::new(true, true)
                 .with_title(String::from("Note"))
-                .with_placeholder_text(String::from(
-                    r#"Made some progress yesterday...
+                .with_placeholder_text(String::from(indoc! {r#"
+                    Made some progress yesterday...
 
-... but there's still a lot to do!
-"#,
-                )),
+                    ... but there's still a lot to do!
+                "#})),
             confirm_button: Button::new(false, String::from("Add Note")),
 
             task_id,

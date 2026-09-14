@@ -5,6 +5,7 @@ use crate::tui::action::Action;
 use crate::tui::component::shared::{CONTROL_OR_COMMAND, SingleSelector, SingleSelectorItem};
 use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
+use indoc::indoc;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Style;
@@ -13,12 +14,13 @@ use ratatui::widgets::{Block, Borders};
 use strum::IntoEnumIterator;
 
 const TASK_PLACEHOLDER_TEXT: &str = "Do the laundry";
-const DESCRIPTION_PLACEHOLDER_TEXT: &str = r#"There's a lot of laundry to do...
+const DESCRIPTION_PLACEHOLDER_TEXT: &str = indoc! {r#"
+    There's a lot of laundry to do...
 
-1. Delicates
-2. Towels
-3. Whites
-"#;
+    1. Delicates
+    2. Towels
+    3. Whites
+"#};
 const TAGS_PLACEHOLDER_TEXT: &str = "work,chores,travel";
 
 pub struct AddOrEditTask<'a> {
