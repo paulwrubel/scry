@@ -169,6 +169,7 @@ impl<'a> IntoIterator for &'a Tags {
     Ord,
     Serialize,
     Deserialize,
+    ValueEnum,
     TryFromPrimitive,
     IntoPrimitive,
     strum::Display,
@@ -176,11 +177,16 @@ impl<'a> IntoIterator for &'a Tags {
 )]
 #[repr(i64)]
 pub enum Priority {
+    #[value(alias("p5"))]
     Minimal = 5,
+    #[value(alias("p4"))]
     Low = 4,
     #[default]
+    #[value(alias("p3"))]
     Medium = 3,
+    #[value(alias("p2"))]
     High = 2,
+    #[value(alias("p1"))]
     Critical = 1,
 }
 
