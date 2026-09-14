@@ -5,7 +5,7 @@ use crate::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
-use crate::tui::state::TaskWithNotes;
+use crate::state::TaskWithNotes;
 
 pub(crate) struct TaskToCreate {
     pub(crate) project_id: ProjectId,
