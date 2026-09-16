@@ -1,3 +1,4 @@
+mod color;
 mod config;
 mod error;
 mod models;
@@ -5,6 +6,7 @@ mod state;
 mod store;
 mod tui;
 
+use crate::color::ColorChoice;
 use crate::models::{
     Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Status, StatusStyle, Tags, Task,
     TaskSortingMode,
@@ -23,6 +25,10 @@ struct Cli {
     /// Target a specific project (overrides the active project)
     #[arg(short = 'p', long = "project")]
     project: Option<String>,
+
+    /// When to colorize output
+    #[arg(long, value_enum, default_value = "auto")]
+    color: ColorChoice,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -201,6 +207,7 @@ enum StatusCommand {
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     let cli = Cli::parse();
+    cli.color.apply();
     let config = ScryConfig::load()?;
     let store = SqliteStore::new(&config.database_url).await?;
 
@@ -369,10 +376,9 @@ async fn main() -> Result<(), AppError> {
                 return Ok(());
             };
 
-            let status_name = state
-                .get_status_by_id(task.status_id)
-                .map(|s| s.name.as_str())
-                .unwrap_or("unknown");
+            let status = state.get_status_by_id(task.status_id);
+            let status_name = status.map(|s| s.name.as_str()).unwrap_or("unknown");
+            let status_color = status.and_then(|s| s.color);
             let created_at = task
                 .created_at
                 .with_timezone(&Local)
@@ -388,16 +394,15 @@ async fn main() -> Result<(), AppError> {
             }
             println!();
 
-            println!(
-                "Priority:    p{} - {}",
-                i64::from(task.priority),
-                task.priority
-            );
-            println!("Status:      {}", status_name);
-            println!(
-                "Tags:        {}",
-                task.tags.iter().cloned().collect::<Vec<_>>().join(" ")
-            );
+            anstream::println!("Priority:    {}", color::priority_long(task.priority));
+            anstream::println!("Status:      {}", color::status(status_color, status_name));
+            let tags = task
+                .tags
+                .iter()
+                .map(|tag| color::tag(tag))
+                .collect::<Vec<_>>()
+                .join(" ");
+            anstream::println!("Tags:        {}", tags);
             println!("Created at:  {}", created_at);
             println!();
 
@@ -448,7 +453,8 @@ async fn main() -> Result<(), AppError> {
                 } else {
                     ""
                 };
-                println!("{}{} ({}):", marker, status_def.name, status_tasks.len());
+                let header = format!("{}{} ({}):", marker, status_def.name, status_tasks.len());
+                anstream::println!("{}", color::status(status_def.color, &header));
 
                 for task in &status_tasks {
                     let icon = match status_def.style {
@@ -462,16 +468,21 @@ async fn main() -> Result<(), AppError> {
                         line.push_str(&format!("  {}", icon));
                     }
                     if show_priority {
-                        line.push_str(&format!("  p{}", i64::from(task.priority)));
+                        line.push_str(&format!("  {}", color::priority(task.priority)));
                     }
                     line.push_str(&format!("  {}", task.title));
 
-                    let tags = task.tags.iter().cloned().collect::<Vec<_>>().join(" ");
+                    let tags = task
+                        .tags
+                        .iter()
+                        .map(|tag| color::tag(tag))
+                        .collect::<Vec<_>>()
+                        .join(" ");
                     if !tags.is_empty() {
                         line.push_str(&format!("  {}", tags));
                     }
 
-                    println!("{}", line);
+                    anstream::println!("{}", line);
                 }
 
                 if !status_tasks.is_empty() {
@@ -573,7 +584,7 @@ async fn main() -> Result<(), AppError> {
                     let statuses = store.get_all_statuses_by_project_id(project.id).await?;
                     println!("Statuses for \"{}\":", project.name);
                     for s in &statuses {
-                        println!("  {}", s.name);
+                        anstream::println!("  {}", color::status(s.color, &s.name));
                     }
                 }
                 StatusCommand::Add { name } => {

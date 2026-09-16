@@ -1,3 +1,4 @@
+use anstyle::{AnsiColor, Style};
 use assert_cmd::Command;
 use assert_fs::TempDir;
 use indoc::indoc;
@@ -70,6 +71,19 @@ fn normalize(stdout: &str) -> String {
 fn create_todolist(h: &Harness, name: &str) {
     h.run(&["project", "create", "-t", "todolist", name])
         .success();
+}
+
+/// Render `text` the same way the CLI does, so tests don't hardcode SGR codes.
+fn styled(color: AnsiColor, text: &str) -> String {
+    let style = Style::new().fg_color(Some(color.into()));
+    format!("{style}{text}{style:#}")
+}
+
+/// A tag is rendered with a palette color chosen inside the binary, so an
+/// integration test can't know the exact RGB. Assert only that the tag is
+/// wrapped in an ANSI style, without naming any SGR codes.
+fn tag_is_colored(tag: &str) -> impl predicates::prelude::Predicate<str> {
+    predicate::str::is_match(format!(r"\x1b\[[0-9;]*m{tag}\x1b\[[0-9;]*m")).unwrap()
 }
 
 #[test]
@@ -362,7 +376,9 @@ fn show_missing_task_reports_to_stderr() {
 
     h.run(&["-p", "todolist", "show", "999"])
         .success()
-        .stderr(predicate::str::contains("Task 999 not found in \"todolist\""));
+        .stderr(predicate::str::contains(
+            "Task 999 not found in \"todolist\"",
+        ));
 }
 
 #[test]
@@ -409,7 +425,9 @@ fn note_add_rejects_unknown_task() {
 
     h.run(&["-p", "todolist", "note", "add", "999", "a note"])
         .success()
-        .stderr(predicate::str::contains("Task 999 not found in \"todolist\""));
+        .stderr(predicate::str::contains(
+            "Task 999 not found in \"todolist\"",
+        ));
 }
 
 #[test]
@@ -490,15 +508,8 @@ fn status_color() {
     );
 
     assert_stdout(
-        &h.run(&[
-            "-p",
-            "todolist",
-            "project",
-            "status",
-            "reset-color",
-            "todo",
-        ])
-        .success(),
+        &h.run(&["-p", "todolist", "project", "status", "reset-color", "todo"])
+            .success(),
         "Reset color of status \"todo\" in project \"todolist\"",
     );
 }
@@ -534,4 +545,111 @@ fn status_color_rejects_unknown_status() {
     .stderr(predicate::str::contains(
         "Status \"missing\" not found in \"todolist\"",
     ));
+}
+
+#[test]
+fn color_never_leaves_output_plain() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+    h.run(&["--color=never", "-p", "todolist", "add", "Alpha"])
+        .success();
+
+    h.run(&["--color=never", "-p", "todolist", "list"])
+        .success()
+        .stdout(predicate::str::contains("\u{1b}").not());
+}
+
+#[test]
+fn status_list_renders_status_color() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    h.run(&[
+        "--color=always",
+        "-p",
+        "todolist",
+        "project",
+        "status",
+        "set-color",
+        "todo",
+        "green",
+    ])
+    .success();
+
+    // ANSI SGR 32 is green; the status name should be wrapped in it.
+    h.run(&[
+        "--color=always",
+        "-p",
+        "todolist",
+        "project",
+        "status",
+        "list",
+    ])
+    .success()
+    .stdout(predicate::str::contains(styled(AnsiColor::Green, "todo")));
+}
+
+#[test]
+fn list_renders_priority_and_tag_colors() {
+    let h = Harness::new();
+    h.run(&["project", "create", "-t", "kanban", "kanban"])
+        .success();
+    h.run(&[
+        "-p",
+        "kanban",
+        "add",
+        "Alpha",
+        "--priority",
+        "high",
+        "--tags",
+        "work",
+    ])
+    .success();
+
+    // `high` is p2 (yellow, SGR 33) and tags use 24-bit color. kanban enables
+    // show_priority, so the priority label is rendered.
+    h.run(&["--color=always", "-p", "kanban", "list"])
+        .success()
+        .stdout(
+            predicate::str::contains(styled(AnsiColor::Yellow, "p2")).and(tag_is_colored("work")),
+        );
+}
+
+#[test]
+fn show_renders_status_priority_and_tag_colors() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+    h.run(&[
+        "-p",
+        "todolist",
+        "add",
+        "Alpha",
+        "--priority",
+        "high",
+        "--tags",
+        "work",
+    ])
+    .success();
+    h.run(&[
+        "--color=always",
+        "-p",
+        "todolist",
+        "project",
+        "status",
+        "set-color",
+        "todo",
+        "green",
+    ])
+    .success();
+
+    h.run(&["--color=always", "-p", "todolist", "show", "1"])
+        .success()
+        .stdout(
+            predicate::str::contains(styled(AnsiColor::Green, "todo"))
+                .and(predicate::str::contains(styled(
+                    AnsiColor::Yellow,
+                    "p2 - High",
+                )))
+                .and(tag_is_colored("work")),
+        );
 }
