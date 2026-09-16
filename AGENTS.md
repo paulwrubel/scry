@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`scry` is a SQLite-backed terminal task manager: a clap CLI plus a ratatui interactive TUI (launched when run with **no subcommand**). Single binary crate, Rust edition 2024. Currently there are no unit/integration tests — `just test`/`cargo test` only verifies compilation.
+`scry` is a SQLite-backed terminal task manager: a clap CLI plus a ratatui interactive TUI (launched when run with **no subcommand**). Single binary crate, Rust edition 2024. Integration tests live in `tests/cli.rs` and drive the built binary against isolated scratch databases; `just test` runs them.
 
 ## Tooling prerequisites
 
