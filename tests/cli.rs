@@ -363,3 +363,50 @@ fn show_missing_task_reports_to_stderr() {
         .success()
         .stderr(predicate::str::contains("Task 999 not found in \"smoke\""));
 }
+
+#[test]
+fn note_add_appears_in_show() {
+    let h = Harness::new();
+    create_todolist(&h, "smoke");
+    h.run(&["-p", "smoke", "add", "Alpha"]).success();
+
+    assert_stdout(
+        &h.run(&[
+            "-p",
+            "smoke",
+            "note",
+            "add",
+            "1",
+            "first note line\nsecond note line",
+        ])
+        .success(),
+        "Added note 1 to task 1.",
+    );
+
+    assert_stdout(
+        &h.run(&["-p", "smoke", "show", "1"]).success(),
+        indoc! {r#"
+            Alpha #1
+
+
+            Priority:    p3 - Medium
+            Status:      todo
+            Tags:
+            Created at:  [TIMESTAMP]
+
+            [TIMESTAMP]
+            first note line
+            second note line
+        "#},
+    );
+}
+
+#[test]
+fn note_add_rejects_unknown_task() {
+    let h = Harness::new();
+    create_todolist(&h, "smoke");
+
+    h.run(&["-p", "smoke", "note", "add", "999", "orphan"])
+        .success()
+        .stderr(predicate::str::contains("Task 999 not found in \"smoke\""));
+}

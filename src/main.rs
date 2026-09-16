@@ -98,9 +98,23 @@ enum Command {
         #[arg(long)]
         search: Option<String>,
     },
+    /// Manage notes on a task
+    #[command(subcommand)]
+    Note(NoteCommand),
     /// Manage projects
     #[command(subcommand)]
     Project(ProjectCommand),
+}
+
+#[derive(Subcommand)]
+enum NoteCommand {
+    /// Add a note to a task
+    Add {
+        /// The task ID
+        task_id: i64,
+        /// The note contents
+        contents: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -446,6 +460,19 @@ async fn main() -> Result<(), AppError> {
                 }
             }
         }
+        Command::Note(note_cmd) => match note_cmd {
+            NoteCommand::Add { task_id, contents } => {
+                let state = ProjectState::load_from_store(&store, project.id).await?;
+
+                if state.get_task_by_id(task_id).is_none() {
+                    eprintln!("Task {} not found in \"{}\"", task_id, project.name);
+                    return Ok(());
+                }
+
+                let note = store.create_note(task_id, contents).await?;
+                println!("Added note {} to task {}.", note.id, note.task_id);
+            }
+        },
         Command::Project(project_cmd) => match project_cmd {
             ProjectCommand::List => {
                 let projects = store.get_all_projects().await?;
