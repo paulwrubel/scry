@@ -149,6 +149,22 @@ enum ProjectCommand {
         /// The new project name
         new_name: String,
     },
+    /// Set the entry status, so new tasks default to it
+    SetEntryStatus {
+        /// The status name
+        name: String,
+    },
+    /// Reset the entry status, so new tasks default to the first status
+    ResetEntryStatus,
+    /// Set the task sorting mode for the project
+    SetSort {
+        /// The sorting mode
+        mode: TaskSortingMode,
+    },
+    /// Show the priority level in the task list
+    ShowPriority,
+    /// Hide the priority level in the task list
+    HidePriority,
     /// Delete a project and all its tasks
     Delete {
         /// The project name
@@ -588,6 +604,64 @@ async fn main() -> Result<(), AppError> {
                     })
                     .await?;
                 println!("Renamed project \"{}\" --> \"{}\"", old_name, new_name);
+            }
+            ProjectCommand::SetEntryStatus { name } => {
+                if let Some(status) = store
+                    .get_status_by_project_id_and_status_name(project.id, name.clone())
+                    .await?
+                {
+                    let updated = store
+                        .update_project(Project {
+                            entry_status_id: Some(status.id),
+                            ..project
+                        })
+                        .await?;
+                    println!(
+                        "Set entry status of project \"{}\" to \"{}\"",
+                        updated.name, name
+                    );
+                } else {
+                    eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
+                }
+            }
+            ProjectCommand::ResetEntryStatus => {
+                let updated = store
+                    .update_project(Project {
+                        entry_status_id: None,
+                        ..project
+                    })
+                    .await?;
+                println!("Reset entry status of project \"{}\"", updated.name);
+            }
+            ProjectCommand::SetSort { mode } => {
+                let updated = store
+                    .update_project(Project {
+                        task_sorting_mode: mode,
+                        ..project
+                    })
+                    .await?;
+                println!(
+                    "Set sort mode of project \"{}\" to \"{}\"",
+                    updated.name, mode
+                );
+            }
+            ProjectCommand::ShowPriority => {
+                let updated = store
+                    .update_project(Project {
+                        show_priority: true,
+                        ..project
+                    })
+                    .await?;
+                println!("Showing priority in project \"{}\"", updated.name);
+            }
+            ProjectCommand::HidePriority => {
+                let updated = store
+                    .update_project(Project {
+                        show_priority: false,
+                        ..project
+                    })
+                    .await?;
+                println!("Hiding priority in project \"{}\"", updated.name);
             }
             ProjectCommand::Status(status_cmd) => match status_cmd {
                 StatusCommand::List => {

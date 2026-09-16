@@ -736,3 +736,148 @@ fn status_move_rejects_unknown_status() {
         "Status \"missing\" not found in \"todolist\"",
     ));
 }
+
+#[test]
+fn project_entry_status() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    // default entry status is `todo`
+    assert_stdout(
+        &h.run(&["-p", "todolist", "add", "Alpha"]).success(),
+        "Created task 1 in \"todolist\" [todo]: Alpha",
+    );
+
+    assert_stdout(
+        &h.run(&["-p", "todolist", "project", "set-entry-status", "done"])
+            .success(),
+        "Set entry status of project \"todolist\" to \"done\"",
+    );
+    assert_stdout(
+        &h.run(&["-p", "todolist", "add", "Beta"]).success(),
+        "Created task 2 in \"todolist\" [done]: Beta",
+    );
+
+    // resetting falls back to the first status (`todo`)
+    assert_stdout(
+        &h.run(&["-p", "todolist", "project", "reset-entry-status"])
+            .success(),
+        "Reset entry status of project \"todolist\"",
+    );
+    assert_stdout(
+        &h.run(&["-p", "todolist", "add", "Gamma"]).success(),
+        "Created task 3 in \"todolist\" [todo]: Gamma",
+    );
+}
+
+#[test]
+fn project_set_sort_mode() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Beta"]).success();
+    h.run(&["-p", "todolist", "add", "Alpha"]).success();
+
+    // the default is manual order (insertion/position)
+    assert_stdout(
+        &h.run(&["-p", "todolist", "list"]).success(),
+        indoc! {r#"
+            project "todolist"
+
+            * todo (2):
+              1  [ ]  Beta
+              2  [ ]  Alpha
+
+            done (0):
+        "#},
+    );
+
+    assert_stdout(
+        &h.run(&["-p", "todolist", "project", "set-sort", "alphabetical"])
+            .success(),
+        "Set sort mode of project \"todolist\" to \"alphabetical\"",
+    );
+
+    assert_stdout(
+        &h.run(&["-p", "todolist", "list"]).success(),
+        indoc! {r#"
+            project "todolist"
+
+            * todo (2):
+              2  [ ]  Alpha
+              1  [ ]  Beta
+
+            done (0):
+        "#},
+    );
+}
+
+#[test]
+fn project_priority_visibility() {
+    let h = Harness::new();
+    h.run(&["project", "create", "-t", "kanban", "kanban"])
+        .success();
+    h.run(&["-p", "kanban", "add", "Alpha", "--priority", "high"])
+        .success();
+
+    // kanban shows priority by default
+    assert_stdout(
+        &h.run(&["-p", "kanban", "list"]).success(),
+        indoc! {r#"
+            project "kanban"
+
+            in-progress (0):
+            * backlog (1):
+              1  p2  Alpha
+
+            done (0):
+        "#},
+    );
+
+    assert_stdout(
+        &h.run(&["-p", "kanban", "project", "hide-priority"])
+            .success(),
+        "Hiding priority in project \"kanban\"",
+    );
+    assert_stdout(
+        &h.run(&["-p", "kanban", "list"]).success(),
+        indoc! {r#"
+            project "kanban"
+
+            in-progress (0):
+            * backlog (1):
+              1  Alpha
+
+            done (0):
+        "#},
+    );
+
+    assert_stdout(
+        &h.run(&["-p", "kanban", "project", "show-priority"])
+            .success(),
+        "Showing priority in project \"kanban\"",
+    );
+    assert_stdout(
+        &h.run(&["-p", "kanban", "list"]).success(),
+        indoc! {r#"
+            project "kanban"
+
+            in-progress (0):
+            * backlog (1):
+              1  p2  Alpha
+
+            done (0):
+        "#},
+    );
+}
+
+#[test]
+fn project_set_entry_status_rejects_unknown_status() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    h.run(&["-p", "todolist", "project", "set-entry-status", "missing"])
+        .success()
+        .stderr(predicate::str::contains(
+            "Status \"missing\" not found in \"todolist\"",
+        ));
+}
