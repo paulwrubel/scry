@@ -6,7 +6,7 @@ mod store;
 mod tui;
 
 use crate::models::{
-    PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Status, StatusStyle, Tags, Task,
+    Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Status, StatusStyle, Tags, Task,
     TaskSortingMode,
 };
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
@@ -183,6 +183,18 @@ enum StatusCommand {
         name: String,
         /// The style to apply
         style: StatusStyle,
+    },
+    /// Set the color for a status
+    SetColor {
+        /// The status name
+        name: String,
+        /// The color to apply
+        color: Color,
+    },
+    /// Reset the color for a status
+    ResetColor {
+        /// The status name
+        name: String,
     },
 }
 
@@ -627,6 +639,44 @@ async fn main() -> Result<(), AppError> {
                         println!(
                             "Set style of status \"{}\" to \"{}\" in project \"{}\"",
                             name, style, project.name
+                        );
+                    } else {
+                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
+                    }
+                }
+                StatusCommand::SetColor { name, color } => {
+                    if let Some(status) = store
+                        .get_status_by_project_id_and_status_name(project.id, name.clone())
+                        .await?
+                    {
+                        store
+                            .update_status(Status {
+                                color: Some(color),
+                                ..status
+                            })
+                            .await?;
+                        println!(
+                            "Set color of status \"{}\" to \"{}\" in project \"{}\"",
+                            name, color, project.name
+                        );
+                    } else {
+                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
+                    }
+                }
+                StatusCommand::ResetColor { name } => {
+                    if let Some(status) = store
+                        .get_status_by_project_id_and_status_name(project.id, name.clone())
+                        .await?
+                    {
+                        store
+                            .update_status(Status {
+                                color: None,
+                                ..status
+                            })
+                            .await?;
+                        println!(
+                            "Reset color of status \"{}\" in project \"{}\"",
+                            name, project.name
                         );
                     } else {
                         eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);

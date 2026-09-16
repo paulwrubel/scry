@@ -467,3 +467,71 @@ fn status_set_style_rejects_unknown_status() {
         "Status \"missing\" not found in \"todolist\"",
     ));
 }
+
+#[test]
+fn status_color() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    // Color isn't rendered in any CLI output, so this only exercises the
+    // accept path and confirmations.
+    assert_stdout(
+        &h.run(&[
+            "-p",
+            "todolist",
+            "project",
+            "status",
+            "set-color",
+            "todo",
+            "green",
+        ])
+        .success(),
+        "Set color of status \"todo\" to \"green\" in project \"todolist\"",
+    );
+
+    assert_stdout(
+        &h.run(&[
+            "-p",
+            "todolist",
+            "project",
+            "status",
+            "reset-color",
+            "todo",
+        ])
+        .success(),
+        "Reset color of status \"todo\" in project \"todolist\"",
+    );
+}
+
+#[test]
+fn status_color_rejects_unknown_status() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    h.run(&[
+        "-p",
+        "todolist",
+        "project",
+        "status",
+        "set-color",
+        "missing",
+        "green",
+    ])
+    .success()
+    .stderr(predicate::str::contains(
+        "Status \"missing\" not found in \"todolist\"",
+    ));
+
+    h.run(&[
+        "-p",
+        "todolist",
+        "project",
+        "status",
+        "reset-color",
+        "missing",
+    ])
+    .success()
+    .stderr(predicate::str::contains(
+        "Status \"missing\" not found in \"todolist\"",
+    ));
+}
