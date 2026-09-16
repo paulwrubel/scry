@@ -23,9 +23,6 @@ pub fn truncate_string_to_width(s: String, max_width: usize) -> String {
     }
 }
 
-// Aug 9, 2026 at 4:40pm
-pub const DATETIME_FORMAT_STR: &str = "%b %-d, %Y at %-I:%M%P";
-
 #[cfg(target_os = "macos")]
 pub const CONTROL_OR_COMMAND: KeyModifiers = KeyModifiers::SUPER;
 #[cfg(not(target_os = "macos"))]

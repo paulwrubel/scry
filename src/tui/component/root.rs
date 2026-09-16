@@ -1,4 +1,5 @@
 use crate::models::{Task, TaskId};
+use crate::state::TaskWithNotes;
 use crate::store::TaskToCreate;
 use crate::tui::action::Action;
 use crate::tui::component::popup::{
@@ -8,7 +9,6 @@ use crate::tui::component::shared::CONTROL_OR_COMMAND;
 use crate::tui::component::{
     CommandInput, FilterInput, Hints, Popup, ProjectState, RenderContext, TaskDetails, TaskList,
 };
-use crate::tui::state::TaskWithNotes;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Spacing};
 use ratatui::symbols::merge::MergeStrategy;

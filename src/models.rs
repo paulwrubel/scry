@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use anstyle::AnsiColor;
 use ratatui::{style::Style, text::Span};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -61,6 +62,29 @@ impl From<Color> for ratatui::style::Color {
             Color::LightMagenta => Self::LightMagenta,
             Color::LightCyan => Self::LightCyan,
             Color::White => Self::White,
+        }
+    }
+}
+
+impl From<Color> for AnsiColor {
+    fn from(color: Color) -> Self {
+        match color {
+            Color::Black => Self::Black,
+            Color::Red => Self::Red,
+            Color::Green => Self::Green,
+            Color::Yellow => Self::Yellow,
+            Color::Blue => Self::Blue,
+            Color::Magenta => Self::Magenta,
+            Color::Cyan => Self::Cyan,
+            Color::Gray => Self::White,
+            Color::DarkGray => Self::BrightBlack,
+            Color::LightRed => Self::BrightRed,
+            Color::LightGreen => Self::BrightGreen,
+            Color::LightYellow => Self::BrightYellow,
+            Color::LightBlue => Self::BrightBlue,
+            Color::LightMagenta => Self::BrightMagenta,
+            Color::LightCyan => Self::BrightCyan,
+            Color::White => Self::BrightWhite,
         }
     }
 }
@@ -169,6 +193,7 @@ impl<'a> IntoIterator for &'a Tags {
     Ord,
     Serialize,
     Deserialize,
+    ValueEnum,
     TryFromPrimitive,
     IntoPrimitive,
     strum::Display,
@@ -176,11 +201,16 @@ impl<'a> IntoIterator for &'a Tags {
 )]
 #[repr(i64)]
 pub enum Priority {
+    #[value(alias("p5"))]
     Minimal = 5,
+    #[value(alias("p4"))]
     Low = 4,
     #[default]
+    #[value(alias("p3"))]
     Medium = 3,
+    #[value(alias("p2"))]
     High = 2,
+    #[value(alias("p1"))]
     Critical = 1,
 }
 

@@ -1,6 +1,6 @@
 use crate::models::Project;
+use crate::state::TaskWithNotes;
 use crate::store::TaskToCreate;
-use crate::tui::state::TaskWithNotes;
 use crate::{
     models::{Note, Status, StatusId, Task, TaskId},
     tui::component::popup::ConfirmDeleteEntity,

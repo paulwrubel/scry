@@ -1,9 +1,7 @@
 use crate::{
     models::{Color as ScryColor, StatusStyle},
-    tui::{
-        component::shared::{ColoredTags, truncate_string_to_width},
-        state::TaskWithNotes,
-    },
+    state::TaskWithNotes,
+    tui::component::shared::{ColoredTags, truncate_string_to_width},
 };
 use ratatui::{
     style::{Color, Style},
