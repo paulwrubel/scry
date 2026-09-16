@@ -653,3 +653,86 @@ fn show_renders_status_priority_and_tag_colors() {
                 .and(tag_is_colored("work")),
         );
 }
+
+#[test]
+fn status_move_up_and_down_reorder_statuses() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    assert_stdout(
+        &h.run(&["-p", "todolist", "project", "status", "list"])
+            .success(),
+        indoc! {r#"
+            Statuses for "todolist":
+              todo
+              done
+        "#},
+    );
+
+    // moving the first status up is a no-op
+    h.run(&["-p", "todolist", "project", "status", "move-up", "todo"])
+        .success()
+        .stderr(predicate::str::contains("already at the top"));
+
+    // move-down actually reorders
+    assert_stdout(
+        &h.run(&["-p", "todolist", "project", "status", "move-down", "todo"])
+            .success(),
+        "Moved status \"todo\" down in project \"todolist\"",
+    );
+    assert_stdout(
+        &h.run(&["-p", "todolist", "project", "status", "list"])
+            .success(),
+        indoc! {r#"
+            Statuses for "todolist":
+              done
+              todo
+        "#},
+    );
+
+    // moving the last status down is a no-op
+    h.run(&["-p", "todolist", "project", "status", "move-down", "todo"])
+        .success()
+        .stderr(predicate::str::contains("already at the bottom"));
+
+    // move-up brings it back
+    assert_stdout(
+        &h.run(&["-p", "todolist", "project", "status", "move-up", "todo"])
+            .success(),
+        "Moved status \"todo\" up in project \"todolist\"",
+    );
+    assert_stdout(
+        &h.run(&["-p", "todolist", "project", "status", "list"])
+            .success(),
+        indoc! {r#"
+            Statuses for "todolist":
+              todo
+              done
+        "#},
+    );
+}
+
+#[test]
+fn status_move_rejects_unknown_status() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    h.run(&["-p", "todolist", "project", "status", "move-up", "missing"])
+        .success()
+        .stderr(predicate::str::contains(
+            "Status \"missing\" not found in \"todolist\"",
+        ));
+
+    h.run(&[
+        "-p",
+        "todolist",
+        "project",
+        "status",
+        "move-down",
+        "missing",
+    ])
+    .success()
+    .stderr(predicate::str::contains(
+        "Status \"missing\" not found in \"todolist\"",
+    ));
+}

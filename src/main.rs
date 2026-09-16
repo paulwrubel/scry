@@ -183,6 +183,16 @@ enum StatusCommand {
         /// The new status name
         new_name: String,
     },
+    /// Move a status up in the ordering for the project
+    MoveUp {
+        /// The status name
+        name: String,
+    },
+    /// Move a status down in the ordering for the project
+    MoveDown {
+        /// The status name
+        name: String,
+    },
     /// Set the style for a status
     SetStyle {
         /// The status name
@@ -639,6 +649,60 @@ async fn main() -> Result<(), AppError> {
                             "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
                             old_name, new_name, project.name
                         );
+                    }
+                }
+                StatusCommand::MoveUp { name } => {
+                    if let Some(status) = store
+                        .get_status_by_project_id_and_status_name(project.id, name.clone())
+                        .await?
+                    {
+                        if status.position > 0 {
+                            store
+                                .reorder_status(project.id, status.id, status.position - 1)
+                                .await?;
+                            println!(
+                                "Moved status \"{}\" up in project \"{}\"",
+                                name, project.name
+                            );
+                        } else {
+                            eprintln!(
+                                "Status \"{}\" is already at the top of \"{}\"",
+                                name, project.name
+                            );
+                        }
+                    } else {
+                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
+                    }
+                }
+                StatusCommand::MoveDown { name } => {
+                    if let Some(status) = store
+                        .get_status_by_project_id_and_status_name(project.id, name.clone())
+                        .await?
+                    {
+                        let max_position = store
+                            .get_all_statuses_by_project_id(project.id)
+                            .await?
+                            .iter()
+                            .map(|s| s.position)
+                            .max()
+                            .unwrap_or(0);
+
+                        if status.position < max_position {
+                            store
+                                .reorder_status(project.id, status.id, status.position + 1)
+                                .await?;
+                            println!(
+                                "Moved status \"{}\" down in project \"{}\"",
+                                name, project.name
+                            );
+                        } else {
+                            eprintln!(
+                                "Status \"{}\" is already at the bottom of \"{}\"",
+                                name, project.name
+                            );
+                        }
+                    } else {
+                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
                     }
                 }
                 StatusCommand::SetStyle { name, style } => {
