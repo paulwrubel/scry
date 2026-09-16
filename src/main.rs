@@ -177,6 +177,13 @@ enum StatusCommand {
         /// The new status name
         new_name: String,
     },
+    /// Set the style for a status
+    SetStyle {
+        /// The status name
+        name: String,
+        /// The style to apply
+        style: StatusStyle,
+    },
 }
 
 #[tokio::main]
@@ -609,6 +616,20 @@ async fn main() -> Result<(), AppError> {
                             "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
                             old_name, new_name, project.name
                         );
+                    }
+                }
+                StatusCommand::SetStyle { name, style } => {
+                    if let Some(status) = store
+                        .get_status_by_project_id_and_status_name(project.id, name.clone())
+                        .await?
+                    {
+                        store.update_status(Status { style, ..status }).await?;
+                        println!(
+                            "Set style of status \"{}\" to \"{}\" in project \"{}\"",
+                            name, style, project.name
+                        );
+                    } else {
+                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
                     }
                 }
             },

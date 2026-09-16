@@ -410,3 +410,59 @@ fn note_add_rejects_unknown_task() {
         .success()
         .stderr(predicate::str::contains("Task 999 not found in \"smoke\""));
 }
+
+#[test]
+fn status_set_style() {
+    let h = Harness::new();
+    create_todolist(&h, "smoke");
+    h.run(&["-p", "smoke", "add", "Alpha"]).success();
+
+    // (style token, the expected task line in `scry list`)
+    let cases = [
+        ("none", "  1  Alpha"),
+        ("unchecked", "  1  [ ]  Alpha"),
+        ("checked", "  1  [x]  Alpha"),
+        ("strikethrough", "  1  Alpha"),
+    ];
+
+    for (style, task_line) in cases {
+        assert_stdout(
+            &h.run(&[
+                "-p",
+                "smoke",
+                "project",
+                "status",
+                "set-style",
+                "todo",
+                style,
+            ])
+            .success(),
+            &format!("Set style of status \"todo\" to \"{style}\" in project \"smoke\""),
+        );
+
+        assert_stdout(
+            &h.run(&["-p", "smoke", "list"]).success(),
+            &format!("project \"smoke\"\n\n* todo (1):\n{task_line}\n\ndone (0):"),
+        );
+    }
+}
+
+#[test]
+fn status_set_style_rejects_unknown_status() {
+    let h = Harness::new();
+    create_todolist(&h, "smoke");
+
+    h.run(&[
+        "-p",
+        "smoke",
+        "project",
+        "status",
+        "set-style",
+        "missing",
+        "checked",
+    ])
+    .success()
+    .stderr(predicate::str::contains(
+        "Status \"missing\" not found in \"smoke\"",
+    ));
+}
