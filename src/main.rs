@@ -1,6 +1,7 @@
 mod config;
 mod error;
 mod models;
+mod state;
 mod store;
 mod tui;
 
@@ -8,6 +9,7 @@ use crate::models::{
     PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Status, StatusStyle, Tags, Task,
     TaskSortingMode,
 };
+use crate::state::{DATETIME_FORMAT_STR, ProjectState};
 use crate::store::TaskToCreate;
 use chrono::Local;
 use clap::{Parser, Subcommand};
@@ -32,6 +34,18 @@ enum Command {
     Add {
         /// The task title
         title: String,
+        /// The task description
+        #[arg(long)]
+        description: Option<String>,
+        /// The task priority
+        #[arg(long)]
+        priority: Option<Priority>,
+        /// Comma-separated tags
+        #[arg(long)]
+        tags: Option<String>,
+        /// The target status (defaults to the project entry status, otherwise the first status)
+        #[arg(long)]
+        status: Option<String>,
     },
     /// Move a task to a new status (alias for update --status)
     Move {
@@ -44,9 +58,26 @@ enum Command {
     Update {
         /// The task ID
         id: i64,
+        /// New title
+        #[arg(long)]
+        title: Option<String>,
+        /// New description (empty string clears it)
+        #[arg(long)]
+        description: Option<String>,
+        /// New priority
+        #[arg(long)]
+        priority: Option<Priority>,
+        /// Comma-separated tags (empty string clears them)
+        #[arg(long)]
+        tags: Option<String>,
         /// Move the task to a new status
         #[arg(long)]
         status: Option<String>,
+    },
+    /// Duplicate an existing task
+    Duplicate {
+        /// The task ID
+        id: i64,
     },
     /// Delete a task
     Delete {
@@ -63,6 +94,9 @@ enum Command {
         /// Show only tasks in a specific status
         #[arg(long)]
         status: Option<String>,
+        /// Case-insensitive substring filter over task titles and tags
+        #[arg(long)]
+        search: Option<String>,
     },
     /// Manage projects
     #[command(subcommand)]
@@ -145,36 +179,52 @@ async fn main() -> Result<(), AppError> {
     };
 
     match command {
-        Command::Add { title } => {
+        Command::Add {
+            title,
+            description,
+            priority,
+            tags,
+            status,
+        } => {
             let statuses = store.get_all_statuses_by_project_id(project.id).await?;
-            let first_status = statuses
-                .first()
-                .ok_or_else(|| AppError::Internal("project has no statuses".to_string()))?;
+            let target_status = match status {
+                Some(name) => {
+                    let Some(status) = store
+                        .get_status_by_project_id_and_status_name(project.id, name.clone())
+                        .await?
+                    else {
+                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
+                        return Ok(());
+                    };
+                    status
+                }
+                None => project
+                    .entry_status_id
+                    .and_then(|id| statuses.iter().find(|s| s.id == id).cloned())
+                    .or_else(|| statuses.first().cloned())
+                    .ok_or_else(|| AppError::Internal("project has no statuses".to_string()))?,
+            };
             let position = store
-                .get_all_tasks_by_status_id(first_status.id)
+                .get_all_tasks_by_status_id(target_status.id)
                 .await?
-                .len() as i32;
+                .iter()
+                .map(|t| t.position)
+                .max()
+                .map_or(0, |p| p + 1);
             let task = store
                 .create_task(TaskToCreate {
                     project_id: project.id,
                     title,
-                    description: None,
-                    priority: Priority::default(),
-                    status_id: first_status.id,
+                    description: description.filter(|d| !d.is_empty()),
+                    priority: priority.unwrap_or_default(),
+                    status_id: target_status.id,
                     position,
-                    tags: Tags::default(),
+                    tags: tags.map(|t| Tags::from(t.as_str())).unwrap_or_default(),
                 })
                 .await?;
             println!(
                 "Created task {} in \"{}\" [{}]: {}",
-                task.id,
-                project.name,
-                statuses
-                    .iter()
-                    .find(|s| s.id == task.status_id)
-                    .map(|s| s.name.as_str())
-                    .unwrap_or("?"),
-                task.title
+                task.id, project.name, target_status.name, task.title
             );
         }
         Command::Move { id, status } => {
@@ -197,32 +247,78 @@ async fn main() -> Result<(), AppError> {
                 .await?;
             println!("Moved task {} --> \"{}\"", task.id, status.name);
         }
-        Command::Update { id, status } => {
-            let Some(status_name) = status else {
+        Command::Update {
+            id,
+            title,
+            description,
+            priority,
+            tags,
+            status,
+        } => {
+            if title.is_none()
+                && description.is_none()
+                && priority.is_none()
+                && tags.is_none()
+                && status.is_none()
+            {
                 eprintln!("No flags provided. Use 'scry update --help' for available options.");
                 return Ok(());
-            };
-            let Some(status) = store
-                .get_status_by_project_id_and_status_name(project.id, status_name.clone())
-                .await?
-            else {
-                eprintln!(
-                    "Status \"{}\" not found in \"{}\"",
-                    status_name, project.name
-                );
-                return Ok(());
-            };
+            }
             let Some(task) = store.get_task_by_id(id).await? else {
                 eprintln!("Task {} not found in \"{}\"", id, project.name);
                 return Ok(());
             };
-            let task = store
+            let status_id = match status {
+                Some(status_name) => {
+                    let Some(status) = store
+                        .get_status_by_project_id_and_status_name(project.id, status_name.clone())
+                        .await?
+                    else {
+                        eprintln!(
+                            "Status \"{}\" not found in \"{}\"",
+                            status_name, project.name
+                        );
+                        return Ok(());
+                    };
+                    status.id
+                }
+                None => task.status_id,
+            };
+            let updated = store
                 .update_and_autoposition_task(Task {
-                    status_id: status.id,
-                    ..task
+                    id: task.id,
+                    project_id: task.project_id,
+                    title: title.unwrap_or(task.title),
+                    description: match description {
+                        Some(d) => Some(d).filter(|d| !d.is_empty()),
+                        None => task.description,
+                    },
+                    priority: priority.unwrap_or(task.priority),
+                    status_id,
+                    position: task.position,
+                    tags: tags.map(|t| Tags::from(t.as_str())).unwrap_or(task.tags),
+                    created_at: task.created_at,
                 })
                 .await?;
-            println!("Updated task {}: status --> \"{}\"", task.id, &status_name);
+            println!("Updated task {}.", updated.id);
+        }
+        Command::Duplicate { id } => {
+            let state = ProjectState::load_from_store(&store, project.id).await?;
+
+            let Some(task) = state.get_task_by_id(id) else {
+                eprintln!("Task {} not found in \"{}\"", id, project.name);
+                return Ok(());
+            };
+
+            let new_task = store.create_task(TaskToCreate::from(task)).await?;
+            let status_name = state
+                .get_status_by_id(new_task.status_id)
+                .map(|s| s.name.as_str())
+                .unwrap_or("?");
+            println!(
+                "Duplicated task {} as task {} in \"{}\" [{}]",
+                id, new_task.id, project.name, status_name
+            );
         }
         Command::Delete { id } => {
             if store.get_task_by_id(id).await?.is_none() {
@@ -232,71 +328,119 @@ async fn main() -> Result<(), AppError> {
             store.delete_task(id).await?;
             println!("Deleted task {} from \"{}\"", id, project.name);
         }
-        Command::Show { id } => match store.get_task_by_id(id).await? {
-            Some(task) => {
-                let status_defs = store.get_all_statuses_by_project_id(project.id).await?;
-                let status_name = status_defs
-                    .iter()
-                    .find(|s| s.id == task.status_id)
-                    .map(|s| s.name.as_str())
-                    .unwrap_or("unknown");
+        Command::Show { id } => {
+            let state = ProjectState::load_from_store(&store, project.id).await?;
 
-                println!("Task {}", task.id);
-                println!("  Project:   {}", project.name);
-                println!("  Title:     {}", task.title);
-                println!("  Status:    {}", status_name);
-                println!(
-                    "  Created:   {}",
-                    task.created_at
-                        .with_timezone(&Local)
-                        .format("%Y-%m-%d %I:%M %p %Z")
-                );
-            }
-            None => eprintln!("Task {} not found in \"{}\"", id, project.name),
-        },
-        Command::List { status } => {
-            let tasks = match &status {
-                Some(name) => match store
-                    .get_status_by_project_id_and_status_name(project.id, name.clone())
-                    .await?
-                {
-                    Some(status_def) => store.get_all_tasks_by_status_id(status_def.id).await?,
-                    None => vec![],
-                },
-                None => store.get_all_tasks_by_project_id(project.id).await?,
+            let Some(task) = state.get_task_by_id(id) else {
+                eprintln!("Task {} not found in \"{}\"", id, project.name);
+                return Ok(());
             };
-            let statuses = store.get_all_statuses_by_project_id(project.id).await?;
 
-            println!("project \"{}\"\n", project.name);
+            let status_name = state
+                .get_status_by_id(task.status_id)
+                .map(|s| s.name.as_str())
+                .unwrap_or("unknown");
+            let created_at = task
+                .created_at
+                .with_timezone(&Local)
+                .format(DATETIME_FORMAT_STR);
 
-            if tasks.is_empty() {
+            println!("{} #{}", task.title, task.id);
+            println!();
+
+            if let Some(description) = &task.description {
+                for line in description.lines() {
+                    println!("    {}", line);
+                }
+            }
+            println!();
+
+            println!(
+                "Priority:    p{} - {}",
+                i64::from(task.priority),
+                task.priority
+            );
+            println!("Status:      {}", status_name);
+            println!(
+                "Tags:        {}",
+                task.tags.iter().cloned().collect::<Vec<_>>().join(" ")
+            );
+            println!("Created at:  {}", created_at);
+            println!();
+
+            for note in &task.notes {
+                let note_created_at = note
+                    .created_at
+                    .with_timezone(&Local)
+                    .format(DATETIME_FORMAT_STR);
+                println!("{}", note_created_at);
+                println!("{}", note.contents);
+                println!();
+            }
+        }
+        Command::List { status, search } => {
+            let mut state = ProjectState::load_from_store(&store, project.id).await?;
+            if let Some(search) = search.filter(|s| !s.is_empty()) {
+                state = state.with_substring_filter(search);
+            }
+
+            println!("project \"{}\"\n", state.project().name);
+
+            let statuses_to_show: Vec<_> = state
+                .statuses()
+                .filter(|status_def| match &status {
+                    Some(filter) => status_def.name == *filter,
+                    None => true,
+                })
+                .collect();
+
+            let total_tasks: usize = statuses_to_show
+                .iter()
+                .map(|status_def| state.tasks_in_status(status_def.id).len())
+                .sum();
+
+            if total_tasks == 0 {
                 println!("No tasks.");
                 return Ok(());
             }
 
-            for status_def in &statuses {
-                let status_tasks: Vec<_> = tasks
-                    .iter()
-                    .filter(|t| t.status_id == status_def.id)
-                    .collect();
+            let show_priority = state.project().show_priority;
+            let entry_status_id = state.project().entry_status_id;
 
-                if let Some(ref filter) = status
-                    && status_def.name != *filter
-                {
-                    continue;
-                }
+            for status_def in statuses_to_show {
+                let status_tasks = state.tasks_in_status(status_def.id);
 
-                println!("{} ({}):", status_def.name, status_tasks.len());
+                let marker = if entry_status_id == Some(status_def.id) {
+                    "* "
+                } else {
+                    ""
+                };
+                println!("{}{} ({}):", marker, status_def.name, status_tasks.len());
+
                 for task in &status_tasks {
-                    let icon = if status_def.style == StatusStyle::Checked
-                        || status_def.style == StatusStyle::Strikethrough
-                    {
-                        "[x]"
-                    } else {
-                        "[ ]"
+                    let icon = match status_def.style {
+                        StatusStyle::None | StatusStyle::Strikethrough => "",
+                        StatusStyle::Unchecked => "[ ]",
+                        StatusStyle::Checked => "[x]",
                     };
-                    println!("  {}  {}  {}", task.id, icon, task.title);
+
+                    let mut line = format!("  {}", task.id);
+                    if !icon.is_empty() {
+                        line.push_str(&format!("  {}", icon));
+                    }
+                    if show_priority {
+                        line.push_str(&format!("  p{}", i64::from(task.priority)));
+                    }
+                    line.push_str(&format!("  {}", task.title));
+
+                    let tags = task.tags.iter().cloned().collect::<Vec<_>>().join(" ");
+                    if !tags.is_empty() {
+                        line.push_str(&format!("  {}", tags));
+                    }
+
+                    println!("{}", line);
                 }
+
                 if !status_tasks.is_empty() {
                     println!();
                 }

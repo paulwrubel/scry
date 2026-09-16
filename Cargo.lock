@@ -1982,6 +1982,7 @@ dependencies = [
  "predicates",
  "ratatui",
  "ratatui-textarea",
+ "regex",
  "serde",
  "shlex",
  "sqlx",
