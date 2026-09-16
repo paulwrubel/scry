@@ -75,12 +75,12 @@ fn create_todolist(h: &Harness, name: &str) {
 #[test]
 fn add_persists_description_priority_tags_and_entry_status() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
+    create_todolist(&h, "todolist");
 
     assert_stdout(
         &h.run(&[
             "-p",
-            "smoke",
+            "todolist",
             "add",
             "Alpha",
             "--description",
@@ -91,11 +91,11 @@ fn add_persists_description_priority_tags_and_entry_status() {
             "work, urgent",
         ])
         .success(),
-        "Created task 1 in \"smoke\" [todo]: Alpha",
+        "Created task 1 in \"todolist\" [todo]: Alpha",
     );
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "show", "1"]).success(),
+        &h.run(&["-p", "todolist", "show", "1"]).success(),
         indoc! {r#"
             Alpha #1
 
@@ -112,47 +112,47 @@ fn add_persists_description_priority_tags_and_entry_status() {
 #[test]
 fn add_defaults_to_first_status_without_entry_status() {
     let h = Harness::new();
-    h.run(&["project", "create", "plain"]).success();
-    h.run(&["-p", "plain", "project", "status", "add", "only"])
+    h.run(&["project", "create", "blank"]).success();
+    h.run(&["-p", "blank", "project", "status", "add", "todo"])
         .success();
 
     assert_stdout(
-        &h.run(&["-p", "plain", "add", "Solo"]).success(),
-        "Created task 1 in \"plain\" [only]: Solo",
+        &h.run(&["-p", "blank", "add", "Alpha"]).success(),
+        "Created task 1 in \"blank\" [todo]: Alpha",
     );
 }
 
 #[test]
 fn add_accepts_explicit_status() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
+    create_todolist(&h, "todolist");
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "add", "Done item", "--status", "done"])
+        &h.run(&["-p", "todolist", "add", "Alpha", "--status", "done"])
             .success(),
-        "Created task 1 in \"smoke\" [done]: Done item",
+        "Created task 1 in \"todolist\" [done]: Alpha",
     );
 }
 
 #[test]
 fn add_rejects_unknown_status() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
+    create_todolist(&h, "todolist");
 
-    h.run(&["-p", "smoke", "add", "Nope", "--status", "missing"])
+    h.run(&["-p", "todolist", "add", "Alpha", "--status", "missing"])
         .success()
         .stderr(predicate::str::contains(
-            "Status \"missing\" not found in \"smoke\"",
+            "Status \"missing\" not found in \"todolist\"",
         ));
 }
 
 #[test]
 fn update_changes_fields_and_clears_description_and_tags() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
+    create_todolist(&h, "todolist");
     h.run(&[
         "-p",
-        "smoke",
+        "todolist",
         "add",
         "Alpha",
         "--description",
@@ -167,11 +167,11 @@ fn update_changes_fields_and_clears_description_and_tags() {
     assert_stdout(
         &h.run(&[
             "-p",
-            "smoke",
+            "todolist",
             "update",
             "1",
             "--title",
-            "Renamed",
+            "Delta",
             "--description",
             "",
             "--tags",
@@ -184,9 +184,9 @@ fn update_changes_fields_and_clears_description_and_tags() {
     );
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "show", "1"]).success(),
+        &h.run(&["-p", "todolist", "show", "1"]).success(),
         indoc! {r#"
-            Renamed #1
+            Delta #1
 
 
             Priority:    p1 - Critical
@@ -200,10 +200,10 @@ fn update_changes_fields_and_clears_description_and_tags() {
 #[test]
 fn update_requires_at_least_one_flag() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
-    h.run(&["-p", "smoke", "add", "Alpha"]).success();
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Alpha"]).success();
 
-    h.run(&["-p", "smoke", "update", "1"])
+    h.run(&["-p", "todolist", "update", "1"])
         .success()
         .stderr(predicate::str::contains("No flags provided"));
 }
@@ -211,21 +211,21 @@ fn update_requires_at_least_one_flag() {
 #[test]
 fn duplicate_copies_the_source_position() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
-    h.run(&["-p", "smoke", "add", "Alpha"]).success();
-    h.run(&["-p", "smoke", "add", "Beta"]).success();
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Alpha"]).success();
+    h.run(&["-p", "todolist", "add", "Beta"]).success();
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "duplicate", "1"]).success(),
-        "Duplicated task 1 as task 3 in \"smoke\" [todo]",
+        &h.run(&["-p", "todolist", "duplicate", "1"]).success(),
+        "Duplicated task 1 as task 3 in \"todolist\" [todo]",
     );
 
     // Manual sort keeps the copied position, so the duplicate (id 3) sits next
     // to the source (id 1, position 0), ahead of Beta (id 2, position 1).
     assert_stdout(
-        &h.run(&["-p", "smoke", "list"]).success(),
+        &h.run(&["-p", "todolist", "list"]).success(),
         indoc! {r#"
-            project "smoke"
+            project "todolist"
 
             * todo (3):
               1  [ ]  Alpha
@@ -240,40 +240,40 @@ fn duplicate_copies_the_source_position() {
 #[test]
 fn list_marks_the_entry_status_and_filters_by_status() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
-    h.run(&["-p", "smoke", "add", "Todo item"]).success();
-    h.run(&["-p", "smoke", "add", "Done item", "--status", "done"])
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Alpha"]).success();
+    h.run(&["-p", "todolist", "add", "Beta", "--status", "done"])
         .success();
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "list"]).success(),
+        &h.run(&["-p", "todolist", "list"]).success(),
         indoc! {r#"
-            project "smoke"
+            project "todolist"
 
             * todo (1):
-              1  [ ]  Todo item
+              1  [ ]  Alpha
 
             done (1):
-              2  [x]  Done item
+              2  [x]  Beta
         "#},
     );
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "list", "--status", "done"])
+        &h.run(&["-p", "todolist", "list", "--status", "done"])
             .success(),
         indoc! {r#"
-            project "smoke"
+            project "todolist"
 
             done (1):
-              2  [x]  Done item
+              2  [x]  Beta
         "#},
     );
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "list", "--status", "missing"])
+        &h.run(&["-p", "todolist", "list", "--status", "missing"])
             .success(),
         indoc! {r#"
-            project "smoke"
+            project "todolist"
 
             No tasks.
         "#},
@@ -283,18 +283,19 @@ fn list_marks_the_entry_status_and_filters_by_status() {
 #[test]
 fn list_search_matches_titles_and_tags() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
-    h.run(&["-p", "smoke", "add", "Alpha", "--tags", "work"])
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Alpha", "--tags", "work"])
         .success();
-    h.run(&["-p", "smoke", "add", "Beta", "--tags", "home"])
+    h.run(&["-p", "todolist", "add", "Beta", "--tags", "home"])
         .success();
-    h.run(&["-p", "smoke", "add", "Gamma exercise"]).success();
+    h.run(&["-p", "todolist", "add", "Gamma", "--tags", "exercise"])
+        .success();
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "list", "--search", "work"])
+        &h.run(&["-p", "todolist", "list", "--search", "work"])
             .success(),
         indoc! {r#"
-            project "smoke"
+            project "todolist"
 
             * todo (1):
               1  [ ]  Alpha  work
@@ -304,23 +305,23 @@ fn list_search_matches_titles_and_tags() {
     );
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "list", "--search", "EXERC"])
+        &h.run(&["-p", "todolist", "list", "--search", "EXERC"])
             .success(),
         indoc! {r#"
-            project "smoke"
+            project "todolist"
 
             * todo (1):
-              3  [ ]  Gamma exercise
+              3  [ ]  Gamma  exercise
 
             done (0):
         "#},
     );
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "list", "--search", "nomatch"])
+        &h.run(&["-p", "todolist", "list", "--search", "nomatch"])
             .success(),
         indoc! {r#"
-            project "smoke"
+            project "todolist"
 
             No tasks.
         "#},
@@ -330,24 +331,24 @@ fn list_search_matches_titles_and_tags() {
 #[test]
 fn list_respects_show_priority_and_project_sort_mode() {
     let h = Harness::new();
-    h.run(&["project", "create", "-t", "kanban", "kb"])
+    h.run(&["project", "create", "-t", "kanban", "kanban"])
         .success();
-    h.run(&["-p", "kb", "add", "Low", "--priority", "low"])
+    h.run(&["-p", "kanban", "add", "Alpha", "--priority", "low"])
         .success();
-    h.run(&["-p", "kb", "add", "Crit", "--priority", "critical"])
+    h.run(&["-p", "kanban", "add", "Beta", "--priority", "critical"])
         .success();
 
     // kanban enables show_priority and sorts by Priority. `Priority`'s ordering
-    // is by discriminant, so the most urgent (Crit, p1) sorts before Low (p4).
+    // is by discriminant, so the most urgent (Beta, p1) sorts before Alpha (p4).
     assert_stdout(
-        &h.run(&["-p", "kb", "list"]).success(),
+        &h.run(&["-p", "kanban", "list"]).success(),
         indoc! {r#"
-            project "kb"
+            project "kanban"
 
             in-progress (0):
             * backlog (2):
-              2  p1  Crit
-              1  p4  Low
+              2  p1  Beta
+              1  p4  Alpha
 
             done (0):
         "#},
@@ -357,23 +358,23 @@ fn list_respects_show_priority_and_project_sort_mode() {
 #[test]
 fn show_missing_task_reports_to_stderr() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
+    create_todolist(&h, "todolist");
 
-    h.run(&["-p", "smoke", "show", "999"])
+    h.run(&["-p", "todolist", "show", "999"])
         .success()
-        .stderr(predicate::str::contains("Task 999 not found in \"smoke\""));
+        .stderr(predicate::str::contains("Task 999 not found in \"todolist\""));
 }
 
 #[test]
 fn note_add_appears_in_show() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
-    h.run(&["-p", "smoke", "add", "Alpha"]).success();
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Alpha"]).success();
 
     assert_stdout(
         &h.run(&[
             "-p",
-            "smoke",
+            "todolist",
             "note",
             "add",
             "1",
@@ -384,7 +385,7 @@ fn note_add_appears_in_show() {
     );
 
     assert_stdout(
-        &h.run(&["-p", "smoke", "show", "1"]).success(),
+        &h.run(&["-p", "todolist", "show", "1"]).success(),
         indoc! {r#"
             Alpha #1
 
@@ -404,18 +405,18 @@ fn note_add_appears_in_show() {
 #[test]
 fn note_add_rejects_unknown_task() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
+    create_todolist(&h, "todolist");
 
-    h.run(&["-p", "smoke", "note", "add", "999", "orphan"])
+    h.run(&["-p", "todolist", "note", "add", "999", "a note"])
         .success()
-        .stderr(predicate::str::contains("Task 999 not found in \"smoke\""));
+        .stderr(predicate::str::contains("Task 999 not found in \"todolist\""));
 }
 
 #[test]
 fn status_set_style() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
-    h.run(&["-p", "smoke", "add", "Alpha"]).success();
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Alpha"]).success();
 
     // (style token, the expected task line in `scry list`)
     let cases = [
@@ -429,7 +430,7 @@ fn status_set_style() {
         assert_stdout(
             &h.run(&[
                 "-p",
-                "smoke",
+                "todolist",
                 "project",
                 "status",
                 "set-style",
@@ -437,12 +438,12 @@ fn status_set_style() {
                 style,
             ])
             .success(),
-            &format!("Set style of status \"todo\" to \"{style}\" in project \"smoke\""),
+            &format!("Set style of status \"todo\" to \"{style}\" in project \"todolist\""),
         );
 
         assert_stdout(
-            &h.run(&["-p", "smoke", "list"]).success(),
-            &format!("project \"smoke\"\n\n* todo (1):\n{task_line}\n\ndone (0):"),
+            &h.run(&["-p", "todolist", "list"]).success(),
+            &format!("project \"todolist\"\n\n* todo (1):\n{task_line}\n\ndone (0):"),
         );
     }
 }
@@ -450,11 +451,11 @@ fn status_set_style() {
 #[test]
 fn status_set_style_rejects_unknown_status() {
     let h = Harness::new();
-    create_todolist(&h, "smoke");
+    create_todolist(&h, "todolist");
 
     h.run(&[
         "-p",
-        "smoke",
+        "todolist",
         "project",
         "status",
         "set-style",
@@ -463,6 +464,6 @@ fn status_set_style_rejects_unknown_status() {
     ])
     .success()
     .stderr(predicate::str::contains(
-        "Status \"missing\" not found in \"smoke\"",
+        "Status \"missing\" not found in \"todolist\"",
     ));
 }
