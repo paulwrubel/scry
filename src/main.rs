@@ -9,7 +9,7 @@ mod tui;
 
 use crate::color::ColorChoice;
 use crate::models::{
-    Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, StatusStyle, Tags,
+    Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, StatusStyle, Tags, Task,
     TaskSortingMode,
 };
 use crate::service::{ProjectService, TaskInput};
@@ -17,7 +17,7 @@ use crate::state::{DATETIME_FORMAT_STR, ProjectState};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use config::ScryConfig;
-use error::AppError;
+use error::{AppError, ServiceError};
 use store::{TaskStore, sqlite::SqliteStore};
 
 #[derive(Parser)]
@@ -264,6 +264,14 @@ fn error_document(error: &AppError) -> String {
     .to_string()
 }
 
+/// Print a value as compact JSON on stdout, for the `--json` success path.
+fn print_json<T: serde::Serialize>(value: &T) -> Result<(), AppError> {
+    let json = serde_json::to_string(value)
+        .map_err(|error| AppError::Internal(format!("failed to serialize JSON: {error}")))?;
+    println!("{json}");
+    Ok(())
+}
+
 async fn run(cli: Cli) -> Result<(), AppError> {
     let output_json = cli.json;
     if output_json && cli.command.is_none() {
@@ -310,18 +318,26 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 status: status_id,
             };
             let change = service.create_task(&project, new_task).await?;
-            println!(
-                "Created task {} in \"{}\" [{}]: {}",
-                change.task.id, project.name, change.status.name, change.task.title
-            );
+            if output_json {
+                print_json(&change.task)?;
+            } else {
+                println!(
+                    "Created task {} in \"{}\" [{}]: {}",
+                    change.task.id, project.name, change.status.name, change.task.title
+                );
+            }
         }
         Command::Move { id, status } => {
             let status = service.get_status_by_name(&project, &status).await?;
             let change = service.move_task(&project, id, status.id).await?;
-            println!(
-                "Moved task {} --> \"{}\"",
-                change.task.id, change.status.name
-            );
+            if output_json {
+                print_json(&change.task)?;
+            } else {
+                println!(
+                    "Moved task {} --> \"{}\"",
+                    change.task.id, change.status.name
+                );
+            }
         }
         Command::Update {
             id,
@@ -354,28 +370,45 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 status: status_id,
             };
             let updated = service.update_task(&project, id, patch).await?;
-            println!("Updated task {}.", updated.id);
+            if output_json {
+                print_json(&updated)?;
+            } else {
+                println!("Updated task {}.", updated.id);
+            }
         }
         Command::Duplicate { id } => {
             let change = service.duplicate_task(&project, id).await?;
-            println!(
-                "Duplicated task {} as task {} in \"{}\" [{}]",
-                id, change.task.id, project.name, change.status.name
-            );
+            if output_json {
+                print_json(&change.task)?;
+            } else {
+                println!(
+                    "Duplicated task {} as task {} in \"{}\" [{}]",
+                    id, change.task.id, project.name, change.status.name
+                );
+            }
         }
         Command::Delete { id } => {
-            service.delete_task(&project, id).await?;
-            println!("Deleted task {} from \"{}\"", id, project.name);
+            let removed = service.delete_task(&project, id).await?;
+            if output_json {
+                print_json(&removed)?;
+            } else {
+                println!("Deleted task {} from \"{}\"", id, project.name);
+            }
         }
         Command::Show { id } => {
             let state = ProjectState::load_from_store(&store, project.id).await?;
 
             let Some(task) = state.get_task_by_id(id) else {
-                return Err(AppError::Usage(format!(
-                    "Task {} not found in \"{}\"",
-                    id, project.name
-                )));
+                return Err(AppError::Service(ServiceError::TaskNotFound {
+                    task_id: id,
+                    project: project.name.clone(),
+                }));
             };
+
+            if output_json {
+                print_json(task)?;
+                return Ok(());
+            }
 
             let status = state.get_status_by_id(task.status_id);
             let status_name = status.map(|s| s.name.as_str()).unwrap_or("unknown");
@@ -421,6 +454,20 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let mut state = ProjectState::load_from_store(&store, project.id).await?;
             if let Some(search) = search.filter(|s| !s.is_empty()) {
                 state = state.with_substring_filter(search);
+            }
+
+            if output_json {
+                let tasks: Vec<Task> = state
+                    .statuses()
+                    .filter(|status_def| match &status {
+                        Some(filter) => status_def.name == *filter,
+                        None => true,
+                    })
+                    .flat_map(|status_def| state.tasks_in_status(status_def.id))
+                    .map(Task::from)
+                    .collect();
+                print_json(&tasks)?;
+                return Ok(());
             }
 
             println!("project \"{}\"\n", state.project().name);
@@ -494,7 +541,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Command::Note(note_cmd) => match note_cmd {
             NoteCommand::Add { task_id, contents } => {
                 let note = service.add_task_note(&project, task_id, contents).await?;
-                println!("Added note {} to task {}.", note.id, note.task_id);
+                if output_json {
+                    print_json(&note)?;
+                } else {
+                    println!("Added note {} to task {}.", note.id, note.task_id);
+                }
             }
         },
         Command::Project(project_cmd) => match project_cmd {

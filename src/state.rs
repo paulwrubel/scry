@@ -1,5 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
+use serde::Serialize;
 
 use crate::error::StorageError;
 use crate::models::Note;
@@ -25,7 +26,7 @@ pub struct StatusWithTasks {
     pub(crate) tasks_with_notes: Vec<TaskWithNotes>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TaskWithNotes {
     pub(crate) id: TaskId,
     pub(crate) project_id: ProjectId,
