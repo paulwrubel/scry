@@ -246,8 +246,22 @@ impl<S: TaskStore + Sync> App<'_, S> {
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::UpdateProject(project) => {
-                match Self::block_on(self.store.update_project(project)) {
+            Action::SetProjectEntryStatus { status_id } => {
+                match Self::block_on(service.set_project_entry_status(state.project(), status_id)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::SetProjectSortingMode(mode) => {
+                match Self::block_on(service.set_project_sorting_mode(state.project(), mode)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::SetProjectShouldShowPriority(show) => {
+                match Self::block_on(
+                    service.set_project_should_show_priority(state.project(), show),
+                ) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }

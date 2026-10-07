@@ -136,7 +136,9 @@ impl Root<'_> {
                     | Action::MoveStatusDown { .. }
                     | Action::DeleteStatus { .. }
                     | Action::AddTaskNote { .. }
-                    | Action::UpdateProject(_) => {
+                    | Action::SetProjectEntryStatus { .. }
+                    | Action::SetProjectSortingMode(_)
+                    | Action::SetProjectShouldShowPriority(_) => {
                         self.popup = None;
                         vec![action]
                     }

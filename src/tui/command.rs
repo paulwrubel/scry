@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::models::{Color, Project, StatusStyle, TaskSortingMode};
+use crate::models::{Color, StatusStyle, TaskSortingMode};
 use crate::state::ProjectState;
 use crate::tui::Action;
 use crate::tui::component::popup::ConfirmDeleteEntity;
@@ -214,10 +214,9 @@ pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
         Command::Project(project_command) => match project_command {
             ProjectCommand::SetEntryStatus { status_name } => {
                 if let Some(status) = state.get_status_by_name(&status_name) {
-                    vec![Action::UpdateProject(Project {
-                        entry_status_id: Some(status.id),
-                        ..state.project().clone()
-                    })]
+                    vec![Action::SetProjectEntryStatus {
+                        status_id: Some(status.id),
+                    }]
                 } else {
                     vec![Action::OpenPopupErrorInfo(format![
                         "no status with name \"{}\" found in project",
@@ -226,33 +225,21 @@ pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
                 }
             }
             ProjectCommand::ResetEntryStatus => {
-                vec![Action::UpdateProject(Project {
-                    entry_status_id: None,
-                    ..state.project().clone()
-                })]
+                vec![Action::SetProjectEntryStatus { status_id: None }]
             }
             ProjectCommand::SetTaskSortingMode { task_sorting_mode } => {
-                vec![Action::UpdateProject(Project {
-                    task_sorting_mode,
-                    ..state.project().clone()
-                })]
+                vec![Action::SetProjectSortingMode(task_sorting_mode)]
             }
             ProjectCommand::ShowPriority => {
                 if !state.project().show_priority {
-                    vec![Action::UpdateProject(Project {
-                        show_priority: true,
-                        ..state.project().clone()
-                    })]
+                    vec![Action::SetProjectShouldShowPriority(true)]
                 } else {
                     vec![]
                 }
             }
             ProjectCommand::HidePriority => {
                 if state.project().show_priority {
-                    vec![Action::UpdateProject(Project {
-                        show_priority: false,
-                        ..state.project().clone()
-                    })]
+                    vec![Action::SetProjectShouldShowPriority(false)]
                 } else {
                     vec![]
                 }

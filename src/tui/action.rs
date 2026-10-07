@@ -1,4 +1,4 @@
-use crate::models::{Color, Project, StatusId, StatusStyle, TaskId};
+use crate::models::{Color, StatusId, StatusStyle, TaskId, TaskSortingMode};
 use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
 use crate::tui::component::popup::ConfirmDeleteEntity;
@@ -61,5 +61,9 @@ pub enum Action {
     },
 
     // ── projects ──
-    UpdateProject(Project),
+    SetProjectEntryStatus {
+        status_id: Option<StatusId>,
+    },
+    SetProjectSortingMode(TaskSortingMode),
+    SetProjectShouldShowPriority(bool),
 }
