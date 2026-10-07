@@ -555,7 +555,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
 
                 for task in &status_tasks {
                     let icon = match status_def.style {
-                        StatusStyle::None | StatusStyle::Strikethrough => "",
+                        StatusStyle::None | StatusStyle::Strikethrough | StatusStyle::Hidden => "",
                         StatusStyle::Unchecked => "[ ]",
                         StatusStyle::Checked => "[x]",
                     };

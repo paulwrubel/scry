@@ -445,6 +445,7 @@ fn status_set_style() {
         ("unchecked", "  1  [ ]  Alpha"),
         ("checked", "  1  [x]  Alpha"),
         ("strikethrough", "  1  Alpha"),
+        ("hidden", "  1  Alpha"),
     ];
 
     for (style, task_line) in cases {

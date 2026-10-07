@@ -6,6 +6,7 @@ use crate::error::StorageError;
 use crate::models::Note;
 use crate::models::Priority;
 use crate::models::StatusId;
+use crate::models::StatusStyle;
 use crate::models::Tags;
 use crate::models::TaskSortingMode;
 use crate::models::{Project, ProjectId, Status, Task, TaskId};
@@ -24,6 +25,9 @@ pub struct StatusWithTasks {
     pub(crate) status: Status,
     pub(crate) is_entry: bool,
     pub(crate) tasks_with_notes: Vec<TaskWithNotes>,
+    /// Number of tasks removed from the visible set because the status style is
+    /// `Hidden`; kept so the status header can still report the true count.
+    pub(crate) hidden_task_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -122,6 +126,7 @@ impl ProjectState {
                         status: status.clone(),
                         is_entry: project.entry_status_id == Some(status.id),
                         tasks_with_notes: subtasks,
+                        hidden_task_count: 0,
                     }
                 })
                 .collect(),
@@ -150,7 +155,30 @@ impl ProjectState {
                         status: swt.status,
                         is_entry: swt.is_entry,
                         tasks_with_notes: filtered_tasks,
+                        hidden_task_count: 0,
                     }
+                })
+                .collect(),
+        }
+    }
+
+    /// Collapse hidden-styled statuses for the TUI: move each hidden status's tasks
+    /// out of the visible task set and record how many were removed, so the status
+    /// header can still report the true count. Only the TUI calls this, so CLI
+    /// output keeps showing tasks in hidden statuses.
+    pub fn with_hidden_statuses_collapsed(self) -> Self {
+        Self {
+            project: self.project,
+            statuses_with_tasks: self
+                .statuses_with_tasks
+                .into_iter()
+                .map(|mut status_with_tasks| {
+                    if status_with_tasks.status.style == StatusStyle::Hidden {
+                        status_with_tasks.hidden_task_count =
+                            status_with_tasks.tasks_with_notes.len();
+                        status_with_tasks.tasks_with_notes = Vec::new();
+                    }
+                    status_with_tasks
                 })
                 .collect(),
         }
@@ -214,21 +242,30 @@ impl ProjectState {
         tasks.next()
     }
 
-    /// Get the Status immediately following the one with the provided ID in the order.
+    /// Get the Status immediately following the one with the provided ID in the order,
+    /// skipping statuses styled `Hidden`. The provided status is assumed to be
+    /// non-hidden, since tasks in hidden statuses are never selectable in the TUI.
     ///
     /// It may return None if there is no following Status.
     pub fn next_status(&self, status_id: StatusId) -> Option<&Status> {
-        let mut statuses = self.statuses();
+        let mut statuses = self
+            .statuses()
+            .filter(|status| status.style != StatusStyle::Hidden);
 
         statuses.find(|status| status.id == status_id)?;
         statuses.next()
     }
 
-    /// Get the Status immediately preceding the one with the provided ID in the order.
+    /// Get the Status immediately preceding the one with the provided ID in the order,
+    /// skipping statuses styled `Hidden`. The provided status is assumed to be
+    /// non-hidden, since tasks in hidden statuses are never selectable in the TUI.
     ///
     /// It may return None if there is no preceding Status.
     pub fn previous_status(&self, status_id: StatusId) -> Option<&Status> {
-        let mut statuses = self.statuses().rev();
+        let mut statuses = self
+            .statuses()
+            .rev()
+            .filter(|status| status.style != StatusStyle::Hidden);
 
         statuses.find(|status| status.id == status_id)?;
         statuses.next()
@@ -251,5 +288,99 @@ impl ProjectState {
 
     pub fn statuses(&self) -> impl DoubleEndedIterator<Item = &Status> + '_ {
         self.statuses_with_tasks.iter().map(|st| &st.status)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Project, StatusStyle, Tags, TaskSortingMode};
+    use chrono::Utc;
+
+    fn task(id: TaskId, status_id: StatusId) -> TaskWithNotes {
+        TaskWithNotes {
+            id,
+            project_id: 1,
+            title: format!("task {id}"),
+            description: None,
+            priority: Priority::default(),
+            status_id,
+            position: id as i32,
+            tags: Tags::default(),
+            created_at: Utc::now(),
+            notes: Vec::new(),
+        }
+    }
+
+    fn status(
+        id: StatusId,
+        name: &str,
+        style: StatusStyle,
+        tasks: Vec<TaskWithNotes>,
+    ) -> StatusWithTasks {
+        StatusWithTasks {
+            status: Status {
+                id,
+                project_id: 1,
+                name: name.to_string(),
+                position: id as i32,
+                color: None,
+                style,
+            },
+            is_entry: false,
+            tasks_with_notes: tasks,
+            hidden_task_count: 0,
+        }
+    }
+
+    fn project_state(statuses: Vec<StatusWithTasks>) -> ProjectState {
+        ProjectState {
+            project: Project {
+                id: 1,
+                name: "test".to_string(),
+                entry_status_id: None,
+                task_sorting_mode: TaskSortingMode::Manual,
+                show_priority: false,
+                created_at: Utc::now(),
+            },
+            statuses_with_tasks: statuses,
+        }
+    }
+
+    #[test]
+    fn collapse_moves_hidden_status_tasks_and_records_count() {
+        let state = project_state(vec![
+            status(1, "todo", StatusStyle::None, vec![task(1, 1), task(2, 1)]),
+            status(
+                2,
+                "archive",
+                StatusStyle::Hidden,
+                vec![task(3, 2), task(4, 2), task(5, 2)],
+            ),
+        ]);
+
+        let collapsed = state.with_hidden_statuses_collapsed();
+
+        let visible = &collapsed.statuses_with_tasks[0];
+        assert_eq!(visible.tasks_with_notes.len(), 2);
+        assert_eq!(visible.hidden_task_count, 0);
+
+        let hidden = &collapsed.statuses_with_tasks[1];
+        assert!(hidden.tasks_with_notes.is_empty());
+        assert_eq!(hidden.hidden_task_count, 3);
+
+        assert_eq!(collapsed.tasks().count(), 2);
+    }
+
+    #[test]
+    fn next_status_skips_hidden() {
+        let state = project_state(vec![
+            status(1, "todo", StatusStyle::None, vec![]),
+            status(2, "archive", StatusStyle::Hidden, vec![]),
+            status(3, "done", StatusStyle::None, vec![]),
+        ]);
+
+        assert_eq!(state.next_status(1).map(|s| s.id), Some(3));
+        assert_eq!(state.previous_status(3).map(|s| s.id), Some(1));
     }
 }

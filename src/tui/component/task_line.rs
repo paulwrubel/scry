@@ -42,7 +42,7 @@ impl From<TaskLine> for Line<'_> {
         let total_width = usize::from(value.area_width);
 
         let mut prefix = vec![Span::from(match value.style {
-            StatusStyle::None | StatusStyle::Strikethrough => "",
+            StatusStyle::None | StatusStyle::Strikethrough | StatusStyle::Hidden => "",
             StatusStyle::Unchecked => "[ ] ",
             StatusStyle::Checked => "[x] ",
         })];

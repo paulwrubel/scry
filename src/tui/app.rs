@@ -120,6 +120,8 @@ impl<S: TaskStore + Sync> App<'_, S> {
                 state = state.with_substring_filter(filter)
             }
 
+            state = state.with_hidden_statuses_collapsed();
+
             self.root.bind_selected_task(&state);
             terminal
                 .draw(|f| {
