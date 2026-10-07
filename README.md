@@ -124,6 +124,38 @@ scry -p myapp move 1 "in progress"
 
 `<color>` is one of `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark-gray`, `light-red`, `light-green`, `light-yellow`, `light-blue`, `light-magenta`, `light-cyan`, `white`. `<style>` is one of `none`, `unchecked`, `checked`, `strikethrough`.
 
+### Skill Commands
+
+Install an Agent Skills `SKILL.md` so coding agents (Claude Code, opencode, and any harness
+that reads the open-standard path) can discover and drive the scry CLI.
+
+| Command                                         | Description                                                     |
+| ----------------------------------------------- | --------------------------------------------------------------- |
+| `scry skill install --harness <name> [--force]` | Install at a harness's standard user-global location            |
+| `scry skill install --dir <path> [--force]`     | Install into a custom skills directory (`<path>/scry/SKILL.md`) |
+| `scry skill uninstall --harness <name>`         | Remove a harness's user-global skill                            |
+| `scry skill uninstall --dir <path>`             | Remove a skill from a custom skills directory                   |
+| `scry skill print`                              | Print the skill to stdout without writing anything              |
+
+Exactly one of `--harness` or `--dir` is required. `--force` overwrites an existing skill file.
+
+`<name>` is one of `claude-code`, `opencode`, `agents`, each of which has a standard
+user-global location:
+
+| `--harness`   | Location                                  |
+| ------------- | ----------------------------------------- |
+| `claude-code` | `~/.claude/skills/scry/SKILL.md`          |
+| `opencode`    | `~/.config/opencode/skills/scry/SKILL.md` |
+| `agents`      | `~/.agents/skills/scry/SKILL.md`          |
+
+`--dir` is harness-agnostic: scry writes `<path>/scry/SKILL.md`, so it works with any harness or
+location. For a repo-local install that travels with the repository, point it at the harness's
+project directory, for example `scry skill install --dir .claude/skills`.
+
+On the `--harness` paths, `~/.config` honors `$XDG_CONFIG_HOME` when it is set. opencode also reads
+skills from `.claude/skills/` and `.agents/skills/`, so installing for `claude-code` or `agents`
+covers opencode too. Do not install twice: skill names must be unique across discovery locations.
+
 ### JSON Output
 
 The global `--json` flag makes one-shot subcommands emit compact JSON instead of human-formatted text:
