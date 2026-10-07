@@ -198,6 +198,32 @@ impl ScryServer {
     ) -> Result<CallToolResult, McpError> {
         tool_result(tools::projects::delete_project(&self.store, &params).await)
     }
+
+    #[tool(
+        description = "Set or clear the project's entry status (the status new tasks default to)"
+    )]
+    async fn project_set_entry_status(
+        &self,
+        Parameters(params): Parameters<tools::project_settings::ProjectSetEntryStatusParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::project_settings::set_entry_status(&self.store, &params).await)
+    }
+
+    #[tool(description = "Set the project's task sorting mode")]
+    async fn project_set_sort_mode(
+        &self,
+        Parameters(params): Parameters<tools::project_settings::ProjectSetSortModeParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::project_settings::set_sort_mode(&self.store, &params).await)
+    }
+
+    #[tool(description = "Show or hide task priority in the project's listings")]
+    async fn project_set_show_priority(
+        &self,
+        Parameters(params): Parameters<tools::project_settings::ProjectSetShowPriorityParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::project_settings::set_show_priority(&self.store, &params).await)
+    }
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -689,5 +715,75 @@ mod tests {
         let text = text_of(&listed);
         assert!(text.contains("default"), "{text}");
         assert!(!text.contains("\"name\":\"alpha\""), "{text}");
+    }
+
+    #[tokio::test]
+    async fn project_settings_round_trip() {
+        let (_dir, server) = test_server().await;
+
+        let entry = server
+            .project_set_entry_status(Parameters(
+                tools::project_settings::ProjectSetEntryStatusParams {
+                    status: Some("done".to_string()),
+                    project: None,
+                },
+            ))
+            .await
+            .expect("project_set_entry_status");
+        assert!(
+            text_of(&entry).contains("\"entry_status_id\":2"),
+            "{}",
+            text_of(&entry)
+        );
+
+        let sorted = server
+            .project_set_sort_mode(Parameters(
+                tools::project_settings::ProjectSetSortModeParams {
+                    mode: crate::models::TaskSortingMode::Priority,
+                    project: None,
+                },
+            ))
+            .await
+            .expect("project_set_sort_mode");
+        assert!(
+            text_of(&sorted).contains("\"task_sorting_mode\":\"priority\""),
+            "{}",
+            text_of(&sorted)
+        );
+
+        let shown = server
+            .project_set_show_priority(Parameters(
+                tools::project_settings::ProjectSetShowPriorityParams {
+                    enabled: true,
+                    project: None,
+                },
+            ))
+            .await
+            .expect("project_set_show_priority");
+        assert!(
+            text_of(&shown).contains("\"show_priority\":true"),
+            "{}",
+            text_of(&shown)
+        );
+    }
+
+    #[tokio::test]
+    async fn project_set_entry_status_clears_when_omitted() {
+        let (_dir, server) = test_server().await;
+
+        let cleared = server
+            .project_set_entry_status(Parameters(
+                tools::project_settings::ProjectSetEntryStatusParams {
+                    status: None,
+                    project: None,
+                },
+            ))
+            .await
+            .expect("project_set_entry_status");
+        assert!(
+            text_of(&cleared).contains("\"entry_status_id\":null"),
+            "{}",
+            text_of(&cleared)
+        );
     }
 }

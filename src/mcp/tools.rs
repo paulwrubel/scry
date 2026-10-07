@@ -5,6 +5,7 @@ use crate::models::Project;
 use crate::store::{TaskStore, sqlite::SqliteStore};
 
 pub(crate) mod notes;
+pub(crate) mod project_settings;
 pub(crate) mod projects;
 pub(crate) mod tasks;
 
