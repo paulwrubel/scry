@@ -1,16 +1,17 @@
 //! In-process Model Context Protocol (MCP) server exposing scry operations as tools.
 
-use crate::error::{AppError, StorageError};
-use crate::models::Project;
+use crate::error::AppError;
 use crate::store::TaskStore;
 use crate::store::sqlite::SqliteStore;
 use rmcp::{
     ErrorData as McpError, ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig},
-    schemars, tool, tool_handler, tool_router,
+    tool, tool_handler, tool_router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+
+mod tools;
 
 /// Build a caller-visible tool-level error result from an application error.
 ///
@@ -48,30 +49,6 @@ where
     }
 }
 
-/// Resolve which project a tool should act on: an explicit name when given,
-/// otherwise the active project. A missing name is reported as a not-found
-/// tool error so the agent can correct itself.
-pub(crate) async fn resolve_project(
-    store: &SqliteStore,
-    name: Option<&str>,
-) -> Result<Project, AppError> {
-    match name {
-        Some(name) => store.get_project_by_name(name).await?.ok_or_else(|| {
-            AppError::Storage(StorageError::NotFound(format!(
-                "project '{name}' not found"
-            )))
-        }),
-        None => Ok(store.get_active_project().await?),
-    }
-}
-
-/// Parameters for the `status_list` tool.
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct StatusListParams {
-    /// Project to inspect; defaults to the active project.
-    project: Option<String>,
-}
-
 /// The scry MCP server. Holds the store that tool handlers operate on.
 #[derive(Clone)]
 pub struct ScryServer {
@@ -102,24 +79,38 @@ impl ScryServer {
 
     #[tool(description = "List all projects")]
     async fn project_list(&self) -> Result<CallToolResult, McpError> {
-        tool_result(self.store.get_all_projects().await)
+        tool_result(tools::projects::list_projects(&self.store).await)
     }
 
     #[tool(description = "Show the active project")]
     async fn project_current(&self) -> Result<CallToolResult, McpError> {
-        tool_result(self.store.get_active_project().await)
+        tool_result(tools::projects::active_project(&self.store).await)
     }
 
     #[tool(description = "List the statuses of a project")]
     async fn status_list(
         &self,
-        Parameters(params): Parameters<StatusListParams>,
+        Parameters(params): Parameters<tools::projects::StatusListParams>,
     ) -> Result<CallToolResult, McpError> {
-        let project = match resolve_project(&self.store, params.project.as_deref()).await {
-            Ok(project) => project,
-            Err(error) => return Ok(error_result(error)),
-        };
-        tool_result(self.store.get_all_statuses_by_project_id(project.id).await)
+        tool_result(tools::projects::list_statuses(&self.store, params.project.as_deref()).await)
+    }
+
+    #[tool(
+        description = "List tasks in a project, optionally filtered by status and by title or tag search"
+    )]
+    async fn task_list(
+        &self,
+        Parameters(params): Parameters<tools::tasks::TaskListParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::tasks::list_tasks(&self.store, &params).await)
+    }
+
+    #[tool(description = "Show full details for a task, including its notes")]
+    async fn task_show(
+        &self,
+        Parameters(params): Parameters<tools::tasks::TaskShowParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::tasks::show_task(&self.store, &params).await)
     }
 }
 
@@ -151,6 +142,7 @@ pub async fn serve_stdio(store: SqliteStore) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::service::{ProjectService, TaskInput};
     use assert_fs::TempDir;
 
     async fn test_server() -> (TempDir, ScryServer) {
@@ -168,13 +160,29 @@ mod tests {
             .to_string()
     }
 
+    async fn add_task(server: &ScryServer, title: &str) -> i64 {
+        let project = server
+            .store
+            .get_active_project()
+            .await
+            .expect("active project");
+        let service = ProjectService::new(&server.store);
+        let change = service
+            .create_task(
+                &project,
+                TaskInput {
+                    title: Some(title.to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("create task");
+        change.task.id
+    }
+
     #[tokio::test]
     async fn scry_info_reports_version_and_active_project() {
-        let dir = TempDir::new().expect("temp dir");
-        let url = format!("sqlite://{}", dir.path().join("scry.db").display());
-        let store = SqliteStore::new(&url).await.expect("store");
-        let server = ScryServer::new(store);
-
+        let (_dir, server) = test_server().await;
         let result = server.scry_info().await.expect("scry_info");
         let json = serde_json::to_string(&result).expect("serialize result");
 
@@ -235,7 +243,9 @@ mod tests {
     async fn status_list_defaults_to_the_active_project() {
         let (_dir, server) = test_server().await;
         let result = server
-            .status_list(Parameters(StatusListParams { project: None }))
+            .status_list(Parameters(tools::projects::StatusListParams {
+                project: None,
+            }))
             .await
             .expect("status_list");
         let text = text_of(&result);
@@ -247,7 +257,7 @@ mod tests {
     async fn status_list_reports_unknown_projects_as_tool_errors() {
         let (_dir, server) = test_server().await;
         let result = server
-            .status_list(Parameters(StatusListParams {
+            .status_list(Parameters(tools::projects::StatusListParams {
                 project: Some("nope".to_string()),
             }))
             .await
@@ -256,5 +266,80 @@ mod tests {
         let text = text_of(&result);
         assert!(text.contains("\"kind\":\"not_found\""), "{text}");
         assert!(text.contains("project 'nope' not found"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn task_list_returns_tasks() {
+        let (_dir, server) = test_server().await;
+        add_task(&server, "Alpha").await;
+
+        let result = server
+            .task_list(Parameters(tools::tasks::TaskListParams {
+                status: None,
+                search: None,
+                project: None,
+            }))
+            .await
+            .expect("task_list");
+        assert!(text_of(&result).contains("Alpha"), "{}", text_of(&result));
+    }
+
+    #[tokio::test]
+    async fn task_list_applies_the_search_filter() {
+        let (_dir, server) = test_server().await;
+        add_task(&server, "Alpha").await;
+        add_task(&server, "Beta").await;
+
+        let result = server
+            .task_list(Parameters(tools::tasks::TaskListParams {
+                status: None,
+                search: Some("alp".to_string()),
+                project: None,
+            }))
+            .await
+            .expect("task_list");
+        let text = text_of(&result);
+        assert!(text.contains("Alpha"), "{text}");
+        assert!(!text.contains("Beta"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn task_show_includes_notes() {
+        let (_dir, server) = test_server().await;
+        let id = add_task(&server, "Alpha").await;
+        let project = server
+            .store
+            .get_active_project()
+            .await
+            .expect("active project");
+        ProjectService::new(&server.store)
+            .add_task_note(&project, id, "a note".to_string())
+            .await
+            .expect("add note");
+
+        let result = server
+            .task_show(Parameters(tools::tasks::TaskShowParams {
+                id,
+                project: None,
+            }))
+            .await
+            .expect("task_show");
+        let text = text_of(&result);
+        assert!(text.contains("Alpha"), "{text}");
+        assert!(text.contains("a note"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn task_show_reports_unknown_ids_as_tool_errors() {
+        let (_dir, server) = test_server().await;
+        let result = server
+            .task_show(Parameters(tools::tasks::TaskShowParams {
+                id: 999,
+                project: None,
+            }))
+            .await
+            .expect("task_show");
+        assert_eq!(result.is_error, Some(true));
+        assert!(text_of(&result).contains("\"kind\":\"not_found\""));
     }
 }
