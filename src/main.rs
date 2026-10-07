@@ -3,9 +3,12 @@ mod config;
 mod error;
 mod models;
 mod service;
+mod skill;
 mod state;
 mod store;
 mod tui;
+
+use std::path::{Path, PathBuf};
 
 use crate::color::ColorChoice;
 use crate::models::{
@@ -13,6 +16,7 @@ use crate::models::{
     TaskSortingMode,
 };
 use crate::service::{ProjectService, TaskInput};
+use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
 use chrono::Local;
 use clap::{Parser, Subcommand};
@@ -115,6 +119,9 @@ enum Command {
     /// Manage projects
     #[command(subcommand)]
     Project(ProjectCommand),
+    /// Manage the agent skill that teaches coding agents to drive scry
+    #[command(subcommand)]
+    Skill(SkillCommand),
 }
 
 #[derive(Subcommand)]
@@ -235,6 +242,43 @@ enum StatusCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum SkillCommand {
+    /// Install the scry agent skill
+    #[command(group(
+        clap::ArgGroup::new("target")
+            .required(true)
+            .args(["harness", "dir"])
+    ))]
+    Install {
+        /// Install at a harness's standard user-global location
+        #[arg(long, value_enum)]
+        harness: Option<Harness>,
+        /// Install into a custom skills directory (writes <DIR>/scry/SKILL.md)
+        #[arg(long, value_name = "DIR")]
+        dir: Option<PathBuf>,
+        /// Overwrite an existing skill file
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove an installed scry agent skill
+    #[command(group(
+        clap::ArgGroup::new("target")
+            .required(true)
+            .args(["harness", "dir"])
+    ))]
+    Uninstall {
+        /// Remove from a harness's standard user-global location
+        #[arg(long, value_enum)]
+        harness: Option<Harness>,
+        /// Remove from a custom skills directory (<DIR>/scry/SKILL.md)
+        #[arg(long, value_name = "DIR")]
+        dir: Option<PathBuf>,
+    },
+    /// Print the agent skill to stdout without writing anything
+    Print,
+}
+
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
@@ -284,6 +328,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         ColorChoice::Never.apply();
     } else {
         cli.color.apply();
+    }
+
+    // Skill commands are filesystem-only: they never touch the database or active project.
+    if let Some(Command::Skill(command)) = &cli.command {
+        return run_skill(command);
     }
 
     let config = ScryConfig::load()?;
@@ -821,9 +870,47 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             },
         },
+        Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
     }
 
     Ok(())
+}
+
+/// Handle `scry skill` commands. These operate on the filesystem only and never
+/// touch the database or active project.
+fn run_skill(command: &SkillCommand) -> Result<(), AppError> {
+    match command {
+        SkillCommand::Install {
+            harness,
+            dir,
+            force,
+        } => {
+            let path = skill_target(*harness, dir.as_deref())?;
+            let path = skill::install(&path, *force)?;
+            println!("Installed scry skill to {}", path.display());
+        }
+        SkillCommand::Uninstall { harness, dir } => {
+            let path = skill_target(*harness, dir.as_deref())?;
+            let path = skill::uninstall(&path)?;
+            println!("Uninstalled scry skill from {}", path.display());
+        }
+        SkillCommand::Print => {
+            print!("{}", skill::SKILL_MD);
+        }
+    }
+
+    Ok(())
+}
+
+/// Resolve the skill file path from the mutually exclusive `--harness`/`--dir` flags.
+fn skill_target(harness: Option<Harness>, dir: Option<&Path>) -> Result<PathBuf, AppError> {
+    match (harness, dir) {
+        (Some(harness), None) => Ok(harness.global_path()),
+        (None, Some(dir)) => Ok(skill::path_in_skills_dir(dir)),
+        _ => Err(AppError::Usage(
+            "specify exactly one of --harness or --dir".to_string(),
+        )),
+    }
 }
 
 /// Resolve which project to use: --project flag takes precedence over active project.

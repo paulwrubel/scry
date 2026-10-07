@@ -36,7 +36,10 @@ fn paint(style: Style, text: &str) -> String {
 /// A status name or header, colored by the status's configured color.
 pub fn status(color: Option<Color>, text: &str) -> String {
     match color {
-        Some(color) => paint(Style::new().fg_color(Some(AnsiColor::from(color).into())), text),
+        Some(color) => paint(
+            Style::new().fg_color(Some(AnsiColor::from(color).into())),
+            text,
+        ),
         None => text.to_string(),
     }
 }
