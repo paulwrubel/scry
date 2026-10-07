@@ -155,6 +155,14 @@ impl ScryServer {
     ) -> Result<CallToolResult, McpError> {
         tool_result(tools::tasks::delete_task(&self.store, &params).await)
     }
+
+    #[tool(description = "Add a note to a task")]
+    async fn note_add(
+        &self,
+        Parameters(params): Parameters<tools::notes::NoteAddParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::notes::add_note(&self.store, &params).await)
+    }
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -498,5 +506,30 @@ mod tests {
             .await
             .expect("task_show");
         assert_eq!(missing.is_error, Some(true));
+    }
+
+    #[tokio::test]
+    async fn note_add_attaches_a_note_to_a_task() {
+        let (_dir, server) = test_server().await;
+        let id = add_task(&server, "Alpha").await;
+
+        let result = server
+            .note_add(Parameters(tools::notes::NoteAddParams {
+                task_id: id,
+                contents: "a note".to_string(),
+                project: None,
+            }))
+            .await
+            .expect("note_add");
+        assert!(text_of(&result).contains("a note"), "{}", text_of(&result));
+
+        let shown = server
+            .task_show(Parameters(tools::tasks::TaskShowParams {
+                id,
+                project: None,
+            }))
+            .await
+            .expect("task_show");
+        assert!(text_of(&shown).contains("a note"), "{}", text_of(&shown));
     }
 }
