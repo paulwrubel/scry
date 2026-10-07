@@ -1,6 +1,7 @@
 use crate::config::ScryConfig;
 use crate::error::{AppError, StorageError};
 use crate::models::ProjectId;
+use crate::service::ProjectService;
 use crate::state::ProjectState;
 use crate::store::TaskStore;
 use crate::tui::action::Action;
@@ -134,7 +135,7 @@ impl<S: TaskStore + Sync> App<'_, S> {
             match event::read().map_err(|e| AppError::Internal(format!("event error: {}", e)))? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
                     for action in self.root.handle_event(&state, key) {
-                        if let Some(action) = self.process_action(action) {
+                        if let Some(action) = self.process_action(&state, action) {
                             // popup-opening actions (e.g. error popups) go back through Root,
                             // which owns the popup lifecycle
                             self.root.handle_action(&state, action);
@@ -148,7 +149,8 @@ impl<S: TaskStore + Sync> App<'_, S> {
         Ok(())
     }
 
-    fn process_action(&mut self, action: Action) -> Option<Action> {
+    fn process_action(&mut self, state: &ProjectState, action: Action) -> Option<Action> {
+        let service = ProjectService::new(&self.store);
         match action {
             Action::Quit => {
                 self.is_running = false;
@@ -163,27 +165,38 @@ impl<S: TaskStore + Sync> App<'_, S> {
             | Action::CloseCommandInput
             | Action::CloseFilterInput => None,
 
-            Action::CreateTask(task_to_create) => {
-                match Self::block_on(self.store.create_task(task_to_create)) {
-                    Ok(task) => {
-                        self.root.select_task(SelectedTask::Id(task.id));
+            Action::CreateTask(input) => {
+                match Self::block_on(service.create_task(state.project(), input)) {
+                    Ok(change) => {
+                        self.root.select_task(SelectedTask::Id(change.task.id));
                         None
                     }
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::UpdateTask(task) => {
-                match Self::block_on(self.store.update_and_autoposition_task(task)) {
+            Action::UpdateTask { id, input } => {
+                match Self::block_on(service.update_task(state.project(), id, input)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::DeleteTask(task_id) => match Self::block_on(self.store.delete_task(task_id)) {
-                Ok(_) => None,
-                Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-            },
-            Action::CreateNote(note) => {
-                match Self::block_on(self.store.create_note(note.task_id, note.contents)) {
+            Action::DuplicateTask(id) => {
+                match Self::block_on(service.duplicate_task(state.project(), id)) {
+                    Ok(change) => {
+                        self.root.select_task(SelectedTask::Id(change.task.id));
+                        None
+                    }
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::DeleteTask(id) => {
+                match Self::block_on(service.delete_task(state.project(), id)) {
+                    Ok(()) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::AddTaskNote { task_id, contents } => {
+                match Self::block_on(service.add_task_note(state.project(), task_id, contents)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }

@@ -1,10 +1,7 @@
-use crate::models::Project;
+use crate::models::{Project, Status, StatusId, TaskId};
+use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
-use crate::store::TaskToCreate;
-use crate::{
-    models::{Note, Status, StatusId, Task, TaskId},
-    tui::component::popup::ConfirmDeleteEntity,
-};
+use crate::tui::component::popup::ConfirmDeleteEntity;
 
 /// Cross-cutting actions that components emit to the parent coordinator.
 /// Internal component state changes (cursor movement, scrolling, text editing)
@@ -23,12 +20,13 @@ pub enum Action {
     CloseFilterInput,
 
     // ── tasks ──
-    CreateTask(TaskToCreate),
-    UpdateTask(Task),
+    CreateTask(TaskInput),
+    UpdateTask { id: TaskId, input: TaskInput },
+    DuplicateTask(TaskId),
     DeleteTask(TaskId),
 
     // ── notes ──
-    CreateNote(Note),
+    AddTaskNote { task_id: TaskId, contents: String },
 
     // ── statuses ──
     CreateStatus(Status),

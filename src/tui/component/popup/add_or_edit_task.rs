@@ -1,6 +1,6 @@
-use crate::models::{Priority, Status, Tags, Task};
+use crate::models::{Priority, Status, Tags};
+use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
-use crate::store::TaskToCreate;
 use crate::tui::action::Action;
 use crate::tui::component::shared::{CONTROL_OR_COMMAND, SingleSelector, SingleSelectorItem};
 use crate::tui::component::{Button, InputBlock};
@@ -283,43 +283,22 @@ impl AddOrEditTask<'_> {
             .render(&mut ctx.with_area(confirm_button_area));
     }
 
-    fn handle_create_or_update(&self, state: &ProjectState) -> Option<Action> {
-        if self.is_valid() {
-            let title = self.title_input.buffer_text();
-            let description = Some(self.description_input.buffer_text()).filter(|t| !t.is_empty());
-            let priority = self.priority_selector.current_selection().value;
-            let status_id = self.status_selector.current_selection().value.id;
-            let tags = Tags::from(self.tags_input.buffer_text().as_str());
+    fn handle_create_or_update(&self, _state: &ProjectState) -> Option<Action> {
+        if !self.is_valid() {
+            return None;
+        }
 
-            match &self.task {
-                Some(task) => Some(Action::UpdateTask(Task {
-                    title,
-                    description,
-                    priority,
-                    status_id,
-                    tags,
-                    ..Task::from(task)
-                })),
-                None => {
-                    let last_position = state
-                        .tasks_in_status(status_id)
-                        .iter()
-                        .map(|t| t.position)
-                        .max();
+        let input = TaskInput {
+            title: Some(self.title_input.buffer_text()),
+            description: Some(self.description_input.buffer_text()),
+            priority: Some(self.priority_selector.current_selection().value),
+            tags: Some(Tags::from(self.tags_input.buffer_text().as_str())),
+            status: Some(self.status_selector.current_selection().value.id),
+        };
 
-                    Some(Action::CreateTask(TaskToCreate {
-                        project_id: state.project().id,
-                        title,
-                        description,
-                        priority,
-                        status_id,
-                        position: last_position.map_or(0, |p| p + 1),
-                        tags,
-                    }))
-                }
-            }
-        } else {
-            None
+        match &self.task {
+            Some(task) => Some(Action::UpdateTask { id: task.id, input }),
+            None => Some(Action::CreateTask(input)),
         }
     }
 

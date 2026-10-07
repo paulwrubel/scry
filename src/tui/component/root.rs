@@ -1,6 +1,6 @@
 use crate::models::{Task, TaskId};
+use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
-use crate::store::TaskToCreate;
 use crate::tui::action::Action;
 use crate::tui::component::popup::{
     AddNote, AddOrEditTask, ConfirmDelete, ConfirmDeleteEntity, ErrorInfo,
@@ -126,11 +126,12 @@ impl Root<'_> {
 
                     // Store actions that also dismiss the popup before bubbling
                     Action::CreateTask(_)
-                    | Action::UpdateTask(_)
+                    | Action::UpdateTask { .. }
+                    | Action::DuplicateTask(_)
                     | Action::CreateStatus(_)
                     | Action::UpdateStatus(_)
                     | Action::DeleteStatus(_)
-                    | Action::CreateNote(_)
+                    | Action::AddTaskNote { .. }
                     | Action::UpdateProject(_) => {
                         self.popup = None;
                         vec![action]
@@ -228,7 +229,7 @@ impl Root<'_> {
             }
             (_, KeyCode::Char('u')) if self.task_list.is_focused => {
                 if let Some(task) = &selected {
-                    self.handle_action(state, Action::CreateTask(TaskToCreate::from(task)))
+                    self.handle_action(state, Action::DuplicateTask(task.id))
                 } else {
                     vec![]
                 }
@@ -244,49 +245,47 @@ impl Root<'_> {
                 if let Some(task) = selected {
                     self.handle_action(
                         state,
-                        Action::UpdateTask(Task {
-                            priority: task.priority.next(),
-                            ..Task::from(task)
-                        }),
+                        Action::UpdateTask {
+                            id: task.id,
+                            input: TaskInput {
+                                priority: Some(task.priority.next()),
+                                ..Default::default()
+                            },
+                        },
                     )
                 } else {
                     vec![]
                 }
             }
             (_, KeyCode::Char(',') | KeyCode::Char('<')) if let Some(task) = selected => {
-                // statuses is ordered by position; take the one before the task's current status
-                let previous_status = state
-                    .statuses()
-                    .position(|status| status.id == task.status_id)
-                    .and_then(|index| index.checked_sub(1))
-                    .and_then(|index| state.statuses().nth(index));
-
                 // nothing to move to if the task is already in the first status
-                previous_status.map_or(vec![], |status| {
-                    self.handle_action(
-                        state,
-                        Action::UpdateTask(Task {
-                            status_id: status.id,
-                            ..Task::from(task)
-                        }),
-                    )
-                })
+                state
+                    .previous_status(task.status_id)
+                    .map_or(vec![], |status| {
+                        self.handle_action(
+                            state,
+                            Action::UpdateTask {
+                                id: task.id,
+                                input: TaskInput {
+                                    status: Some(status.id),
+                                    ..Default::default()
+                                },
+                            },
+                        )
+                    })
             }
             (_, KeyCode::Char('.') | KeyCode::Char('>')) if let Some(task) = selected => {
-                // statuses is ordered by position; take the one after the task's current status
-                let next_status = state
-                    .statuses()
-                    .position(|status| status.id == task.status_id)
-                    .and_then(|index| state.statuses().nth(index + 1));
-
                 // nothing to move to if the task is already in the last status
-                next_status.map_or(vec![], |status| {
+                state.next_status(task.status_id).map_or(vec![], |status| {
                     self.handle_action(
                         state,
-                        Action::UpdateTask(Task {
-                            status_id: status.id,
-                            ..Task::from(task)
-                        }),
+                        Action::UpdateTask {
+                            id: task.id,
+                            input: TaskInput {
+                                status: Some(status.id),
+                                ..Default::default()
+                            },
+                        },
                     )
                 })
             }
