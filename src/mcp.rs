@@ -11,7 +11,10 @@ use rmcp::{
 };
 use serde::Serialize;
 
+mod http;
 mod tools;
+
+pub use http::serve_http;
 
 /// Build a caller-visible tool-level error result from an application error.
 ///
@@ -951,5 +954,41 @@ mod tests {
             "{}",
             text_of(&result)
         );
+    }
+
+    #[tokio::test]
+    async fn http_transport_answers_the_initialize_handshake() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode, header};
+        use tower::ServiceExt;
+
+        let (_dir, server) = test_server().await;
+        let app = http::router(&server.store);
+
+        let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"scry-test","version":"0"}}}"#;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header(header::HOST, "127.0.0.1")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::ACCEPT, "application/json, text/event-stream")
+                    .body(Body::from(initialize))
+                    .expect("build request"),
+            )
+            .await
+            .expect("send request");
+
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read body");
+        let body = String::from_utf8(bytes.to_vec()).expect("utf-8 body");
+
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert!(body.contains("serverInfo"), "{body}");
+        assert!(body.contains("scry"), "{body}");
     }
 }
