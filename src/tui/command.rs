@@ -32,7 +32,7 @@ enum StatusCommand {
         name: String,
     },
     /// Delete a Status from this project
-    #[command(aliases(["d"]))]
+    #[command(aliases(["del"]))]
     Delete {
         /// Name of the Status to delete
         name: String,
@@ -46,13 +46,13 @@ enum StatusCommand {
         new: String,
     },
     /// Move a Status up in the ordering for the project
-    #[command(aliases(["up", "mu", "u"]))]
+    #[command(aliases(["up", "mu"]))]
     MoveUp {
         /// Name of the Status to move up
         name: String,
     },
     /// Move a Status down in the ordering for the project
-    #[command(aliases(["down", "md", "d"]))]
+    #[command(aliases(["down", "md"]))]
     MoveDown {
         /// Name of the Status to move down
         name: String,
@@ -245,5 +245,19 @@ pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
                 }
             }
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Command;
+    use clap::Parser;
+
+    #[test]
+    fn status_set_style_hidden_command_parses() {
+        // parsing builds the entire clap command tree, so this guards against
+        // duplicate-alias debug assertions firing before any subcommand runs
+        Command::try_parse_from(["status", "set-style", "super done", "hidden"])
+            .expect("status set-style with the hidden style should parse");
     }
 }
