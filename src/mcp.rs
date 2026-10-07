@@ -9,6 +9,30 @@ use rmcp::{
     model::{CallToolResult, ContentBlock, ServerCapabilities, ServerConfig},
     tool, tool_handler, tool_router,
 };
+use serde::Serialize;
+
+/// Build a caller-visible tool-level error result from an application error.
+///
+/// The payload mirrors the CLI's `--json` error document so the same `kind`
+/// vocabulary appears on both surfaces.
+pub(crate) fn error_result(error: impl Into<AppError>) -> CallToolResult {
+    let error = error.into();
+    let document = serde_json::json!({
+        "error": {
+            "kind": error.kind(),
+            "message": error.to_string(),
+        }
+    });
+    CallToolResult::error(vec![ContentBlock::text(document.to_string())])
+}
+
+/// Build a success result whose content is the compact JSON of `value`.
+pub(crate) fn success_result<T: Serialize>(value: &T) -> Result<CallToolResult, McpError> {
+    let text = serde_json::to_string(value).map_err(|error| {
+        McpError::internal_error(format!("failed to serialize tool result: {error}"), None)
+    })?;
+    Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
+}
 
 /// The scry MCP server. Holds the store that tool handlers operate on.
 #[derive(Clone)]
@@ -28,17 +52,14 @@ impl ScryServer {
 
     #[tool(description = "Report scry server information, including the active project")]
     async fn scry_info(&self) -> Result<CallToolResult, McpError> {
-        let project = self
-            .store
-            .get_active_project()
-            .await
-            .map_err(|error| McpError::internal_error(error.to_string(), None))?;
-        let text = format!(
-            "scry {} MCP server. Active project: {}",
-            env!("CARGO_PKG_VERSION"),
-            project.name
-        );
-        Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
+        let project = match self.store.get_active_project().await {
+            Ok(project) => project,
+            Err(error) => return Ok(error_result(error)),
+        };
+        success_result(&serde_json::json!({
+            "version": env!("CARGO_PKG_VERSION"),
+            "active_project": project.name,
+        }))
     }
 }
 
@@ -88,5 +109,26 @@ mod tests {
             json.contains("default"),
             "active project missing from result: {json}"
         );
+    }
+
+    #[test]
+    fn error_result_carries_the_stable_kind_and_message() {
+        let error = AppError::Service(crate::error::ServiceError::TaskNotFound {
+            task_id: 7,
+            project: "default".to_string(),
+        });
+
+        let result = error_result(error);
+
+        assert_eq!(result.is_error, Some(true), "expected a tool-level error");
+        let value = serde_json::to_value(&result).expect("serialize result");
+        let text = value["content"][0]["text"]
+            .as_str()
+            .expect("text content block");
+        assert!(
+            text.contains("\"kind\":\"not_found\""),
+            "kind missing: {text}"
+        );
+        assert!(text.contains("Task 7 not found"), "message missing: {text}");
     }
 }
