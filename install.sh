@@ -55,8 +55,10 @@ $FETCH "$RELEASE_URL" | tar xz -C "$TMPDIR"
 
 install "$TMPDIR/scry" "$INSTALL_DIR/scry"
 
+VERSION=$("$INSTALL_DIR/scry" --version)
+
 echo ""
-echo "scry installed to ${INSTALL_DIR}/scry"
+echo "${VERSION} installed to ${INSTALL_DIR}/scry"
 
 case ":$PATH:" in
     *:"$INSTALL_DIR":*)
