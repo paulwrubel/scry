@@ -699,87 +699,125 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             ProjectCommand::Status(status_cmd) => match status_cmd {
                 StatusCommand::List => {
                     let statuses = store.get_all_statuses_by_project_id(project.id).await?;
-                    println!("Statuses for \"{}\":", project.name);
-                    for s in &statuses {
-                        anstream::println!("  {}", color::status(s.color, &s.name));
+                    if output_json {
+                        print_json(&statuses)?;
+                    } else {
+                        println!("Statuses for \"{}\":", project.name);
+                        for s in &statuses {
+                            anstream::println!("  {}", color::status(s.color, &s.name));
+                        }
                     }
                 }
                 StatusCommand::Add { name } => {
                     let status = service.create_status(&project, name).await?;
-                    println!(
-                        "Added status \"{}\" to project \"{}\"",
-                        status.name, project.name
-                    );
+                    if output_json {
+                        print_json(&status)?;
+                    } else {
+                        println!(
+                            "Added status \"{}\" to project \"{}\"",
+                            status.name, project.name
+                        );
+                    }
                 }
                 StatusCommand::Remove { name } => {
                     let status = service.get_status_by_name(&project, &name).await?;
-                    service.delete_status(&project, status.id).await?;
-                    println!(
-                        "Removed status \"{}\" from project \"{}\"",
-                        name, project.name
-                    );
+                    let removed = service.delete_status(&project, status.id).await?;
+                    if output_json {
+                        print_json(&removed)?;
+                    } else {
+                        println!(
+                            "Removed status \"{}\" from project \"{}\"",
+                            name, project.name
+                        );
+                    }
                 }
                 StatusCommand::Rename { old_name, new_name } => {
                     let status = service.get_status_by_name(&project, &old_name).await?;
-                    service
+                    let renamed = service
                         .rename_status(&project, status.id, new_name.clone())
                         .await?;
-                    println!(
-                        "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
-                        old_name, new_name, project.name
-                    );
+                    if output_json {
+                        print_json(&renamed)?;
+                    } else {
+                        println!(
+                            "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
+                            old_name, new_name, project.name
+                        );
+                    }
                 }
                 StatusCommand::MoveUp { name } => {
                     let status = service.get_status_by_name(&project, &name).await?;
-                    match service.move_status_up(&project, status.id).await? {
-                        Some(_) => println!(
-                            "Moved status \"{}\" up in project \"{}\"",
-                            name, project.name
-                        ),
-                        None => eprintln!(
-                            "Status \"{}\" is already at the top of \"{}\"",
-                            name, project.name
-                        ),
+                    let moved = service.move_status_up(&project, status.id).await?;
+                    if output_json {
+                        print_json(&status)?;
+                    } else {
+                        match moved {
+                            Some(_) => println!(
+                                "Moved status \"{}\" up in project \"{}\"",
+                                name, project.name
+                            ),
+                            None => eprintln!(
+                                "Status \"{}\" is already at the top of \"{}\"",
+                                name, project.name
+                            ),
+                        }
                     }
                 }
                 StatusCommand::MoveDown { name } => {
                     let status = service.get_status_by_name(&project, &name).await?;
-                    match service.move_status_down(&project, status.id).await? {
-                        Some(_) => println!(
-                            "Moved status \"{}\" down in project \"{}\"",
-                            name, project.name
-                        ),
-                        None => eprintln!(
-                            "Status \"{}\" is already at the bottom of \"{}\"",
-                            name, project.name
-                        ),
+                    let moved = service.move_status_down(&project, status.id).await?;
+                    if output_json {
+                        print_json(&status)?;
+                    } else {
+                        match moved {
+                            Some(_) => println!(
+                                "Moved status \"{}\" down in project \"{}\"",
+                                name, project.name
+                            ),
+                            None => eprintln!(
+                                "Status \"{}\" is already at the bottom of \"{}\"",
+                                name, project.name
+                            ),
+                        }
                     }
                 }
                 StatusCommand::SetStyle { name, style } => {
                     let status = service.get_status_by_name(&project, &name).await?;
-                    service.set_status_style(&project, status.id, style).await?;
-                    println!(
-                        "Set style of status \"{}\" to \"{}\" in project \"{}\"",
-                        name, style, project.name
-                    );
+                    let updated = service.set_status_style(&project, status.id, style).await?;
+                    if output_json {
+                        print_json(&updated)?;
+                    } else {
+                        println!(
+                            "Set style of status \"{}\" to \"{}\" in project \"{}\"",
+                            name, style, project.name
+                        );
+                    }
                 }
                 StatusCommand::SetColor { name, color } => {
                     let status = service.get_status_by_name(&project, &name).await?;
-                    service
+                    let updated = service
                         .set_status_color(&project, status.id, Some(color))
                         .await?;
-                    println!(
-                        "Set color of status \"{}\" to \"{}\" in project \"{}\"",
-                        name, color, project.name
-                    );
+                    if output_json {
+                        print_json(&updated)?;
+                    } else {
+                        println!(
+                            "Set color of status \"{}\" to \"{}\" in project \"{}\"",
+                            name, color, project.name
+                        );
+                    }
                 }
                 StatusCommand::ResetColor { name } => {
                     let status = service.get_status_by_name(&project, &name).await?;
-                    service.set_status_color(&project, status.id, None).await?;
-                    println!(
-                        "Reset color of status \"{}\" in project \"{}\"",
-                        name, project.name
-                    );
+                    let updated = service.set_status_color(&project, status.id, None).await?;
+                    if output_json {
+                        print_json(&updated)?;
+                    } else {
+                        println!(
+                            "Reset color of status \"{}\" in project \"{}\"",
+                            name, project.name
+                        );
+                    }
                 }
             },
         },
