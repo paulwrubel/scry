@@ -1,8 +1,8 @@
+use anstyle::AnsiColor;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use anstyle::AnsiColor;
 use ratatui::{style::Style, text::Span};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -14,6 +14,7 @@ pub type ProjectId = i64;
 pub type StatusId = i64;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum Color {
     Black,
     Red,
@@ -90,6 +91,7 @@ impl From<Color> for AnsiColor {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum StatusStyle {
     #[default]
     #[value(alias("default"))]
@@ -199,6 +201,7 @@ impl<'a> IntoIterator for &'a Tags {
     strum::Display,
     strum::EnumIter,
 )]
+#[serde(rename_all = "kebab-case")]
 #[repr(i64)]
 pub enum Priority {
     #[value(alias("p5"))]
@@ -264,6 +267,7 @@ impl From<Priority> for Span<'_> {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum TaskSortingMode {
     #[default]
     #[value(aliases([
