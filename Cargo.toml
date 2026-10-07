@@ -27,6 +27,12 @@ twox-hash = "2.1.4"
 itertools = "0.15.0"
 num_enum = "0.7.6"
 strum = "0.28.0"
+rmcp = { version = "3.5.1", features = [
+    "server",
+    "macros",
+    "schemars",
+    "transport-io",
+] }
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
