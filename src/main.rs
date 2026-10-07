@@ -1,6 +1,7 @@
 mod color;
 mod config;
 mod error;
+mod mcp;
 mod models;
 mod service;
 mod skill;
@@ -122,6 +123,8 @@ enum Command {
     /// Manage the agent skill that teaches coding agents to drive scry
     #[command(subcommand)]
     Skill(SkillCommand),
+    /// Serve the Model Context Protocol (MCP) over stdio
+    Mcp,
 }
 
 #[derive(Subcommand)]
@@ -318,9 +321,10 @@ fn print_json<T: serde::Serialize>(value: &T) -> Result<(), AppError> {
 
 async fn run(cli: Cli) -> Result<(), AppError> {
     let output_json = cli.json;
-    if output_json && cli.command.is_none() {
+    if output_json && (cli.command.is_none() || matches!(cli.command.as_ref(), Some(Command::Mcp)))
+    {
         return Err(AppError::Usage(
-            "--json is exclusive to cli commands, not the terminal UI".to_string(),
+            "--json is exclusive to cli commands".to_string(),
         ));
     }
 
@@ -337,6 +341,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
 
     let config = ScryConfig::load()?;
     let store = SqliteStore::new(&config.database_url).await?;
+
+    if let Some(Command::Mcp) = &cli.command {
+        return mcp::serve_stdio(store).await;
+    }
 
     let project = resolve_project(&store, cli.project.as_deref()).await?;
 
@@ -871,6 +879,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             },
         },
         Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
+        Command::Mcp => unreachable!("the MCP server is handled before database-backed commands"),
     }
 
     Ok(())
