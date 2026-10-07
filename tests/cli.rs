@@ -1232,3 +1232,75 @@ fn skill_uninstall_dir_flag_removes_custom_install() {
     );
     assert!(!path.exists());
 }
+
+/// `scry mcp` speaks newline-delimited JSON-RPC over stdio, so the whole
+/// handshake can be driven by piping requests in and reading responses out.
+#[test]
+fn mcp_stdio_completes_handshake_and_lists_tools() {
+    let h = Harness::new();
+
+    // 2026-07-28 replaced `initialize` with `server/discover`, so negotiate the
+    // newest version that still uses `initialize`.
+    let input = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"scry-test","version":"0"}}}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#,
+        "\n",
+    );
+
+    let mut cmd = h.cmd();
+    cmd.arg("mcp").write_stdin(input);
+    let output = cmd.output().expect("run `scry mcp`");
+
+    assert!(
+        output.status.success(),
+        "scry mcp exited with {}; stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    // Every stdout line must be a protocol frame, so stray output cannot slip in.
+    let responses: Vec<Value> = String::from_utf8(output.stdout)
+        .expect("utf-8 stdout")
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("each stdout line is a JSON-RPC message"))
+        .collect();
+
+    let initialize = responses
+        .iter()
+        .find(|message| message["id"].as_u64() == Some(1))
+        .expect("initialize response");
+    assert_eq!(
+        initialize["result"]["serverInfo"]["name"].as_str(),
+        Some("scry")
+    );
+    assert_eq!(
+        initialize["result"]["serverInfo"]["version"].as_str(),
+        Some(env!("CARGO_PKG_VERSION"))
+    );
+
+    let tools = responses
+        .iter()
+        .find(|message| message["id"].as_u64() == Some(2))
+        .expect("tools/list response");
+    let names: Vec<&str> = tools["result"]["tools"]
+        .as_array()
+        .expect("tools array")
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect();
+    assert!(names.contains(&"scry_info"), "tools were: {names:?}");
+}
+
+#[test]
+fn mcp_rejects_the_json_flag() {
+    let h = Harness::new();
+    h.run(&["--json", "mcp"])
+        .failure()
+        .stderr(predicate::str::contains(
+            "--json is exclusive to cli commands",
+        ));
+}

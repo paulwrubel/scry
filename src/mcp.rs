@@ -6,7 +6,7 @@ use crate::store::sqlite::SqliteStore;
 use rmcp::{
     ErrorData as McpError, ServerHandler, ServiceExt,
     handler::server::router::tool::ToolRouter,
-    model::{CallToolResult, ContentBlock, ServerCapabilities, ServerConfig},
+    model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig},
     tool, tool_handler, tool_router,
 };
 use serde::Serialize;
@@ -66,9 +66,11 @@ impl ScryServer {
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for ScryServer {
     fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "scry is a terminal task manager. Use these tools to manage tasks, projects, statuses, and notes.",
-        )
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new("scry", env!("CARGO_PKG_VERSION")))
+            .with_instructions(
+                "scry is a task manager. Use these tools to manage tasks, projects, statuses, and notes.",
+            )
     }
 }
 
