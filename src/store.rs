@@ -5,7 +5,6 @@ use crate::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
-use crate::state::TaskWithNotes;
 
 pub(crate) struct TaskToCreate {
     pub(crate) project_id: ProjectId,
@@ -19,20 +18,6 @@ pub(crate) struct TaskToCreate {
 
 impl From<&Task> for TaskToCreate {
     fn from(value: &Task) -> Self {
-        Self {
-            project_id: value.project_id,
-            title: value.title.clone(),
-            description: value.description.clone(),
-            priority: value.priority,
-            status_id: value.status_id,
-            position: value.position,
-            tags: value.tags.clone(),
-        }
-    }
-}
-
-impl From<&TaskWithNotes> for TaskToCreate {
-    fn from(value: &TaskWithNotes) -> Self {
         Self {
             project_id: value.project_id,
             title: value.title.clone(),
