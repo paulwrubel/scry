@@ -112,6 +112,49 @@ impl ScryServer {
     ) -> Result<CallToolResult, McpError> {
         tool_result(tools::tasks::show_task(&self.store, &params).await)
     }
+
+    #[tool(description = "Add a task to a project")]
+    async fn task_add(
+        &self,
+        Parameters(params): Parameters<tools::tasks::TaskAddParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::tasks::add_task(&self.store, &params).await)
+    }
+
+    #[tool(description = "Update a task's title, description, priority, tags, or status")]
+    async fn task_update(
+        &self,
+        Parameters(params): Parameters<tools::tasks::TaskUpdateParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::tasks::update_task(&self.store, &params).await)
+    }
+
+    #[tool(description = "Move a task to a different status")]
+    async fn task_move(
+        &self,
+        Parameters(params): Parameters<tools::tasks::TaskMoveParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::tasks::move_task(&self.store, &params).await)
+    }
+
+    #[tool(description = "Duplicate a task into the same status")]
+    async fn task_duplicate(
+        &self,
+        Parameters(params): Parameters<tools::tasks::TaskDuplicateParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::tasks::duplicate_task(&self.store, &params).await)
+    }
+
+    #[tool(
+        description = "Permanently delete a task",
+        annotations(destructive_hint = true)
+    )]
+    async fn task_delete(
+        &self,
+        Parameters(params): Parameters<tools::tasks::TaskDeleteParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::tasks::delete_task(&self.store, &params).await)
+    }
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -341,5 +384,119 @@ mod tests {
             .expect("task_show");
         assert_eq!(result.is_error, Some(true));
         assert!(text_of(&result).contains("\"kind\":\"not_found\""));
+    }
+
+    #[tokio::test]
+    async fn task_add_creates_a_task() {
+        let (_dir, server) = test_server().await;
+        let result = server
+            .task_add(Parameters(tools::tasks::TaskAddParams {
+                title: "Alpha".to_string(),
+                description: None,
+                priority: Some(crate::models::Priority::High),
+                tags: None,
+                status: None,
+                project: None,
+            }))
+            .await
+            .expect("task_add");
+        let text = text_of(&result);
+        assert!(text.contains("Alpha"), "{text}");
+        assert!(text.contains("\"priority\":\"high\""), "{text}");
+    }
+
+    #[tokio::test]
+    async fn task_update_changes_fields() {
+        let (_dir, server) = test_server().await;
+        let id = add_task(&server, "Alpha").await;
+
+        let result = server
+            .task_update(Parameters(tools::tasks::TaskUpdateParams {
+                id,
+                title: Some("Renamed".to_string()),
+                description: None,
+                priority: None,
+                tags: None,
+                status: None,
+                project: None,
+            }))
+            .await
+            .expect("task_update");
+        assert!(text_of(&result).contains("Renamed"), "{}", text_of(&result));
+    }
+
+    #[tokio::test]
+    async fn task_update_requires_at_least_one_field() {
+        let (_dir, server) = test_server().await;
+        let id = add_task(&server, "Alpha").await;
+
+        let result = server
+            .task_update(Parameters(tools::tasks::TaskUpdateParams {
+                id,
+                title: None,
+                description: None,
+                priority: None,
+                tags: None,
+                status: None,
+                project: None,
+            }))
+            .await
+            .expect("task_update");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            text_of(&result).contains("\"kind\":\"invalid\""),
+            "{}",
+            text_of(&result)
+        );
+    }
+
+    #[tokio::test]
+    async fn task_move_duplicate_and_delete_round_trip() {
+        let (_dir, server) = test_server().await;
+        let id = add_task(&server, "Alpha").await;
+
+        let moved = server
+            .task_move(Parameters(tools::tasks::TaskMoveParams {
+                id,
+                status: "done".to_string(),
+                project: None,
+            }))
+            .await
+            .expect("task_move");
+        assert!(
+            text_of(&moved).contains("\"status_id\":2"),
+            "{}",
+            text_of(&moved)
+        );
+
+        let duplicated = server
+            .task_duplicate(Parameters(tools::tasks::TaskDuplicateParams {
+                id,
+                project: None,
+            }))
+            .await
+            .expect("task_duplicate");
+        assert!(
+            text_of(&duplicated).contains("Alpha"),
+            "{}",
+            text_of(&duplicated)
+        );
+
+        server
+            .task_delete(Parameters(tools::tasks::TaskDeleteParams {
+                id,
+                project: None,
+            }))
+            .await
+            .expect("task_delete");
+
+        let missing = server
+            .task_show(Parameters(tools::tasks::TaskShowParams {
+                id,
+                project: None,
+            }))
+            .await
+            .expect("task_show");
+        assert_eq!(missing.is_error, Some(true));
     }
 }

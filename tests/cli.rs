@@ -1392,3 +1392,46 @@ fn mcp_stdio_calls_the_task_list_tool() {
         .expect("text content block");
     assert!(text.contains("Alpha"), "{text}");
 }
+
+/// A task write tool persists through to the database the CLI reads.
+#[test]
+fn mcp_stdio_calls_the_task_add_tool() {
+    let h = Harness::new();
+
+    let input = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"scry-test","version":"0"}}}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"task_add","arguments":{"title":"Alpha"}}}"#,
+        "\n",
+    );
+
+    let mut cmd = h.cmd();
+    cmd.arg("mcp").write_stdin(input);
+    let output = cmd.output().expect("run `scry mcp`");
+
+    assert!(
+        output.status.success(),
+        "scry mcp exited with {}; stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let responses: Vec<Value> = String::from_utf8(output.stdout)
+        .expect("utf-8 stdout")
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("each stdout line is a JSON-RPC message"))
+        .collect();
+    let call = responses
+        .iter()
+        .find(|message| message["id"].as_u64() == Some(2))
+        .expect("tools/call response");
+    assert_ne!(call["result"]["isError"], Value::Bool(true), "{call}");
+
+    // The created task is visible to the regular CLI against the same database.
+    h.run(&["--json", "list"])
+        .success()
+        .stdout(predicate::str::contains("Alpha"));
+}

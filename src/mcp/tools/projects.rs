@@ -8,19 +8,19 @@ use crate::store::{TaskStore, sqlite::SqliteStore};
 
 use super::resolve_project;
 
-/// Parameters for the `status_list` tool.
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct StatusListParams {
-    /// Project to inspect; defaults to the active project.
-    pub project: Option<String>,
-}
-
 pub(crate) async fn list_projects(store: &SqliteStore) -> Result<Vec<Project>, AppError> {
     Ok(store.get_all_projects().await?)
 }
 
 pub(crate) async fn active_project(store: &SqliteStore) -> Result<Project, AppError> {
     Ok(store.get_active_project().await?)
+}
+
+/// Parameters for the `status_list` tool.
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct StatusListParams {
+    /// Project to inspect; defaults to the active project.
+    pub project: Option<String>,
 }
 
 pub(crate) async fn list_statuses(
