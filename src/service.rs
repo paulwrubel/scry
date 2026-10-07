@@ -1,4 +1,4 @@
-use crate::error::ServiceError;
+use crate::error::{ServiceError, StorageError};
 use crate::models::{
     Color, Note, Priority, Project, ProjectTemplate, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
@@ -147,10 +147,10 @@ impl<'a> ProjectService<'a> {
         Ok(updated)
     }
 
-    pub async fn delete_task(&self, project: &Project, id: TaskId) -> Result<(), ServiceError> {
-        self.task_in_project(project, id).await?;
+    pub async fn delete_task(&self, project: &Project, id: TaskId) -> Result<Task, ServiceError> {
+        let task = self.task_in_project(project, id).await?;
         self.store.delete_task(id).await?;
-        Ok(())
+        Ok(task)
     }
 
     pub async fn add_task_note(
@@ -247,7 +247,7 @@ impl<'a> ProjectService<'a> {
         self.store
             .reorder_status(project.id, status.id, status.position - 1)
             .await?;
-        Ok(Some(status))
+        Ok(Some(self.status_in_project(project, status.id).await?))
     }
 
     /// Move a status down one position. `None` when it is already last.
@@ -272,7 +272,7 @@ impl<'a> ProjectService<'a> {
         self.store
             .reorder_status(project.id, status.id, status.position + 1)
             .await?;
-        Ok(Some(status))
+        Ok(Some(self.status_in_project(project, status.id).await?))
     }
 
     pub async fn set_status_color(
@@ -299,7 +299,7 @@ impl<'a> ProjectService<'a> {
         &self,
         project: &Project,
         status_id: StatusId,
-    ) -> Result<(), ServiceError> {
+    ) -> Result<Status, ServiceError> {
         let status = self.status_in_project(project, status_id).await?;
         let tasks = self.store.get_all_tasks_by_status_id(status.id).await?;
         if !tasks.is_empty() {
@@ -309,7 +309,7 @@ impl<'a> ProjectService<'a> {
             });
         }
         self.store.delete_status(status.id).await?;
-        Ok(())
+        Ok(status)
     }
 
     pub async fn rename_project(
@@ -372,10 +372,16 @@ impl<'a> ProjectService<'a> {
             .await?)
     }
 
-    /// Set the active project, persisted across sessions.
-    pub async fn set_active_project(&self, name: &str) -> Result<(), ServiceError> {
+    /// Set the active project, persisted across sessions, returning it.
+    pub async fn set_active_project(&self, name: &str) -> Result<Project, ServiceError> {
         self.store.set_active_project(name).await?;
-        Ok(())
+        let project = self.store.get_project_by_name(name).await?.ok_or_else(|| {
+            ServiceError::Storage(StorageError::NotFound(format!(
+                "project '{}' not found",
+                name
+            )))
+        })?;
+        Ok(project)
     }
 
     pub async fn create_project(
@@ -422,10 +428,16 @@ impl<'a> ProjectService<'a> {
             .await?)
     }
 
-    /// Delete a project, returning the project that is active afterwards.
+    /// Delete a project, returning the deleted project.
     pub async fn delete_project(&self, name: &str) -> Result<Project, ServiceError> {
+        let project = self.store.get_project_by_name(name).await?.ok_or_else(|| {
+            ServiceError::Storage(StorageError::NotFound(format!(
+                "project '{}' not found",
+                name
+            )))
+        })?;
         self.store.delete_project(name.to_string()).await?;
-        Ok(self.store.get_active_project().await?)
+        Ok(project)
     }
 
     /// The status new tasks default to: the entry status if set and present,

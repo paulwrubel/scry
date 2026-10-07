@@ -4,6 +4,7 @@ use assert_fs::TempDir;
 use indoc::indoc;
 use predicates::prelude::*;
 use regex::Regex;
+use serde_json::Value;
 use std::sync::LazyLock;
 
 /// Matches the `%b %-d, %Y at %-I:%M%P` timestamps rendered by `scry show`.
@@ -880,4 +881,236 @@ fn project_set_entry_status_rejects_unknown_status() {
         .stderr(predicate::str::contains(
             "Status \"missing\" not found in \"todolist\"",
         ));
+}
+
+/// Parse JSON from a command's stdout.
+fn stdout_json(assert: &assert_cmd::assert::Assert) -> Value {
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf-8 stdout");
+    serde_json::from_str(&stdout).expect("stdout is valid JSON")
+}
+
+/// Parse the JSON error document from a command's stderr.
+fn stderr_json(assert: &assert_cmd::assert::Assert) -> Value {
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).expect("utf-8 stderr");
+    serde_json::from_str(&stderr).expect("stderr is valid JSON")
+}
+
+#[test]
+fn json_task_shapes_and_notes() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    let created = stdout_json(
+        &h.run(&[
+            "--json",
+            "-p",
+            "todolist",
+            "add",
+            "Alpha",
+            "--description",
+            "a desc",
+            "--priority",
+            "critical",
+            "--tags",
+            "work,urgent",
+        ])
+        .success(),
+    );
+    assert_eq!(created["id"], 1);
+    assert_eq!(created["title"], "Alpha");
+    assert_eq!(created["description"], "a desc");
+    assert_eq!(created["priority"], "critical");
+    assert_eq!(created["tags"], serde_json::json!(["urgent", "work"]));
+
+    let listed = stdout_json(&h.run(&["--json", "-p", "todolist", "list"]).success());
+    assert_eq!(listed.as_array().expect("array").len(), 1);
+    assert_eq!(listed[0]["id"], 1);
+
+    let before_notes = stdout_json(&h.run(&["--json", "-p", "todolist", "show", "1"]).success());
+    assert_eq!(before_notes["notes"], serde_json::json!([]));
+
+    stdout_json(
+        &h.run(&["--json", "-p", "todolist", "note", "add", "1", "hello"])
+            .success(),
+    );
+
+    let shown = stdout_json(&h.run(&["--json", "-p", "todolist", "show", "1"]).success());
+    assert_eq!(shown["notes"].as_array().expect("notes").len(), 1);
+    assert_eq!(shown["notes"][0]["contents"], "hello");
+}
+
+#[test]
+fn json_enum_values_are_kebab_case() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    let colored = stdout_json(
+        &h.run(&[
+            "--json",
+            "-p",
+            "todolist",
+            "project",
+            "status",
+            "set-color",
+            "todo",
+            "dark-gray",
+        ])
+        .success(),
+    );
+    assert_eq!(colored["color"], "dark-gray");
+
+    let tasked = stdout_json(
+        &h.run(&[
+            "--json",
+            "-p",
+            "todolist",
+            "add",
+            "Beta",
+            "--priority",
+            "high",
+        ])
+        .success(),
+    );
+    assert_eq!(tasked["priority"], "high");
+
+    let sorted = stdout_json(
+        &h.run(&[
+            "--json",
+            "-p",
+            "todolist",
+            "project",
+            "set-sort",
+            "alphabetical-case-insensitive",
+        ])
+        .success(),
+    );
+    assert_eq!(sorted["task_sorting_mode"], "alphabetical-case-insensitive");
+}
+
+#[test]
+fn json_suppresses_color_even_with_color_always() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Alpha"]).success();
+
+    h.run(&["--json", "--color=always", "-p", "todolist", "list"])
+        .success()
+        .stdout(predicate::str::contains("\u{1b}").not());
+}
+
+#[test]
+fn json_mutations_return_affected_model() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+    h.run(&["-p", "todolist", "add", "Alpha"]).success();
+
+    let deleted = stdout_json(
+        &h.run(&["--json", "-p", "todolist", "delete", "1"])
+            .success(),
+    );
+    assert_eq!(deleted["id"], 1);
+
+    let listed = stdout_json(&h.run(&["--json", "-p", "todolist", "list"]).success());
+    assert_eq!(listed, serde_json::json!([]));
+}
+
+#[test]
+fn json_errors_are_structured_and_nonzero() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    let missing = h
+        .run(&["--json", "-p", "todolist", "show", "999"])
+        .failure();
+    assert_eq!(stderr_json(&missing)["error"]["kind"], "not_found");
+
+    let usage = h
+        .run(&["--json", "-p", "todolist", "update", "1"])
+        .failure();
+    assert_eq!(stderr_json(&usage)["error"]["kind"], "invalid");
+}
+
+#[test]
+fn json_without_subcommand_errors() {
+    let h = Harness::new();
+    let out = h.run(&["--json"]).failure();
+    assert_eq!(stderr_json(&out)["error"]["kind"], "invalid");
+}
+
+#[test]
+fn json_project_commands_return_models() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    let used = stdout_json(&h.run(&["--json", "project", "use", "todolist"]).success());
+    assert_eq!(used["name"], "todolist");
+
+    let current = stdout_json(&h.run(&["--json", "project", "current"]).success());
+    assert_eq!(current["name"], "todolist");
+
+    let created = stdout_json(&h.run(&["--json", "project", "create", "scratch"]).success());
+    assert_eq!(created["name"], "scratch");
+
+    // delete auto-confirms under --json (no stdin is provided)
+    let deleted = stdout_json(&h.run(&["--json", "project", "delete", "scratch"]).success());
+    assert_eq!(deleted["name"], "scratch");
+}
+
+#[test]
+fn json_status_commands_return_models() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    let listed = stdout_json(
+        &h.run(&["--json", "-p", "todolist", "project", "status", "list"])
+            .success(),
+    );
+    assert_eq!(listed.as_array().expect("array").len(), 2);
+
+    let added = stdout_json(
+        &h.run(&[
+            "--json", "-p", "todolist", "project", "status", "add", "blocked",
+        ])
+        .success(),
+    );
+    assert_eq!(added["name"], "blocked");
+
+    let styled = stdout_json(
+        &h.run(&[
+            "--json",
+            "-p",
+            "todolist",
+            "project",
+            "status",
+            "set-style",
+            "blocked",
+            "checked",
+        ])
+        .success(),
+    );
+    assert_eq!(styled["style"], "checked");
+
+    let removed = stdout_json(
+        &h.run(&[
+            "--json", "-p", "todolist", "project", "status", "remove", "blocked",
+        ])
+        .success(),
+    );
+    assert_eq!(removed["name"], "blocked");
+}
+
+#[test]
+fn json_status_move_returns_post_move_position() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    // `done` starts at position 1; moving it up should report its new position.
+    let moved = stdout_json(
+        &h.run(&[
+            "--json", "-p", "todolist", "project", "status", "move-up", "done",
+        ])
+        .success(),
+    );
+    assert_eq!(moved["name"], "done");
+    assert_eq!(moved["position"], 0);
 }

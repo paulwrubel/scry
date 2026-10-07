@@ -191,7 +191,7 @@ impl<S: TaskStore + Sync> App<'_, S> {
             }
             Action::DeleteTask(id) => {
                 match Self::block_on(service.delete_task(state.project(), id)) {
-                    Ok(()) => None,
+                    Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
@@ -242,7 +242,7 @@ impl<S: TaskStore + Sync> App<'_, S> {
             }
             Action::DeleteStatus { status_id } => {
                 match Self::block_on(service.delete_status(state.project(), status_id)) {
-                    Ok(()) => None,
+                    Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }

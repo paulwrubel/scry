@@ -26,6 +26,19 @@ impl fmt::Display for AppError {
 
 impl std::error::Error for AppError {}
 
+impl AppError {
+    /// Stable snake_case discriminator used for machine-readable error output.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            AppError::Usage(_) => "invalid",
+            AppError::Config(_) => "config",
+            AppError::Internal(_) => "internal",
+            AppError::Storage(error) => error.kind(),
+            AppError::Service(error) => error.kind(),
+        }
+    }
+}
+
 impl From<StorageError> for AppError {
     fn from(e: StorageError) -> Self {
         AppError::Storage(e)
@@ -84,6 +97,17 @@ impl fmt::Display for ServiceError {
 
 impl std::error::Error for ServiceError {}
 
+impl ServiceError {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::StatusNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
+            Self::StatusNotEmpty { .. } | Self::StatusNameTaken { .. } => "conflict",
+            Self::ProjectHasNoStatuses | Self::TitleRequired => "invalid",
+            Self::Storage(error) => error.kind(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum StorageError {
     Database(String),
@@ -104,3 +128,14 @@ impl fmt::Display for StorageError {
 }
 
 impl std::error::Error for StorageError {}
+
+impl StorageError {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::Database(_) => "internal",
+            Self::NotFound(_) => "not_found",
+            Self::Conflict(_) => "conflict",
+            Self::Invalid(_) => "invalid",
+        }
+    }
+}
