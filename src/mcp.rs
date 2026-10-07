@@ -90,9 +90,9 @@ impl ScryServer {
     #[tool(description = "List the statuses of a project")]
     async fn status_list(
         &self,
-        Parameters(params): Parameters<tools::projects::StatusListParams>,
+        Parameters(params): Parameters<tools::statuses::StatusListParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::projects::list_statuses(&self.store, params.project.as_deref()).await)
+        tool_result(tools::statuses::list_statuses(&self.store, &params).await)
     }
 
     #[tool(
@@ -223,6 +223,57 @@ impl ScryServer {
         Parameters(params): Parameters<tools::project_settings::ProjectSetShowPriorityParams>,
     ) -> Result<CallToolResult, McpError> {
         tool_result(tools::project_settings::set_show_priority(&self.store, &params).await)
+    }
+
+    #[tool(description = "Add a status to a project")]
+    async fn status_add(
+        &self,
+        Parameters(params): Parameters<tools::statuses::StatusAddParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::statuses::add_status(&self.store, &params).await)
+    }
+
+    #[tool(description = "Rename a status")]
+    async fn status_rename(
+        &self,
+        Parameters(params): Parameters<tools::statuses::StatusRenameParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::statuses::rename_status(&self.store, &params).await)
+    }
+
+    #[tool(description = "Move a status up or down within a project's ordering")]
+    async fn status_move(
+        &self,
+        Parameters(params): Parameters<tools::statuses::StatusMoveParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::statuses::move_status(&self.store, &params).await)
+    }
+
+    #[tool(description = "Set or clear a status's color")]
+    async fn status_set_color(
+        &self,
+        Parameters(params): Parameters<tools::statuses::StatusSetColorParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::statuses::set_status_color(&self.store, &params).await)
+    }
+
+    #[tool(description = "Set a status's style")]
+    async fn status_set_style(
+        &self,
+        Parameters(params): Parameters<tools::statuses::StatusSetStyleParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::statuses::set_status_style(&self.store, &params).await)
+    }
+
+    #[tool(
+        description = "Remove an empty status from a project",
+        annotations(destructive_hint = true)
+    )]
+    async fn status_remove(
+        &self,
+        Parameters(params): Parameters<tools::statuses::StatusRemoveParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::statuses::remove_status(&self.store, &params).await)
     }
 }
 
@@ -355,7 +406,7 @@ mod tests {
     async fn status_list_defaults_to_the_active_project() {
         let (_dir, server) = test_server().await;
         let result = server
-            .status_list(Parameters(tools::projects::StatusListParams {
+            .status_list(Parameters(tools::statuses::StatusListParams {
                 project: None,
             }))
             .await
@@ -369,7 +420,7 @@ mod tests {
     async fn status_list_reports_unknown_projects_as_tool_errors() {
         let (_dir, server) = test_server().await;
         let result = server
-            .status_list(Parameters(tools::projects::StatusListParams {
+            .status_list(Parameters(tools::statuses::StatusListParams {
                 project: Some("nope".to_string()),
             }))
             .await
@@ -612,7 +663,7 @@ mod tests {
         );
 
         let statuses = server
-            .status_list(Parameters(tools::projects::StatusListParams {
+            .status_list(Parameters(tools::statuses::StatusListParams {
                 project: Some("todolist".to_string()),
             }))
             .await
@@ -784,6 +835,121 @@ mod tests {
             text_of(&cleared).contains("\"entry_status_id\":null"),
             "{}",
             text_of(&cleared)
+        );
+    }
+
+    #[tokio::test]
+    async fn status_write_tools_round_trip() {
+        let (_dir, server) = test_server().await;
+
+        let added = server
+            .status_add(Parameters(tools::statuses::StatusAddParams {
+                name: "review".to_string(),
+                project: None,
+            }))
+            .await
+            .expect("status_add");
+        assert!(
+            text_of(&added).contains("\"name\":\"review\""),
+            "{}",
+            text_of(&added)
+        );
+
+        let renamed = server
+            .status_rename(Parameters(tools::statuses::StatusRenameParams {
+                old_name: "review".to_string(),
+                new_name: "qa".to_string(),
+                project: None,
+            }))
+            .await
+            .expect("status_rename");
+        assert!(
+            text_of(&renamed).contains("\"name\":\"qa\""),
+            "{}",
+            text_of(&renamed)
+        );
+
+        let colored = server
+            .status_set_color(Parameters(tools::statuses::StatusSetColorParams {
+                name: "qa".to_string(),
+                color: Some(crate::models::Color::Blue),
+                project: None,
+            }))
+            .await
+            .expect("status_set_color");
+        assert!(
+            text_of(&colored).contains("\"color\":\"blue\""),
+            "{}",
+            text_of(&colored)
+        );
+
+        let styled = server
+            .status_set_style(Parameters(tools::statuses::StatusSetStyleParams {
+                name: "qa".to_string(),
+                style: crate::models::StatusStyle::Checked,
+                project: None,
+            }))
+            .await
+            .expect("status_set_style");
+        assert!(
+            text_of(&styled).contains("\"style\":\"checked\""),
+            "{}",
+            text_of(&styled)
+        );
+
+        let moved = server
+            .status_move(Parameters(tools::statuses::StatusMoveParams {
+                name: "qa".to_string(),
+                direction: tools::statuses::StatusMoveDirection::Up,
+                project: None,
+            }))
+            .await
+            .expect("status_move");
+        assert!(
+            text_of(&moved).contains("\"position\":1"),
+            "{}",
+            text_of(&moved)
+        );
+
+        let removed = server
+            .status_remove(Parameters(tools::statuses::StatusRemoveParams {
+                name: "qa".to_string(),
+                project: None,
+            }))
+            .await
+            .expect("status_remove");
+        assert_eq!(removed.is_error, Some(false));
+
+        let listed = server
+            .status_list(Parameters(tools::statuses::StatusListParams {
+                project: None,
+            }))
+            .await
+            .expect("status_list");
+        assert!(
+            !text_of(&listed).contains("\"name\":\"qa\""),
+            "{}",
+            text_of(&listed)
+        );
+    }
+
+    #[tokio::test]
+    async fn status_remove_rejects_a_status_with_tasks() {
+        let (_dir, server) = test_server().await;
+        add_task(&server, "Alpha").await;
+
+        let result = server
+            .status_remove(Parameters(tools::statuses::StatusRemoveParams {
+                name: "todo".to_string(),
+                project: None,
+            }))
+            .await
+            .expect("status_remove");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            text_of(&result).contains("\"kind\":\"conflict\""),
+            "{}",
+            text_of(&result)
         );
     }
 }

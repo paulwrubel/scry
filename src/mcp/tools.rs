@@ -7,6 +7,7 @@ use crate::store::{TaskStore, sqlite::SqliteStore};
 pub(crate) mod notes;
 pub(crate) mod project_settings;
 pub(crate) mod projects;
+pub(crate) mod statuses;
 pub(crate) mod tasks;
 
 /// Resolve which project a tool should act on: an explicit name when given,
