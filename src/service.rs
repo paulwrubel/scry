@@ -247,7 +247,7 @@ impl<'a> ProjectService<'a> {
         self.store
             .reorder_status(project.id, status.id, status.position - 1)
             .await?;
-        Ok(Some(status))
+        Ok(Some(self.status_in_project(project, status.id).await?))
     }
 
     /// Move a status down one position. `None` when it is already last.
@@ -272,7 +272,7 @@ impl<'a> ProjectService<'a> {
         self.store
             .reorder_status(project.id, status.id, status.position + 1)
             .await?;
-        Ok(Some(status))
+        Ok(Some(self.status_in_project(project, status.id).await?))
     }
 
     pub async fn set_status_color(

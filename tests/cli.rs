@@ -1098,3 +1098,19 @@ fn json_status_commands_return_models() {
     );
     assert_eq!(removed["name"], "blocked");
 }
+
+#[test]
+fn json_status_move_returns_post_move_position() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    // `done` starts at position 1; moving it up should report its new position.
+    let moved = stdout_json(
+        &h.run(&[
+            "--json", "-p", "todolist", "project", "status", "move-up", "done",
+        ])
+        .success(),
+    );
+    assert_eq!(moved["name"], "done");
+    assert_eq!(moved["position"], 0);
+}
