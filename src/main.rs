@@ -551,7 +551,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Command::Project(project_cmd) => match project_cmd {
             ProjectCommand::List => {
                 let projects = store.get_all_projects().await?;
-                if projects.is_empty() {
+                if output_json {
+                    print_json(&projects)?;
+                } else if projects.is_empty() {
                     eprintln!("No projects. Run 'scry project create <name>' to create one.");
                 } else {
                     for p in &projects {
@@ -561,11 +563,19 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
             ProjectCommand::Current => {
-                println!("{}", project.name);
+                if output_json {
+                    print_json(&project)?;
+                } else {
+                    println!("{}", project.name);
+                }
             }
             ProjectCommand::Use { name } => {
-                service.set_active_project(&name).await?;
-                println!("Using project \"{}\"", name);
+                let active = service.set_active_project(&name).await?;
+                if output_json {
+                    print_json(&active)?;
+                } else {
+                    println!("Using project \"{}\"", name);
+                }
             }
             ProjectCommand::Create {
                 name,
@@ -587,19 +597,23 @@ async fn run(cli: Cli) -> Result<(), AppError> {
 
                 let project = service.create_project(name, template.copied()).await?;
 
-                println!("Created project \"{}\"", project.name);
-                if template.is_none() {
+                if output_json {
+                    print_json(&project)?;
+                } else {
+                    println!("Created project \"{}\"", project.name);
+                    if template.is_none() {
+                        println!(
+                            "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."
+                        );
+                    }
                     println!(
-                        "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."
+                        "Make it active with 'scry project use \"{}\"'.",
+                        project.name
                     );
                 }
-                println!(
-                    "Make it active with 'scry project use \"{}\"'.",
-                    project.name
-                );
             }
             ProjectCommand::Delete { name, force } => {
-                if !force {
+                if !force && !output_json {
                     use std::io::Write;
                     print!("Delete project \"{}\" and all its tasks? [y/N]: ", name);
                     std::io::stdout().flush().unwrap();
@@ -610,48 +624,77 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         return Ok(());
                     }
                 }
-                let new_active = service.delete_project(&name).await?;
-                println!("Deleted project \"{}\"", name);
-                if new_active.name != name {
-                    println!("Using project \"{}\"", new_active.name);
+                let removed = service.delete_project(&name).await?;
+                if output_json {
+                    print_json(&removed)?;
+                } else {
+                    println!("Deleted project \"{}\"", name);
+                    let new_active = store.get_active_project().await?;
+                    if new_active.name != name {
+                        println!("Using project \"{}\"", new_active.name);
+                    }
                 }
             }
             ProjectCommand::Rename { old_name, new_name } => {
-                service.rename_project(&project, new_name.clone()).await?;
-                println!("Renamed project \"{}\" --> \"{}\"", old_name, new_name);
+                let renamed = service.rename_project(&project, new_name.clone()).await?;
+                if output_json {
+                    print_json(&renamed)?;
+                } else {
+                    println!("Renamed project \"{}\" --> \"{}\"", old_name, new_name);
+                }
             }
             ProjectCommand::SetEntryStatus { name } => {
                 let status = service.get_status_by_name(&project, &name).await?;
-                service
+                let updated = service
                     .set_project_entry_status(&project, Some(status.id))
                     .await?;
-                println!(
-                    "Set entry status of project \"{}\" to \"{}\"",
-                    project.name, name
-                );
+                if output_json {
+                    print_json(&updated)?;
+                } else {
+                    println!(
+                        "Set entry status of project \"{}\" to \"{}\"",
+                        project.name, name
+                    );
+                }
             }
             ProjectCommand::ResetEntryStatus => {
-                service.set_project_entry_status(&project, None).await?;
-                println!("Reset entry status of project \"{}\"", project.name);
+                let updated = service.set_project_entry_status(&project, None).await?;
+                if output_json {
+                    print_json(&updated)?;
+                } else {
+                    println!("Reset entry status of project \"{}\"", project.name);
+                }
             }
             ProjectCommand::SetSort { mode } => {
-                service.set_project_sorting_mode(&project, mode).await?;
-                println!(
-                    "Set sort mode of project \"{}\" to \"{}\"",
-                    project.name, mode
-                );
+                let updated = service.set_project_sorting_mode(&project, mode).await?;
+                if output_json {
+                    print_json(&updated)?;
+                } else {
+                    println!(
+                        "Set sort mode of project \"{}\" to \"{}\"",
+                        project.name, mode
+                    );
+                }
             }
             ProjectCommand::ShowPriority => {
-                service
+                let updated = service
                     .set_project_should_show_priority(&project, true)
                     .await?;
-                println!("Showing priority in project \"{}\"", project.name);
+                if output_json {
+                    print_json(&updated)?;
+                } else {
+                    println!("Showing priority in project \"{}\"", project.name);
+                }
             }
             ProjectCommand::HidePriority => {
-                service
+                let updated = service
                     .set_project_should_show_priority(&project, false)
                     .await?;
-                println!("Hiding priority in project \"{}\"", project.name);
+                if output_json {
+                    print_json(&updated)?;
+                } else {
+                    println!("Hiding priority in project \"{}\"", project.name);
+                }
             }
             ProjectCommand::Status(status_cmd) => match status_cmd {
                 StatusCommand::List => {
