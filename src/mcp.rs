@@ -956,28 +956,33 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn http_transport_answers_the_initialize_handshake() {
+    async fn http_request(
+        app: &axum::Router,
+        authorization: Option<&str>,
+        origin: Option<&str>,
+    ) -> (axum::http::StatusCode, String) {
         use axum::body::Body;
-        use axum::http::{Request, StatusCode, header};
+        use axum::http::{Request, header};
         use tower::ServiceExt;
-
-        let (_dir, server) = test_server().await;
-        let app = http::router(&server.store);
 
         let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"scry-test","version":"0"}}}"#;
 
+        let mut builder = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header(header::HOST, "127.0.0.1")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ACCEPT, "application/json, text/event-stream");
+        if let Some(authorization) = authorization {
+            builder = builder.header(header::AUTHORIZATION, authorization);
+        }
+        if let Some(origin) = origin {
+            builder = builder.header(header::ORIGIN, origin);
+        }
+
         let response = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/mcp")
-                    .header(header::HOST, "127.0.0.1")
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header(header::ACCEPT, "application/json, text/event-stream")
-                    .body(Body::from(initialize))
-                    .expect("build request"),
-            )
+            .clone()
+            .oneshot(builder.body(Body::from(initialize)).expect("build request"))
             .await
             .expect("send request");
 
@@ -985,10 +990,55 @@ mod tests {
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("read body");
-        let body = String::from_utf8(bytes.to_vec()).expect("utf-8 body");
+        (
+            status,
+            String::from_utf8(bytes.to_vec()).expect("utf-8 body"),
+        )
+    }
 
-        assert_eq!(status, StatusCode::OK, "{body}");
+    #[tokio::test]
+    async fn http_transport_answers_the_initialize_handshake() {
+        let (_dir, server) = test_server().await;
+        let app = http::router(&server.store, None, false);
+
+        let (status, body) = http_request(&app, None, None).await;
+        assert_eq!(status, axum::http::StatusCode::OK, "{body}");
         assert!(body.contains("serverInfo"), "{body}");
         assert!(body.contains("scry"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn http_transport_requires_the_bearer_token_when_configured() {
+        let (_dir, server) = test_server().await;
+        let app = http::router(&server.store, Some("0123456789abcdef".to_string()), false);
+
+        let (status, _) = http_request(&app, None, None).await;
+        assert_eq!(status, axum::http::StatusCode::UNAUTHORIZED);
+
+        let (status, body) = http_request(&app, Some("Bearer 0123456789abcdef"), None).await;
+        assert_eq!(status, axum::http::StatusCode::OK, "{body}");
+
+        // The scheme is matched case-insensitively.
+        let (status, body) = http_request(&app, Some("bearer 0123456789abcdef"), None).await;
+        assert_eq!(status, axum::http::StatusCode::OK, "{body}");
+    }
+
+    #[tokio::test]
+    async fn http_transport_rejects_foreign_origins() {
+        let (_dir, server) = test_server().await;
+        let app = http::router(&server.store, None, false);
+
+        let (status, _) = http_request(&app, None, Some("https://evil.example")).await;
+        assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn host_loopback_detection() {
+        assert!(http::host_is_loopback("127.0.0.1:8000"));
+        assert!(http::host_is_loopback("localhost:8000"));
+        assert!(http::host_is_loopback("[::1]:8000"));
+        assert!(!http::host_is_loopback("0.0.0.0:8000"));
+        assert!(!http::host_is_loopback("192.168.1.5:8000"));
+        assert!(!http::host_is_loopback("example.com:8000"));
     }
 }

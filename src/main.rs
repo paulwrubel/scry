@@ -126,7 +126,8 @@ enum Command {
     /// Serve the Model Context Protocol (MCP)
     Mcp {
         /// Serve over streamable HTTP on this address (for example `127.0.0.1:8000`)
-        /// instead of over stdio.
+        /// instead of over stdio. The address decides exposure: a non-loopback
+        /// bind is reachable from other hosts.
         #[arg(long, value_name = "ADDR")]
         http: Option<String>,
     },
