@@ -100,6 +100,7 @@ pub enum StatusStyle {
     Checked,
     #[value(alias("strike"))]
     Strikethrough,
+    Hidden,
 }
 
 impl Display for StatusStyle {

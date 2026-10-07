@@ -155,6 +155,7 @@ mod tests {
             },
             is_entry: false,
             tasks_with_notes: tasks,
+            hidden_task_count: 0,
         }
     }
 

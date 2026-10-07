@@ -1,5 +1,5 @@
 use crate::{
-    models::TaskId,
+    models::{StatusStyle, TaskId},
     state::StatusWithTasks,
     tui::component::{TaskLine, shared::truncate_string_to_width},
 };
@@ -36,7 +36,10 @@ impl<'a> From<TaskStatusList<'a>> for Text<'a> {
         let status: &crate::models::Status = &value.status_with_tasks.status;
         let is_entry = value.status_with_tasks.is_entry;
         let status_name = &status.name;
-        let task_count = value.status_with_tasks.tasks_with_notes.len();
+        let is_hidden = status.style == StatusStyle::Hidden;
+        let hidden_suffix = if is_hidden { " <hidden>" } else { "" };
+        let task_count = value.status_with_tasks.tasks_with_notes.len()
+            + value.status_with_tasks.hidden_task_count;
 
         let status_color = status.color.map_or(Color::default(), |c| c.into());
 
@@ -52,12 +55,14 @@ impl<'a> From<TaskStatusList<'a>> for Text<'a> {
             value
                 .area_width
                 .saturating_sub(task_count_str.chars().count() as u16)
+                .saturating_sub(hidden_suffix.chars().count() as u16)
                 .saturating_sub(1)
                 .into(),
         );
         text.push_line(
             Line::from(vec![
                 Span::from(status_name_str.clone()).italic(),
+                Span::from(hidden_suffix),
                 Span::from(
                     " ".repeat(
                         value
@@ -66,7 +71,8 @@ impl<'a> From<TaskStatusList<'a>> for Text<'a> {
                                 // status name is truncated above, there's no risk here
                                 status_name_str.chars().count() as u16
                                 // and for task count, this is essentially statically bounded
-                                    + task_count_str.chars().count() as u16,
+                                    + task_count_str.chars().count() as u16
+                                    + hidden_suffix.chars().count() as u16,
                             )
                             .into(),
                     ),
@@ -95,5 +101,56 @@ impl<'a> From<TaskStatusList<'a>> for Text<'a> {
         }
 
         text
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TaskStatusList;
+    use crate::{
+        models::{Status, StatusStyle},
+        state::StatusWithTasks,
+    };
+    use ratatui::text::{Line, Text};
+
+    fn status_with_tasks(style: StatusStyle, hidden_task_count: usize) -> StatusWithTasks {
+        StatusWithTasks {
+            status: Status {
+                id: 1,
+                project_id: 1,
+                name: "Test Status".to_string(),
+                position: 0,
+                color: None,
+                style,
+            },
+            is_entry: false,
+            tasks_with_notes: Vec::new(),
+            hidden_task_count,
+        }
+    }
+
+    fn line_text(line: &Line<'_>) -> String {
+        line.to_string()
+    }
+
+    #[test]
+    fn hidden_status_header_shows_notice_and_real_count() {
+        let swt = status_with_tasks(StatusStyle::Hidden, 3);
+        let text = Text::from(TaskStatusList::new(&swt, None, false, 40));
+
+        assert_eq!(text.lines.len(), 2);
+        let header = line_text(&text.lines[0]);
+        assert!(header.contains("<hidden>"), "header was {header:?}");
+        assert!(header.contains("[3]"), "header was {header:?}");
+    }
+
+    #[test]
+    fn visible_status_header_has_no_notice() {
+        let swt = status_with_tasks(StatusStyle::None, 0);
+        let text = Text::from(TaskStatusList::new(&swt, None, false, 40));
+
+        let header = line_text(&text.lines[0]);
+        assert!(header.contains("[0]"), "header was {header:?}");
+        assert!(!header.contains("<hidden>"), "header was {header:?}");
     }
 }
