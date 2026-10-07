@@ -163,6 +163,41 @@ impl ScryServer {
     ) -> Result<CallToolResult, McpError> {
         tool_result(tools::notes::add_note(&self.store, &params).await)
     }
+
+    #[tool(description = "Create a project, optionally from a template (todolist or kanban)")]
+    async fn project_create(
+        &self,
+        Parameters(params): Parameters<tools::projects::ProjectCreateParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::projects::create_project(&self.store, &params).await)
+    }
+
+    #[tool(description = "Rename a project")]
+    async fn project_rename(
+        &self,
+        Parameters(params): Parameters<tools::projects::ProjectRenameParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::projects::rename_project(&self.store, &params).await)
+    }
+
+    #[tool(description = "Set the active project")]
+    async fn project_use(
+        &self,
+        Parameters(params): Parameters<tools::projects::ProjectUseParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::projects::use_project(&self.store, &params).await)
+    }
+
+    #[tool(
+        description = "Permanently delete a project and all of its tasks",
+        annotations(destructive_hint = true)
+    )]
+    async fn project_delete(
+        &self,
+        Parameters(params): Parameters<tools::projects::ProjectDeleteParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::projects::delete_project(&self.store, &params).await)
+    }
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -531,5 +566,128 @@ mod tests {
             .await
             .expect("task_show");
         assert!(text_of(&shown).contains("a note"), "{}", text_of(&shown));
+    }
+
+    #[tokio::test]
+    async fn project_create_seeds_template_statuses() {
+        let (_dir, server) = test_server().await;
+
+        let created = server
+            .project_create(Parameters(tools::projects::ProjectCreateParams {
+                name: "todolist".to_string(),
+                template: Some("todolist".to_string()),
+            }))
+            .await
+            .expect("project_create");
+        assert!(
+            text_of(&created).contains("\"name\":\"todolist\""),
+            "{}",
+            text_of(&created)
+        );
+
+        let statuses = server
+            .status_list(Parameters(tools::projects::StatusListParams {
+                project: Some("todolist".to_string()),
+            }))
+            .await
+            .expect("status_list");
+        let text = text_of(&statuses);
+        assert!(text.contains("\"name\":\"todo\""), "{text}");
+        assert!(text.contains("\"name\":\"done\""), "{text}");
+    }
+
+    #[tokio::test]
+    async fn project_create_rejects_unknown_templates() {
+        let (_dir, server) = test_server().await;
+
+        let result = server
+            .project_create(Parameters(tools::projects::ProjectCreateParams {
+                name: "mystery".to_string(),
+                template: Some("nope".to_string()),
+            }))
+            .await
+            .expect("project_create");
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            text_of(&result).contains("\"kind\":\"invalid\""),
+            "{}",
+            text_of(&result)
+        );
+    }
+
+    #[tokio::test]
+    async fn project_rename_changes_the_name() {
+        let (_dir, server) = test_server().await;
+        server
+            .project_create(Parameters(tools::projects::ProjectCreateParams {
+                name: "alpha".to_string(),
+                template: None,
+            }))
+            .await
+            .expect("project_create");
+
+        let renamed = server
+            .project_rename(Parameters(tools::projects::ProjectRenameParams {
+                old_name: "alpha".to_string(),
+                new_name: "beta".to_string(),
+            }))
+            .await
+            .expect("project_rename");
+        assert!(
+            text_of(&renamed).contains("\"name\":\"beta\""),
+            "{}",
+            text_of(&renamed)
+        );
+    }
+
+    #[tokio::test]
+    async fn project_use_switches_the_active_project() {
+        let (_dir, server) = test_server().await;
+        server
+            .project_create(Parameters(tools::projects::ProjectCreateParams {
+                name: "alpha".to_string(),
+                template: None,
+            }))
+            .await
+            .expect("project_create");
+
+        server
+            .project_use(Parameters(tools::projects::ProjectUseParams {
+                name: "alpha".to_string(),
+            }))
+            .await
+            .expect("project_use");
+
+        let current = server.project_current().await.expect("project_current");
+        assert!(
+            text_of(&current).contains("\"name\":\"alpha\""),
+            "{}",
+            text_of(&current)
+        );
+    }
+
+    #[tokio::test]
+    async fn project_delete_removes_the_project() {
+        let (_dir, server) = test_server().await;
+        server
+            .project_create(Parameters(tools::projects::ProjectCreateParams {
+                name: "alpha".to_string(),
+                template: None,
+            }))
+            .await
+            .expect("project_create");
+
+        let deleted = server
+            .project_delete(Parameters(tools::projects::ProjectDeleteParams {
+                name: "alpha".to_string(),
+            }))
+            .await
+            .expect("project_delete");
+        assert_eq!(deleted.is_error, Some(false));
+
+        let listed = server.project_list().await.expect("project_list");
+        let text = text_of(&listed);
+        assert!(text.contains("default"), "{text}");
+        assert!(!text.contains("\"name\":\"alpha\""), "{text}");
     }
 }
