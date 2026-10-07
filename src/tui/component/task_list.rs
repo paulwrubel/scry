@@ -1,4 +1,5 @@
 use crate::models::TaskId;
+use crate::state::StatusWithTasks;
 use crate::tui::component::TaskStatusList;
 use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -71,11 +72,11 @@ impl TaskList {
             .render(Paragraph::new(task_list_lines).scroll((self.scroll_offset, 0)));
     }
 
-    fn line_index_from_task_id(state: &ProjectState, task_id: TaskId) -> u16 {
+    fn line_index_from_task_id(statuses_with_tasks: &[StatusWithTasks], task_id: TaskId) -> u16 {
         let mut line_index = 0;
-        for status in &state.statuses_with_tasks {
-            // the status header counts as a line
-            line_index += 1;
+        for status in statuses_with_tasks {
+            // each status renders a name/count line and a separator line
+            line_index += 2;
             for task in &status.tasks_with_notes {
                 if task.id == task_id {
                     return line_index;
@@ -97,7 +98,8 @@ impl TaskList {
     ) {
         // todo
         if let Some(task_id) = selected_task_id {
-            let line_to_ensure_visibility = Self::line_index_from_task_id(state, task_id);
+            let line_to_ensure_visibility =
+                Self::line_index_from_task_id(&state.statuses_with_tasks, task_id);
 
             let min_visible_index = self.scroll_offset;
             let max_visible_index = min_visible_index + area.height - 1;
@@ -112,9 +114,61 @@ impl TaskList {
                 && let Some(iis) = state.index_in_status(task_id)
                 && iis == 0
             {
-                // header visibility!
-                self.scroll_offset -= 1
+                // reveal the two-line status header (name + separator)
+                self.scroll_offset -= 2
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TaskList;
+    use crate::models::{Priority, Status, StatusId, StatusStyle, Tags, TaskId};
+    use crate::state::{StatusWithTasks, TaskWithNotes};
+    use chrono::Utc;
+
+    fn task(id: TaskId, status_id: StatusId) -> TaskWithNotes {
+        TaskWithNotes {
+            id,
+            project_id: 1,
+            title: format!("task {id}"),
+            description: None,
+            priority: Priority::default(),
+            status_id,
+            position: id as i32,
+            tags: Tags::default(),
+            created_at: Utc::now(),
+            notes: Vec::new(),
+        }
+    }
+
+    fn status(id: StatusId, name: &str, tasks: Vec<TaskWithNotes>) -> StatusWithTasks {
+        StatusWithTasks {
+            status: Status {
+                id,
+                project_id: 1,
+                name: name.to_string(),
+                position: id as i32,
+                color: None,
+                style: StatusStyle::None,
+            },
+            is_entry: false,
+            tasks_with_notes: tasks,
+        }
+    }
+
+    #[test]
+    fn line_index_accounts_for_two_line_status_headers() {
+        // rendered rows: 0 = "a" header, 1 = "a" separator, 2 = task 1, 3 = task 2,
+        // 4 = spacer, 5 = "b" header, 6 = "b" separator, 7 = task 3
+        let statuses = vec![
+            status(1, "a", vec![task(1, 1), task(2, 1)]),
+            status(2, "b", vec![task(3, 2)]),
+        ];
+
+        assert_eq!(TaskList::line_index_from_task_id(&statuses, 1), 2);
+        assert_eq!(TaskList::line_index_from_task_id(&statuses, 2), 3);
+        assert_eq!(TaskList::line_index_from_task_id(&statuses, 3), 7);
     }
 }
