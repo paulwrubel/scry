@@ -1986,6 +1986,7 @@ dependencies = [
  "ratatui-textarea",
  "regex",
  "serde",
+ "serde_json",
  "shlex",
  "sqlx",
  "strum",
