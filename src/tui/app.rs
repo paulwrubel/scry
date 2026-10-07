@@ -1,5 +1,5 @@
 use crate::config::ScryConfig;
-use crate::error::{AppError, StorageError};
+use crate::error::AppError;
 use crate::models::ProjectId;
 use crate::service::ProjectService;
 use crate::state::ProjectState;
@@ -201,46 +201,51 @@ impl<S: TaskStore + Sync> App<'_, S> {
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::CreateStatus(status) => {
-                match Self::block_on(self.store.create_status(
-                    status.project_id,
-                    status.name,
-                    status.position,
-                    status.color,
-                    status.style,
-                )) {
+            Action::CreateStatus { name } => {
+                match Self::block_on(service.create_status(state.project(), name)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::UpdateStatus(status) => {
-                match Self::block_on(async {
-                    let current =
-                        self.store
-                            .get_status_by_id(status.id)
-                            .await?
-                            .ok_or_else(|| {
-                                StorageError::NotFound(format!(
-                                    "status with id '{}' not found",
-                                    status.id
-                                ))
-                            })?;
-                    if current.position == status.position {
-                        self.store.update_status(status).await.map(|_| ())
-                    } else {
-                        self.store
-                            .reorder_status(status.project_id, status.id, status.position)
-                            .await
-                    }
-                }) {
+            Action::RenameStatus {
+                status_id,
+                new_name,
+            } => {
+                match Self::block_on(service.rename_status(state.project(), status_id, new_name)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::DeleteStatus(id) => match Self::block_on(self.store.delete_status(id)) {
-                Ok(_) => None,
-                Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-            },
+            Action::SetStatusColor { status_id, color } => {
+                match Self::block_on(service.set_status_color(state.project(), status_id, color)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::SetStatusStyle { status_id, style } => {
+                match Self::block_on(service.set_status_style(state.project(), status_id, style)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::MoveStatusUp { status_id } => {
+                match Self::block_on(service.move_status_up(state.project(), status_id)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::MoveStatusDown { status_id } => {
+                match Self::block_on(service.move_status_down(state.project(), status_id)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::DeleteStatus { status_id } => {
+                match Self::block_on(service.delete_status(state.project(), status_id)) {
+                    Ok(()) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
             Action::UpdateProject(project) => {
                 match Self::block_on(self.store.update_project(project)) {
                     Ok(_) => None,

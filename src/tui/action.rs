@@ -1,4 +1,4 @@
-use crate::models::{Project, Status, StatusId, TaskId};
+use crate::models::{Color, Project, StatusId, StatusStyle, TaskId};
 use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
 use crate::tui::component::popup::ConfirmDeleteEntity;
@@ -21,17 +21,44 @@ pub enum Action {
 
     // ── tasks ──
     CreateTask(TaskInput),
-    UpdateTask { id: TaskId, input: TaskInput },
+    UpdateTask {
+        id: TaskId,
+        input: TaskInput,
+    },
     DuplicateTask(TaskId),
     DeleteTask(TaskId),
 
     // ── notes ──
-    AddTaskNote { task_id: TaskId, contents: String },
+    AddTaskNote {
+        task_id: TaskId,
+        contents: String,
+    },
 
     // ── statuses ──
-    CreateStatus(Status),
-    UpdateStatus(Status),
-    DeleteStatus(StatusId),
+    CreateStatus {
+        name: String,
+    },
+    RenameStatus {
+        status_id: StatusId,
+        new_name: String,
+    },
+    SetStatusColor {
+        status_id: StatusId,
+        color: Option<Color>,
+    },
+    SetStatusStyle {
+        status_id: StatusId,
+        style: StatusStyle,
+    },
+    MoveStatusUp {
+        status_id: StatusId,
+    },
+    MoveStatusDown {
+        status_id: StatusId,
+    },
+    DeleteStatus {
+        status_id: StatusId,
+    },
 
     // ── projects ──
     UpdateProject(Project),

@@ -128,9 +128,13 @@ impl Root<'_> {
                     Action::CreateTask(_)
                     | Action::UpdateTask { .. }
                     | Action::DuplicateTask(_)
-                    | Action::CreateStatus(_)
-                    | Action::UpdateStatus(_)
-                    | Action::DeleteStatus(_)
+                    | Action::CreateStatus { .. }
+                    | Action::RenameStatus { .. }
+                    | Action::SetStatusColor { .. }
+                    | Action::SetStatusStyle { .. }
+                    | Action::MoveStatusUp { .. }
+                    | Action::MoveStatusDown { .. }
+                    | Action::DeleteStatus { .. }
                     | Action::AddTaskNote { .. }
                     | Action::UpdateProject(_) => {
                         self.popup = None;
