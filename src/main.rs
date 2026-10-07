@@ -749,7 +749,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     let status = service.get_status_by_name(&project, &name).await?;
                     let moved = service.move_status_up(&project, status.id).await?;
                     if output_json {
-                        print_json(&status)?;
+                        print_json(moved.as_ref().unwrap_or(&status))?;
                     } else {
                         match moved {
                             Some(_) => println!(
@@ -767,7 +767,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     let status = service.get_status_by_name(&project, &name).await?;
                     let moved = service.move_status_down(&project, status.id).await?;
                     if output_json {
-                        print_json(&status)?;
+                        print_json(moved.as_ref().unwrap_or(&status))?;
                     } else {
                         match moved {
                             Some(_) => println!(
