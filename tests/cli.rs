@@ -35,7 +35,9 @@ impl Harness {
                 self.temp_dir.path().join("scry.db").display()
             ),
         )
-        .env("XDG_CONFIG_HOME", self.temp_dir.path().join("config"));
+        .env("XDG_CONFIG_HOME", self.temp_dir.path().join("config"))
+        .env("HOME", self.temp_dir.path())
+        .current_dir(self.temp_dir.path());
         cmd
     }
 
@@ -1113,4 +1115,119 @@ fn json_status_move_returns_post_move_position() {
     );
     assert_eq!(moved["name"], "done");
     assert_eq!(moved["position"], 0);
+}
+
+#[test]
+fn skill_install_writes_global_claude_code_file() {
+    let h = Harness::new();
+    let path = h.temp_dir.path().join(".claude/skills/scry/SKILL.md");
+
+    assert_stdout(
+        &h.run(&["skill", "install", "--harness", "claude-code"])
+            .success(),
+        &format!("Installed scry skill to {}", path.display()),
+    );
+
+    let content = std::fs::read_to_string(&path).expect("skill file written");
+    assert!(content.starts_with("---\nname: scry\n"));
+}
+
+#[test]
+fn skill_install_dir_flag_writes_to_custom_skills_root() {
+    let h = Harness::new();
+
+    assert_stdout(
+        &h.run(&["skill", "install", "--dir", ".opencode/skills"])
+            .success(),
+        "Installed scry skill to .opencode/skills/scry/SKILL.md",
+    );
+
+    assert!(
+        h.temp_dir
+            .path()
+            .join(".opencode/skills/scry/SKILL.md")
+            .is_file()
+    );
+}
+
+#[test]
+fn skill_install_requires_exactly_one_target() {
+    let h = Harness::new();
+
+    h.run(&["skill", "install"]).failure();
+
+    h.run(&["skill", "install", "--harness", "agents", "--dir", "custom"])
+        .failure();
+}
+
+#[test]
+fn skill_install_refuses_without_force_and_force_overwrites() {
+    let h = Harness::new();
+    let path = h.temp_dir.path().join(".agents/skills/scry/SKILL.md");
+
+    h.run(&["skill", "install", "--harness", "agents"])
+        .success();
+
+    h.run(&["skill", "install", "--harness", "agents"])
+        .failure()
+        .stderr(predicate::str::contains("--force"));
+
+    std::fs::write(&path, "clobbered").expect("overwrite skill file");
+
+    h.run(&["skill", "install", "--harness", "agents", "--force"])
+        .success();
+
+    let content = std::fs::read_to_string(&path).expect("skill file written");
+    assert!(content.starts_with("---\nname: scry\n"));
+}
+
+#[test]
+fn skill_uninstall_removes_file_and_errors_when_absent() {
+    let h = Harness::new();
+    let path = h.temp_dir.path().join(".agents/skills/scry/SKILL.md");
+
+    h.run(&["skill", "install", "--harness", "agents"])
+        .success();
+    assert!(path.is_file());
+
+    assert_stdout(
+        &h.run(&["skill", "uninstall", "--harness", "agents"])
+            .success(),
+        &format!("Uninstalled scry skill from {}", path.display()),
+    );
+    assert!(!path.exists());
+
+    h.run(&["skill", "uninstall", "--harness", "agents"])
+        .failure()
+        .stderr(predicate::str::contains("no scry skill installed"));
+}
+
+#[test]
+fn skill_print_writes_nothing_to_disk() {
+    let h = Harness::new();
+
+    let assert = h.run(&["skill", "print"]).success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf-8 stdout");
+    assert!(stdout.starts_with("---\nname: scry\n"));
+
+    assert!(!h.temp_dir.path().join(".claude").exists());
+    assert!(!h.temp_dir.path().join(".agents").exists());
+    assert!(!h.temp_dir.path().join(".opencode").exists());
+}
+
+#[test]
+fn skill_uninstall_dir_flag_removes_custom_install() {
+    let h = Harness::new();
+    let path = h.temp_dir.path().join("custom/skills/scry/SKILL.md");
+
+    h.run(&["skill", "install", "--dir", "custom/skills"])
+        .success();
+    assert!(path.is_file());
+
+    assert_stdout(
+        &h.run(&["skill", "uninstall", "--dir", "custom/skills"])
+            .success(),
+        "Uninstalled scry skill from custom/skills/scry/SKILL.md",
+    );
+    assert!(!path.exists());
 }
