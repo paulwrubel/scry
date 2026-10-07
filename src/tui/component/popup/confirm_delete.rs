@@ -24,7 +24,9 @@ impl ConfirmDelete {
         match key.code {
             KeyCode::Esc | KeyCode::Char('n') => Some(Action::DismissPopup),
             KeyCode::Delete | KeyCode::Char('y') => match &self.0 {
-                ConfirmDeleteEntity::Status(status) => Some(Action::DeleteStatus(status.id)),
+                ConfirmDeleteEntity::Status(status) => Some(Action::DeleteStatus {
+                    status_id: status.id,
+                }),
                 ConfirmDeleteEntity::Task(task) => Some(Action::DeleteTask(task.id)),
             },
             _ => None,

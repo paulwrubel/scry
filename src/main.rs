@@ -2,17 +2,18 @@ mod color;
 mod config;
 mod error;
 mod models;
+mod service;
 mod state;
 mod store;
 mod tui;
 
 use crate::color::ColorChoice;
 use crate::models::{
-    Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Status, StatusStyle, Tags, Task,
+    Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, StatusStyle, Tags,
     TaskSortingMode,
 };
+use crate::service::{ProjectService, TaskInput};
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
-use crate::store::TaskToCreate;
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use config::ScryConfig;
@@ -231,7 +232,17 @@ enum StatusCommand {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), AppError> {
+async fn main() -> std::process::ExitCode {
+    match run().await {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+async fn run() -> Result<(), AppError> {
     let cli = Cli::parse();
     cli.color.apply();
     let config = ScryConfig::load()?;
@@ -244,6 +255,8 @@ async fn main() -> Result<(), AppError> {
         return app.run().await;
     };
 
+    let service = ProjectService::new(&store);
+
     match command {
         Command::Add {
             title,
@@ -252,66 +265,30 @@ async fn main() -> Result<(), AppError> {
             tags,
             status,
         } => {
-            let statuses = store.get_all_statuses_by_project_id(project.id).await?;
-            let target_status = match status {
-                Some(name) => {
-                    let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, name.clone())
-                        .await?
-                    else {
-                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
-                        return Ok(());
-                    };
-                    status
-                }
-                None => project
-                    .entry_status_id
-                    .and_then(|id| statuses.iter().find(|s| s.id == id).cloned())
-                    .or_else(|| statuses.first().cloned())
-                    .ok_or_else(|| AppError::Internal("project has no statuses".to_string()))?,
+            let status_id = match status {
+                Some(name) => Some(service.get_status_by_name(&project, &name).await?.id),
+                None => None,
             };
-            let position = store
-                .get_all_tasks_by_status_id(target_status.id)
-                .await?
-                .iter()
-                .map(|t| t.position)
-                .max()
-                .map_or(0, |p| p + 1);
-            let task = store
-                .create_task(TaskToCreate {
-                    project_id: project.id,
-                    title,
-                    description: description.filter(|d| !d.is_empty()),
-                    priority: priority.unwrap_or_default(),
-                    status_id: target_status.id,
-                    position,
-                    tags: tags.map(|t| Tags::from(t.as_str())).unwrap_or_default(),
-                })
-                .await?;
+            let new_task = TaskInput {
+                title: Some(title),
+                description,
+                priority,
+                tags: tags.map(|tags| Tags::from(tags.as_str())),
+                status: status_id,
+            };
+            let change = service.create_task(&project, new_task).await?;
             println!(
                 "Created task {} in \"{}\" [{}]: {}",
-                task.id, project.name, target_status.name, task.title
+                change.task.id, project.name, change.status.name, change.task.title
             );
         }
         Command::Move { id, status } => {
-            let Some(status) = store
-                .get_status_by_project_id_and_status_name(project.id, status.clone())
-                .await?
-            else {
-                eprintln!("Status \"{}\" not found in \"{}\"", status, project.name);
-                return Ok(());
-            };
-            let Some(task) = store.get_task_by_id(id).await? else {
-                eprintln!("Task {} not found in \"{}\"", id, project.name);
-                return Ok(());
-            };
-            let task = store
-                .update_and_autoposition_task(Task {
-                    status_id: status.id,
-                    ..task
-                })
-                .await?;
-            println!("Moved task {} --> \"{}\"", task.id, status.name);
+            let status = service.get_status_by_name(&project, &status).await?;
+            let change = service.move_task(&project, id, status.id).await?;
+            println!(
+                "Moved task {} --> \"{}\"",
+                change.task.id, change.status.name
+            );
         }
         Command::Update {
             id,
@@ -327,79 +304,44 @@ async fn main() -> Result<(), AppError> {
                 && tags.is_none()
                 && status.is_none()
             {
-                eprintln!("No flags provided. Use 'scry update --help' for available options.");
-                return Ok(());
+                return Err(AppError::Usage(
+                    "No flags provided. Use 'scry update --help' for available options."
+                        .to_string(),
+                ));
             }
-            let Some(task) = store.get_task_by_id(id).await? else {
-                eprintln!("Task {} not found in \"{}\"", id, project.name);
-                return Ok(());
-            };
             let status_id = match status {
-                Some(status_name) => {
-                    let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, status_name.clone())
-                        .await?
-                    else {
-                        eprintln!(
-                            "Status \"{}\" not found in \"{}\"",
-                            status_name, project.name
-                        );
-                        return Ok(());
-                    };
-                    status.id
-                }
-                None => task.status_id,
+                Some(name) => Some(service.get_status_by_name(&project, &name).await?.id),
+                None => None,
             };
-            let updated = store
-                .update_and_autoposition_task(Task {
-                    id: task.id,
-                    project_id: task.project_id,
-                    title: title.unwrap_or(task.title),
-                    description: match description {
-                        Some(d) => Some(d).filter(|d| !d.is_empty()),
-                        None => task.description,
-                    },
-                    priority: priority.unwrap_or(task.priority),
-                    status_id,
-                    position: task.position,
-                    tags: tags.map(|t| Tags::from(t.as_str())).unwrap_or(task.tags),
-                    created_at: task.created_at,
-                })
-                .await?;
+            let patch = TaskInput {
+                title,
+                description,
+                priority,
+                tags: tags.map(|tags| Tags::from(tags.as_str())),
+                status: status_id,
+            };
+            let updated = service.update_task(&project, id, patch).await?;
             println!("Updated task {}.", updated.id);
         }
         Command::Duplicate { id } => {
-            let state = ProjectState::load_from_store(&store, project.id).await?;
-
-            let Some(task) = state.get_task_by_id(id) else {
-                eprintln!("Task {} not found in \"{}\"", id, project.name);
-                return Ok(());
-            };
-
-            let new_task = store.create_task(TaskToCreate::from(task)).await?;
-            let status_name = state
-                .get_status_by_id(new_task.status_id)
-                .map(|s| s.name.as_str())
-                .unwrap_or("?");
+            let change = service.duplicate_task(&project, id).await?;
             println!(
                 "Duplicated task {} as task {} in \"{}\" [{}]",
-                id, new_task.id, project.name, status_name
+                id, change.task.id, project.name, change.status.name
             );
         }
         Command::Delete { id } => {
-            if store.get_task_by_id(id).await?.is_none() {
-                eprintln!("Task {} not found in \"{}\"", id, project.name);
-                return Ok(());
-            }
-            store.delete_task(id).await?;
+            service.delete_task(&project, id).await?;
             println!("Deleted task {} from \"{}\"", id, project.name);
         }
         Command::Show { id } => {
             let state = ProjectState::load_from_store(&store, project.id).await?;
 
             let Some(task) = state.get_task_by_id(id) else {
-                eprintln!("Task {} not found in \"{}\"", id, project.name);
-                return Ok(());
+                return Err(AppError::Usage(format!(
+                    "Task {} not found in \"{}\"",
+                    id, project.name
+                )));
             };
 
             let status = state.get_status_by_id(task.status_id);
@@ -518,14 +460,7 @@ async fn main() -> Result<(), AppError> {
         }
         Command::Note(note_cmd) => match note_cmd {
             NoteCommand::Add { task_id, contents } => {
-                let state = ProjectState::load_from_store(&store, project.id).await?;
-
-                if state.get_task_by_id(task_id).is_none() {
-                    eprintln!("Task {} not found in \"{}\"", task_id, project.name);
-                    return Ok(());
-                }
-
-                let note = store.create_note(task_id, contents).await?;
+                let note = service.add_task_note(&project, task_id, contents).await?;
                 println!("Added note {} to task {}.", note.id, note.task_id);
             }
         },
@@ -545,7 +480,7 @@ async fn main() -> Result<(), AppError> {
                 println!("{}", project.name);
             }
             ProjectCommand::Use { name } => {
-                store.set_active_project(&name).await?;
+                service.set_active_project(&name).await?;
                 println!("Using project \"{}\"", name);
             }
             ProjectCommand::Create {
@@ -556,15 +491,17 @@ async fn main() -> Result<(), AppError> {
                     Some(requested) => {
                         let Some(template) = PROJECT_TEMPLATES.iter().find(|t| t.name == requested)
                         else {
-                            eprintln!("Unknown template name: \"{}\".", requested);
-                            return Ok(());
+                            return Err(AppError::Usage(format!(
+                                "Unknown template name: \"{}\".",
+                                requested
+                            )));
                         };
                         Some(template)
                     }
                     None => None,
                 };
 
-                let project = create_project(&store, name, template.copied()).await?;
+                let project = service.create_project(name, template.copied()).await?;
 
                 println!("Created project \"{}\"", project.name);
                 if template.is_none() {
@@ -589,79 +526,48 @@ async fn main() -> Result<(), AppError> {
                         return Ok(());
                     }
                 }
-                store.delete_project(name.clone()).await?;
+                let new_active = service.delete_project(&name).await?;
                 println!("Deleted project \"{}\"", name);
-                let new_active = store.get_active_project().await?;
                 if new_active.name != name {
                     println!("Using project \"{}\"", new_active.name);
                 }
             }
             ProjectCommand::Rename { old_name, new_name } => {
-                store
-                    .update_project(Project {
-                        name: new_name.clone(),
-                        ..project
-                    })
-                    .await?;
+                service.rename_project(&project, new_name.clone()).await?;
                 println!("Renamed project \"{}\" --> \"{}\"", old_name, new_name);
             }
             ProjectCommand::SetEntryStatus { name } => {
-                if let Some(status) = store
-                    .get_status_by_project_id_and_status_name(project.id, name.clone())
-                    .await?
-                {
-                    let updated = store
-                        .update_project(Project {
-                            entry_status_id: Some(status.id),
-                            ..project
-                        })
-                        .await?;
-                    println!(
-                        "Set entry status of project \"{}\" to \"{}\"",
-                        updated.name, name
-                    );
-                } else {
-                    eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
-                }
-            }
-            ProjectCommand::ResetEntryStatus => {
-                let updated = store
-                    .update_project(Project {
-                        entry_status_id: None,
-                        ..project
-                    })
-                    .await?;
-                println!("Reset entry status of project \"{}\"", updated.name);
-            }
-            ProjectCommand::SetSort { mode } => {
-                let updated = store
-                    .update_project(Project {
-                        task_sorting_mode: mode,
-                        ..project
-                    })
+                let status = service.get_status_by_name(&project, &name).await?;
+                service
+                    .set_project_entry_status(&project, Some(status.id))
                     .await?;
                 println!(
+                    "Set entry status of project \"{}\" to \"{}\"",
+                    project.name, name
+                );
+            }
+            ProjectCommand::ResetEntryStatus => {
+                service.set_project_entry_status(&project, None).await?;
+                println!("Reset entry status of project \"{}\"", project.name);
+            }
+            ProjectCommand::SetSort { mode } => {
+                service.set_project_sorting_mode(&project, mode).await?;
+                println!(
                     "Set sort mode of project \"{}\" to \"{}\"",
-                    updated.name, mode
+                    project.name, mode
                 );
             }
             ProjectCommand::ShowPriority => {
-                let updated = store
-                    .update_project(Project {
-                        show_priority: true,
-                        ..project
-                    })
+                service
+                    .set_project_should_show_priority(&project, true)
                     .await?;
-                println!("Showing priority in project \"{}\"", updated.name);
+                println!("Showing priority in project \"{}\"", project.name);
             }
             ProjectCommand::HidePriority => {
-                let updated = store
-                    .update_project(Project {
-                        show_priority: false,
-                        ..project
-                    })
+                service
+                    .set_project_should_show_priority(&project, false)
                     .await?;
-                println!("Hiding priority in project \"{}\"", updated.name);
+                println!("Hiding priority in project \"{}\"", project.name);
             }
             ProjectCommand::Status(status_cmd) => match status_cmd {
                 StatusCommand::List => {
@@ -672,164 +578,81 @@ async fn main() -> Result<(), AppError> {
                     }
                 }
                 StatusCommand::Add { name } => {
-                    let statuses = store.get_all_statuses_by_project_id(project.id).await?;
-                    let status = store
-                        .create_status(
-                            project.id,
-                            name,
-                            statuses.len() as i32,
-                            None,
-                            StatusStyle::None,
-                        )
-                        .await?;
+                    let status = service.create_status(&project, name).await?;
                     println!(
                         "Added status \"{}\" to project \"{}\"",
                         status.name, project.name
                     );
                 }
                 StatusCommand::Remove { name } => {
-                    if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, name.clone())
-                        .await?
-                    {
-                        let tasks_in_status = store.get_all_tasks_by_status_id(status.id).await?;
-                        if tasks_in_status.is_empty() {
-                            store.delete_status(status.id).await?;
-                            println!(
-                                "Removed status \"{}\" from project \"{}\"",
-                                name, project.name
-                            );
-                        } else {
-                            eprintln!(
-                                "Cannot delete status with active tasks. Status \"{}\" contains {} tasks",
-                                status.name,
-                                tasks_in_status.len()
-                            );
-                        }
-                    }
+                    let status = service.get_status_by_name(&project, &name).await?;
+                    service.delete_status(&project, status.id).await?;
+                    println!(
+                        "Removed status \"{}\" from project \"{}\"",
+                        name, project.name
+                    );
                 }
                 StatusCommand::Rename { old_name, new_name } => {
-                    if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, old_name.clone())
-                        .await?
-                    {
-                        store
-                            .update_status(Status {
-                                name: new_name.clone(),
-                                ..status
-                            })
-                            .await?;
-                        println!(
-                            "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
-                            old_name, new_name, project.name
-                        );
-                    }
+                    let status = service.get_status_by_name(&project, &old_name).await?;
+                    service
+                        .rename_status(&project, status.id, new_name.clone())
+                        .await?;
+                    println!(
+                        "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
+                        old_name, new_name, project.name
+                    );
                 }
                 StatusCommand::MoveUp { name } => {
-                    if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, name.clone())
-                        .await?
-                    {
-                        if status.position > 0 {
-                            store
-                                .reorder_status(project.id, status.id, status.position - 1)
-                                .await?;
-                            println!(
-                                "Moved status \"{}\" up in project \"{}\"",
-                                name, project.name
-                            );
-                        } else {
-                            eprintln!(
-                                "Status \"{}\" is already at the top of \"{}\"",
-                                name, project.name
-                            );
-                        }
-                    } else {
-                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
+                    let status = service.get_status_by_name(&project, &name).await?;
+                    match service.move_status_up(&project, status.id).await? {
+                        Some(_) => println!(
+                            "Moved status \"{}\" up in project \"{}\"",
+                            name, project.name
+                        ),
+                        None => eprintln!(
+                            "Status \"{}\" is already at the top of \"{}\"",
+                            name, project.name
+                        ),
                     }
                 }
                 StatusCommand::MoveDown { name } => {
-                    if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, name.clone())
-                        .await?
-                    {
-                        let max_position = store
-                            .get_all_statuses_by_project_id(project.id)
-                            .await?
-                            .iter()
-                            .map(|s| s.position)
-                            .max()
-                            .unwrap_or(0);
-
-                        if status.position < max_position {
-                            store
-                                .reorder_status(project.id, status.id, status.position + 1)
-                                .await?;
-                            println!(
-                                "Moved status \"{}\" down in project \"{}\"",
-                                name, project.name
-                            );
-                        } else {
-                            eprintln!(
-                                "Status \"{}\" is already at the bottom of \"{}\"",
-                                name, project.name
-                            );
-                        }
-                    } else {
-                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
+                    let status = service.get_status_by_name(&project, &name).await?;
+                    match service.move_status_down(&project, status.id).await? {
+                        Some(_) => println!(
+                            "Moved status \"{}\" down in project \"{}\"",
+                            name, project.name
+                        ),
+                        None => eprintln!(
+                            "Status \"{}\" is already at the bottom of \"{}\"",
+                            name, project.name
+                        ),
                     }
                 }
                 StatusCommand::SetStyle { name, style } => {
-                    if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, name.clone())
-                        .await?
-                    {
-                        store.update_status(Status { style, ..status }).await?;
-                        println!(
-                            "Set style of status \"{}\" to \"{}\" in project \"{}\"",
-                            name, style, project.name
-                        );
-                    } else {
-                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
-                    }
+                    let status = service.get_status_by_name(&project, &name).await?;
+                    service.set_status_style(&project, status.id, style).await?;
+                    println!(
+                        "Set style of status \"{}\" to \"{}\" in project \"{}\"",
+                        name, style, project.name
+                    );
                 }
                 StatusCommand::SetColor { name, color } => {
-                    if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, name.clone())
-                        .await?
-                    {
-                        store
-                            .update_status(Status {
-                                color: Some(color),
-                                ..status
-                            })
-                            .await?;
-                        println!(
-                            "Set color of status \"{}\" to \"{}\" in project \"{}\"",
-                            name, color, project.name
-                        );
-                    } else {
-                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
-                    }
+                    let status = service.get_status_by_name(&project, &name).await?;
+                    service
+                        .set_status_color(&project, status.id, Some(color))
+                        .await?;
+                    println!(
+                        "Set color of status \"{}\" to \"{}\" in project \"{}\"",
+                        name, color, project.name
+                    );
                 }
                 StatusCommand::ResetColor { name } => {
-                    if let Some(status) = store
-                        .get_status_by_project_id_and_status_name(project.id, name.clone())
-                        .await?
-                    {
-                        store
-                            .update_status(Status {
-                                color: None,
-                                ..status
-                            })
-                            .await?;
-                        println!(
-                            "Reset color of status \"{}\" in project \"{}\"",
-                            name, project.name
-                        );
-                    } else {
-                        eprintln!("Status \"{}\" not found in \"{}\"", name, project.name);
-                    }
+                    let status = service.get_status_by_name(&project, &name).await?;
+                    service.set_status_color(&project, status.id, None).await?;
+                    println!(
+                        "Reset color of status \"{}\" in project \"{}\"",
+                        name, project.name
+                    );
                 }
             },
         },
@@ -844,52 +667,10 @@ async fn resolve_project(store: &SqliteStore, flag: Option<&str>) -> Result<Proj
         let project = store
             .get_project_by_name(name)
             .await?
-            .ok_or_else(|| AppError::Internal(format!("project '{}' not found", name)))?;
+            .ok_or_else(|| AppError::Usage(format!("project '{}' not found", name)))?;
         Ok(project)
     } else {
         let project = store.get_active_project().await?;
         Ok(project)
     }
-}
-
-async fn create_project(
-    store: &dyn TaskStore,
-    name: String,
-    template: Option<ProjectTemplate>,
-) -> Result<Project, AppError> {
-    let project = store
-        .create_project(name, None, TaskSortingMode::default(), false)
-        .await?;
-
-    let Some(template) = template else {
-        return Ok(project);
-    };
-
-    let mut statuses = vec![];
-    for status in template.statuses {
-        statuses.push(
-            store
-                .create_status(
-                    project.id,
-                    status.name.to_string(),
-                    status.position,
-                    status.color,
-                    status.style,
-                )
-                .await?,
-        );
-    }
-
-    let entry_status_id = template
-        .entry_status_name
-        .and_then(|name| statuses.iter().find(|s| s.name == name).map(|s| s.id));
-
-    Ok(store
-        .update_project(Project {
-            entry_status_id,
-            task_sorting_mode: template.task_sorting_mode,
-            show_priority: template.show_priority,
-            ..project
-        })
-        .await?)
 }

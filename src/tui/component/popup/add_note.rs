@@ -1,9 +1,8 @@
-use crate::models::{Note, TaskId};
+use crate::models::TaskId;
 use crate::tui::action::Action;
 use crate::tui::component::shared::CONTROL_OR_COMMAND;
 use crate::tui::component::{Button, InputBlock};
 use crate::tui::component::{ProjectState, RenderContext};
-use chrono::DateTime;
 use indoc::indoc;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout};
@@ -102,15 +101,9 @@ impl AddNote {
     }
 
     fn handle_create_or_update(&self, _state: &ProjectState) -> Option<Action> {
-        self.is_valid().then(|| {
-            let contents = self.contents_input.buffer_text();
-
-            Action::CreateNote(Note {
-                id: 0, // dummy id
-                task_id: self.task_id,
-                contents,
-                created_at: DateTime::default(), // dummy, overwritten on insert
-            })
+        self.is_valid().then(|| Action::AddTaskNote {
+            task_id: self.task_id,
+            contents: self.contents_input.buffer_text(),
         })
     }
 

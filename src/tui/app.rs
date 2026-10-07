@@ -1,6 +1,7 @@
 use crate::config::ScryConfig;
-use crate::error::{AppError, StorageError};
+use crate::error::AppError;
 use crate::models::ProjectId;
+use crate::service::ProjectService;
 use crate::state::ProjectState;
 use crate::store::TaskStore;
 use crate::tui::action::Action;
@@ -134,7 +135,7 @@ impl<S: TaskStore + Sync> App<'_, S> {
             match event::read().map_err(|e| AppError::Internal(format!("event error: {}", e)))? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
                     for action in self.root.handle_event(&state, key) {
-                        if let Some(action) = self.process_action(action) {
+                        if let Some(action) = self.process_action(&state, action) {
                             // popup-opening actions (e.g. error popups) go back through Root,
                             // which owns the popup lifecycle
                             self.root.handle_action(&state, action);
@@ -148,7 +149,8 @@ impl<S: TaskStore + Sync> App<'_, S> {
         Ok(())
     }
 
-    fn process_action(&mut self, action: Action) -> Option<Action> {
+    fn process_action(&mut self, state: &ProjectState, action: Action) -> Option<Action> {
+        let service = ProjectService::new(&self.store);
         match action {
             Action::Quit => {
                 self.is_running = false;
@@ -163,73 +165,103 @@ impl<S: TaskStore + Sync> App<'_, S> {
             | Action::CloseCommandInput
             | Action::CloseFilterInput => None,
 
-            Action::CreateTask(task_to_create) => {
-                match Self::block_on(self.store.create_task(task_to_create)) {
-                    Ok(task) => {
-                        self.root.select_task(SelectedTask::Id(task.id));
+            Action::CreateTask(input) => {
+                match Self::block_on(service.create_task(state.project(), input)) {
+                    Ok(change) => {
+                        self.root.select_task(SelectedTask::Id(change.task.id));
                         None
                     }
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::UpdateTask(task) => {
-                match Self::block_on(self.store.update_and_autoposition_task(task)) {
+            Action::UpdateTask { id, input } => {
+                match Self::block_on(service.update_task(state.project(), id, input)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::DeleteTask(task_id) => match Self::block_on(self.store.delete_task(task_id)) {
-                Ok(_) => None,
-                Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-            },
-            Action::CreateNote(note) => {
-                match Self::block_on(self.store.create_note(note.task_id, note.contents)) {
-                    Ok(_) => None,
-                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-                }
-            }
-            Action::CreateStatus(status) => {
-                match Self::block_on(self.store.create_status(
-                    status.project_id,
-                    status.name,
-                    status.position,
-                    status.color,
-                    status.style,
-                )) {
-                    Ok(_) => None,
-                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-                }
-            }
-            Action::UpdateStatus(status) => {
-                match Self::block_on(async {
-                    let current =
-                        self.store
-                            .get_status_by_id(status.id)
-                            .await?
-                            .ok_or_else(|| {
-                                StorageError::NotFound(format!(
-                                    "status with id '{}' not found",
-                                    status.id
-                                ))
-                            })?;
-                    if current.position == status.position {
-                        self.store.update_status(status).await.map(|_| ())
-                    } else {
-                        self.store
-                            .reorder_status(status.project_id, status.id, status.position)
-                            .await
+            Action::DuplicateTask(id) => {
+                match Self::block_on(service.duplicate_task(state.project(), id)) {
+                    Ok(change) => {
+                        self.root.select_task(SelectedTask::Id(change.task.id));
+                        None
                     }
-                }) {
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::DeleteTask(id) => {
+                match Self::block_on(service.delete_task(state.project(), id)) {
+                    Ok(()) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::AddTaskNote { task_id, contents } => {
+                match Self::block_on(service.add_task_note(state.project(), task_id, contents)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::DeleteStatus(id) => match Self::block_on(self.store.delete_status(id)) {
-                Ok(_) => None,
-                Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-            },
-            Action::UpdateProject(project) => {
-                match Self::block_on(self.store.update_project(project)) {
+            Action::CreateStatus { name } => {
+                match Self::block_on(service.create_status(state.project(), name)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::RenameStatus {
+                status_id,
+                new_name,
+            } => {
+                match Self::block_on(service.rename_status(state.project(), status_id, new_name)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::SetStatusColor { status_id, color } => {
+                match Self::block_on(service.set_status_color(state.project(), status_id, color)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::SetStatusStyle { status_id, style } => {
+                match Self::block_on(service.set_status_style(state.project(), status_id, style)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::MoveStatusUp { status_id } => {
+                match Self::block_on(service.move_status_up(state.project(), status_id)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::MoveStatusDown { status_id } => {
+                match Self::block_on(service.move_status_down(state.project(), status_id)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::DeleteStatus { status_id } => {
+                match Self::block_on(service.delete_status(state.project(), status_id)) {
+                    Ok(()) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::SetProjectEntryStatus { status_id } => {
+                match Self::block_on(service.set_project_entry_status(state.project(), status_id)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::SetProjectSortingMode(mode) => {
+                match Self::block_on(service.set_project_sorting_mode(state.project(), mode)) {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
+            Action::SetProjectShouldShowPriority(show) => {
+                match Self::block_on(
+                    service.set_project_should_show_priority(state.project(), show),
+                ) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }

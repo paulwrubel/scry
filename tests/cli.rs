@@ -154,7 +154,7 @@ fn add_rejects_unknown_status() {
     create_todolist(&h, "todolist");
 
     h.run(&["-p", "todolist", "add", "Alpha", "--status", "missing"])
-        .success()
+        .failure()
         .stderr(predicate::str::contains(
             "Status \"missing\" not found in \"todolist\"",
         ));
@@ -218,7 +218,7 @@ fn update_requires_at_least_one_flag() {
     h.run(&["-p", "todolist", "add", "Alpha"]).success();
 
     h.run(&["-p", "todolist", "update", "1"])
-        .success()
+        .failure()
         .stderr(predicate::str::contains("No flags provided"));
 }
 
@@ -375,7 +375,7 @@ fn show_missing_task_reports_to_stderr() {
     create_todolist(&h, "todolist");
 
     h.run(&["-p", "todolist", "show", "999"])
-        .success()
+        .failure()
         .stderr(predicate::str::contains(
             "Task 999 not found in \"todolist\"",
         ));
@@ -424,7 +424,7 @@ fn note_add_rejects_unknown_task() {
     create_todolist(&h, "todolist");
 
     h.run(&["-p", "todolist", "note", "add", "999", "a note"])
-        .success()
+        .failure()
         .stderr(predicate::str::contains(
             "Task 999 not found in \"todolist\"",
         ));
@@ -480,7 +480,7 @@ fn status_set_style_rejects_unknown_status() {
         "missing",
         "checked",
     ])
-    .success()
+    .failure()
     .stderr(predicate::str::contains(
         "Status \"missing\" not found in \"todolist\"",
     ));
@@ -528,7 +528,7 @@ fn status_color_rejects_unknown_status() {
         "missing",
         "green",
     ])
-    .success()
+    .failure()
     .stderr(predicate::str::contains(
         "Status \"missing\" not found in \"todolist\"",
     ));
@@ -541,7 +541,7 @@ fn status_color_rejects_unknown_status() {
         "reset-color",
         "missing",
     ])
-    .success()
+    .failure()
     .stderr(predicate::str::contains(
         "Status \"missing\" not found in \"todolist\"",
     ));
@@ -718,7 +718,7 @@ fn status_move_rejects_unknown_status() {
     create_todolist(&h, "todolist");
 
     h.run(&["-p", "todolist", "project", "status", "move-up", "missing"])
-        .success()
+        .failure()
         .stderr(predicate::str::contains(
             "Status \"missing\" not found in \"todolist\"",
         ));
@@ -731,7 +731,7 @@ fn status_move_rejects_unknown_status() {
         "move-down",
         "missing",
     ])
-    .success()
+    .failure()
     .stderr(predicate::str::contains(
         "Status \"missing\" not found in \"todolist\"",
     ));
@@ -876,7 +876,7 @@ fn project_set_entry_status_rejects_unknown_status() {
     create_todolist(&h, "todolist");
 
     h.run(&["-p", "todolist", "project", "set-entry-status", "missing"])
-        .success()
+        .failure()
         .stderr(predicate::str::contains(
             "Status \"missing\" not found in \"todolist\"",
         ));
