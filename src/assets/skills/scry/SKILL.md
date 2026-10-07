@@ -72,25 +72,26 @@ Every example below includes the global `--json` flag, which must come before th
 
 Every example below includes the global `--json` flag, which must come before the subcommand.
 
-| Command                                             | Purpose                                  |
-| --------------------------------------------------- | ---------------------------------------- |
-| `scry --json project list`                          | List projects (`*` marks the active one) |
-| `scry --json project current`                       | Show the active project                  |
-| `scry --json project use <name>`                    | Set the active project                   |
-| `scry --json project create [-t <template>] <name>` | Create a project                         |
-| `scry --json project rename <old> <new>`            | Rename a project                         |
-| `scry --json project delete <name> [-f]`            | Delete a project and all its tasks       |
-| `scry --json project status list`                   | List a project's statuses                |
-| `scry --json project status add <name>`             | Add a status                             |
-| `scry --json project status remove <name>`          | Remove an empty status                   |
-| `scry --json project status rename <old> <new>`     | Rename a status                          |
-| `scry --json project status move-up <name>`         | Move a status up in the ordering         |
-| `scry --json project status move-down <name>`       | Move a status down in the ordering       |
-| `scry --json project set-entry-status <name>`       | Set the status new tasks default to      |
-| `scry --json project reset-entry-status`            | Default new tasks to the first status    |
-| `scry --json project set-sort <mode>`               | Set the task sorting mode                |
-| `scry --json project show-priority`                 | Show priority in listings                |
-| `scry --json project hide-priority`                 | Hide priority in listings                |
+| Command                                               | Purpose                                  |
+| ----------------------------------------------------- | ---------------------------------------- |
+| `scry --json project list`                            | List projects (`*` marks the active one) |
+| `scry --json project current`                         | Show the active project                  |
+| `scry --json project use <name>`                      | Set the active project                   |
+| `scry --json project create [-t <template>] <name>`   | Create a project                         |
+| `scry --json project rename <old> <new>`              | Rename a project                         |
+| `scry --json project delete <name> [-f]`              | Delete a project and all its tasks       |
+| `scry --json project status list`                     | List a project's statuses                |
+| `scry --json project status add <name>`               | Add a status                             |
+| `scry --json project status remove <name>`            | Remove an empty status                   |
+| `scry --json project status rename <old> <new>`       | Rename a status                          |
+| `scry --json project status move-up <name>`           | Move a status up in the ordering         |
+| `scry --json project status move-down <name>`         | Move a status down in the ordering       |
+| `scry --json project status set-style <name> <style>` | Set a status's style                     |
+| `scry --json project set-entry-status <name>`         | Set the status new tasks default to      |
+| `scry --json project reset-entry-status`              | Default new tasks to the first status    |
+| `scry --json project set-sort <mode>`                 | Set the task sorting mode                |
+| `scry --json project show-priority`                   | Show priority in listings                |
+| `scry --json project hide-priority`                   | Hide priority in listings                |
 
 Project templates seed a project's statuses and settings via
 `scry --json project create -t <template> <name>`:
