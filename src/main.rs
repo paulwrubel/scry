@@ -31,6 +31,10 @@ struct Cli {
     #[arg(long, value_enum, default_value = "auto")]
     color: ColorChoice,
 
+    /// Emit machine-readable JSON instead of human-formatted text
+    #[arg(long)]
+    json: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -233,18 +237,47 @@ enum StatusCommand {
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
-    match run().await {
+    let cli = Cli::parse();
+    let output_json = cli.json;
+
+    match run(cli).await {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("{error}");
+            if output_json {
+                eprintln!("{}", error_document(&error));
+            } else {
+                eprintln!("{error}");
+            }
             std::process::ExitCode::FAILURE
         }
     }
 }
 
-async fn run() -> Result<(), AppError> {
-    let cli = Cli::parse();
-    cli.color.apply();
+/// Render an error as the machine-readable document emitted on stderr under `--json`.
+fn error_document(error: &AppError) -> String {
+    serde_json::json!({
+        "error": {
+            "kind": error.kind(),
+            "message": error.to_string(),
+        }
+    })
+    .to_string()
+}
+
+async fn run(cli: Cli) -> Result<(), AppError> {
+    let output_json = cli.json;
+    if output_json && cli.command.is_none() {
+        return Err(AppError::Usage(
+            "--json is exclusive to cli commands, not the terminal UI".to_string(),
+        ));
+    }
+
+    if output_json {
+        ColorChoice::Never.apply();
+    } else {
+        cli.color.apply();
+    }
+
     let config = ScryConfig::load()?;
     let store = SqliteStore::new(&config.database_url).await?;
 
