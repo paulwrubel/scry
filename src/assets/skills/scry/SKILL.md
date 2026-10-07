@@ -21,8 +21,11 @@ Use it when the user asks to:
 
 ## Discover the exact surface
 
-Start with `scry --help`, then `scry <command> --help` (for example `scry add --help`)
-for the full, current flag set. Prefer these over guessing.
+`scry` is built with `clap`, so every command and subcommand supports `--help`. You can
+append `--help` to essentially any command to get accurate, current usage, its arguments,
+and the accepted values of any enum option (shown as `[possible values: ...]`). For
+example: `scry --help`, `scry add --help`, or `scry project status set-style --help`.
+Prefer this over guessing command names, flags, or values.
 
 ## Output for agents
 
