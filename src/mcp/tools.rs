@@ -2,7 +2,7 @@
 
 use crate::error::{AppError, StorageError};
 use crate::models::Project;
-use crate::store::{TaskStore, sqlite::SqliteStore};
+use crate::store::Store;
 
 pub(crate) mod notes;
 pub(crate) mod project_settings;
@@ -14,7 +14,7 @@ pub(crate) mod tasks;
 /// otherwise the active project. A missing name is reported as a not-found
 /// tool error so the agent can correct itself.
 pub(crate) async fn resolve_project(
-    store: &SqliteStore,
+    store: &dyn Store,
     name: Option<&str>,
 ) -> Result<Project, AppError> {
     match name {

@@ -1,8 +1,6 @@
 //! In-process Model Context Protocol (MCP) server exposing scry operations as tools.
 
-use crate::error::AppError;
-use crate::store::TaskStore;
-use crate::store::sqlite::SqliteStore;
+use crate::{error::AppError, store::ArcStore};
 use rmcp::{
     ErrorData as McpError, ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -55,13 +53,13 @@ where
 /// The scry MCP server. Holds the store that tool handlers operate on.
 #[derive(Clone)]
 pub struct ScryServer {
-    store: SqliteStore,
+    store: ArcStore,
     tool_router: ToolRouter<ScryServer>,
 }
 
 #[tool_router]
 impl ScryServer {
-    pub fn new(store: SqliteStore) -> Self {
+    pub fn new(store: ArcStore) -> Self {
         Self {
             store,
             tool_router: Self::tool_router(),
@@ -82,12 +80,12 @@ impl ScryServer {
 
     #[tool(description = "List all projects")]
     async fn project_list(&self) -> Result<CallToolResult, McpError> {
-        tool_result(tools::projects::list_projects(&self.store).await)
+        tool_result(tools::projects::list_projects(self.store.as_ref()).await)
     }
 
     #[tool(description = "Show the active project")]
     async fn project_current(&self) -> Result<CallToolResult, McpError> {
-        tool_result(tools::projects::active_project(&self.store).await)
+        tool_result(tools::projects::active_project(self.store.as_ref()).await)
     }
 
     #[tool(description = "List the statuses of a project")]
@@ -95,7 +93,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::statuses::StatusListParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::statuses::list_statuses(&self.store, &params).await)
+        tool_result(tools::statuses::list_statuses(self.store.as_ref(), &params).await)
     }
 
     #[tool(
@@ -105,7 +103,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::tasks::TaskListParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::tasks::list_tasks(&self.store, &params).await)
+        tool_result(tools::tasks::list_tasks(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Show full details for a task, including its notes")]
@@ -113,7 +111,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::tasks::TaskShowParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::tasks::show_task(&self.store, &params).await)
+        tool_result(tools::tasks::show_task(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Add a task to a project")]
@@ -121,7 +119,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::tasks::TaskAddParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::tasks::add_task(&self.store, &params).await)
+        tool_result(tools::tasks::add_task(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Update a task's title, description, priority, tags, or status")]
@@ -129,7 +127,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::tasks::TaskUpdateParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::tasks::update_task(&self.store, &params).await)
+        tool_result(tools::tasks::update_task(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Move a task to a different status")]
@@ -137,7 +135,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::tasks::TaskMoveParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::tasks::move_task(&self.store, &params).await)
+        tool_result(tools::tasks::move_task(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Duplicate a task into the same status")]
@@ -145,7 +143,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::tasks::TaskDuplicateParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::tasks::duplicate_task(&self.store, &params).await)
+        tool_result(tools::tasks::duplicate_task(self.store.as_ref(), &params).await)
     }
 
     #[tool(
@@ -156,7 +154,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::tasks::TaskDeleteParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::tasks::delete_task(&self.store, &params).await)
+        tool_result(tools::tasks::delete_task(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Add a note to a task")]
@@ -164,7 +162,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::notes::NoteAddParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::notes::add_note(&self.store, &params).await)
+        tool_result(tools::notes::add_note(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Create a project, optionally from a template (todolist or kanban)")]
@@ -172,7 +170,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::projects::ProjectCreateParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::projects::create_project(&self.store, &params).await)
+        tool_result(tools::projects::create_project(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Rename a project")]
@@ -180,7 +178,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::projects::ProjectRenameParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::projects::rename_project(&self.store, &params).await)
+        tool_result(tools::projects::rename_project(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Set the active project")]
@@ -188,7 +186,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::projects::ProjectUseParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::projects::use_project(&self.store, &params).await)
+        tool_result(tools::projects::use_project(self.store.as_ref(), &params).await)
     }
 
     #[tool(
@@ -199,7 +197,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::projects::ProjectDeleteParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::projects::delete_project(&self.store, &params).await)
+        tool_result(tools::projects::delete_project(self.store.as_ref(), &params).await)
     }
 
     #[tool(
@@ -209,7 +207,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::project_settings::ProjectSetEntryStatusParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::project_settings::set_entry_status(&self.store, &params).await)
+        tool_result(tools::project_settings::set_entry_status(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Set the project's task sorting mode")]
@@ -217,7 +215,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::project_settings::ProjectSetSortModeParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::project_settings::set_sort_mode(&self.store, &params).await)
+        tool_result(tools::project_settings::set_sort_mode(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Show or hide task priority in the project's listings")]
@@ -225,7 +223,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::project_settings::ProjectSetShowPriorityParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::project_settings::set_show_priority(&self.store, &params).await)
+        tool_result(tools::project_settings::set_show_priority(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Add a status to a project")]
@@ -233,7 +231,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::statuses::StatusAddParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::statuses::add_status(&self.store, &params).await)
+        tool_result(tools::statuses::add_status(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Rename a status")]
@@ -241,7 +239,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::statuses::StatusRenameParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::statuses::rename_status(&self.store, &params).await)
+        tool_result(tools::statuses::rename_status(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Move a status up or down within a project's ordering")]
@@ -249,7 +247,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::statuses::StatusMoveParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::statuses::move_status(&self.store, &params).await)
+        tool_result(tools::statuses::move_status(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Set or clear a status's color")]
@@ -257,7 +255,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::statuses::StatusSetColorParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::statuses::set_status_color(&self.store, &params).await)
+        tool_result(tools::statuses::set_status_color(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Set a status's style")]
@@ -265,7 +263,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::statuses::StatusSetStyleParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::statuses::set_status_style(&self.store, &params).await)
+        tool_result(tools::statuses::set_status_style(self.store.as_ref(), &params).await)
     }
 
     #[tool(
@@ -276,7 +274,7 @@ impl ScryServer {
         &self,
         Parameters(params): Parameters<tools::statuses::StatusRemoveParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::statuses::remove_status(&self.store, &params).await)
+        tool_result(tools::statuses::remove_status(self.store.as_ref(), &params).await)
     }
 }
 
@@ -292,7 +290,7 @@ impl ServerHandler for ScryServer {
 }
 
 /// Serve the MCP protocol over stdio until the client disconnects.
-pub async fn serve_stdio(store: SqliteStore) -> Result<(), AppError> {
+pub async fn serve_stdio(store: ArcStore) -> Result<(), AppError> {
     let server = ScryServer::new(store);
     let service = server
         .serve(rmcp::transport::stdio())
@@ -309,12 +307,13 @@ pub async fn serve_stdio(store: SqliteStore) -> Result<(), AppError> {
 mod tests {
     use super::*;
     use crate::service::{ProjectService, TaskInput};
+    use crate::store::sqlite::SqliteStore;
     use assert_fs::TempDir;
 
     async fn test_server() -> (TempDir, ScryServer) {
         let dir = TempDir::new().expect("temp dir");
         let url = format!("sqlite://{}", dir.path().join("scry.db").display());
-        let store = SqliteStore::new(&url).await.expect("store");
+        let store: ArcStore = std::sync::Arc::new(SqliteStore::new(&url).await.expect("store"));
         (dir, ScryServer::new(store))
     }
 
@@ -332,7 +331,7 @@ mod tests {
             .get_active_project()
             .await
             .expect("active project");
-        let service = ProjectService::new(&server.store);
+        let service = ProjectService::new(server.store.as_ref());
         let change = service
             .create_task(
                 &project,
@@ -478,7 +477,7 @@ mod tests {
             .get_active_project()
             .await
             .expect("active project");
-        ProjectService::new(&server.store)
+        ProjectService::new(server.store.as_ref())
             .add_task_note(&project, id, "a note".to_string())
             .await
             .expect("add note");

@@ -6,7 +6,7 @@ use crate::error::{AppError, ServiceError};
 use crate::models::{Priority, Tags, Task};
 use crate::service::{ProjectService, TaskInput};
 use crate::state::{ProjectState, TaskWithNotes};
-use crate::store::sqlite::SqliteStore;
+use crate::store::Store;
 
 use super::resolve_project;
 
@@ -22,7 +22,7 @@ pub struct TaskListParams {
 }
 
 pub(crate) async fn list_tasks(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &TaskListParams,
 ) -> Result<Vec<Task>, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -53,7 +53,7 @@ pub struct TaskShowParams {
 }
 
 pub(crate) async fn show_task(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &TaskShowParams,
 ) -> Result<TaskWithNotes, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -85,10 +85,7 @@ pub struct TaskAddParams {
     pub project: Option<String>,
 }
 
-pub(crate) async fn add_task(
-    store: &SqliteStore,
-    params: &TaskAddParams,
-) -> Result<Task, AppError> {
+pub(crate) async fn add_task(store: &dyn Store, params: &TaskAddParams) -> Result<Task, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
@@ -129,7 +126,7 @@ pub struct TaskUpdateParams {
 }
 
 pub(crate) async fn update_task(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &TaskUpdateParams,
 ) -> Result<Task, AppError> {
     if params.title.is_none()
@@ -174,7 +171,7 @@ pub struct TaskMoveParams {
 }
 
 pub(crate) async fn move_task(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &TaskMoveParams,
 ) -> Result<Task, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -197,7 +194,7 @@ pub struct TaskDuplicateParams {
 }
 
 pub(crate) async fn duplicate_task(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &TaskDuplicateParams,
 ) -> Result<Task, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -216,7 +213,7 @@ pub struct TaskDeleteParams {
 }
 
 pub(crate) async fn delete_task(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &TaskDeleteParams,
 ) -> Result<Task, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;

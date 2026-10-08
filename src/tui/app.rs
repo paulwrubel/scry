@@ -3,11 +3,9 @@ use crate::error::AppError;
 use crate::models::ProjectId;
 use crate::service::ProjectService;
 use crate::state::ProjectState;
-use crate::store::TaskStore;
+use crate::store::ArcStore;
 use crate::tui::action::Action;
-use crate::tui::component::Root;
-use crate::tui::component::{RenderContext, SelectedTask};
-
+use crate::tui::component::{RenderContext, Root, SelectedTask};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
@@ -23,18 +21,18 @@ use std::future::Future;
 use tokio::runtime::Handle;
 
 /// Terminal lifecycle and domain logic. UI orchestration lives in Root.
-pub struct App<'a, S: TaskStore + Sync> {
+pub struct App<'a> {
     root: Root<'a>,
     is_running: bool,
 
     // domain state
     _config: ScryConfig,
-    store: S,
+    store: ArcStore,
     project_id: ProjectId,
 }
 
-impl<S: TaskStore + Sync> App<'_, S> {
-    pub fn new(config: ScryConfig, store: S, project_id: ProjectId) -> Self {
+impl App<'_> {
+    pub fn new(config: ScryConfig, store: ArcStore, project_id: ProjectId) -> Self {
         App {
             root: Root::new(),
             is_running: true,
@@ -113,7 +111,8 @@ impl<S: TaskStore + Sync> App<'_, S> {
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<(), AppError> {
         while self.is_running {
-            let mut state = ProjectState::load_from_store(&self.store, self.project_id).await?;
+            let mut state =
+                ProjectState::load_from_store(self.store.as_ref(), self.project_id).await?;
 
             let filter = self.root.current_filter();
             if !filter.is_empty() {
@@ -152,7 +151,7 @@ impl<S: TaskStore + Sync> App<'_, S> {
     }
 
     fn process_action(&mut self, state: &ProjectState, action: Action) -> Option<Action> {
-        let service = ProjectService::new(&self.store);
+        let service = ProjectService::new(self.store.as_ref());
         match action {
             Action::Quit => {
                 self.is_running = false;

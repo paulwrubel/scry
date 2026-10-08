@@ -5,7 +5,7 @@ use rmcp::schemars;
 use crate::error::AppError;
 use crate::models::Note;
 use crate::service::ProjectService;
-use crate::store::sqlite::SqliteStore;
+use crate::store::Store;
 
 use super::resolve_project;
 
@@ -20,10 +20,7 @@ pub struct NoteAddParams {
     pub project: Option<String>,
 }
 
-pub(crate) async fn add_note(
-    store: &SqliteStore,
-    params: &NoteAddParams,
-) -> Result<Note, AppError> {
+pub(crate) async fn add_note(store: &dyn Store, params: &NoteAddParams) -> Result<Note, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
