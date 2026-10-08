@@ -2275,6 +2275,8 @@ dependencies = [
  "ratatui-textarea",
  "regex",
  "rmcp",
+ "scry-core",
+ "scry-sqlite",
  "serde",
  "serde_json",
  "shlex",
@@ -2285,6 +2287,32 @@ dependencies = [
  "toml",
  "tower",
  "twox-hash",
+]
+
+[[package]]
+name = "scry-core"
+version = "0.20.0"
+dependencies = [
+ "anstyle",
+ "async-trait",
+ "chrono",
+ "clap",
+ "itertools 0.15.0",
+ "num_enum",
+ "ratatui",
+ "serde",
+ "strum",
+]
+
+[[package]]
+name = "scry-sqlite"
+version = "0.20.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "clap",
+ "scry-core",
+ "sqlx",
 ]
 
 [[package]]
