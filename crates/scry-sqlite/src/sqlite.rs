@@ -4,12 +4,12 @@ use clap::ValueEnum;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
-use crate::error::StorageError;
-use crate::models::{
+use scry_core::error::StorageError;
+use scry_core::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
-use crate::store::{Store, TaskToCreate};
+use scry_core::store::{Store, TaskToCreate};
 
 #[derive(Clone)]
 pub struct SqliteStore {

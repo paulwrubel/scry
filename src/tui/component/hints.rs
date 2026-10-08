@@ -1,4 +1,4 @@
-use crate::models::TaskId;
+use scry_core::models::TaskId;
 use crate::tui::component::RenderContext;
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, ToSpan};

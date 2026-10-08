@@ -1,4 +1,4 @@
-use crate::models::{Task, TaskId};
+use scry_core::models::{Task, TaskId};
 use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
 use crate::tui::action::Action;

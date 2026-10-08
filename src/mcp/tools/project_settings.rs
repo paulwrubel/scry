@@ -3,9 +3,9 @@
 use rmcp::schemars;
 
 use crate::error::AppError;
-use crate::models::{Project, TaskSortingMode};
+use scry_core::models::{Project, TaskSortingMode};
 use crate::service::ProjectService;
-use crate::store::Store;
+use scry_core::store::Store;
 
 use super::resolve_project;
 

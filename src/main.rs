@@ -2,29 +2,27 @@ mod color;
 mod config;
 mod error;
 mod mcp;
-mod models;
 mod service;
 mod skill;
 mod state;
-mod store;
 mod tui;
 
 use crate::color::ColorChoice;
-use crate::models::{
+use scry_core::models::{
     Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, StatusStyle, Tags, Task,
     TaskSortingMode,
 };
 use crate::service::{ProjectService, TaskInput};
 use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
-use crate::store::ArcStore;
+use scry_core::store::ArcStore;
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use config::ScryConfig;
 use error::{AppError, ServiceError};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use store::sqlite::SqliteStore;
+use scry_sqlite::SqliteStore;
 
 #[derive(Parser)]
 #[command(name = "scry", about = "A task manager for the terminal", version)]

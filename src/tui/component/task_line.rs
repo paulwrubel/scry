@@ -1,8 +1,8 @@
 use crate::{
-    models::{Color as ScryColor, StatusStyle},
     state::TaskWithNotes,
     tui::component::shared::{ColoredTags, truncate_string_to_width},
 };
+use scry_core::models::{Color as ScryColor, StatusStyle};
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span, ToSpan},

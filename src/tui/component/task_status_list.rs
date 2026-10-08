@@ -1,8 +1,8 @@
 use crate::{
-    models::{StatusStyle, TaskId},
     state::StatusWithTasks,
     tui::component::{TaskLine, shared::truncate_string_to_width},
 };
+use scry_core::models::{StatusStyle, TaskId};
 use ratatui::{
     style::{Color, Stylize},
     text::{Line, Span, Text},
@@ -33,7 +33,7 @@ impl<'a> TaskStatusList<'a> {
 
 impl<'a> From<TaskStatusList<'a>> for Text<'a> {
     fn from(value: TaskStatusList<'a>) -> Self {
-        let status: &crate::models::Status = &value.status_with_tasks.status;
+        let status: &scry_core::models::Status = &value.status_with_tasks.status;
         let is_entry = value.status_with_tasks.is_entry;
         let status_name = &status.name;
         let is_hidden = status.style == StatusStyle::Hidden;
@@ -107,10 +107,8 @@ impl<'a> From<TaskStatusList<'a>> for Text<'a> {
 #[cfg(test)]
 mod tests {
     use super::TaskStatusList;
-    use crate::{
-        models::{Status, StatusStyle},
-        state::StatusWithTasks,
-    };
+    use crate::state::StatusWithTasks;
+    use scry_core::models::{Status, StatusStyle};
     use ratatui::text::{Line, Text};
 
     fn status_with_tasks(style: StatusStyle, hidden_task_count: usize) -> StatusWithTasks {

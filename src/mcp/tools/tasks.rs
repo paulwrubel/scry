@@ -3,10 +3,10 @@
 use rmcp::schemars;
 
 use crate::error::{AppError, ServiceError};
-use crate::models::{Priority, Tags, Task};
+use scry_core::models::{Priority, Tags, Task};
 use crate::service::{ProjectService, TaskInput};
 use crate::state::{ProjectState, TaskWithNotes};
-use crate::store::Store;
+use scry_core::store::Store;
 
 use super::resolve_project;
 

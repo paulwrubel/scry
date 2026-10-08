@@ -309,23 +309,23 @@ impl From<&str> for TaskSortingMode {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ProjectTemplate {
-    pub(crate) name: &'static str,
-    pub(crate) entry_status_name: Option<&'static str>,
-    pub(crate) task_sorting_mode: TaskSortingMode,
-    pub(crate) show_priority: bool,
-    pub(crate) statuses: &'static [ProjectTemplateStatus],
+pub struct ProjectTemplate {
+    pub name: &'static str,
+    pub entry_status_name: Option<&'static str>,
+    pub task_sorting_mode: TaskSortingMode,
+    pub show_priority: bool,
+    pub statuses: &'static [ProjectTemplateStatus],
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ProjectTemplateStatus {
-    pub(crate) name: &'static str,
-    pub(crate) position: i32,
-    pub(crate) color: Option<Color>,
-    pub(crate) style: StatusStyle,
+pub struct ProjectTemplateStatus {
+    pub name: &'static str,
+    pub position: i32,
+    pub color: Option<Color>,
+    pub style: StatusStyle,
 }
 
-pub(crate) const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
+pub const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
     ProjectTemplate {
         name: "todolist",
         entry_status_name: Some("todo"),

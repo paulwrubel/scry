@@ -1,4 +1,4 @@
-use crate::models::{Priority, Status, Tags};
+use scry_core::models::{Priority, Status, Tags};
 use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
 use crate::tui::action::Action;

@@ -1,4 +1,4 @@
-use crate::models::TaskId;
+use scry_core::models::TaskId;
 use crate::state::StatusWithTasks;
 use crate::tui::component::TaskStatusList;
 use crate::tui::component::{ProjectState, RenderContext};
@@ -124,7 +124,7 @@ impl TaskList {
 #[cfg(test)]
 mod tests {
     use super::TaskList;
-    use crate::models::{Priority, Status, StatusId, StatusStyle, Tags, TaskId};
+    use scry_core::models::{Priority, Status, StatusId, StatusStyle, Tags, TaskId};
     use crate::state::{StatusWithTasks, TaskWithNotes};
     use chrono::Utc;
 

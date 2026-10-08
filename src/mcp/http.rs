@@ -1,7 +1,7 @@
 //! Streamable HTTP transport for the MCP server.
 
 use crate::error::AppError;
-use crate::store::ArcStore;
+use scry_core::store::ArcStore;
 use axum::extract::{Request, State};
 use axum::http::{StatusCode, header};
 use axum::middleware::Next;

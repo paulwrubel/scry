@@ -1,9 +1,9 @@
 use crate::config::ScryConfig;
 use crate::error::AppError;
-use crate::models::ProjectId;
+use scry_core::models::ProjectId;
 use crate::service::ProjectService;
 use crate::state::ProjectState;
-use crate::store::ArcStore;
+use scry_core::store::ArcStore;
 use crate::tui::action::Action;
 use crate::tui::component::{RenderContext, Root, SelectedTask};
 use ratatui::Terminal;

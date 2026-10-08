@@ -1,4 +1,4 @@
-use crate::models::{Color, StatusId, StatusStyle, TaskId, TaskSortingMode};
+use scry_core::models::{Color, StatusId, StatusStyle, TaskId, TaskSortingMode};
 use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
 use crate::tui::component::popup::ConfirmDeleteEntity;

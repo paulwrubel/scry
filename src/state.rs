@@ -2,15 +2,15 @@ use chrono::DateTime;
 use chrono::Utc;
 use serde::Serialize;
 
-use crate::error::StorageError;
-use crate::models::Note;
-use crate::models::Priority;
-use crate::models::StatusId;
-use crate::models::StatusStyle;
-use crate::models::Tags;
-use crate::models::TaskSortingMode;
-use crate::models::{Project, ProjectId, Status, Task, TaskId};
-use crate::store::Store;
+use scry_core::error::StorageError;
+use scry_core::models::Note;
+use scry_core::models::Priority;
+use scry_core::models::StatusId;
+use scry_core::models::StatusStyle;
+use scry_core::models::Tags;
+use scry_core::models::TaskSortingMode;
+use scry_core::models::{Project, ProjectId, Status, Task, TaskId};
+use scry_core::store::Store;
 
 // Aug 9, 2026 at 4:40pm
 pub const DATETIME_FORMAT_STR: &str = "%b %-d, %Y at %-I:%M%P";
@@ -294,7 +294,7 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Project, StatusStyle, Tags, TaskSortingMode};
+    use scry_core::models::{Project, StatusStyle, Tags, TaskSortingMode};
     use chrono::Utc;
 
     fn task(id: TaskId, status_id: StatusId) -> TaskWithNotes {

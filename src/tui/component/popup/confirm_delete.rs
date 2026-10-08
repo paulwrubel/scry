@@ -1,4 +1,4 @@
-use crate::models::{Status, Task};
+use scry_core::models::{Status, Task};
 use crate::tui::action::Action;
 use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};

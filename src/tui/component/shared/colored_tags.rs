@@ -1,4 +1,5 @@
-use crate::{color::tag_rgb, models::Tags};
+use crate::color::tag_rgb;
+use scry_core::models::Tags;
 use ratatui::{
     style::{Color, Stylize},
     text::Span,

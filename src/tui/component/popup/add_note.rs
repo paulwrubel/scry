@@ -1,4 +1,4 @@
-use crate::models::TaskId;
+use scry_core::models::TaskId;
 use crate::tui::action::Action;
 use crate::tui::component::shared::CONTROL_OR_COMMAND;
 use crate::tui::component::{Button, InputBlock};
