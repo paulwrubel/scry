@@ -31,6 +31,64 @@ cargo build --release
 ./target/release/scry --help
 ```
 
+## Docker
+
+An image is provided for running the MCP server in a container.
+
+```sh
+docker build -t scry .
+```
+
+### stdio
+
+The client launches the container as a child process; its stdin/stdout carry the protocol.
+
+```sh
+docker run -i --rm -v scry-data:/data scry mcp
+```
+
+`-i` keeps stdin open (the stdio transport requires it); do not add `-t`, which can corrupt the framing. A client config looks like:
+
+```json
+{
+  "mcpServers": {
+    "scry": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "scry-data:/data", "scry", "mcp"]
+    }
+  }
+}
+```
+
+### HTTP
+
+```sh
+SCRY_MCP_TOKEN=$(openssl rand -hex 32) docker compose up -d
+```
+
+This starts the server on `http://127.0.0.1:8000/mcp`, published on host loopback only, with the database on the `scry-data` volume. The container reads its config from `/app/scry.toml`, which compose mounts from `scry.docker.toml`. A client config looks like:
+
+```json
+{
+  "mcpServers": {
+    "scry": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+The `headers` entry is only needed when `SCRY_MCP_TOKEN` is set; without it the endpoint is unauthenticated.
+
+### Notes
+
+- The container runs as UID/GID `1000`; for a bind-mounted database owned by a different UID, run with `--user "$(id -u):$(id -g)"`.
+- SQLite is single-writer: do not run the container and a host `scry` or TUI against the same database at once.
+- The HTTP transport has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
+- Client config key names vary between harnesses.
+
 ## Core Concepts
 
 ### Projects
@@ -182,7 +240,7 @@ Because the output is the bare data, some context that the human output carries 
 
 ## Configuration
 
-scry reads configuration from `$XDG_CONFIG_HOME/scry/config.toml` (falling back to `~/.config/scry/config.toml`) if the file exists. The file is never created automatically — create it manually only if you want to override the defaults.
+scry looks for `scry.toml` in the current directory first, then `$XDG_CONFIG_HOME/scry/scry.toml` (falling back to `~/.config/scry/scry.toml`), and finally the legacy `$XDG_CONFIG_HOME/scry/config.toml`. The file is never created automatically — create one manually only if you want to override the defaults.
 
 Available options:
 
