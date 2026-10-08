@@ -131,7 +131,7 @@ scry -p myapp move 1 "in progress"
 
 `--color <auto|always|never>` — when to colorize output. `auto` (the default) colorizes only when stdout is a terminal and `NO_COLOR` is unset.
 
-`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand (the TUI) is an error. See [JSON Output](#json-output).
+`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand (the TUI) or with `mcp` is an error. See [JSON Output](#json-output).
 
 ### Task Commands
 
@@ -214,6 +214,27 @@ On the `--harness` paths, `~/.config` honors `$XDG_CONFIG_HOME` when it is set. 
 skills from `.claude/skills/` and `.agents/skills/`, so installing for `claude-code` or `agents`
 covers opencode too. Do not install twice: skill names must be unique across discovery locations.
 
+### MCP Server
+
+Serve scry over the [Model Context Protocol](https://modelcontextprotocol.io) so MCP clients
+(Claude Code, opencode, and others) can drive it through tools instead of the CLI.
+
+| Command                  | Description                                                 |
+| ------------------------ | ----------------------------------------------------------- |
+| `scry mcp`               | Serve over stdio (the client launches scry as a subprocess) |
+| `scry mcp --http <addr>` | Serve over streamable HTTP at `http://<addr>/mcp`           |
+
+Without `--http`, the server speaks the stdio transport: stdin/stdout carry the protocol and
+logs go to stderr. With `--http`, the address decides exposure — binding a non-loopback
+address such as `0.0.0.0:8000` makes the server reachable from other hosts, so scry warns on
+startup. Set `SCRY_MCP_TOKEN` to require an `Authorization: Bearer <token>` header on every
+HTTP request; requests are answered statelessly with JSON.
+
+The tools mirror the CLI: tasks, notes, projects, statuses, and project settings. Results are
+structured JSON, and errors are returned as tool results carrying a stable `kind` (`not_found`,
+`conflict`, `invalid`, or `internal`). See [Docker](#docker) for container usage and client
+configuration examples.
+
 ### JSON Output
 
 The global `--json` flag makes one-shot subcommands emit compact JSON instead of human-formatted text:
@@ -226,7 +247,7 @@ scry -p myapp --json add "design API"
 
 Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
-`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
+`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) or with `mcp` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 
 On failure, a structured error document is written to stderr:
 

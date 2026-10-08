@@ -6,8 +6,9 @@ license: MIT
 
 # scry
 
-`scry` is a task manager for the terminal. Drive it through its CLI to manage tasks
-and projects on the user's behalf.
+`scry` is a task manager for the terminal. Drive it through its CLI — or, when your
+harness supports it, through its MCP server — to manage tasks and projects on the
+user's behalf.
 
 ## When to use this skill
 
@@ -18,6 +19,14 @@ Use it when the user asks to:
 - Move tasks through a workflow (for example backlog -> in progress -> done).
 - Organize work into projects, or inspect projects and their statuses.
 - Read a task's details or notes.
+
+## MCP server
+
+When your harness supports the Model Context Protocol, prefer it over shelling out to
+the CLI: `scry mcp` serves over stdio, and `scry mcp --http <addr>` serves over
+streamable HTTP. The tools cover the same operations as the commands below (tasks,
+notes, projects, statuses, and project settings) with structured JSON results and
+stable error kinds. Fall back to the CLI commands when MCP is unavailable.
 
 ## Discover the exact surface
 
