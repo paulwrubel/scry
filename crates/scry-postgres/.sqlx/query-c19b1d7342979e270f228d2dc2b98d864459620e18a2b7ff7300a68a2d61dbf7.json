@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE statuses\n                SET name = $1, position = $2, color = $3, style = $4\n                WHERE id = $5\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c19b1d7342979e270f228d2dc2b98d864459620e18a2b7ff7300a68a2d61dbf7"
+}

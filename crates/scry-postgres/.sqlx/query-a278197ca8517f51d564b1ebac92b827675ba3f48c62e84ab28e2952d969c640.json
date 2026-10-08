@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE statuses\n                SET position = position + $1\n                WHERE project_id = $2 AND position >= $3 AND position <= $4\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a278197ca8517f51d564b1ebac92b827675ba3f48c62e84ab28e2952d969c640"
+}
