@@ -1,9 +1,10 @@
-use crate::error::{ServiceError, StorageError};
-use crate::models::{
+use crate::error::ServiceError;
+use scry_core::error::StorageError;
+use scry_core::models::{
     Color, Note, Priority, Project, ProjectTemplate, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
-use crate::store::{Store, TaskToCreate};
+use scry_core::store::{Store, TaskToCreate};
 
 /// Partial task input, shared by create and update. `None` leaves a field
 /// unchanged on update; `Some("")` on `description` clears it; `Some(Tags)` on
@@ -28,7 +29,7 @@ pub struct TaskChangeResult {
 
 /// Frontend-agnostic, high-level operations over one project. Resolves names to
 /// ids, picks defaults, computes positions, and enforces invariants before
-/// delegating the raw writes to `TaskStore`.
+/// delegating the raw writes to `Store`.
 pub struct ProjectService<'a> {
     store: &'a dyn Store,
 }

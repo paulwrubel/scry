@@ -1,13 +1,11 @@
 //! Project tools.
 
-use rmcp::schemars;
-
-use crate::error::AppError;
-use crate::models::{PROJECT_TEMPLATES, Project};
-use crate::service::ProjectService;
-use crate::store::Store;
-
 use super::resolve_project;
+use crate::error::AppError;
+use crate::service::ProjectService;
+use rmcp::schemars;
+use scry_core::models::{PROJECT_TEMPLATES, Project};
+use scry_core::store::Store;
 
 pub(crate) async fn list_projects(store: &dyn Store) -> Result<Vec<Project>, AppError> {
     Ok(store.get_all_projects().await?)

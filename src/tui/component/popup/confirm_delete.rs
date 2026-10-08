@@ -1,4 +1,3 @@
-use crate::models::{Status, Task};
 use crate::tui::action::Action;
 use crate::tui::component::{ProjectState, RenderContext};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -6,6 +5,7 @@ use ratatui::layout::{Constraint, Flex, Layout};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use scry_core::models::{Status, Task};
 
 #[derive(Debug, Clone)]
 pub enum ConfirmDeleteEntity {

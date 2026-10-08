@@ -1,13 +1,11 @@
 //! Status tools.
 
-use rmcp::schemars;
-
-use crate::error::AppError;
-use crate::models::{Color, Status, StatusStyle};
-use crate::service::ProjectService;
-use crate::store::Store;
-
 use super::resolve_project;
+use crate::error::AppError;
+use crate::service::ProjectService;
+use rmcp::schemars;
+use scry_core::models::{Color, Status, StatusStyle};
+use scry_core::store::Store;
 
 /// Parameters for the `status_list` tool.
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]

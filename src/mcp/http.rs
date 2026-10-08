@@ -1,7 +1,6 @@
 //! Streamable HTTP transport for the MCP server.
 
 use crate::error::AppError;
-use crate::store::ArcStore;
 use axum::extract::{Request, State};
 use axum::http::{StatusCode, header};
 use axum::middleware::Next;
@@ -9,6 +8,7 @@ use axum::response::{IntoResponse, Response};
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
+use scry_core::store::ArcStore;
 use subtle::ConstantTimeEq;
 
 use super::ScryServer;

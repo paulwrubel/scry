@@ -1,4 +1,3 @@
-use crate::models::{Priority, Status, Tags};
 use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
 use crate::tui::action::Action;
@@ -11,6 +10,7 @@ use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Style;
 use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders};
+use scry_core::models::{Priority, Status, Tags};
 use strum::IntoEnumIterator;
 
 const TASK_PLACEHOLDER_TEXT: &str = "Do the laundry";

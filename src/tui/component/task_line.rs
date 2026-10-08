@@ -1,5 +1,4 @@
 use crate::{
-    models::{Color as ScryColor, StatusStyle},
     state::TaskWithNotes,
     tui::component::shared::{ColoredTags, truncate_string_to_width},
 };
@@ -7,6 +6,7 @@ use ratatui::{
     style::{Color, Style},
     text::{Line, Span, ToSpan},
 };
+use scry_core::models::{Color as ScryColor, StatusStyle};
 
 pub struct TaskLine {
     task: TaskWithNotes,

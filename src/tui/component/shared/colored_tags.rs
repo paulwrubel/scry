@@ -1,8 +1,9 @@
-use crate::{color::tag_rgb, models::Tags};
+use crate::color::tag_rgb;
 use ratatui::{
     style::{Color, Stylize},
     text::Span,
 };
+use scry_core::models::Tags;
 
 #[derive(Debug, Clone)]
 pub struct ColoredTags(Tags);

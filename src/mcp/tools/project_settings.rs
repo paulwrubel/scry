@@ -1,13 +1,11 @@
 //! Project settings tools.
 
-use rmcp::schemars;
-
-use crate::error::AppError;
-use crate::models::{Project, TaskSortingMode};
-use crate::service::ProjectService;
-use crate::store::Store;
-
 use super::resolve_project;
+use crate::error::AppError;
+use crate::service::ProjectService;
+use rmcp::schemars;
+use scry_core::models::{Project, TaskSortingMode};
+use scry_core::store::Store;
 
 /// Parameters for the `project_set_entry_status` tool.
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
