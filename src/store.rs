@@ -31,7 +31,7 @@ impl From<&Task> for TaskToCreate {
 }
 
 #[async_trait]
-pub trait TaskStore {
+pub trait TaskStore: Send + Sync {
     /// Add a new task.
     async fn create_task(&self, task_to_create: TaskToCreate) -> Result<Task, StorageError>;
 

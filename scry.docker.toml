@@ -1,0 +1,3 @@
+# Configuration mounted into the container (see compose.yaml).
+# The database lives on the `scry-data` volume mounted at /data.
+database_url = "sqlite:///data/scry.db"

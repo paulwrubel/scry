@@ -27,9 +27,19 @@ twox-hash = "2.1.4"
 itertools = "0.15.0"
 num_enum = "0.7.6"
 strum = "0.28.0"
+rmcp = { version = "3.5.1", features = [
+    "server",
+    "macros",
+    "schemars",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
+axum = "0.8.9"
+subtle = "2"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
 assert_fs = "1.1.4"
 predicates = "3.1.4"
 regex = "1.13.1"
+tower = { version = "0.5.3", features = ["util"] }

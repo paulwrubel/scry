@@ -1,0 +1,19 @@
+services:
+  scry-mcp:
+    build: .
+    # Bind all interfaces inside the container so the published port can reach
+    # it; the host-side mapping below restricts exposure to loopback.
+    command: ["mcp", "--http", "0.0.0.0:8000"]
+    environment:
+      # When set, HTTP requests must send `Authorization: Bearer <token>`.
+      SCRY_MCP_TOKEN: ${SCRY_MCP_TOKEN:-}
+    ports:
+      # Publish on the host loopback only. Use `8000:8000` to expose it further.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Config the container reads from its working directory (WORKDIR /app).
+      - ./scry.docker.toml:/app/scry.toml:ro
+      - scry-data:/data
+
+volumes:
+  scry-data:

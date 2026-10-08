@@ -31,6 +31,64 @@ cargo build --release
 ./target/release/scry --help
 ```
 
+## Docker
+
+An image is provided for running the MCP server in a container.
+
+```sh
+docker build -t scry .
+```
+
+### stdio
+
+The client launches the container as a child process; its stdin/stdout carry the protocol.
+
+```sh
+docker run -i --rm -v scry-data:/data scry mcp
+```
+
+`-i` keeps stdin open (the stdio transport requires it); do not add `-t`, which can corrupt the framing. A client config looks like:
+
+```json
+{
+  "mcpServers": {
+    "scry": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "scry-data:/data", "scry", "mcp"]
+    }
+  }
+}
+```
+
+### HTTP
+
+```sh
+SCRY_MCP_TOKEN=$(openssl rand -hex 32) docker compose up -d
+```
+
+This starts the server on `http://127.0.0.1:8000/mcp`, published on host loopback only, with the database on the `scry-data` volume. The container reads its config from `/app/scry.toml`, which compose mounts from `scry.docker.toml`. A client config looks like:
+
+```json
+{
+  "mcpServers": {
+    "scry": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+The `headers` entry is only needed when `SCRY_MCP_TOKEN` is set; without it the endpoint is unauthenticated.
+
+### Notes
+
+- The container runs as UID/GID `1000`; for a bind-mounted database owned by a different UID, run with `--user "$(id -u):$(id -g)"`.
+- SQLite is single-writer: do not run the container and a host `scry` or TUI against the same database at once.
+- The HTTP transport has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
+- Client config key names vary between harnesses.
+
 ## Core Concepts
 
 ### Projects
@@ -73,7 +131,7 @@ scry -p myapp move 1 "in progress"
 
 `--color <auto|always|never>` — when to colorize output. `auto` (the default) colorizes only when stdout is a terminal and `NO_COLOR` is unset.
 
-`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand (the TUI) is an error. See [JSON Output](#json-output).
+`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand (the TUI) or with `mcp` is an error. See [JSON Output](#json-output).
 
 ### Task Commands
 
@@ -156,6 +214,27 @@ On the `--harness` paths, `~/.config` honors `$XDG_CONFIG_HOME` when it is set. 
 skills from `.claude/skills/` and `.agents/skills/`, so installing for `claude-code` or `agents`
 covers opencode too. Do not install twice: skill names must be unique across discovery locations.
 
+### MCP Server
+
+Serve scry over the [Model Context Protocol](https://modelcontextprotocol.io) so MCP clients
+(Claude Code, opencode, and others) can drive it through tools instead of the CLI.
+
+| Command                  | Description                                                 |
+| ------------------------ | ----------------------------------------------------------- |
+| `scry mcp`               | Serve over stdio (the client launches scry as a subprocess) |
+| `scry mcp --http <addr>` | Serve over streamable HTTP at `http://<addr>/mcp`           |
+
+Without `--http`, the server speaks the stdio transport: stdin/stdout carry the protocol and
+logs go to stderr. With `--http`, the address decides exposure — binding a non-loopback
+address such as `0.0.0.0:8000` makes the server reachable from other hosts, so scry warns on
+startup. Set `SCRY_MCP_TOKEN` to require an `Authorization: Bearer <token>` header on every
+HTTP request; requests are answered statelessly with JSON.
+
+The tools mirror the CLI: tasks, notes, projects, statuses, and project settings. Results are
+structured JSON, and errors are returned as tool results carrying a stable `kind` (`not_found`,
+`conflict`, `invalid`, or `internal`). See [Docker](#docker) for container usage and client
+configuration examples.
+
 ### JSON Output
 
 The global `--json` flag makes one-shot subcommands emit compact JSON instead of human-formatted text:
@@ -168,7 +247,7 @@ scry -p myapp --json add "design API"
 
 Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
-`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
+`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) or with `mcp` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 
 On failure, a structured error document is written to stderr:
 
@@ -182,7 +261,7 @@ Because the output is the bare data, some context that the human output carries 
 
 ## Configuration
 
-scry reads configuration from `$XDG_CONFIG_HOME/scry/config.toml` (falling back to `~/.config/scry/config.toml`) if the file exists. The file is never created automatically — create it manually only if you want to override the defaults.
+scry looks for `scry.toml` in the current directory first, then `$XDG_CONFIG_HOME/scry/scry.toml` (falling back to `~/.config/scry/scry.toml`), and finally the legacy `$XDG_CONFIG_HOME/scry/config.toml`. The file is never created automatically — create one manually only if you want to override the defaults.
 
 Available options:
 
