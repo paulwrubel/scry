@@ -1,8 +1,7 @@
 use anstyle::{AnsiColor, Color as AnsiStyleColor, RgbColor, Style};
 use clap::ValueEnum;
+use scry_core::models::{Color, Priority};
 use twox_hash::XxHash32;
-
-use crate::models::{Color, Priority};
 
 /// When to colorize CLI output.
 #[derive(Debug, Clone, Copy, ValueEnum)]

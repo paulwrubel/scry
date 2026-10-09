@@ -1,4 +1,3 @@
-use crate::models::{Task, TaskId};
 use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
 use crate::tui::action::Action;
@@ -14,6 +13,7 @@ use ratatui::layout::{Constraint, Layout, Spacing};
 use ratatui::symbols::merge::MergeStrategy;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders};
+use scry_core::models::{Task, TaskId};
 
 const VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
     Some(version) => version,

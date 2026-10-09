@@ -1,14 +1,12 @@
 //! Task tools.
 
-use rmcp::schemars;
-
+use super::resolve_project;
 use crate::error::{AppError, ServiceError};
-use crate::models::{Priority, Tags, Task};
 use crate::service::{ProjectService, TaskInput};
 use crate::state::{ProjectState, TaskWithNotes};
-use crate::store::Store;
-
-use super::resolve_project;
+use rmcp::schemars;
+use scry_core::models::{Priority, Tags, Task};
+use scry_core::store::Store;
 
 /// Parameters for the `task_list` tool.
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]

@@ -1,7 +1,7 @@
-use crate::models::TaskId;
 use crate::tui::component::RenderContext;
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, ToSpan};
+use scry_core::models::TaskId;
 
 pub struct Hints;
 

@@ -5,12 +5,12 @@ set shell := ["bash", "-uc"]
 setup-database:
     rm -f scry.db
     touch scry.db
-    sqlx migrate run
+    sqlx migrate run --source crates/scry-sqlite/migrations
 
 # regenerate sqlx offline query cache by rebuilding the DB fresh
 [group('validate')]
 sqlx-prepare: setup-database
-    cargo sqlx prepare
+    cargo sqlx prepare --workspace
 
 # run all validation checks: test, check, clippy
 [group('validate')]
@@ -19,17 +19,17 @@ validate:  test check clippy
 # run the test suite
 [group('validate')]
 test: setup-database
-    cargo test
+    cargo test --workspace
 
 # type-check without compiling (fast feedback)
 [group('validate')]
 check: setup-database
-    cargo check
+    cargo check --workspace
 
 # lint for common mistakes and style issues
 [group('validate')]
 clippy: setup-database
-    cargo clippy -- -D warnings
+    cargo clippy --workspace -- -D warnings
 
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]

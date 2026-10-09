@@ -1,12 +1,13 @@
 //! In-process Model Context Protocol (MCP) server exposing scry operations as tools.
 
-use crate::{error::AppError, store::ArcStore};
+use crate::error::AppError;
 use rmcp::{
     ErrorData as McpError, ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig},
     tool, tool_handler, tool_router,
 };
+use scry_core::store::ArcStore;
 use serde::Serialize;
 
 mod http;
@@ -307,8 +308,8 @@ pub async fn serve_stdio(store: ArcStore) -> Result<(), AppError> {
 mod tests {
     use super::*;
     use crate::service::{ProjectService, TaskInput};
-    use crate::store::sqlite::SqliteStore;
     use assert_fs::TempDir;
+    use scry_sqlite::SqliteStore;
 
     async fn test_server() -> (TempDir, ScryServer) {
         let dir = TempDir::new().expect("temp dir");
@@ -515,7 +516,7 @@ mod tests {
             .task_add(Parameters(tools::tasks::TaskAddParams {
                 title: "Alpha".to_string(),
                 description: None,
-                priority: Some(crate::models::Priority::High),
+                priority: Some(scry_core::models::Priority::High),
                 tags: None,
                 status: None,
                 project: None,
@@ -792,7 +793,7 @@ mod tests {
         let sorted = server
             .project_set_sort_mode(Parameters(
                 tools::project_settings::ProjectSetSortModeParams {
-                    mode: crate::models::TaskSortingMode::Priority,
+                    mode: scry_core::models::TaskSortingMode::Priority,
                     project: None,
                 },
             ))
@@ -874,7 +875,7 @@ mod tests {
         let colored = server
             .status_set_color(Parameters(tools::statuses::StatusSetColorParams {
                 name: "qa".to_string(),
-                color: Some(crate::models::Color::Blue),
+                color: Some(scry_core::models::Color::Blue),
                 project: None,
             }))
             .await
@@ -888,7 +889,7 @@ mod tests {
         let styled = server
             .status_set_style(Parameters(tools::statuses::StatusSetStyleParams {
                 name: "qa".to_string(),
-                style: crate::models::StatusStyle::Checked,
+                style: scry_core::models::StatusStyle::Checked,
                 project: None,
             }))
             .await

@@ -1,7 +1,7 @@
-use crate::models::{Color, StatusId, StatusStyle, TaskId, TaskSortingMode};
 use crate::service::TaskInput;
 use crate::state::TaskWithNotes;
 use crate::tui::component::popup::ConfirmDeleteEntity;
+use scry_core::models::{Color, StatusId, StatusStyle, TaskId, TaskSortingMode};
 
 /// Cross-cutting actions that components emit to the parent coordinator.
 /// Internal component state changes (cursor movement, scrolling, text editing)

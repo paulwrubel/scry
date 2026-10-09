@@ -1,4 +1,3 @@
-use crate::models::TaskId;
 use crate::state::StatusWithTasks;
 use crate::tui::component::TaskStatusList;
 use crate::tui::component::{ProjectState, RenderContext};
@@ -6,6 +5,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
+use scry_core::models::TaskId;
 
 pub struct TaskList {
     pub is_focused: bool,
@@ -124,9 +124,9 @@ impl TaskList {
 #[cfg(test)]
 mod tests {
     use super::TaskList;
-    use crate::models::{Priority, Status, StatusId, StatusStyle, Tags, TaskId};
     use crate::state::{StatusWithTasks, TaskWithNotes};
     use chrono::Utc;
+    use scry_core::models::{Priority, Status, StatusId, StatusStyle, Tags, TaskId};
 
     fn task(id: TaskId, status_id: StatusId) -> TaskWithNotes {
         TaskWithNotes {

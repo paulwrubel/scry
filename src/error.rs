@@ -1,6 +1,6 @@
+use scry_core::error::StorageError;
+use scry_core::models::TaskId;
 use std::fmt;
-
-use crate::models::TaskId;
 
 #[derive(Debug, Clone)]
 pub enum AppError {
@@ -104,38 +104,6 @@ impl ServiceError {
             Self::StatusNotEmpty { .. } | Self::StatusNameTaken { .. } => "conflict",
             Self::ProjectHasNoStatuses | Self::TitleRequired => "invalid",
             Self::Storage(error) => error.kind(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum StorageError {
-    Database(String),
-    NotFound(String),
-    Conflict(String),
-    Invalid(String),
-}
-
-impl fmt::Display for StorageError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            StorageError::Database(msg) => write!(f, "database error: {msg}"),
-            StorageError::NotFound(msg) => write!(f, "not found: {msg}"),
-            StorageError::Conflict(msg) => write!(f, "conflict: {msg}"),
-            StorageError::Invalid(msg) => write!(f, "invalid operation: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for StorageError {}
-
-impl StorageError {
-    fn kind(&self) -> &'static str {
-        match self {
-            Self::Database(_) => "internal",
-            Self::NotFound(_) => "not_found",
-            Self::Conflict(_) => "conflict",
-            Self::Invalid(_) => "invalid",
         }
     }
 }

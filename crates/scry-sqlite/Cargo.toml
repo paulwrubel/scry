@@ -1,0 +1,16 @@
+[package]
+name = "scry-sqlite"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+scry-core = { path = "../scry-core" }
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+sqlx = { version = "0.9", features = [
+    "runtime-tokio",
+    "sqlite",
+    "chrono",
+    "migrate",
+] }

@@ -1,8 +1,9 @@
 //! Tool implementations, grouped by the resource they operate on.
 
-use crate::error::{AppError, StorageError};
-use crate::models::Project;
-use crate::store::Store;
+use crate::error::AppError;
+use scry_core::error::StorageError;
+use scry_core::models::Project;
+use scry_core::store::Store;
 
 pub(crate) mod notes;
 pub(crate) mod project_settings;

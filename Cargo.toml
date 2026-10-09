@@ -36,6 +36,12 @@ rmcp = { version = "3.5.1", features = [
 ] }
 axum = "0.8.9"
 subtle = "2"
+scry-core = { path = "crates/scry-core" }
+scry-sqlite = { path = "crates/scry-sqlite" }
+
+[workspace]
+members = ["crates/scry-core", "crates/scry-sqlite"]
+resolver = "3"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"

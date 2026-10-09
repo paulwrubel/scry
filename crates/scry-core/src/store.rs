@@ -6,14 +6,14 @@ use crate::models::{
 use async_trait::async_trait;
 use std::sync::Arc;
 
-pub(crate) struct TaskToCreate {
-    pub(crate) project_id: ProjectId,
-    pub(crate) title: String,
-    pub(crate) description: Option<String>,
-    pub(crate) priority: Priority,
-    pub(crate) status_id: i64,
-    pub(crate) position: i32,
-    pub(crate) tags: Tags,
+pub struct TaskToCreate {
+    pub project_id: ProjectId,
+    pub title: String,
+    pub description: Option<String>,
+    pub priority: Priority,
+    pub status_id: i64,
+    pub position: i32,
+    pub tags: Tags,
 }
 
 impl From<&Task> for TaskToCreate {
@@ -159,5 +159,3 @@ pub trait Store: Send + Sync {
     /// Set the active project. Persisted across sessions.
     async fn set_active_project(&self, name: &str) -> Result<(), StorageError>;
 }
-
-pub mod sqlite;

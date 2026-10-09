@@ -1,4 +1,3 @@
-use crate::models::TaskId;
 use crate::tui::action::Action;
 use crate::tui::component::shared::CONTROL_OR_COMMAND;
 use crate::tui::component::{Button, InputBlock};
@@ -7,6 +6,7 @@ use indoc::indoc;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::widgets::{Block, Borders};
+use scry_core::models::TaskId;
 
 pub struct AddNote {
     contents_input: InputBlock,
