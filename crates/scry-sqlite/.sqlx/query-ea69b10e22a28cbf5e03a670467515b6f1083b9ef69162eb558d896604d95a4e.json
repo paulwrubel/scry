@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                SELECT\n                    id,\n                    task_id,\n                    contents,\n                    created_at\n                FROM notes\n                WHERE task_id = ?\n                ORDER BY created_at ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "task_id",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "task_id"
+          }
+        }
+      },
+      {
+        "name": "contents",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "contents"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ea69b10e22a28cbf5e03a670467515b6f1083b9ef69162eb558d896604d95a4e"
+}

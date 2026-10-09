@@ -2276,11 +2276,11 @@ dependencies = [
  "regex",
  "rmcp",
  "scry-core",
+ "scry-postgres",
  "scry-sqlite",
  "serde",
  "serde_json",
  "shlex",
- "sqlx",
  "strum",
  "subtle",
  "tokio",
@@ -2302,6 +2302,17 @@ dependencies = [
  "ratatui",
  "serde",
  "strum",
+]
+
+[[package]]
+name = "scry-postgres"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "clap",
+ "scry-core",
+ "sqlx",
 ]
 
 [[package]]

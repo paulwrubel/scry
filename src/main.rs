@@ -20,6 +20,7 @@ use scry_core::models::{
     TaskSortingMode,
 };
 use scry_core::store::ArcStore;
+use scry_postgres::PostgresStore;
 use scry_sqlite::SqliteStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -346,7 +347,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     }
 
     let config = ScryConfig::load()?;
-    let store: ArcStore = Arc::new(SqliteStore::new(&config.database_url).await?);
+    let store = connect_store(&config.database_url).await?;
 
     if let Some(Command::Mcp { http }) = &cli.command {
         return match http.as_deref() {
@@ -930,6 +931,19 @@ fn skill_target(harness: Option<Harness>, dir: Option<&Path>) -> Result<PathBuf,
         _ => Err(AppError::Usage(
             "specify exactly one of --harness or --dir".to_string(),
         )),
+    }
+}
+
+/// Open the store for the backend named by the database URL's scheme.
+async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
+    if database_url.starts_with("sqlite:") {
+        Ok(Arc::new(SqliteStore::new(database_url).await?))
+    } else if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
+        Ok(Arc::new(PostgresStore::new(database_url).await?))
+    } else {
+        Err(AppError::Config(format!(
+            "unsupported database URL scheme: {database_url}"
+        )))
     }
 }
 

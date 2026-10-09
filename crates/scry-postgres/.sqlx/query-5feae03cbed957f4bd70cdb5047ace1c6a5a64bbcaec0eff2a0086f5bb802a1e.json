@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT value\n                FROM config\n                WHERE key = 'active_project'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "config",
+            "name": "value"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5feae03cbed957f4bd70cdb5047ace1c6a5a64bbcaec0eff2a0086f5bb802a1e"
+}

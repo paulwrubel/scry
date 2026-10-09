@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE projects\n                SET name = $1, entry_status_id = $2, task_sorting_mode = $3, show_priority = $4\n                WHERE id = $5\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Text",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1ceecf6a8c4f118cfc03f49bb189d231ba632c47c5344e124769f9b0c043cb6a"
+}

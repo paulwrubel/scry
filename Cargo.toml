@@ -13,12 +13,6 @@ indoc = "2.0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 shlex = "2"
-sqlx = { version = "0.9", features = [
-    "runtime-tokio",
-    "sqlite",
-    "chrono",
-    "migrate",
-] }
 toml = "0.8"
 tokio = { version = "1", features = ["full"] }
 ratatui = "0.30"
@@ -38,9 +32,10 @@ axum = "0.8.9"
 subtle = "2"
 scry-core = { path = "crates/scry-core" }
 scry-sqlite = { path = "crates/scry-sqlite" }
+scry-postgres = { path = "crates/scry-postgres" }
 
 [workspace]
-members = ["crates/scry-core", "crates/scry-sqlite"]
+members = ["crates/scry-core", "crates/scry-sqlite", "crates/scry-postgres"]
 resolver = "3"
 
 [dev-dependencies]

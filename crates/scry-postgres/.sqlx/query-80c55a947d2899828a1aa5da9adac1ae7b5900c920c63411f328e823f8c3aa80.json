@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO config (key, value)\n                VALUES ('active_project', $1)\n                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "80c55a947d2899828a1aa5da9adac1ae7b5900c920c63411f328e823f8c3aa80"
+}
