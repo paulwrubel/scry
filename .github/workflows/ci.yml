@@ -1,10 +1,13 @@
 name: CI
 
+# Automatic runs disabled. Uncomment the push/pull_request triggers below to
+# re-enable them (and remove workflow_dispatch if you want no runs at all).
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  # push:
+  #   branches:
+  #     - main
+  # pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
