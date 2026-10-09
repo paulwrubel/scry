@@ -16,7 +16,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        # Pinned below floating `stable`: clippy 1.99 trips a false-positive
+        # `double_must_use` on `#[async_trait]` (rust-lang/rust-clippy#17529),
+        # fixed in clippy 1.100 which is not stable yet. Bump once it is.
+        uses: dtolnay/rust-toolchain@1.98.1
         with:
           components: clippy
 
