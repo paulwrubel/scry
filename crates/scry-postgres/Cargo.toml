@@ -13,4 +13,5 @@ sqlx = { version = "0.9", features = [
     "postgres",
     "chrono",
     "migrate",
+    "tls-rustls",
 ] }
