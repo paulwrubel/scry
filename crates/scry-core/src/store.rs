@@ -1,3 +1,4 @@
+use crate::backup::{ImportPlan, ImportReport};
 use crate::error::StorageError;
 use crate::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
@@ -152,6 +153,16 @@ pub trait Store: Send + Sync {
     async fn update_project(&self, project: Project) -> Result<Project, StorageError>;
 
     async fn delete_project(&self, name: String) -> Result<(), StorageError>;
+
+    /// Apply an import plan atomically.
+    ///
+    /// In `Replace` mode the existing projects listed in `plan.project_ids_to_delete`
+    /// are removed (along with their statuses, tasks, and notes) before the plan's
+    /// projects are inserted; in `Skip` and `Fail` mode no existing data is
+    /// removed. Rows are inserted with the ids and timestamps carried by the plan,
+    /// so callers must resolve id collisions beforehand (see
+    /// `crate::backup::plan_import`).
+    async fn apply_import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError>;
 
     /// Get the currently active project.
     async fn get_active_project(&self) -> Result<Project, StorageError>;

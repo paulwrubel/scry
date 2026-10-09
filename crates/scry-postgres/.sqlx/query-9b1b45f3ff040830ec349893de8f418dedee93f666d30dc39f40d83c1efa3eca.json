@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT setval(pg_get_serial_sequence('statuses', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM statuses), 1), 1), (SELECT COUNT(*) > 0 FROM statuses))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "setval",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9b1b45f3ff040830ec349893de8f418dedee93f666d30dc39f40d83c1efa3eca"
+}

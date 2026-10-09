@@ -15,6 +15,7 @@ use chrono::Local;
 use clap::{Parser, Subcommand};
 use config::ScryConfig;
 use error::{AppError, ServiceError};
+use scry_core::backup::{self, BACKUP_VERSION, Backup, ImportMode};
 use scry_core::models::{
     Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, StatusStyle, Tags, Task,
     TaskSortingMode,
@@ -117,6 +118,17 @@ enum Command {
     /// Manage notes on a task
     #[command(subcommand)]
     Note(NoteCommand),
+    /// Export all data (or a single project with the global -p/--project) as JSON to stdout
+    Export,
+    /// Import a JSON backup from stdin
+    Import {
+        /// Replace the existing project when the backup has a project with the same name
+        #[arg(long, conflicts_with = "skip_existing_projects")]
+        replace_existing_projects: bool,
+        /// Keep the existing project and skip the backup's project of the same name
+        #[arg(long, conflicts_with = "replace_existing_projects")]
+        skip_existing_projects: bool,
+    },
     /// Manage projects
     #[command(subcommand)]
     Project(ProjectCommand),
@@ -888,6 +900,62 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             },
         },
+        Command::Export => {
+            let export_project_id = cli.project.is_some().then_some(project.id);
+
+            let mut backup = backup::export(store.as_ref(), export_project_id).await?;
+            backup.app_version = env!("CARGO_PKG_VERSION").to_string();
+            let json = serde_json::to_string_pretty(&backup)
+                .map_err(|e| AppError::Internal(format!("failed to serialize JSON: {e}")))?;
+            println!("{json}");
+        }
+        Command::Import {
+            replace_existing_projects,
+            skip_existing_projects,
+        } => {
+            use std::io::Read;
+
+            let mut input = String::new();
+            std::io::stdin()
+                .read_to_string(&mut input)
+                .map_err(|e| AppError::Internal(format!("failed to read stdin: {e}")))?;
+
+            let backup: Backup = serde_json::from_str(&input)
+                .map_err(|e| AppError::Usage(format!("invalid backup JSON: {e}")))?;
+
+            if backup.version != BACKUP_VERSION {
+                return Err(AppError::Usage(format!(
+                    "unsupported backup version {}; this build supports version {BACKUP_VERSION}",
+                    backup.version
+                )));
+            }
+
+            let mode = if replace_existing_projects {
+                ImportMode::Replace
+            } else if skip_existing_projects {
+                ImportMode::Skip
+            } else {
+                ImportMode::Fail
+            };
+
+            let plan = backup::plan_import(store.as_ref(), &backup, mode).await?;
+            let report = store.apply_import(plan).await?;
+
+            if output_json {
+                let document = serde_json::json!({
+                    "projects": report.projects,
+                    "statuses": report.statuses,
+                    "tasks": report.tasks,
+                    "notes": report.notes,
+                });
+                print_json(&document)?;
+            } else {
+                println!(
+                    "Imported {} project(s), {} status(es), {} task(s), {} note(s)",
+                    report.projects, report.statuses, report.tasks, report.notes
+                );
+            }
+        }
         Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
         Command::Mcp { .. } => {
             unreachable!("the MCP server is handled before database-backed commands")

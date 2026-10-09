@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT setval(pg_get_serial_sequence('projects', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM projects), 1), 1), (SELECT COUNT(*) > 0 FROM projects))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "setval",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7367377567c85ca2ee1712b8351e5fe4c3843701532c335ab3447ebe28f59ee4"
+}

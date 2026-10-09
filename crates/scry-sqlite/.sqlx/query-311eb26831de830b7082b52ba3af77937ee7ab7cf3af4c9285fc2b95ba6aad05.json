@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                        INSERT INTO notes (id, task_id, contents, created_at)\n                        VALUES (?, ?, ?, ?)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "311eb26831de830b7082b52ba3af77937ee7ab7cf3af4c9285fc2b95ba6aad05"
+}

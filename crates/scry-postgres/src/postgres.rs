@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
+use scry_core::backup::{ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
 use scry_core::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
@@ -1390,5 +1391,183 @@ impl Store for PostgresStore {
             .map_err(|e| StorageError::Database(format!("failed to commit transaction: {}", e)))?;
 
         Ok(())
+    }
+
+    async fn apply_import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError> {
+        let mut tx =
+            self.pool.begin().await.map_err(|e| {
+                StorageError::Database(format!("failed to begin transaction: {}", e))
+            })?;
+
+        if plan.mode == ImportMode::Replace {
+            for project_id in &plan.project_ids_to_delete {
+                sqlx::query!(
+                    "DELETE FROM notes WHERE task_id IN (SELECT id FROM tasks WHERE project_id = $1)",
+                    project_id,
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| StorageError::Database(format!("failed to delete notes: {}", e)))?;
+                sqlx::query!("DELETE FROM tasks WHERE project_id = $1", project_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| {
+                        StorageError::Database(format!("failed to delete tasks: {}", e))
+                    })?;
+                sqlx::query!("DELETE FROM statuses WHERE project_id = $1", project_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| {
+                        StorageError::Database(format!("failed to delete statuses: {}", e))
+                    })?;
+                sqlx::query!("DELETE FROM projects WHERE id = $1", project_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| {
+                        StorageError::Database(format!("failed to delete project: {}", e))
+                    })?;
+            }
+        }
+
+        let mut report = ImportReport::default();
+
+        for backup_project in &plan.projects {
+            let project = &backup_project.project;
+
+            sqlx::query!(
+                r#"
+                    INSERT INTO projects (id, name, entry_status_id, task_sorting_mode, show_priority, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                "#,
+                project.id,
+                &project.name,
+                project.entry_status_id,
+                project.task_sorting_mode.to_string(),
+                project.show_priority,
+                project.created_at,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to create project: {}", e)))?;
+            report.projects += 1;
+
+            for status in &backup_project.statuses {
+                let color = status.color.map(|c| c.to_string());
+                sqlx::query!(
+                    r#"
+                        INSERT INTO statuses (id, project_id, name, position, color, style)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                    "#,
+                    status.id,
+                    status.project_id,
+                    &status.name,
+                    &status.position,
+                    color.as_deref(),
+                    &status.style.to_string(),
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| StorageError::Database(format!("failed to add status: {}", e)))?;
+                report.statuses += 1;
+            }
+
+            for task in &backup_project.tasks {
+                sqlx::query!(
+                    r#"
+                        INSERT INTO tasks (id, project_id, title, description, priority, status_id, position, tags, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    "#,
+                    task.id,
+                    task.project_id,
+                    &task.title,
+                    task.description.as_deref(),
+                    i64::from(task.priority),
+                    &task.status_id,
+                    &task.position,
+                    task.tags.to_string(),
+                    task.created_at,
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| StorageError::Database(format!("failed to add task: {}", e)))?;
+                report.tasks += 1;
+            }
+
+            for note in &backup_project.notes {
+                sqlx::query!(
+                    r#"
+                        INSERT INTO notes (id, task_id, contents, created_at)
+                        VALUES ($1, $2, $3, $4)
+                    "#,
+                    note.id,
+                    note.task_id,
+                    &note.contents,
+                    note.created_at,
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| StorageError::Database(format!("failed to add note: {}", e)))?;
+                report.notes += 1;
+            }
+        }
+
+        if plan.mode == ImportMode::Replace
+            && let Some(active_project_id) = plan.active_project_id
+        {
+            sqlx::query!(
+                r#"
+                    INSERT INTO config (key, value)
+                    VALUES ('active_project', $1)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                "#,
+                active_project_id.to_string(),
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to set active project: {}", e)))?;
+        }
+
+        // inserting explicit ids bypasses the identity sequences, so advance each one past MAX(id)
+        sqlx::query!(
+            "SELECT setval(pg_get_serial_sequence('projects', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM projects), 1), 1), (SELECT COUNT(*) > 0 FROM projects))"
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| {
+            StorageError::Database(format!("failed to reset projects id sequence: {}", e))
+        })?;
+
+        sqlx::query!(
+            "SELECT setval(pg_get_serial_sequence('statuses', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM statuses), 1), 1), (SELECT COUNT(*) > 0 FROM statuses))"
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| {
+            StorageError::Database(format!("failed to reset statuses id sequence: {}", e))
+        })?;
+
+        sqlx::query!(
+            "SELECT setval(pg_get_serial_sequence('tasks', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM tasks), 1), 1), (SELECT COUNT(*) > 0 FROM tasks))"
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| {
+            StorageError::Database(format!("failed to reset tasks id sequence: {}", e))
+        })?;
+
+        sqlx::query!(
+            "SELECT setval(pg_get_serial_sequence('notes', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM notes), 1), 1), (SELECT COUNT(*) > 0 FROM notes))"
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| {
+            StorageError::Database(format!("failed to reset notes id sequence: {}", e))
+        })?;
+
+        tx.commit()
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to commit transaction: {}", e)))?;
+
+        Ok(report)
     }
 }

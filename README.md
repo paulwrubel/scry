@@ -182,6 +182,31 @@ scry -p myapp move 1 "in progress"
 
 `<color>` is one of `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark-gray`, `light-red`, `light-green`, `light-yellow`, `light-blue`, `light-magenta`, `light-cyan`, `white`. `<style>` is one of `none`, `unchecked`, `checked`, `strikethrough`, `hidden`.
 
+### Export & Import
+
+Back up and restore projects as a single JSON document. `export` always writes to stdout and `import` always reads from stdin, so both compose with shell redirection.
+
+| Command                                   | Description                                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `scry export`                             | Write all projects (with statuses, tasks, and notes) as JSON to stdout                     |
+| `scry -p <name> export`                   | Write a single project as JSON to stdout (`-p` is the global flag, placed before `export`) |
+| `scry import`                             | Read a JSON backup from stdin and add its projects (fails if any name already exists)      |
+| `scry import --replace-existing-projects` | Add new projects, replacing existing projects whose names collide                          |
+| `scry import --skip-existing-projects`    | Add new projects, keeping existing projects whose names collide                            |
+
+A plain `scry import` is strict: it adds the incoming projects but fails, writing nothing, if any name already exists. Because scry always ships a built-in `default` project, a full backup (which contains `default`) conflicts on a plain import — restoring one therefore requires `scry import --replace-existing-projects`. `--replace-existing-projects` adds new projects and replaces any existing project whose name collides, while `--skip-existing-projects` adds new projects and keeps the existing ones on collision; the two flags are mutually exclusive. `scry -p <name> export` is handy for sharing a single project that doesn't collide.
+
+The typical round trip pipes one into the other:
+
+```sh
+scry export > scry-backup.json
+scry import --replace-existing-projects < scry-backup.json
+```
+
+The document is a single object, `{ "version": 1, "app_version": "0.20.0", "projects": [ ... ] }`. `version` is the format version checked on import and `app_version` is informational, recording the binary that produced the backup. Each project carries its own fields (`id`, `name`, `entry_status_id`, `task_sorting_mode`, `show_priority`, `created_at`) alongside nested `statuses`, `tasks`, and `notes` arrays. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` and `"style": "checked"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
+
+Import assigns fresh ids and rewrites the related `project_id`, `status_id`, and `task_id` references while preserving the other fields and timestamps. The `version` field is validated, and a backup from an unsupported version is rejected. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `statuses`, `tasks`, and `notes`.
+
 ### Skill Commands
 
 Install an Agent Skills `SKILL.md` so coding agents (Claude Code, opencode, and any harness
