@@ -271,4 +271,21 @@ The active project is persisted automatically.
 
 ## Database
 
-Tasks, projects, and statuses are stored in a SQLite database at `$XDG_DATA_HOME/scry/scry.db` (falling back to `~/.local/share/scry/scry.db`). No manual setup or migrations are required.
+scry stores data in a database chosen by the `database_url` config value or, if unset, the `DATABASE_URL` environment variable. The backend is selected by the URL scheme:
+
+- **SQLite** — `sqlite:///path/to/scry.db` (or `sqlite::memory:`). This is the default: no setup, and the database lives at `$XDG_DATA_HOME/scry/scry.db` (falling back to `~/.local/share/scry/scry.db`).
+- **PostgreSQL** — `postgres://user:pass@host/db` (or `postgresql://…`).
+
+Migrations run automatically on startup, so either backend needs no manual setup. To use Postgres, point scry at it:
+
+```sh
+DATABASE_URL=postgres://user:pass@localhost/scry scry list
+```
+
+or set it in `scry.toml`:
+
+```toml
+database_url = "postgres://user:pass@localhost/scry"
+```
+
+For local development against Postgres, the repo ships `compose.dev.yaml` and justfile helpers: `just pg-up` starts a dev Postgres (`postgres:18`), `just setup-database-postgres` applies the migrations, and `just pg-down` stops it (`just pg-reset` also wipes its data). After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query caches with `just sqlx-prepare`.

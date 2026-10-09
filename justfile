@@ -44,6 +44,12 @@ sqlx-prepare-postgres: setup-database-postgres
 [group('validate')]
 sqlx-prepare: sqlx-prepare-sqlite sqlx-prepare-postgres
 
+# verify both offline query caches are up to date (used in CI)
+[group('validate')]
+sqlx-prepare-check: setup-database setup-database-postgres
+    cd crates/scry-sqlite && SQLX_OFFLINE=false cargo sqlx prepare --check --database-url sqlite://{{justfile_directory()}}/scry.db
+    cd crates/scry-postgres && SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+
 # run all validation checks: test, check, clippy
 [group('validate')]
 validate:  test check clippy
