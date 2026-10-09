@@ -2,7 +2,7 @@ name: scry-dev
 
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:18
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: scry
