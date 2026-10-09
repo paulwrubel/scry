@@ -7,34 +7,17 @@ use scry_core::models::{
     TaskId, TaskSortingMode,
 };
 use scry_core::store::{Store, TaskToCreate};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
-use std::path::Path;
+use sqlx::postgres::{PgPool, PgPoolOptions};
 
 #[derive(Clone)]
-pub struct SqliteStore {
-    pool: SqlitePool,
+pub struct PostgresStore {
+    pool: PgPool,
 }
 
-impl SqliteStore {
+impl PostgresStore {
     pub async fn new(database_url: &str) -> Result<Self, StorageError> {
-        let db_path = database_url
-            .strip_prefix("sqlite://")
-            .ok_or_else(|| StorageError::Invalid("expected sqlite:// database URL".into()))?;
-
-        if let Some(parent) = Path::new(db_path).parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                StorageError::Database(format!("failed to create directory {:?}: {}", parent, e))
-            })?;
-        }
-
-        let connect_options = SqliteConnectOptions::new()
-            .filename(db_path)
-            .create_if_missing(true)
-            .foreign_keys(true);
-
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(connect_options)
+        let pool = PgPoolOptions::new()
+            .connect(database_url)
             .await
             .map_err(|e| StorageError::Database(format!("failed to connect: {}", e)))?;
 
@@ -61,14 +44,10 @@ fn task_from_fields(
     description: Option<String>,
     priority: i64,
     status_id: i64,
-    position: i64,
+    position: i32,
     tags: String,
-    created_at: String,
+    created_at: DateTime<Utc>,
 ) -> Result<Task, StorageError> {
-    let created_at = DateTime::parse_from_rfc3339(&created_at)
-        .map_err(|e| StorageError::Database(format!("invalid task created_at: {}", e)))?
-        .with_timezone(&Utc);
-
     Ok(Task {
         id,
         project_id,
@@ -77,7 +56,7 @@ fn task_from_fields(
         priority: Priority::try_from(priority)
             .map_err(|e| StorageError::Database(format!("invalid priority i64 value: {e}")))?,
         status_id,
-        position: position as i32,
+        position,
         tags: Tags::from(tags.as_str()),
         created_at,
     })
@@ -87,7 +66,7 @@ fn status_from_fields(
     id: i64,
     project_id: ProjectId,
     name: String,
-    position: i64,
+    position: i32,
     color: Option<String>,
     style: String,
 ) -> Status {
@@ -95,7 +74,7 @@ fn status_from_fields(
         id,
         project_id,
         name,
-        position: position as i32,
+        position,
         color: color.and_then(|c| Color::from_str(&c, false).ok()),
         style: style.as_str().into(),
     }
@@ -107,12 +86,8 @@ fn project_from_fields(
     entry_status_id: Option<StatusId>,
     task_sorting_mode: String,
     show_priority: bool,
-    created_at: String,
+    created_at: DateTime<Utc>,
 ) -> Result<Project, StorageError> {
-    let created_at = DateTime::parse_from_rfc3339(&created_at)
-        .map_err(|e| StorageError::Database(format!("invalid project created_at: {}", e)))?
-        .with_timezone(&Utc);
-
     Ok(Project {
         id,
         name,
@@ -127,12 +102,8 @@ fn note_from_fields(
     id: i64,
     task_id: i64,
     contents: String,
-    created_at: String,
+    created_at: DateTime<Utc>,
 ) -> Result<Note, StorageError> {
-    let created_at = DateTime::parse_from_rfc3339(&created_at)
-        .map_err(|e| StorageError::Database(format!("invalid note created_at: {}", e)))?
-        .with_timezone(&Utc);
-
     Ok(Note {
         id,
         task_id,
@@ -142,31 +113,31 @@ fn note_from_fields(
 }
 
 #[async_trait]
-impl Store for SqliteStore {
+impl Store for PostgresStore {
     async fn create_task(&self, task: TaskToCreate) -> Result<Task, StorageError> {
         let created_at = Utc::now();
 
         let row = sqlx::query!(
             r#"
                 INSERT INTO tasks (project_id, title, description, priority, status_id, position, tags, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING id
             "#,
             &task.project_id,
             &task.title,
-            &task.description,
+            task.description.as_deref(),
             i64::from(task.priority),
             &task.status_id,
             &task.position,
             task.tags.to_string(),
-            created_at.to_rfc3339(),
+            created_at,
         )
         .fetch_one(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to add task: {}", e)))?;
 
         Ok(Task {
-            id: row.id.expect("RETURNING guarantees id"),
+            id: row.id,
             project_id: task.project_id,
             title: task.title,
             description: task.description,
@@ -192,7 +163,7 @@ impl Store for SqliteStore {
                     tags,
                     created_at
                 FROM tasks
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -233,7 +204,7 @@ impl Store for SqliteStore {
                     tags,
                     created_at
                 FROM tasks
-                WHERE project_id = ?
+                WHERE project_id = $1
                 ORDER BY position ASC, id ASC
             "#,
             project_id,
@@ -276,7 +247,7 @@ impl Store for SqliteStore {
                     tags,
                     created_at
                 FROM tasks
-                WHERE status_id = ?
+                WHERE status_id = $1
                 ORDER BY position ASC, id ASC
             "#,
             status_id,
@@ -307,16 +278,16 @@ impl Store for SqliteStore {
             r#"
                 UPDATE tasks
                 SET 
-                    title = ?, 
-                    description = ?, 
-                    priority = ?, 
-                    status_id = ?, 
-                    position = ?, 
-                    tags = ?
-                WHERE id = ?
+                    title = $1, 
+                    description = $2, 
+                    priority = $3, 
+                    status_id = $4, 
+                    position = $5, 
+                    tags = $6
+                WHERE id = $7
             "#,
             &task.title,
-            &task.description,
+            task.description.as_deref(),
             i64::from(task.priority),
             &task.status_id,
             &task.position,
@@ -353,7 +324,7 @@ impl Store for SqliteStore {
                     tags,
                     created_at
                 FROM tasks
-                WHERE id = ?
+                WHERE id = $1
             "#,
             task.id,
         )
@@ -380,16 +351,16 @@ impl Store for SqliteStore {
                 r#"
                 UPDATE tasks
                 SET 
-                    title = ?, 
-                    description = ?, 
-                    priority = ?, 
-                    status_id = ?, 
-                    position = ?, 
-                    tags = ?
-                WHERE id = ?
+                    title = $1, 
+                    description = $2, 
+                    priority = $3, 
+                    status_id = $4, 
+                    position = $5, 
+                    tags = $6
+                WHERE id = $7
             "#,
                 &task.title,
-                &task.description,
+                task.description.as_deref(),
                 i64::from(task.priority),
                 &task.status_id,
                 &task.position,
@@ -415,22 +386,21 @@ impl Store for SqliteStore {
             r#"
                 UPDATE tasks
                 SET 
-                    title = ?,
-                    description = ?,
-                    priority = ?,
-                    status_id = ?,
+                    title = $1,
+                    description = $2,
+                    priority = $3,
+                    status_id = $4,
                     position = (
                         SELECT COALESCE(MAX(position), -1) + 1
                         FROM tasks
-                        WHERE status_id = ?
-                    ), tags = ?
-                WHERE id = ?
-                RETURNING position
+                        WHERE status_id = $4
+                    ), tags = $5
+                WHERE id = $6
+                RETURNING position AS "position!"
             "#,
             &task.title,
-            &task.description,
+            task.description.as_deref(),
             i64::from(task.priority),
-            &task.status_id,
             &task.status_id,
             task.tags.to_string(),
             &task.id,
@@ -447,7 +417,7 @@ impl Store for SqliteStore {
             .map_err(|e| StorageError::Database(format!("failed to commit transaction: {}", e)))?;
 
         Ok(Task {
-            position: row.position as i32,
+            position: row.position,
             ..task
         })
     }
@@ -456,7 +426,7 @@ impl Store for SqliteStore {
         sqlx::query!(
             r#"
                 DELETE FROM tasks
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -473,19 +443,19 @@ impl Store for SqliteStore {
         let row = sqlx::query!(
             r#"
                 INSERT INTO notes (task_id, contents, created_at)
-                VALUES (?, ?, ?)
+                VALUES ($1, $2, $3)
                 RETURNING id
             "#,
             &task_id,
             &contents,
-            created_at.to_rfc3339(),
+            created_at,
         )
         .fetch_one(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("failed to add note: {}", e)))?;
 
         Ok(Note {
-            id: row.id.expect("RETURNING guarantees id"),
+            id: row.id,
             task_id,
             contents,
             created_at,
@@ -501,7 +471,7 @@ impl Store for SqliteStore {
                     contents,
                     created_at
                 FROM notes
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -524,7 +494,7 @@ impl Store for SqliteStore {
                     contents,
                     created_at
                 FROM notes
-                WHERE task_id = ?
+                WHERE task_id = $1
                 ORDER BY created_at ASC
             "#,
             task_id,
@@ -551,7 +521,7 @@ impl Store for SqliteStore {
                     n.created_at
                 FROM notes n
                 JOIN tasks t ON t.id = n.task_id
-                WHERE t.project_id = ?
+                WHERE t.project_id = $1
                 ORDER BY n.created_at ASC
             "#,
             project_id,
@@ -569,8 +539,8 @@ impl Store for SqliteStore {
         let result = sqlx::query!(
             r#"
                 UPDATE notes
-                SET contents = ?
-                WHERE id = ?
+                SET contents = $1
+                WHERE id = $2
             "#,
             &note.contents,
             &note.id,
@@ -590,7 +560,7 @@ impl Store for SqliteStore {
         let result = sqlx::query!(
             r#"
                 DELETE FROM notes
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -613,16 +583,17 @@ impl Store for SqliteStore {
         color: Option<Color>,
         style: StatusStyle,
     ) -> Result<Status, StorageError> {
+        let color_str = color.map(|c| c.to_string());
         let inserted = sqlx::query!(
             r#"
                 INSERT INTO statuses (project_id, name, position, color, style)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING id
             "#,
             &project_id,
             &name,
             &position,
-            &color.map(|c| c.to_string()),
+            color_str.as_deref(),
             &style.to_string(),
         )
         .fetch_one(&self.pool)
@@ -630,7 +601,7 @@ impl Store for SqliteStore {
 
         match inserted {
             Ok(r) => Ok(Status {
-                id: r.id.expect("RETURNING guarantees id"),
+                id: r.id,
                 project_id,
                 name,
                 position,
@@ -659,7 +630,7 @@ impl Store for SqliteStore {
                     color,
                     style
                 FROM statuses
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -686,7 +657,7 @@ impl Store for SqliteStore {
                     color,
                     style
                 FROM statuses
-                WHERE project_id = ? AND name = ?
+                WHERE project_id = $1 AND name = $2
             "#,
             project_id,
             status_name,
@@ -713,7 +684,7 @@ impl Store for SqliteStore {
                     color,
                     style
                 FROM statuses
-                WHERE project_id = ?
+                WHERE project_id = $1
                 ORDER BY position ASC
             "#,
             project_id,
@@ -747,7 +718,7 @@ impl Store for SqliteStore {
                     color,
                     style
                 FROM statuses
-                WHERE id = ?
+                WHERE id = $1
             "#,
             status.id,
         )
@@ -774,7 +745,7 @@ impl Store for SqliteStore {
                     color,
                     style
                 FROM statuses
-                WHERE project_id = ? AND name = ?
+                WHERE project_id = $1 AND name = $2
             "#,
             status.project_id,
             status.name.clone(),
@@ -794,15 +765,16 @@ impl Store for SqliteStore {
             }
         }
 
+        let color_str = status.color.map(|c| c.to_string());
         let result = sqlx::query!(
             r#"
                 UPDATE statuses
-                SET name = ?, position = ?, color = ?, style = ?
-                WHERE id = ?
+                SET name = $1, position = $2, color = $3, style = $4
+                WHERE id = $5
             "#,
             &status.name,
             &status.position,
-            &status.color.map(|c| c.to_string()),
+            color_str.as_deref(),
             &status.style.to_string(),
             &status.id,
         )
@@ -845,7 +817,7 @@ impl Store for SqliteStore {
                     color,
                     style
                 FROM statuses
-                WHERE id = ?
+                WHERE id = $1
             "#,
             status_id,
         )
@@ -863,9 +835,9 @@ impl Store for SqliteStore {
         // count total statuses to clamp new_position
         let total = sqlx::query!(
             r#"
-                SELECT COUNT(*) AS count
+                SELECT COUNT(*) AS "count!"
                 FROM statuses
-                WHERE project_id = ?
+                WHERE project_id = $1
             "#,
             project_id,
         )
@@ -891,8 +863,8 @@ impl Store for SqliteStore {
         sqlx::query!(
             r#"
                 UPDATE statuses
-                SET position = position + ?
-                WHERE project_id = ? AND position >= ? AND position <= ?
+                SET position = position + $1
+                WHERE project_id = $2 AND position >= $3 AND position <= $4
             "#,
             delta,
             project_id,
@@ -906,8 +878,8 @@ impl Store for SqliteStore {
         sqlx::query!(
             r#"
                 UPDATE statuses
-                SET position = ?
-                WHERE id = ?
+                SET position = $1
+                WHERE id = $2
             "#,
             new_pos,
             status.id,
@@ -939,7 +911,7 @@ impl Store for SqliteStore {
                     color,
                     style
                 FROM statuses
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -958,9 +930,9 @@ impl Store for SqliteStore {
         // special case: we will NOT allow deleting a status that currently has tasks
         let row = sqlx::query!(
             r#"
-                SELECT COUNT(*) AS "count: i64"
+                SELECT COUNT(*) AS "count!"
                 FROM tasks
-                WHERE status_id = ?
+                WHERE status_id = $1
             "#,
             id,
         )
@@ -978,7 +950,7 @@ impl Store for SqliteStore {
         sqlx::query!(
             r#"
                 DELETE FROM statuses
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -1005,14 +977,14 @@ impl Store for SqliteStore {
         let result = sqlx::query!(
             r#"
                 INSERT INTO projects (name, entry_status_id, task_sorting_mode, show_priority, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING id
             "#,
             &name,
             entry_status_id,
             task_sorting_mode.to_string(),
             show_priority,
-            created_at.to_rfc3339(),
+            created_at,
         )
         .fetch_one(&self.pool)
         .await;
@@ -1048,7 +1020,7 @@ impl Store for SqliteStore {
             r#"
                 SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -1074,7 +1046,7 @@ impl Store for SqliteStore {
             r#"
                 SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
-                WHERE name = ?
+                WHERE name = $1
             "#,
             name,
         )
@@ -1125,11 +1097,11 @@ impl Store for SqliteStore {
         let result = sqlx::query!(
             r#"
                 UPDATE projects
-                SET name = ?, entry_status_id = ?, task_sorting_mode = ?, show_priority = ?
-                WHERE id = ?
+                SET name = $1, entry_status_id = $2, task_sorting_mode = $3, show_priority = $4
+                WHERE id = $5
             "#,
             &project.name,
-            &project.entry_status_id,
+            project.entry_status_id,
             &project.task_sorting_mode.to_string(),
             &project.show_priority,
             &project.id,
@@ -1179,7 +1151,7 @@ impl Store for SqliteStore {
             r#"
                 SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
-                WHERE name = ?
+                WHERE name = $1
             "#,
             &name,
         )
@@ -1200,7 +1172,7 @@ impl Store for SqliteStore {
         sqlx::query!(
             r#"
                 DELETE FROM tasks
-                WHERE project_id = ?
+                WHERE project_id = $1
             "#,
             project.id,
         )
@@ -1211,7 +1183,7 @@ impl Store for SqliteStore {
         sqlx::query!(
             r#"
                 DELETE FROM statuses
-                WHERE project_id = ?
+                WHERE project_id = $1
             "#,
             project.id,
         )
@@ -1222,7 +1194,7 @@ impl Store for SqliteStore {
         sqlx::query!(
             r#"
                 DELETE FROM projects
-                WHERE id = ?
+                WHERE id = $1
             "#,
             project.id,
         )
@@ -1246,7 +1218,7 @@ impl Store for SqliteStore {
                 r#"
                     SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                     FROM projects
-                    WHERE name = ?
+                    WHERE name = $1
                 "#,
                 "default",
             )
@@ -1266,8 +1238,9 @@ impl Store for SqliteStore {
 
             sqlx::query!(
                 r#"
-                    INSERT OR REPLACE INTO config (key, value)
-                    VALUES ('active_project', ?)
+                    INSERT INTO config (key, value)
+                    VALUES ('active_project', $1)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
                 "#,
                 default.id.to_string(),
             )
@@ -1311,7 +1284,7 @@ impl Store for SqliteStore {
                 r#"
                     SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                     FROM projects
-                    WHERE name = ?
+                    WHERE name = $1
                 "#,
                 "default",
             )
@@ -1331,8 +1304,9 @@ impl Store for SqliteStore {
 
             sqlx::query!(
                 r#"
-                    INSERT OR REPLACE INTO config (key, value)
-                    VALUES ('active_project', ?)
+                    INSERT INTO config (key, value)
+                    VALUES ('active_project', $1)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
                 "#,
                 default.id.to_string(),
             )
@@ -1346,7 +1320,7 @@ impl Store for SqliteStore {
             r#"
                 SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
-                WHERE id = ?
+                WHERE id = $1
             "#,
             id,
         )
@@ -1381,7 +1355,7 @@ impl Store for SqliteStore {
             r#"
                 SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
-                WHERE name = ?
+                WHERE name = $1
             "#,
             name,
         )
@@ -1401,8 +1375,9 @@ impl Store for SqliteStore {
 
         sqlx::query!(
             r#"
-                INSERT OR REPLACE INTO config (key, value)
-                VALUES ('active_project', ?)
+                INSERT INTO config (key, value)
+                VALUES ('active_project', $1)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
             "#,
             project.id.to_string(),
         )

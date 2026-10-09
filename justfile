@@ -1,16 +1,48 @@
 set shell := ["bash", "-uc"]
 
-# regenerate sqlx offline query cache by rebuilding the DB fresh
+# rebuild the sqlite database fresh (used for the sqlite offline query cache)
 [group('validate')]
 setup-database:
     rm -f scry.db
     touch scry.db
     sqlx migrate run --source crates/scry-sqlite/migrations
 
-# regenerate sqlx offline query cache by rebuilding the DB fresh
+# regenerate the sqlite offline query cache by rebuilding the DB fresh
 [group('validate')]
-sqlx-prepare: setup-database
-    cargo sqlx prepare --workspace
+sqlx-prepare-sqlite: setup-database
+    cd crates/scry-sqlite && SQLX_OFFLINE=false cargo sqlx prepare --database-url sqlite://{{justfile_directory()}}/scry.db
+
+# start the dev postgres and wait for it to be healthy
+[group('validate')]
+pg-up:
+    docker compose -f compose.dev.yaml up -d --wait
+
+# stop the dev postgres (keep its data)
+[group('validate')]
+pg-down:
+    docker compose -f compose.dev.yaml down
+
+# stop the dev postgres and wipe its data volume
+[group('validate')]
+pg-reset:
+    docker compose -f compose.dev.yaml down -v
+
+# run the postgres migrations against the local postgres
+[group('validate')]
+setup-database-postgres: pg-up
+    sqlx migrate run --source crates/scry-postgres/migrations --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+
+# regenerate the postgres offline query cache against the local postgres
+[group('validate')]
+sqlx-prepare-postgres: setup-database-postgres
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
+    cd crates/scry-postgres && SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+
+# regenerate both offline query caches
+[group('validate')]
+sqlx-prepare: sqlx-prepare-sqlite sqlx-prepare-postgres
 
 # run all validation checks: test, check, clippy
 [group('validate')]

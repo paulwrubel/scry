@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                SELECT\n                    n.id,\n                    n.task_id,\n                    n.contents,\n                    n.created_at\n                FROM notes n\n                WHERE n.id = ?\n            ",
+  "query": "\n                SELECT\n                    id,\n                    task_id,\n                    contents,\n                    created_at\n                FROM notes\n                WHERE task_id = ?\n                ORDER BY created_at ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "60b93dcf898a843c53a7403d54d6603e866357a41011762c431e2d3e43f7684d"
+  "hash": "ea69b10e22a28cbf5e03a670467515b6f1083b9ef69162eb558d896604d95a4e"
 }
