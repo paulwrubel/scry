@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM statuses WHERE project_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b4f99e076dc4b4ea359b8681f1ff71feecfe1bafb3bb877eeede4055dd5fc835"
+}

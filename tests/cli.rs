@@ -1435,3 +1435,284 @@ fn mcp_stdio_calls_the_task_add_tool() {
         .success()
         .stdout(predicate::str::contains("Alpha"));
 }
+
+/// Remove id-bearing keys recursively so two backups can be compared on
+/// everything except generated ids.
+fn strip_ids(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            for key in [
+                "id",
+                "project_id",
+                "status_id",
+                "task_id",
+                "entry_status_id",
+            ] {
+                map.remove(key);
+            }
+            for child in map.values_mut() {
+                strip_ids(child);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                strip_ids(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn export_covers_projects_statuses_tasks_and_notes() {
+    let h = Harness::new();
+    create_todolist(&h, "myapp");
+    h.run(&[
+        "-p",
+        "myapp",
+        "add",
+        "First",
+        "--tags",
+        "work,urgent",
+        "--priority",
+        "high",
+    ])
+    .success();
+    h.run(&["-p", "myapp", "add", "Second"]).success();
+    h.run(&["-p", "myapp", "note", "add", "1", "a note"])
+        .success();
+
+    let backup = stdout_json(&h.run(&["export"]).success());
+
+    assert_eq!(backup["version"], 1);
+    assert_eq!(backup["app_version"], env!("CARGO_PKG_VERSION"));
+    let projects = backup["projects"].as_array().expect("projects array");
+    assert_eq!(projects.len(), 2);
+
+    let myapp = projects
+        .iter()
+        .find(|project| project.get("name").and_then(Value::as_str) == Some("myapp"))
+        .expect("myapp project is exported");
+
+    assert_eq!(myapp["statuses"].as_array().expect("statuses").len(), 2);
+    assert_eq!(myapp["tasks"].as_array().expect("tasks").len(), 2);
+    assert_eq!(myapp["notes"].as_array().expect("notes").len(), 1);
+
+    let first = &myapp["tasks"][0];
+    assert_eq!(first["title"], "First");
+    assert_eq!(first["priority"], "high");
+    let tags: Vec<&str> = first["tags"]
+        .as_array()
+        .expect("tags array")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(tags.contains(&"work"), "tags were: {tags:?}");
+    assert!(tags.contains(&"urgent"), "tags were: {tags:?}");
+
+    assert_eq!(myapp["notes"][0]["task_id"], first["id"]);
+}
+
+#[test]
+fn export_project_scopes_to_one() {
+    let h = Harness::new();
+    create_todolist(&h, "myapp");
+    h.run(&["-p", "myapp", "add", "Alpha"]).success();
+
+    let backup = stdout_json(&h.run(&["-p", "myapp", "export"]).success());
+    let projects = backup["projects"].as_array().expect("projects array");
+
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0]["name"], "myapp");
+}
+
+#[test]
+fn import_replace_existing_projects_replaces_conflicts() {
+    let source = Harness::new();
+    create_todolist(&source, "myapp");
+    source.run(&["-p", "myapp", "add", "Alpha"]).success();
+    source
+        .run(&["-p", "myapp", "note", "add", "1", "a note"])
+        .success();
+    let exported = source.run(&["export"]).success();
+    let backup_json =
+        String::from_utf8(exported.get_output().stdout.clone()).expect("utf-8 export");
+
+    let target = Harness::new();
+    create_todolist(&target, "myapp");
+    target.run(&["-p", "myapp", "add", "Old"]).success();
+    target.run(&["project", "create", "oldstuff"]).success();
+
+    let mut cmd = target.cmd();
+    cmd.args(["--json", "import", "--replace-existing-projects"])
+        .write_stdin(backup_json);
+    let report = stdout_json(&cmd.assert().success());
+    // `default` and `myapp` both already existed, so both were replaced.
+    assert_eq!(report["projects"], 2);
+
+    let listed = stdout_json(&target.run(&["-p", "myapp", "--json", "list"]).success());
+    let titles: Vec<&str> = listed
+        .as_array()
+        .expect("task list array")
+        .iter()
+        .filter_map(|task| task["title"].as_str())
+        .collect();
+    assert_eq!(titles, ["Alpha"]);
+
+    let listed = stdout_json(&target.run(&["--json", "project", "list"]).success());
+    let names: Vec<&str> = listed
+        .as_array()
+        .expect("project list array")
+        .iter()
+        .filter_map(|project| project["name"].as_str())
+        .collect();
+    for expected in ["default", "myapp", "oldstuff"] {
+        assert!(names.contains(&expected), "names were: {names:?}");
+    }
+}
+
+#[test]
+fn import_round_trip_preserves_fields_and_timestamps() {
+    let source = Harness::new();
+    create_todolist(&source, "myapp");
+    source
+        .run(&[
+            "-p",
+            "myapp",
+            "add",
+            "Alpha",
+            "--description",
+            "a desc",
+            "--priority",
+            "high",
+            "--tags",
+            "work,urgent",
+        ])
+        .success();
+    source
+        .run(&["-p", "myapp", "note", "add", "1", "a note"])
+        .success();
+    let exported = source.run(&["export"]).success();
+    let backup_json =
+        String::from_utf8(exported.get_output().stdout.clone()).expect("utf-8 export");
+    let mut original: Value = serde_json::from_str(&backup_json).expect("valid export JSON");
+
+    let target = Harness::new();
+    let mut cmd = target.cmd();
+    cmd.args(["import", "--replace-existing-projects"])
+        .write_stdin(backup_json);
+    cmd.assert().success();
+
+    let mut round_tripped: Value = stdout_json(&target.run(&["export"]).success());
+
+    // Import assigns fresh ids, so the two backups' ids are expected to differ;
+    // every other field value and timestamp must survive the round trip.
+    strip_ids(&mut original);
+    strip_ids(&mut round_tripped);
+    assert_eq!(round_tripped, original);
+}
+
+#[test]
+fn import_skip_existing_projects_keeps_existing() {
+    let source = Harness::new();
+    create_todolist(&source, "myapp");
+    source.run(&["-p", "myapp", "add", "Alpha"]).success();
+    let exported = source.run(&["export"]).success();
+    let backup_json =
+        String::from_utf8(exported.get_output().stdout.clone()).expect("utf-8 export");
+
+    let target = Harness::new();
+
+    let mut first = target.cmd();
+    first
+        .args(["--json", "import", "--skip-existing-projects"])
+        .write_stdin(backup_json.clone());
+    let report = stdout_json(&first.assert().success());
+    // The backup also contains `default`, which the target already has.
+    assert_eq!(report["projects"], 1);
+
+    let listed = stdout_json(&target.run(&["-p", "myapp", "--json", "list"]).success());
+    let titles: Vec<&str> = listed
+        .as_array()
+        .expect("task list array")
+        .iter()
+        .filter_map(|task| task["title"].as_str())
+        .collect();
+    assert!(titles.contains(&"Alpha"), "titles were: {titles:?}");
+
+    let mut second = target.cmd();
+    second
+        .args(["--json", "import", "--skip-existing-projects"])
+        .write_stdin(backup_json);
+    let report = stdout_json(&second.assert().success());
+    assert_eq!(report["projects"], 0);
+    assert_eq!(report["statuses"], 0);
+    assert_eq!(report["tasks"], 0);
+    assert_eq!(report["notes"], 0);
+}
+
+#[test]
+fn import_errors_on_conflicting_project_names() {
+    let source = Harness::new();
+    create_todolist(&source, "myapp");
+    source.run(&["-p", "myapp", "add", "Alpha"]).success();
+    let exported = source.run(&["export"]).success();
+    let backup_json =
+        String::from_utf8(exported.get_output().stdout.clone()).expect("utf-8 export");
+
+    let target = Harness::new();
+
+    let mut cmd = target.cmd();
+    cmd.arg("import").write_stdin(backup_json);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("already exist"));
+
+    let listed = stdout_json(&target.run(&["--json", "project", "list"]).success());
+    let names: Vec<&str> = listed
+        .as_array()
+        .expect("project list array")
+        .iter()
+        .filter_map(|project| project["name"].as_str())
+        .collect();
+    assert_eq!(names, ["default"]);
+}
+
+#[test]
+fn import_rejects_unknown_version() {
+    let h = Harness::new();
+
+    let mut cmd = h.cmd();
+    cmd.arg("import")
+        .write_stdin(r#"{"version":99,"projects":[]}"#);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("unsupported backup version"));
+}
+
+#[test]
+fn import_rejects_invalid_json() {
+    let h = Harness::new();
+
+    let mut cmd = h.cmd();
+    cmd.arg("import").write_stdin("not json");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid backup JSON"));
+}
+
+#[test]
+fn import_rejects_conflicting_flags() {
+    let h = Harness::new();
+
+    let mut cmd = h.cmd();
+    cmd.args([
+        "import",
+        "--replace-existing-projects",
+        "--skip-existing-projects",
+    ])
+    .write_stdin("{}");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}

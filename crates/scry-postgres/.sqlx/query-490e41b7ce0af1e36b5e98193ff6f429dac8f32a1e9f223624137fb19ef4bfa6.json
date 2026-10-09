@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        INSERT INTO notes (id, task_id, contents, created_at)\n                        VALUES ($1, $2, $3, $4)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "490e41b7ce0af1e36b5e98193ff6f429dac8f32a1e9f223624137fb19ef4bfa6"
+}

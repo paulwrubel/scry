@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM notes WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b842638abc875002eca3f5b4081bb02a0082f4a82efc2b5b5ef49c7e13c3c465"
+}

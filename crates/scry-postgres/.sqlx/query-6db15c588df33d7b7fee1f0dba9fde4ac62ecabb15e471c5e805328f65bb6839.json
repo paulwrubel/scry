@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        INSERT INTO tasks (id, project_id, title, description, priority, status_id, position, tags, created_at)\n                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int4",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6db15c588df33d7b7fee1f0dba9fde4ac62ecabb15e471c5e805328f65bb6839"
+}

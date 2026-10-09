@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        INSERT INTO statuses (id, project_id, name, position, color, style)\n                        VALUES ($1, $2, $3, $4, $5, $6)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a50b801797a8a00d77096feb11e3584820ede93b6b5e15643d3c3b2dbbc81cfc"
+}
