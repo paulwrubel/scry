@@ -5,15 +5,15 @@ use rmcp::schemars;
 use crate::error::AppError;
 use crate::models::{PROJECT_TEMPLATES, Project};
 use crate::service::ProjectService;
-use crate::store::{TaskStore, sqlite::SqliteStore};
+use crate::store::Store;
 
 use super::resolve_project;
 
-pub(crate) async fn list_projects(store: &SqliteStore) -> Result<Vec<Project>, AppError> {
+pub(crate) async fn list_projects(store: &dyn Store) -> Result<Vec<Project>, AppError> {
     Ok(store.get_all_projects().await?)
 }
 
-pub(crate) async fn active_project(store: &SqliteStore) -> Result<Project, AppError> {
+pub(crate) async fn active_project(store: &dyn Store) -> Result<Project, AppError> {
     Ok(store.get_active_project().await?)
 }
 
@@ -27,7 +27,7 @@ pub struct ProjectCreateParams {
 }
 
 pub(crate) async fn create_project(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &ProjectCreateParams,
 ) -> Result<Project, AppError> {
     let service = ProjectService::new(store);
@@ -59,7 +59,7 @@ pub struct ProjectRenameParams {
 }
 
 pub(crate) async fn rename_project(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &ProjectRenameParams,
 ) -> Result<Project, AppError> {
     let project = resolve_project(store, Some(params.old_name.as_str())).await?;
@@ -78,7 +78,7 @@ pub struct ProjectUseParams {
 }
 
 pub(crate) async fn use_project(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &ProjectUseParams,
 ) -> Result<Project, AppError> {
     let service = ProjectService::new(store);
@@ -94,7 +94,7 @@ pub struct ProjectDeleteParams {
 }
 
 pub(crate) async fn delete_project(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &ProjectDeleteParams,
 ) -> Result<Project, AppError> {
     let service = ProjectService::new(store);

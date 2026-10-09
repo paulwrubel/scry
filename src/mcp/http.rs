@@ -1,5 +1,7 @@
 //! Streamable HTTP transport for the MCP server.
 
+use crate::error::AppError;
+use crate::store::ArcStore;
 use axum::extract::{Request, State};
 use axum::http::{StatusCode, header};
 use axum::middleware::Next;
@@ -8,9 +10,6 @@ use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
 use subtle::ConstantTimeEq;
-
-use crate::error::AppError;
-use crate::store::sqlite::SqliteStore;
 
 use super::ScryServer;
 
@@ -27,7 +26,7 @@ const LOOPBACK_ORIGINS: &[&str] = &["http://localhost:*", "http://127.0.0.1:*", 
 /// gates every request, and `allow_any_host` relaxes Host validation for
 /// non-loopback bindings.
 pub(crate) fn router(
-    store: &SqliteStore,
+    store: &ArcStore,
     token: Option<String>,
     allow_any_host: bool,
 ) -> axum::Router {
@@ -90,7 +89,7 @@ fn bearer_token(headers: &axum::http::HeaderMap) -> Option<&str> {
 ///
 /// The address decides exposure: a non-loopback bind is reachable from other
 /// hosts, so it emits a warning and disables the loopback Host allow-list.
-pub async fn serve_http(store: SqliteStore, addr: &str) -> Result<(), AppError> {
+pub async fn serve_http(store: ArcStore, addr: &str) -> Result<(), AppError> {
     let token = std::env::var(TOKEN_ENV)
         .ok()
         .filter(|token| !token.is_empty());

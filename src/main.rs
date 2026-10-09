@@ -9,8 +9,6 @@ mod state;
 mod store;
 mod tui;
 
-use std::path::{Path, PathBuf};
-
 use crate::color::ColorChoice;
 use crate::models::{
     Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, StatusStyle, Tags, Task,
@@ -19,11 +17,14 @@ use crate::models::{
 use crate::service::{ProjectService, TaskInput};
 use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
+use crate::store::ArcStore;
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use config::ScryConfig;
 use error::{AppError, ServiceError};
-use store::{TaskStore, sqlite::SqliteStore};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use store::sqlite::SqliteStore;
 
 #[derive(Parser)]
 #[command(name = "scry", about = "A task manager for the terminal", version)]
@@ -347,7 +348,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     }
 
     let config = ScryConfig::load()?;
-    let store = SqliteStore::new(&config.database_url).await?;
+    let store: ArcStore = Arc::new(SqliteStore::new(&config.database_url).await?);
 
     if let Some(Command::Mcp { http }) = &cli.command {
         return match http.as_deref() {
@@ -356,14 +357,14 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         };
     }
 
-    let project = resolve_project(&store, cli.project.as_deref()).await?;
+    let project = resolve_project(store.clone(), cli.project.as_deref()).await?;
 
     let Some(command) = cli.command else {
         let mut app = tui::App::new(config, store, project.id);
         return app.run().await;
     };
 
-    let service = ProjectService::new(&store);
+    let service = ProjectService::new(store.as_ref());
 
     match command {
         Command::Add {
@@ -463,7 +464,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             }
         }
         Command::Show { id } => {
-            let state = ProjectState::load_from_store(&store, project.id).await?;
+            let state = ProjectState::load_from_store(store.as_ref(), project.id).await?;
 
             let Some(task) = state.get_task_by_id(id) else {
                 return Err(AppError::Service(ServiceError::TaskNotFound {
@@ -518,7 +519,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             }
         }
         Command::List { status, search } => {
-            let mut state = ProjectState::load_from_store(&store, project.id).await?;
+            let mut state = ProjectState::load_from_store(store.as_ref(), project.id).await?;
             if let Some(search) = search.filter(|s| !s.is_empty()) {
                 state = state.with_substring_filter(search);
             }
@@ -935,7 +936,7 @@ fn skill_target(harness: Option<Harness>, dir: Option<&Path>) -> Result<PathBuf,
 }
 
 /// Resolve which project to use: --project flag takes precedence over active project.
-async fn resolve_project(store: &SqliteStore, flag: Option<&str>) -> Result<Project, AppError> {
+async fn resolve_project(store: ArcStore, flag: Option<&str>) -> Result<Project, AppError> {
     if let Some(name) = flag {
         let project = store
             .get_project_by_name(name)

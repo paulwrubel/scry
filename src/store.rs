@@ -1,10 +1,10 @@
-use async_trait::async_trait;
-
 use crate::error::StorageError;
 use crate::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
+use async_trait::async_trait;
+use std::sync::Arc;
 
 pub(crate) struct TaskToCreate {
     pub(crate) project_id: ProjectId,
@@ -30,8 +30,10 @@ impl From<&Task> for TaskToCreate {
     }
 }
 
+pub type ArcStore = Arc<dyn Store>;
+
 #[async_trait]
-pub trait TaskStore: Send + Sync {
+pub trait Store: Send + Sync {
     /// Add a new task.
     async fn create_task(&self, task_to_create: TaskToCreate) -> Result<Task, StorageError>;
 

@@ -5,7 +5,7 @@ use rmcp::schemars;
 use crate::error::AppError;
 use crate::models::{Color, Status, StatusStyle};
 use crate::service::ProjectService;
-use crate::store::{TaskStore, sqlite::SqliteStore};
+use crate::store::Store;
 
 use super::resolve_project;
 
@@ -17,7 +17,7 @@ pub struct StatusListParams {
 }
 
 pub(crate) async fn list_statuses(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &StatusListParams,
 ) -> Result<Vec<Status>, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -34,7 +34,7 @@ pub struct StatusAddParams {
 }
 
 pub(crate) async fn add_status(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &StatusAddParams,
 ) -> Result<Status, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -53,7 +53,7 @@ pub struct StatusRemoveParams {
 }
 
 pub(crate) async fn remove_status(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &StatusRemoveParams,
 ) -> Result<Status, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -75,7 +75,7 @@ pub struct StatusRenameParams {
 }
 
 pub(crate) async fn rename_status(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &StatusRenameParams,
 ) -> Result<Status, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -111,7 +111,7 @@ pub struct StatusMoveParams {
 }
 
 pub(crate) async fn move_status(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &StatusMoveParams,
 ) -> Result<Status, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -141,7 +141,7 @@ pub struct StatusSetColorParams {
 }
 
 pub(crate) async fn set_status_color(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &StatusSetColorParams,
 ) -> Result<Status, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -166,7 +166,7 @@ pub struct StatusSetStyleParams {
 }
 
 pub(crate) async fn set_status_style(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &StatusSetStyleParams,
 ) -> Result<Status, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;

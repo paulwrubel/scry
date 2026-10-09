@@ -10,7 +10,7 @@ use crate::models::StatusStyle;
 use crate::models::Tags;
 use crate::models::TaskSortingMode;
 use crate::models::{Project, ProjectId, Status, Task, TaskId};
-use crate::store::TaskStore;
+use crate::store::Store;
 
 // Aug 9, 2026 at 4:40pm
 pub const DATETIME_FORMAT_STR: &str = "%b %-d, %Y at %-I:%M%P";
@@ -85,7 +85,7 @@ impl From<&TaskWithNotes> for Task {
 
 impl ProjectState {
     pub async fn load_from_store(
-        store: &dyn TaskStore,
+        store: &dyn Store,
         project_id: ProjectId,
     ) -> Result<Self, StorageError> {
         let project = store

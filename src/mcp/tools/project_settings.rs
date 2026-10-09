@@ -5,7 +5,7 @@ use rmcp::schemars;
 use crate::error::AppError;
 use crate::models::{Project, TaskSortingMode};
 use crate::service::ProjectService;
-use crate::store::sqlite::SqliteStore;
+use crate::store::Store;
 
 use super::resolve_project;
 
@@ -19,7 +19,7 @@ pub struct ProjectSetEntryStatusParams {
 }
 
 pub(crate) async fn set_entry_status(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &ProjectSetEntryStatusParams,
 ) -> Result<Project, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -46,7 +46,7 @@ pub struct ProjectSetSortModeParams {
 }
 
 pub(crate) async fn set_sort_mode(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &ProjectSetSortModeParams,
 ) -> Result<Project, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;
@@ -67,7 +67,7 @@ pub struct ProjectSetShowPriorityParams {
 }
 
 pub(crate) async fn set_show_priority(
-    store: &SqliteStore,
+    store: &dyn Store,
     params: &ProjectSetShowPriorityParams,
 ) -> Result<Project, AppError> {
     let project = resolve_project(store, params.project.as_deref()).await?;

@@ -3,7 +3,7 @@ use crate::models::{
     Color, Note, Priority, Project, ProjectTemplate, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
-use crate::store::{TaskStore, TaskToCreate};
+use crate::store::{Store, TaskToCreate};
 
 /// Partial task input, shared by create and update. `None` leaves a field
 /// unchanged on update; `Some("")` on `description` clears it; `Some(Tags)` on
@@ -30,11 +30,11 @@ pub struct TaskChangeResult {
 /// ids, picks defaults, computes positions, and enforces invariants before
 /// delegating the raw writes to `TaskStore`.
 pub struct ProjectService<'a> {
-    store: &'a dyn TaskStore,
+    store: &'a dyn Store,
 }
 
 impl<'a> ProjectService<'a> {
-    pub fn new(store: &'a dyn TaskStore) -> Self {
+    pub fn new(store: &'a dyn Store) -> Self {
         Self { store }
     }
 

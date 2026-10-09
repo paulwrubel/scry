@@ -9,7 +9,7 @@ use crate::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
-use crate::store::{TaskStore, TaskToCreate};
+use crate::store::{Store, TaskToCreate};
 
 #[derive(Clone)]
 pub struct SqliteStore {
@@ -143,7 +143,7 @@ fn note_from_fields(
 }
 
 #[async_trait]
-impl TaskStore for SqliteStore {
+impl Store for SqliteStore {
     async fn create_task(&self, task: TaskToCreate) -> Result<Task, StorageError> {
         let created_at = Utc::now();
 
