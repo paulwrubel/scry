@@ -1,6 +1,7 @@
 mod client_state;
 mod color;
 mod config;
+mod docs;
 mod error;
 mod http_auth;
 mod mcp;
@@ -136,6 +137,8 @@ enum Command {
     /// Manage projects
     #[command(subcommand)]
     Project(ProjectCommand),
+    /// Print the bundled documentation (the README) to stdout
+    Docs,
     /// Manage the agent skill that teaches coding agents to drive scry
     #[command(subcommand)]
     Skill(SkillCommand),
@@ -352,7 +355,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         && (cli.command.is_none()
             || matches!(
                 cli.command.as_ref(),
-                Some(Command::Mcp { .. } | Command::Serve { .. })
+                Some(
+                    Command::Mcp { .. } | Command::Serve { .. } | Command::Docs | Command::Skill(_)
+                )
             ))
     {
         return Err(AppError::Usage(
@@ -364,6 +369,12 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         ColorChoice::Never.apply();
     } else {
         cli.color.apply();
+    }
+
+    // `scry docs` only prints the embedded README: no database or active project involved.
+    if matches!(cli.command.as_ref(), Some(Command::Docs)) {
+        print!("{}", docs::README_MD);
+        return Ok(());
     }
 
     // Skill commands are filesystem-only: they never touch the database or active project.
@@ -1018,6 +1029,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         },
         Command::Export => unreachable!("handled before the active project is resolved"),
         Command::Import { .. } => unreachable!("handled before the active project is resolved"),
+        Command::Docs => unreachable!("docs is handled before database setup"),
         Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
         Command::Mcp { .. } => {
             unreachable!("the MCP server is handled before database-backed commands")

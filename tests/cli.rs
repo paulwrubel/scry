@@ -1217,6 +1217,15 @@ fn skill_print_writes_nothing_to_disk() {
 }
 
 #[test]
+fn docs_prints_readme_to_stdout() {
+    let h = Harness::new();
+
+    let assert = h.run(&["docs"]).success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf-8 stdout");
+    assert_eq!(stdout, include_str!("../README.md"));
+}
+
+#[test]
 fn skill_uninstall_dir_flag_removes_custom_install() {
     let h = Harness::new();
     let path = h.temp_dir.path().join("custom/skills/scry/SKILL.md");
@@ -1299,6 +1308,26 @@ fn mcp_stdio_completes_handshake_and_lists_tools() {
 fn mcp_rejects_the_json_flag() {
     let h = Harness::new();
     h.run(&["--json", "mcp"])
+        .failure()
+        .stderr(predicate::str::contains(
+            "--json is exclusive to cli commands",
+        ));
+}
+
+#[test]
+fn docs_rejects_the_json_flag() {
+    let h = Harness::new();
+    h.run(&["--json", "docs"])
+        .failure()
+        .stderr(predicate::str::contains(
+            "--json is exclusive to cli commands",
+        ));
+}
+
+#[test]
+fn skill_rejects_the_json_flag() {
+    let h = Harness::new();
+    h.run(&["--json", "skill", "print"])
         .failure()
         .stderr(predicate::str::contains(
             "--json is exclusive to cli commands",

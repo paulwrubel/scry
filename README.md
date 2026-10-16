@@ -131,7 +131,7 @@ scry -p myapp move 1 "in progress"
 
 `--color <auto|always|never>` — when to colorize output. `auto` (the default) colorizes only when stdout is a terminal and `NO_COLOR` is unset.
 
-`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand (the TUI) or with `mcp` is an error. See [JSON Output](#json-output).
+`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand (the TUI) or with `mcp`, `serve`, `docs`, or `skill` is an error. See [JSON Output](#json-output).
 
 ### Task Commands
 
@@ -206,6 +206,16 @@ scry import --replace-existing-projects < scry-backup.json
 The document is a single object, `{ "version": 1, "app_version": "0.20.0", "projects": [ ... ] }`. `version` is the format version checked on import and `app_version` is informational, recording the binary that produced the backup. Each project carries its own fields (`id`, `name`, `entry_status_id`, `task_sorting_mode`, `show_priority`, `created_at`) alongside nested `statuses`, `tasks`, and `notes` arrays. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` and `"style": "checked"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
 
 Import assigns fresh ids and rewrites the related `project_id`, `status_id`, and `task_id` references while preserving the other fields and timestamps. The `version` field is validated, and a backup from an unsupported version is rejected. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `statuses`, `tasks`, and `notes`.
+
+### Documentation
+
+Print the full scry README, which is embedded in the binary at build time, to stdout as raw
+Markdown. It works offline with no network access, is suitable for piping to a pager or a Markdown
+renderer, and never reads or writes the database.
+
+| Command     | Description                        |
+| ----------- | ---------------------------------- |
+| `scry docs` | Print the bundled README to stdout |
 
 ### Skill Commands
 
@@ -348,7 +358,7 @@ scry -p myapp --json add "design API"
 
 Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
-`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) or with `mcp` or `serve` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
+`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) or with `mcp`, `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 
 On failure, a structured error document is written to stderr:
 
