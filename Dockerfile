@@ -40,8 +40,9 @@ COPY --from=builder /app/target/release/scry /usr/local/bin/scry
 USER scry
 ENV DATABASE_URL=sqlite:///data/scry.db
 VOLUME ["/data"]
+EXPOSE 8000
 
 ENTRYPOINT ["scry"]
-# Defaults to the stdio transport; override for HTTP, e.g.
-#   command: ["mcp", "--http", "0.0.0.0:8000"]
-CMD ["mcp"]
+# Defaults to the REST API on 0.0.0.0:8000; override the command for another
+# surface, e.g. command: ["mcp"] for stdio or ["mcp", "--http", "0.0.0.0:8000"].
+CMD ["serve", "--http", "0.0.0.0:8000"]

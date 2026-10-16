@@ -33,11 +33,41 @@ cargo build --release
 
 ## Docker
 
-An image is provided for running the MCP server in a container.
+Prebuilt images are published to GitHub Container Registry on each release as
+`ghcr.io/paulwrubel/scry` (see [Published images](#published-images)). The image's default
+command serves the REST API on port 8000; the MCP surfaces are one command override away. To
+build an image from source instead, use:
 
 ```sh
 docker build -t scry .
 ```
+
+### Published images
+
+Each release publishes the image tagged with its version (e.g.
+`ghcr.io/paulwrubel/scry:0.22.0`) and with `latest`; pin a specific version rather than
+tracking `latest`. Pull it and run the image with its default command, which serves the REST
+API on port 8000:
+
+```sh
+docker pull ghcr.io/paulwrubel/scry:0.22.0
+docker run --rm -p 8000:8000 -v scry-data:/data ghcr.io/paulwrubel/scry:0.22.0
+```
+
+Passing a command overrides the image default. The same tag also serves the stdio MCP server
+or the MCP server over HTTP:
+
+```sh
+docker run -i --rm -v scry-data:/data ghcr.io/paulwrubel/scry:0.22.0 mcp
+docker run --rm -p 8000:8000 -v scry-data:/data ghcr.io/paulwrubel/scry:0.22.0 mcp --http 0.0.0.0:8000
+```
+
+See [Running a server](#running-a-server) for the host-side REST API setup and the
+[MCP Server](#mcp-server) section for the tools.
+
+- GitHub Container Registry packages are private by default: for an unauthenticated pull (e.g.
+  from a k3s node), switch the package to public in the repository's package settings, or give
+  the cluster an image pull secret.
 
 ### stdio
 
@@ -288,18 +318,18 @@ is configured with. On the host that holds the data:
 ```sh
 # optional; omit the token for an unauthenticated server
 printf 'api_token = "%s"\n' "$(openssl rand -hex 32)" > scry.secret.toml
-DATABASE_URL=postgres://user:pass@localhost/scry scry serve --http 0.0.0.0:9000
+DATABASE_URL=postgres://user:pass@localhost/scry scry serve --http 0.0.0.0:8000
 ```
 
 The token lives in `scry.secret.toml` (see [Configuration](#configuration)); exporting
 `SCRY_API_TOKEN` still works.
 
 `--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Use
-`127.0.0.1:9000` to accept only local connections, or `0.0.0.0:9000` to accept any.
+`127.0.0.1:8000` to accept only local connections, or `0.0.0.0:8000` to accept any.
 Confirm the server is up:
 
 ```sh
-curl http://127.0.0.1:9000/api/v1
+curl http://127.0.0.1:8000/api/v1
 # {"name":"scry","version":"0.21.2"}
 ```
 
@@ -307,13 +337,13 @@ Then point a client at it — the CLI and TUI read the same `database_url`, and 
 comes from that machine's `scry.secret.toml` (`api_token`) or `SCRY_API_TOKEN`:
 
 ```sh
-DATABASE_URL=http://data-host:9000 scry list
+DATABASE_URL=http://data-host:8000 scry list
 ```
 
 The container image runs it the same way:
 
 ```sh
-docker run -d -p 9000:9000 -v scry-data:/data scry serve --http 0.0.0.0:9000
+docker run -d -p 8000:8000 -v scry-data:/data scry serve --http 0.0.0.0:8000
 ```
 
 Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) requires an
@@ -410,10 +440,10 @@ To point scry at a running server instead of a local database:
 
 ```sh
 # on the machine that holds the data
-scry serve --http 0.0.0.0:9000
+scry serve --http 0.0.0.0:8000
 
 # from another machine
-DATABASE_URL=http://data-host:9000 scry list
+DATABASE_URL=http://data-host:8000 scry list
 ```
 
 Set `SCRY_API_TOKEN` on the server to require a bearer token, and export the same value wherever the client runs.
