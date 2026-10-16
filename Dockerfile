@@ -24,8 +24,10 @@ FROM debian:bookworm-slim AS runtime
 # Run as a non-root user with a writable data directory. For a bind-mounted
 # database whose owner differs, run the container with
 # `--user "$(id -u):$(id -g)"`.
+# Native-root TLS validates against the operating system trust store, so the
+# image needs ca-certificates present or every outbound HTTPS request fails.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends passwd \
+    && apt-get install -y --no-install-recommends ca-certificates passwd \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 scry \
     && mkdir -p /data \

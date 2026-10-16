@@ -423,7 +423,7 @@ scry stores data in a database chosen by the `database_url` config value or, if 
 
 - **SQLite** — `sqlite:///path/to/scry.db` (or `sqlite::memory:`). This is the default: no setup, and the database lives at `$XDG_DATA_HOME/scry/scry.db` (falling back to `~/.local/share/scry/scry.db`).
 - **PostgreSQL** — `postgres://user:pass@host/db` (or `postgresql://…`). TLS is supported via the URL's `sslmode` parameter (e.g. `?sslmode=require`), which remote and managed servers commonly require.
-- **Remote (HTTP)** — `http://host:port` (or `https://…`) points scry at a running `scry serve` instance instead of a local database. Every command then reads and writes over the REST API; set `SCRY_API_TOKEN` to the server's bearer token when it requires one.
+- **Remote (HTTP)** — `http://host:port` (or `https://…`) points scry at a running `scry serve` instance instead of a local database. Every command then reads and writes over the REST API; set `SCRY_API_TOKEN` to the server's bearer token when it requires one. For `https://` URLs, TLS validation uses the operating system trust store, so corporate roots such as Zscaler's are trusted; setting `SSL_CERT_FILE` or `SSL_CERT_DIR` overrides which roots are loaded.
 
 Migrations run automatically on startup, so a local backend needs no manual setup. To use Postgres, point scry at it:
 
