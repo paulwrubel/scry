@@ -10,6 +10,8 @@ use scry_core::store::Store;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[cfg(not(test))]
+use crate::config::ScryConfig;
 use crate::error::AppError;
 
 /// TOML file holding the client-local active project.
@@ -26,7 +28,7 @@ impl ClientState {
     /// Load the client state from its default location. A missing file is not an
     /// error; it yields the default state.
     pub fn load() -> Result<Self, AppError> {
-        Self::load_from(&state_path())
+        Self::load_from(&state_path()?)
     }
 
     /// Load the client state from `path`. A missing file yields the default state.
@@ -51,7 +53,7 @@ impl ClientState {
     /// Write the client state to its default location, creating the parent
     /// directory first.
     pub fn save(&self) -> Result<(), AppError> {
-        self.save_to(&state_path())
+        self.save_to(&state_path()?)
     }
 
     /// Write the client state to `path`, creating the parent directory first.
@@ -71,10 +73,52 @@ impl ClientState {
     }
 }
 
-/// The state file under `$XDG_STATE_HOME/scry/`, falling back to
-/// `~/.local/state/scry/`.
+/// The state file location. Defaults to `$XDG_STATE_HOME/scry/state.toml`,
+/// falling back to `~/.local/state/scry/state.toml`, and can be overridden by
+/// the `state_file` config option.
 #[cfg(not(test))]
-fn state_path() -> PathBuf {
+fn state_path() -> Result<PathBuf, AppError> {
+    let config = ScryConfig::load()?;
+    Ok(resolve_state_path(config.state_file.as_deref()))
+}
+
+/// In tests, redirect to a per-process scratch file so the suite never reads or
+/// writes the real user state.
+#[cfg(test)]
+fn state_path() -> Result<PathBuf, AppError> {
+    Ok(std::env::temp_dir()
+        .join(format!("scry-test-state-{}", std::process::id()))
+        .join(STATE_FILE))
+}
+
+/// Resolve the state file path, honoring a configured override when present.
+fn resolve_state_path(configured: Option<&str>) -> PathBuf {
+    match configured {
+        Some(path) => expand_home(path),
+        None => default_state_path(),
+    }
+}
+
+/// Expand a leading `~` in `path` against the `HOME` environment variable.
+fn expand_home(path: &str) -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    expand_home_with(path, Path::new(&home))
+}
+
+/// Expand a leading `~` in `path` against `home`.
+fn expand_home_with(path: &str, home: &Path) -> PathBuf {
+    if path == "~" {
+        home.to_path_buf()
+    } else if let Some(rest) = path.strip_prefix("~/") {
+        home.join(rest)
+    } else {
+        PathBuf::from(path)
+    }
+}
+
+/// The default state file under `$XDG_STATE_HOME/scry/`, falling back to
+/// `~/.local/state/scry/`.
+fn default_state_path() -> PathBuf {
     if let Ok(dir) = std::env::var("XDG_STATE_HOME") {
         PathBuf::from(dir).join("scry").join(STATE_FILE)
     } else {
@@ -85,15 +129,6 @@ fn state_path() -> PathBuf {
             .join("scry")
             .join(STATE_FILE)
     }
-}
-
-/// In tests, redirect to a per-process scratch file so the suite never reads or
-/// writes the real user state.
-#[cfg(test)]
-fn state_path() -> PathBuf {
-    std::env::temp_dir()
-        .join(format!("scry-test-state-{}", std::process::id()))
-        .join(STATE_FILE)
 }
 
 /// Resolve the active project: the state file's project when it still exists,
@@ -162,5 +197,45 @@ mod tests {
 
         let loaded = ClientState::load_from(&path).expect("load");
         assert_eq!(loaded.active_project.as_deref(), Some("alpha"));
+    }
+
+    #[test]
+    fn configured_state_file_is_used() {
+        assert_eq!(
+            resolve_state_path(Some("/tmp/x/state.toml")),
+            PathBuf::from("/tmp/x/state.toml")
+        );
+    }
+
+    #[test]
+    fn configured_relative_state_file_is_kept_relative() {
+        assert_eq!(
+            resolve_state_path(Some("rel/state.toml")),
+            PathBuf::from("rel/state.toml")
+        );
+    }
+
+    #[test]
+    fn leading_tilde_expands_to_home() {
+        assert_eq!(
+            expand_home_with("~/x/y.toml", Path::new("/home/u")),
+            Path::new("/home/u/x/y.toml")
+        );
+    }
+
+    #[test]
+    fn bare_tilde_expands_to_home() {
+        assert_eq!(
+            expand_home_with("~", Path::new("/home/u")),
+            Path::new("/home/u")
+        );
+    }
+
+    #[test]
+    fn non_tilde_path_is_unchanged() {
+        assert_eq!(
+            expand_home_with("/a/b.toml", Path::new("/home/u")),
+            Path::new("/a/b.toml")
+        );
     }
 }

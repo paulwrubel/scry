@@ -25,12 +25,14 @@ const MCP_TOKEN_ENV: &str = "SCRY_MCP_TOKEN";
 #[serde(default)]
 pub struct ScryConfig {
     pub database_url: String,
+    pub state_file: Option<String>,
 }
 
 impl Default for ScryConfig {
     fn default() -> Self {
         ScryConfig {
             database_url: Self::resolve_database_url(),
+            state_file: None,
         }
     }
 }
@@ -288,5 +290,31 @@ mod tests {
         assert!(secrets.api_token.is_none());
         assert!(secrets.mcp_token.is_none());
         assert_eq!(secrets.resolved_database_url(&config), "sqlite://config.db");
+    }
+
+    #[test]
+    fn state_file_is_loaded_from_config() {
+        let dir = TempDir::new().expect("temp dir");
+        write_config(
+            &dir.path().join(CONFIG_FILE),
+            "state_file = \"/tmp/x/state.toml\"\n",
+        );
+        let xdg = dir.path().join("xdg");
+
+        let config = ScryConfig::load_from(dir.path(), &xdg).expect("load");
+        assert_eq!(config.state_file.as_deref(), Some("/tmp/x/state.toml"));
+    }
+
+    #[test]
+    fn state_file_is_none_when_absent() {
+        let dir = TempDir::new().expect("temp dir");
+        write_config(
+            &dir.path().join(CONFIG_FILE),
+            "database_url = \"sqlite://local.db\"\n",
+        );
+        let xdg = dir.path().join("xdg");
+
+        let config = ScryConfig::load_from(dir.path(), &xdg).expect("load");
+        assert!(config.state_file.is_none());
     }
 }

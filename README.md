@@ -131,7 +131,7 @@ Statuses are the columns a task moves through within a project. The "default" pr
 
 ### Active Project
 
-scry uses a kubectl-style context model. `scry project use <name>` sets the active project, which persists across sessions. The active project is stored locally per machine, in `$XDG_STATE_HOME/scry/state.toml` (falling back to `~/.local/state/scry/state.toml`), rather than in the backend, so each device that talks to a shared server keeps its own. All task commands operate on the active project unless overridden with `--project` / `-p`.
+scry uses a kubectl-style context model. `scry project use <name>` sets the active project, which persists across sessions. The active project is stored locally per machine, in `$XDG_STATE_HOME/scry/state.toml` (falling back to `~/.local/state/scry/state.toml`), overridable with the `state_file` config option, rather than in the backend, so each device that talks to a shared server keeps its own. All task commands operate on the active project unless overridden with `--project` / `-p`.
 
 ## Quick Start
 
@@ -407,6 +407,7 @@ scry looks for `scry.toml` in the current directory first, then `$XDG_CONFIG_HOM
 Available options:
 
 - `database_url` — set the database URL, e.g. `database_url = "postgres://user:pass@localhost/scry"`. If unset, scry uses the `DATABASE_URL` environment variable, falling back to a SQLite database (see [Database](#database)).
+- `state_file` — override the location of the client-local state file that records the active project. A leading `~` expands to `$HOME`; a relative path resolves against the current directory. If unset, scry uses `$XDG_STATE_HOME/scry/state.toml`, falling back to `~/.local/state/scry/state.toml` (see [Active Project](#active-project)).
 
 The active project is **not** stored here or in the database — it lives in the XDG state directory, per machine (see [Active Project](#active-project)).
 
