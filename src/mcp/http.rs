@@ -12,9 +12,6 @@ use std::net::SocketAddr;
 
 use super::ScryServer;
 
-/// Environment variable holding an optional bearer token HTTP clients must present.
-const TOKEN_ENV: &str = "SCRY_MCP_TOKEN";
-
 /// Browser origins permitted to reach the endpoint (DNS-rebinding protection).
 const LOOPBACK_ORIGINS: &[&str] = &["http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*"];
 
@@ -47,11 +44,11 @@ pub(crate) fn router(store: &ArcStore, token: Option<String>) -> Router {
 }
 
 /// Serve the MCP protocol over streamable HTTP on `addr`.
-pub async fn serve_http(store: ArcStore, addr: &str) -> Result<(), AppError> {
-    let token = std::env::var(TOKEN_ENV)
-        .ok()
-        .filter(|token| !token.is_empty());
-
+pub async fn serve_http(
+    store: ArcStore,
+    addr: &str,
+    token: Option<String>,
+) -> Result<(), AppError> {
     let addr: SocketAddr = addr
         .parse()
         .map_err(|error| AppError::Usage(format!("invalid address '{addr}': {error}")))?;

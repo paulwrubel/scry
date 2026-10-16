@@ -19,3 +19,6 @@ rustc-ice-*.txt
 # sqlx compile-time database
 scry.db
 scry.db-journal
+
+# Local secret config (database credentials, API tokens)
+scry.secret.toml

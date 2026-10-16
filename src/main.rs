@@ -15,7 +15,7 @@ use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
 use chrono::Local;
 use clap::{Parser, Subcommand};
-use config::ScryConfig;
+use config::{ScryConfig, ScrySecrets};
 use error::{AppError, ServiceError};
 use scry_core::backup::{self, BACKUP_VERSION, Backup, ImportMode};
 use scry_core::models::{
@@ -371,17 +371,19 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     }
 
     let config = ScryConfig::load()?;
-    let store = connect_store(&config.database_url).await?;
+    let secrets = ScrySecrets::load()?;
+    let database_url = secrets.resolved_database_url(&config);
+    let store = connect_store(&database_url, secrets.api_token()).await?;
 
     if let Some(Command::Mcp { http }) = &cli.command {
         return match http.as_deref() {
-            Some(addr) => mcp::serve_http(store, addr).await,
+            Some(addr) => mcp::serve_http(store, addr, secrets.mcp_token()).await,
             None => mcp::serve_stdio(store).await,
         };
     }
 
     if let Some(Command::Serve { http }) = &cli.command {
-        return server::serve_http(store, http).await;
+        return server::serve_http(store, http, secrets.api_token()).await;
     }
 
     let project = resolve_project(store.clone(), cli.project.as_deref()).await?;
@@ -1022,16 +1024,18 @@ fn skill_target(harness: Option<Harness>, dir: Option<&Path>) -> Result<PathBuf,
 }
 
 /// Open the store for the backend named by the database URL's scheme.
-async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
+///
+/// `api_token` is only used by the remote (`http(s)`) backend.
+async fn connect_store(
+    database_url: &str,
+    api_token: Option<String>,
+) -> Result<ArcStore, AppError> {
     if database_url.starts_with("sqlite:") {
         Ok(Arc::new(SqliteStore::new(database_url).await?))
     } else if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
         Ok(Arc::new(PostgresStore::new(database_url).await?))
     } else if database_url.starts_with("http://") || database_url.starts_with("https://") {
-        let token = std::env::var("SCRY_API_TOKEN")
-            .ok()
-            .filter(|token| !token.is_empty());
-        Ok(Arc::new(RemoteStore::new(database_url, token).await?))
+        Ok(Arc::new(RemoteStore::new(database_url, api_token).await?))
     } else {
         Err(AppError::Config(format!(
             "unsupported database URL scheme: {database_url}"

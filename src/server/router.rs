@@ -12,9 +12,6 @@ use tower_http::cors::{Any, CorsLayer};
 
 use super::{ScryState, handlers};
 
-/// Environment variable holding an optional bearer token API clients must present.
-const TOKEN_ENV: &str = "SCRY_API_TOKEN";
-
 /// CORS layer permitting browsers to call the API from any origin.
 fn get_cors_layer() -> CorsLayer {
     CorsLayer::new()
@@ -127,11 +124,11 @@ pub fn build_router(state: ScryState, token: Option<String>) -> Router {
 }
 
 /// Serve the REST API over HTTP on `addr`.
-pub async fn serve_http(store: ArcStore, addr: &str) -> Result<(), AppError> {
-    let token = std::env::var(TOKEN_ENV)
-        .ok()
-        .filter(|token| !token.is_empty());
-
+pub async fn serve_http(
+    store: ArcStore,
+    addr: &str,
+    token: Option<String>,
+) -> Result<(), AppError> {
     let addr: SocketAddr = addr
         .parse()
         .map_err(|error| AppError::Usage(format!("invalid address '{addr}': {error}")))?;

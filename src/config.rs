@@ -6,10 +6,20 @@ use crate::error::AppError;
 /// Config file name, used both in the current directory and under the XDG
 /// config directory.
 const CONFIG_FILE: &str = "scry.toml";
-
 /// Legacy config file name, still read under the XDG config directory for
 /// backwards compatibility.
 const LEGACY_CONFIG_FILE: &str = "config.toml";
+
+/// Secret file name, discovered like `CONFIG_FILE` but holding credentials that
+/// must not be committed.
+const SECRET_FILE: &str = "scry.secret.toml";
+
+/// Environment variable holding the database URL.
+const DATABASE_URL_ENV: &str = "DATABASE_URL";
+/// Environment variable holding the REST API bearer token.
+const API_TOKEN_ENV: &str = "SCRY_API_TOKEN";
+/// Environment variable holding the MCP bearer token.
+const MCP_TOKEN_ENV: &str = "SCRY_MCP_TOKEN";
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
@@ -59,7 +69,7 @@ impl ScryConfig {
     }
 
     fn resolve_database_url() -> String {
-        if let Ok(url) = std::env::var("DATABASE_URL") {
+        if let Ok(url) = std::env::var(DATABASE_URL_ENV) {
             return url;
         }
         let dir = if let Ok(d) = std::env::var("XDG_DATA_HOME") {
@@ -82,6 +92,67 @@ impl ScryConfig {
             PathBuf::from(home).join(".config").join("scry")
         }
     }
+}
+
+/// Secrets loaded from `scry.secret.toml`, a file kept out of version control.
+/// Its fields take precedence over `scry.toml` and the environment variables.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct ScrySecrets {
+    pub database_url: Option<String>,
+    pub api_token: Option<String>,
+    pub mcp_token: Option<String>,
+}
+
+impl ScrySecrets {
+    /// Load secrets from the first `scry.secret.toml` that exists, using the
+    /// same discovery as [`ScryConfig::load`]. With none present every field is
+    /// unset. No file is ever created.
+    pub fn load() -> Result<Self, AppError> {
+        let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self::load_from(&dir, &ScryConfig::xdg_dir())
+    }
+
+    /// Load from the first secret file that exists under `dir` or `xdg_dir`.
+    fn load_from(dir: &Path, xdg_dir: &Path) -> Result<Self, AppError> {
+        let candidates = [dir.join(SECRET_FILE), xdg_dir.join(SECRET_FILE)];
+
+        let Some(path) = candidates.into_iter().find(|path| path.is_file()) else {
+            return Ok(Self::default());
+        };
+
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| AppError::Config(format!("failed to read {:?}: {}", path, e)))?;
+
+        toml::from_str(&content)
+            .map_err(|e| AppError::Config(format!("failed to parse {:?}: {}", path, e)))
+    }
+
+    /// Resolve the database URL: this file's value, else `config`'s.
+    pub fn resolved_database_url(&self, config: &ScryConfig) -> String {
+        self.database_url
+            .clone()
+            .unwrap_or_else(|| config.database_url.clone())
+    }
+
+    /// The REST token: this file's value, else `SCRY_API_TOKEN`.
+    pub fn api_token(&self) -> Option<String> {
+        self.api_token
+            .clone()
+            .or_else(|| non_empty_env(API_TOKEN_ENV))
+    }
+
+    /// The MCP token: this file's value, else `SCRY_MCP_TOKEN`.
+    pub fn mcp_token(&self) -> Option<String> {
+        self.mcp_token
+            .clone()
+            .or_else(|| non_empty_env(MCP_TOKEN_ENV))
+    }
+}
+
+/// Read an environment variable, treating an empty value as unset.
+fn non_empty_env(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]
@@ -167,5 +238,55 @@ mod tests {
             "{}",
             config.database_url
         );
+    }
+
+    #[test]
+    fn local_secret_file_is_discovered() {
+        let dir = TempDir::new().expect("temp dir");
+        write_config(
+            &dir.path().join(SECRET_FILE),
+            "database_url = \"sqlite://secret.db\"\napi_token = \"rest-token\"\nmcp_token = \"mcp-token\"\n",
+        );
+        let xdg = dir.path().join("xdg");
+
+        let secrets = ScrySecrets::load_from(dir.path(), &xdg).expect("load");
+        assert_eq!(secrets.database_url.as_deref(), Some("sqlite://secret.db"));
+        assert_eq!(secrets.api_token.as_deref(), Some("rest-token"));
+        assert_eq!(secrets.mcp_token.as_deref(), Some("mcp-token"));
+    }
+
+    #[test]
+    fn secret_database_url_wins_over_scry_toml() {
+        let dir = TempDir::new().expect("temp dir");
+        write_config(
+            &dir.path().join(CONFIG_FILE),
+            "database_url = \"sqlite://config.db\"\n",
+        );
+        write_config(
+            &dir.path().join(SECRET_FILE),
+            "database_url = \"sqlite://secret.db\"\n",
+        );
+        let xdg = dir.path().join("xdg");
+
+        let config = ScryConfig::load_from(dir.path(), &xdg).expect("load config");
+        let secrets = ScrySecrets::load_from(dir.path(), &xdg).expect("load secrets");
+        assert_eq!(secrets.resolved_database_url(&config), "sqlite://secret.db");
+    }
+
+    #[test]
+    fn missing_secret_file_yields_defaults_and_falls_back_to_config() {
+        let dir = TempDir::new().expect("temp dir");
+        let xdg = dir.path().join("xdg");
+        write_config(
+            &dir.path().join(CONFIG_FILE),
+            "database_url = \"sqlite://config.db\"\n",
+        );
+
+        let config = ScryConfig::load_from(dir.path(), &xdg).expect("load config");
+        let secrets = ScrySecrets::load_from(dir.path(), &xdg).expect("load secrets");
+        assert!(secrets.database_url.is_none());
+        assert!(secrets.api_token.is_none());
+        assert!(secrets.mcp_token.is_none());
+        assert_eq!(secrets.resolved_database_url(&config), "sqlite://config.db");
     }
 }
