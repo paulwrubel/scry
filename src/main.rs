@@ -1,3 +1,4 @@
+mod client_state;
 mod color;
 mod config;
 mod error;
@@ -386,14 +387,184 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         return server::serve_http(store, http, secrets.api_token()).await;
     }
 
+    let service = ProjectService::new(store.as_ref());
+
+    // These commands create, list, select, or remove projects, or move data in
+    // and out; none of them needs an active project, so they run even when the
+    // active project cannot be resolved.
+    if let Some(Command::Project(subcommand)) = cli.command.as_ref() {
+        match subcommand {
+            ProjectCommand::List => {
+                let projects = store.get_all_projects().await?;
+                if output_json {
+                    print_json(&projects)?;
+                } else if projects.is_empty() {
+                    eprintln!("No projects. Run 'scry project create <name>' to create one.");
+                } else {
+                    let active_id = client_state::active_project(store.as_ref())
+                        .await
+                        .ok()
+                        .map(|project| project.id);
+                    for p in &projects {
+                        let marker = if Some(p.id) == active_id { "* " } else { "  " };
+                        println!("  {}{}", marker, p.name);
+                    }
+                }
+                return Ok(());
+            }
+            ProjectCommand::Create {
+                name,
+                template_name,
+            } => {
+                let template: Option<&ProjectTemplate> = match template_name {
+                    Some(requested) => {
+                        let Some(template) =
+                            PROJECT_TEMPLATES.iter().find(|t| t.name == *requested)
+                        else {
+                            return Err(AppError::Usage(format!(
+                                "Unknown template name: \"{}\".",
+                                requested
+                            )));
+                        };
+                        Some(template)
+                    }
+                    None => None,
+                };
+
+                let project = service
+                    .create_project(name.clone(), template.copied())
+                    .await?;
+
+                if output_json {
+                    print_json(&project)?;
+                } else {
+                    println!("Created project \"{}\"", project.name);
+                    if template.is_none() {
+                        println!(
+                            "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."
+                        );
+                    }
+                    println!(
+                        "Make it active with 'scry project use \"{}\"'.",
+                        project.name
+                    );
+                }
+                return Ok(());
+            }
+            ProjectCommand::Use { name } => {
+                let active = client_state::set_active_project(store.as_ref(), name).await?;
+                if output_json {
+                    print_json(&active)?;
+                } else {
+                    println!("Using project \"{}\"", name);
+                }
+                return Ok(());
+            }
+            ProjectCommand::Delete { name, force } => {
+                if !force && !output_json {
+                    use std::io::Write;
+                    print!("Delete project \"{}\" and all its tasks? [y/N]: ", name);
+                    std::io::stdout().flush().unwrap();
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input).unwrap();
+                    if input.trim().to_lowercase() != "y" {
+                        println!("Cancelled.");
+                        return Ok(());
+                    }
+                }
+                let removed = service.delete_project(name).await?;
+                if output_json {
+                    print_json(&removed)?;
+                } else {
+                    println!("Deleted project \"{}\"", name);
+                    if let Ok(new_active) = client_state::active_project(store.as_ref()).await
+                        && new_active.name != *name
+                    {
+                        println!("Using project \"{}\"", new_active.name);
+                    }
+                }
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(Command::Export) = cli.command.as_ref() {
+        let export_project_id = match cli.project.as_deref() {
+            Some(name) => Some(
+                store
+                    .get_project_by_name(name)
+                    .await?
+                    .ok_or_else(|| AppError::Usage(format!("project '{name}' not found")))?
+                    .id,
+            ),
+            None => None,
+        };
+
+        let mut backup = backup::export(store.as_ref(), export_project_id).await?;
+        backup.app_version = env!("CARGO_PKG_VERSION").to_string();
+        let json = serde_json::to_string_pretty(&backup)
+            .map_err(|e| AppError::Internal(format!("failed to serialize JSON: {e}")))?;
+        println!("{json}");
+        return Ok(());
+    }
+
+    if let Some(Command::Import {
+        replace_existing_projects,
+        skip_existing_projects,
+    }) = cli.command.as_ref()
+    {
+        use std::io::Read;
+
+        let mut input = String::new();
+        std::io::stdin()
+            .read_to_string(&mut input)
+            .map_err(|e| AppError::Internal(format!("failed to read stdin: {e}")))?;
+
+        let backup: Backup = serde_json::from_str(&input)
+            .map_err(|e| AppError::Usage(format!("invalid backup JSON: {e}")))?;
+
+        if backup.version != BACKUP_VERSION {
+            return Err(AppError::Usage(format!(
+                "unsupported backup version {}; this build supports version {BACKUP_VERSION}",
+                backup.version
+            )));
+        }
+
+        let mode = if *replace_existing_projects {
+            ImportMode::Replace
+        } else if *skip_existing_projects {
+            ImportMode::Skip
+        } else {
+            ImportMode::Fail
+        };
+
+        let plan = backup::plan_import(store.as_ref(), &backup, mode).await?;
+        let report = store.import(plan).await?;
+
+        if output_json {
+            let document = serde_json::json!({
+                "projects": report.projects,
+                "statuses": report.statuses,
+                "tasks": report.tasks,
+                "notes": report.notes,
+            });
+            print_json(&document)?;
+        } else {
+            println!(
+                "Imported {} project(s), {} status(es), {} task(s), {} note(s)",
+                report.projects, report.statuses, report.tasks, report.notes
+            );
+        }
+        return Ok(());
+    }
+
     let project = resolve_project(store.clone(), cli.project.as_deref()).await?;
 
     let Some(command) = cli.command else {
         let mut app = tui::App::new(config, store, project.id);
         return app.run().await;
     };
-
-    let service = ProjectService::new(store.as_ref());
 
     match command {
         Command::Add {
@@ -646,90 +817,17 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             }
         },
         Command::Project(project_cmd) => match project_cmd {
-            ProjectCommand::List => {
-                let projects = store.get_all_projects().await?;
-                if output_json {
-                    print_json(&projects)?;
-                } else if projects.is_empty() {
-                    eprintln!("No projects. Run 'scry project create <name>' to create one.");
-                } else {
-                    for p in &projects {
-                        let marker = if p.id == project.id { "* " } else { "  " };
-                        println!("  {}{}", marker, p.name);
-                    }
-                }
+            ProjectCommand::List
+            | ProjectCommand::Create { .. }
+            | ProjectCommand::Use { .. }
+            | ProjectCommand::Delete { .. } => {
+                unreachable!("handled before the active project is resolved")
             }
             ProjectCommand::Current => {
                 if output_json {
                     print_json(&project)?;
                 } else {
                     println!("{}", project.name);
-                }
-            }
-            ProjectCommand::Use { name } => {
-                let active = service.set_active_project(&name).await?;
-                if output_json {
-                    print_json(&active)?;
-                } else {
-                    println!("Using project \"{}\"", name);
-                }
-            }
-            ProjectCommand::Create {
-                name,
-                template_name,
-            } => {
-                let template: Option<&ProjectTemplate> = match template_name {
-                    Some(requested) => {
-                        let Some(template) = PROJECT_TEMPLATES.iter().find(|t| t.name == requested)
-                        else {
-                            return Err(AppError::Usage(format!(
-                                "Unknown template name: \"{}\".",
-                                requested
-                            )));
-                        };
-                        Some(template)
-                    }
-                    None => None,
-                };
-
-                let project = service.create_project(name, template.copied()).await?;
-
-                if output_json {
-                    print_json(&project)?;
-                } else {
-                    println!("Created project \"{}\"", project.name);
-                    if template.is_none() {
-                        println!(
-                            "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."
-                        );
-                    }
-                    println!(
-                        "Make it active with 'scry project use \"{}\"'.",
-                        project.name
-                    );
-                }
-            }
-            ProjectCommand::Delete { name, force } => {
-                if !force && !output_json {
-                    use std::io::Write;
-                    print!("Delete project \"{}\" and all its tasks? [y/N]: ", name);
-                    std::io::stdout().flush().unwrap();
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input).unwrap();
-                    if input.trim().to_lowercase() != "y" {
-                        println!("Cancelled.");
-                        return Ok(());
-                    }
-                }
-                let removed = service.delete_project(&name).await?;
-                if output_json {
-                    print_json(&removed)?;
-                } else {
-                    println!("Deleted project \"{}\"", name);
-                    let new_active = store.get_active_project().await?;
-                    if new_active.name != name {
-                        println!("Using project \"{}\"", new_active.name);
-                    }
                 }
             }
             ProjectCommand::Rename { old_name, new_name } => {
@@ -918,62 +1016,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             },
         },
-        Command::Export => {
-            let export_project_id = cli.project.is_some().then_some(project.id);
-
-            let mut backup = backup::export(store.as_ref(), export_project_id).await?;
-            backup.app_version = env!("CARGO_PKG_VERSION").to_string();
-            let json = serde_json::to_string_pretty(&backup)
-                .map_err(|e| AppError::Internal(format!("failed to serialize JSON: {e}")))?;
-            println!("{json}");
-        }
-        Command::Import {
-            replace_existing_projects,
-            skip_existing_projects,
-        } => {
-            use std::io::Read;
-
-            let mut input = String::new();
-            std::io::stdin()
-                .read_to_string(&mut input)
-                .map_err(|e| AppError::Internal(format!("failed to read stdin: {e}")))?;
-
-            let backup: Backup = serde_json::from_str(&input)
-                .map_err(|e| AppError::Usage(format!("invalid backup JSON: {e}")))?;
-
-            if backup.version != BACKUP_VERSION {
-                return Err(AppError::Usage(format!(
-                    "unsupported backup version {}; this build supports version {BACKUP_VERSION}",
-                    backup.version
-                )));
-            }
-
-            let mode = if replace_existing_projects {
-                ImportMode::Replace
-            } else if skip_existing_projects {
-                ImportMode::Skip
-            } else {
-                ImportMode::Fail
-            };
-
-            let plan = backup::plan_import(store.as_ref(), &backup, mode).await?;
-            let report = store.import(plan).await?;
-
-            if output_json {
-                let document = serde_json::json!({
-                    "projects": report.projects,
-                    "statuses": report.statuses,
-                    "tasks": report.tasks,
-                    "notes": report.notes,
-                });
-                print_json(&document)?;
-            } else {
-                println!(
-                    "Imported {} project(s), {} status(es), {} task(s), {} note(s)",
-                    report.projects, report.statuses, report.tasks, report.notes
-                );
-            }
-        }
+        Command::Export => unreachable!("handled before the active project is resolved"),
+        Command::Import { .. } => unreachable!("handled before the active project is resolved"),
         Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
         Command::Mcp { .. } => {
             unreachable!("the MCP server is handled before database-backed commands")
@@ -1052,7 +1096,7 @@ async fn resolve_project(store: ArcStore, flag: Option<&str>) -> Result<Project,
             .ok_or_else(|| AppError::Usage(format!("project '{}' not found", name)))?;
         Ok(project)
     } else {
-        let project = store.get_active_project().await?;
+        let project = client_state::active_project(store.as_ref()).await?;
         Ok(project)
     }
 }

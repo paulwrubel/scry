@@ -163,10 +163,4 @@ pub trait Store: Send + Sync {
     /// so callers must resolve id collisions beforehand (see
     /// `crate::backup::plan_import`).
     async fn import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError>;
-
-    /// Get the currently active project.
-    async fn get_active_project(&self) -> Result<Project, StorageError>;
-
-    /// Set the active project. Persisted across sessions.
-    async fn set_active_project(&self, name: &str) -> Result<(), StorageError>;
 }

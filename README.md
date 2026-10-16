@@ -101,7 +101,7 @@ Statuses are the columns a task moves through within a project. The "default" pr
 
 ### Active Project
 
-scry uses a kubectl-style context model. `scry project use <name>` sets the active project, which persists across sessions. All task commands operate on the active project unless overridden with `--project` / `-p`.
+scry uses a kubectl-style context model. `scry project use <name>` sets the active project, which persists across sessions. The active project is stored locally per machine, in `$XDG_STATE_HOME/scry/state.toml` (falling back to `~/.local/state/scry/state.toml`), rather than in the backend, so each device that talks to a shared server keeps its own. All task commands operate on the active project unless overridden with `--project` / `-p`.
 
 ## Quick Start
 
@@ -290,7 +290,7 @@ Confirm the server is up:
 
 ```sh
 curl http://127.0.0.1:9000/api/v1
-# {"name":"scry","version":"0.21.2","active_project":"default"}
+# {"name":"scry","version":"0.21.2"}
 ```
 
 Then point a client at it — the CLI and TUI read the same `database_url`:
@@ -317,8 +317,7 @@ Endpoints, all under `/api/v1`:
 
 | Method                   | Path                                     | Purpose                             |
 | ------------------------ | ---------------------------------------- | ----------------------------------- |
-| `GET`                    | `/`                                      | Server info and active project      |
-| `GET` / `PUT`            | `/active-project`                        | Read / set the active project       |
+| `GET`                    | `/`                                      | Server info                         |
 | `GET` / `POST`           | `/projects`                              | List / create projects              |
 | `GET` / `DELETE`         | `/projects/by-name/{name}`               | Fetch / delete a project by name    |
 | `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project   |
@@ -334,9 +333,6 @@ Endpoints, all under `/api/v1`:
 | `GET` / `POST`           | `/tasks/{id}/notes`                      | List / create a task's notes        |
 | `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note      |
 | `POST`                   | `/import`                                | Apply an import plan                |
-
-Because the active project is shared server state, switching it from one client affects
-every client of the same backend.
 
 ### JSON Output
 

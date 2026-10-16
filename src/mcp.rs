@@ -1,5 +1,6 @@
 //! In-process Model Context Protocol (MCP) server exposing scry operations as tools.
 
+use crate::client_state;
 use crate::error::AppError;
 use rmcp::{
     ErrorData as McpError, ServerHandler, ServiceExt,
@@ -69,7 +70,7 @@ impl ScryServer {
 
     #[tool(description = "Report scry server information, including the active project")]
     async fn scry_info(&self) -> Result<CallToolResult, McpError> {
-        let project = match self.store.get_active_project().await {
+        let project = match client_state::active_project(self.store.as_ref()).await {
             Ok(project) => project,
             Err(error) => return Ok(error_result(error)),
         };
@@ -327,9 +328,7 @@ mod tests {
     }
 
     async fn add_task(server: &ScryServer, title: &str) -> i64 {
-        let project = server
-            .store
-            .get_active_project()
+        let project = client_state::active_project(server.store.as_ref())
             .await
             .expect("active project");
         let service = ProjectService::new(server.store.as_ref());
@@ -473,9 +472,7 @@ mod tests {
     async fn task_show_includes_notes() {
         let (_dir, server) = test_server().await;
         let id = add_task(&server, "Alpha").await;
-        let project = server
-            .store
-            .get_active_project()
+        let project = client_state::active_project(server.store.as_ref())
             .await
             .expect("active project");
         ProjectService::new(server.store.as_ref())

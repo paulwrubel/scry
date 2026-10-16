@@ -70,12 +70,6 @@ struct MoveStatusBody {
     position: i32,
 }
 
-/// Body for `PUT /active-project`.
-#[derive(Serialize)]
-struct SetActiveProjectBody {
-    name: String,
-}
-
 impl RemoteStore {
     /// Build a client for the API rooted at `base_url` (e.g. `http://host:8080`).
     ///
@@ -399,19 +393,6 @@ impl Store for RemoteStore {
     async fn import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError> {
         let builder = self.request(Method::POST, &["import"])?.json(&plan);
         self.send_json(builder).await
-    }
-
-    async fn get_active_project(&self) -> Result<Project, StorageError> {
-        let builder = self.request(Method::GET, &["active-project"])?;
-        self.send_json(builder).await
-    }
-
-    async fn set_active_project(&self, name: &str) -> Result<(), StorageError> {
-        let body = SetActiveProjectBody {
-            name: name.to_string(),
-        };
-        let builder = self.request(Method::PUT, &["active-project"])?.json(&body);
-        self.send_empty(builder).await
     }
 }
 
