@@ -110,7 +110,12 @@ pub async fn active_project(store: &dyn Store) -> Result<Project, AppError> {
     store
         .get_project_by_name("default")
         .await?
-        .ok_or_else(|| AppError::Internal("project 'default' not found".to_string()))
+        .ok_or_else(|| {
+            AppError::Usage(
+                "no active project; create one with `scry project create <name>` and select it with `scry project use <name>`"
+                    .to_string(),
+            )
+        })
 }
 
 /// Make `name` the active project, verifying it exists first.
