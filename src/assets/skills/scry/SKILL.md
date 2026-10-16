@@ -29,9 +29,9 @@ notes, projects, statuses, and project settings) with structured JSON results an
 stable error kinds. Fall back to the CLI commands when MCP is unavailable.
 
 If your harness would rather speak HTTP directly, `scry serve --http <addr>` exposes the
-same operations as a versioned JSON REST API under `/api/v1`. Set `SCRY_API_TOKEN` to
-require an `Authorization: Bearer <token>` header; responses and error kinds match the
-MCP and `--json` surfaces.
+same operations as a versioned JSON REST API under `/api/v1`. Setting `api_token` in
+`scry.secret.toml` (or `SCRY_API_TOKEN`) requires an `Authorization: Bearer <token>`
+header; responses and error kinds match the MCP and `--json` surfaces.
 
 ## Discover the exact surface
 
@@ -60,11 +60,15 @@ Prefer this over guessing command names, flags, or values.
 ## Active project
 
 scry uses a kubectl-style active project. `scry project use <name>` sets it, and it
-persists across sessions. Every task command operates on the active project unless
-overridden.
+persists across sessions in a file on **this machine** (not in the database or on a
+shared server, so each machine keeps its own). Every task command operates on the active
+project unless overridden.
 
-- Prefer `-p/--project <name>` over mutating the global active project when operating
-  on a specific project.
+- Prefer `-p/--project <name>` when operating on a specific project, so you don't depend
+  on the machine's current active project.
+- If no active project is set — or the one it names no longer exists — commands fall back
+  to the `default` project. A task command with no resolvable active project fails with an
+  actionable error; set one with `scry project use <name>`.
 - The built-in `default` project exists automatically with `todo` and `done` statuses;
   no setup is required.
 
@@ -125,5 +129,5 @@ Creating a project without `-t` leaves it with no statuses, so tasks cannot be a
   `scry project status remove`) without explicit user confirmation.
 - Never guess an ID for a destructive action; confirm it with `scry show <id>` first
   when there is any doubt.
-- Avoid changing the global active project when `-p/--project` would do; it mutates
-  shared state for the user.
+- The active project is local to this machine, but changing it still alters the user's
+  later commands; prefer `-p/--project` when operating on a specific project.

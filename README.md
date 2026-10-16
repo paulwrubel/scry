@@ -293,10 +293,11 @@ curl http://127.0.0.1:9000/api/v1
 # {"name":"scry","version":"0.21.2"}
 ```
 
-Then point a client at it — the CLI and TUI read the same `database_url`:
+Then point a client at it — the CLI and TUI read the same `database_url`, and the token
+comes from that machine's `scry.secret.toml` (`api_token`) or `SCRY_API_TOKEN`:
 
 ```sh
-DATABASE_URL=http://data-host:9000 SCRY_API_TOKEN=… scry list
+DATABASE_URL=http://data-host:9000 scry list
 ```
 
 The container image runs it the same way:
@@ -305,7 +306,8 @@ The container image runs it the same way:
 docker run -d -p 9000:9000 -v scry-data:/data scry serve --http 0.0.0.0:9000
 ```
 
-`SCRY_API_TOKEN` requires an `Authorization: Bearer <token>` header on every request
+Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) requires an
+`Authorization: Bearer <token>` header on every request
 (compared in constant time). Responses are JSON; errors carry the same stable `kind`
 vocabulary as `--json` and MCP (`not_found`, `conflict`, `invalid`, `internal`, `config`)
 and map to the matching HTTP status (404, 409, 400, 500). There is no TLS, so put the
@@ -366,7 +368,7 @@ Available options:
 
 - `database_url` — set the database URL, e.g. `database_url = "postgres://user:pass@localhost/scry"`. If unset, scry uses the `DATABASE_URL` environment variable, falling back to a SQLite database (see [Database](#database)).
 
-The active project is persisted automatically.
+The active project is **not** stored here or in the database — it lives in the XDG state directory, per machine (see [Active Project](#active-project)).
 
 Credentials belong in a separate `scry.secret.toml`, discovered the same way (`./scry.secret.toml`, then `$XDG_CONFIG_HOME/scry/scry.secret.toml`). It is never created automatically and is listed in `.gitignore`, so keep it out of version control. Its values take precedence over both `scry.toml` and the environment variables:
 
