@@ -262,18 +262,52 @@ configuration examples.
 ### REST API
 
 Serve scry's operations as a versioned JSON REST API. This is a server surface: the CLI
-still talks to its configured database directly.
+still talks to its configured database directly (see [Database](#database) to point a
+client at a remote server instead).
 
 | Command                    | Description                                  |
 | -------------------------- | -------------------------------------------- |
 | `scry serve --http <addr>` | Serve the REST API at `http://<addr>/api/v1` |
 
-Set `SCRY_API_TOKEN` to require an `Authorization: Bearer <token>` header on every request
-(compared in constant time). Responses are JSON; errors carry the same
-stable `kind` vocabulary as `--json` and MCP (`not_found`, `conflict`, `invalid`,
-`internal`, `config`) and map to the matching HTTP status (404, 409, 400, 500). There is
-no TLS, so put the server behind a TLS-terminating proxy or a private network if it
-leaves the host.
+#### Running a server
+
+`scry serve` reads the same `database_url` as every other command — `scry.toml`, else
+`DATABASE_URL`, else the local SQLite file — so it serves whichever database that machine
+is configured with. On the host that holds the data:
+
+```sh
+export SCRY_API_TOKEN=$(openssl rand -hex 32)   # optional; omit for an unauthenticated server
+DATABASE_URL=postgres://user:pass@localhost/scry scry serve --http 0.0.0.0:9000
+```
+
+`--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Use
+`127.0.0.1:9000` to accept only local connections, or `0.0.0.0:9000` to accept any.
+Confirm the server is up:
+
+```sh
+curl http://127.0.0.1:9000/api/v1
+# {"name":"scry","version":"0.21.2","active_project":"default"}
+```
+
+Then point a client at it — the CLI and TUI read the same `database_url`:
+
+```sh
+DATABASE_URL=http://data-host:9000 SCRY_API_TOKEN=… scry list
+```
+
+The container image runs it the same way:
+
+```sh
+docker run -d -p 9000:9000 -v scry-data:/data scry serve --http 0.0.0.0:9000
+```
+
+`SCRY_API_TOKEN` requires an `Authorization: Bearer <token>` header on every request
+(compared in constant time). Responses are JSON; errors carry the same stable `kind`
+vocabulary as `--json` and MCP (`not_found`, `conflict`, `invalid`, `internal`, `config`)
+and map to the matching HTTP status (404, 409, 400, 500). There is no TLS, so put the
+server behind a TLS-terminating proxy or a private network if it leaves the host. If the
+backend is SQLite, the server is the only writer — do not also run a local `scry` or the
+TUI against the same file; use PostgreSQL if you need concurrent writers.
 
 Endpoints, all under `/api/v1`:
 
@@ -340,8 +374,9 @@ scry stores data in a database chosen by the `database_url` config value or, if 
 
 - **SQLite** — `sqlite:///path/to/scry.db` (or `sqlite::memory:`). This is the default: no setup, and the database lives at `$XDG_DATA_HOME/scry/scry.db` (falling back to `~/.local/share/scry/scry.db`).
 - **PostgreSQL** — `postgres://user:pass@host/db` (or `postgresql://…`). TLS is supported via the URL's `sslmode` parameter (e.g. `?sslmode=require`), which remote and managed servers commonly require.
+- **Remote (HTTP)** — `http://host:port` (or `https://…`) points scry at a running `scry serve` instance instead of a local database. Every command then reads and writes over the REST API; set `SCRY_API_TOKEN` to the server's bearer token when it requires one.
 
-Migrations run automatically on startup, so either backend needs no manual setup. To use Postgres, point scry at it:
+Migrations run automatically on startup, so a local backend needs no manual setup. To use Postgres, point scry at it:
 
 ```sh
 DATABASE_URL=postgres://user:pass@localhost/scry scry list
@@ -352,5 +387,17 @@ or set it in `scry.toml`:
 ```toml
 database_url = "postgres://user:pass@localhost/scry"
 ```
+
+To point scry at a running server instead of a local database:
+
+```sh
+# on the machine that holds the data
+scry serve --http 0.0.0.0:9000
+
+# from another machine
+DATABASE_URL=http://data-host:9000 scry list
+```
+
+Set `SCRY_API_TOKEN` on the server to require a bearer token, and export the same value wherever the client runs.
 
 For local development against Postgres, the repo ships `compose.dev.yaml` and justfile helpers: `just pg-up` starts a dev Postgres (`postgres:18`), `just setup-database-postgres` applies the migrations, and `just pg-down` stops it (`just pg-reset` also wipes its data). After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query caches with `just sqlx-prepare`.

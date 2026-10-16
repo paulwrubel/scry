@@ -5,7 +5,10 @@ use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use scry_core::store::ArcStore;
+use axum::serve;
+use scry_core::models::{Priority, StatusStyle, Tags, TaskSortingMode};
+use scry_core::store::{ArcStore, Store, TaskToCreate};
+use scry_remote::RemoteStore;
 use scry_sqlite::SqliteStore;
 use tower::ServiceExt;
 
@@ -40,7 +43,10 @@ async fn send(app: &Router, request: Request<Body>) -> (StatusCode, String) {
     let bytes = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("read body");
-    (status, String::from_utf8(bytes.to_vec()).expect("utf-8 body"))
+    (
+        status,
+        String::from_utf8(bytes.to_vec()).expect("utf-8 body"),
+    )
 }
 
 #[tokio::test]
@@ -98,7 +104,12 @@ async fn create_and_list_project_round_trips() {
 
     let (status, body) = send(
         &app,
-        request("POST", "/api/v1/projects", None, Some(r#"{"name":"alpha"}"#)),
+        request(
+            "POST",
+            "/api/v1/projects",
+            None,
+            Some(r#"{"name":"alpha"}"#),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -140,4 +151,103 @@ fn app_error_maps_to_http_status() {
         .into_response()
         .status();
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn remote_store_round_trips_against_the_server() {
+    let (_dir, state) = test_state().await;
+    let app = router::build_router(state, None);
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let addr = listener.local_addr().expect("listener address");
+    tokio::spawn(async move {
+        let _ = serve(listener, app).await;
+    });
+
+    let store = RemoteStore::new(&format!("http://{addr}"), None)
+        .await
+        .expect("remote store");
+
+    let project = store
+        .create_project(
+            "remote-demo".to_string(),
+            None,
+            TaskSortingMode::Manual,
+            false,
+        )
+        .await
+        .expect("create project");
+
+    let todo = store
+        .create_status(
+            project.id,
+            "todo".to_string(),
+            0,
+            None,
+            StatusStyle::Unchecked,
+        )
+        .await
+        .expect("create todo status");
+    let done = store
+        .create_status(
+            project.id,
+            "done".to_string(),
+            1,
+            None,
+            StatusStyle::Checked,
+        )
+        .await
+        .expect("create done status");
+
+    let task = store
+        .create_task(TaskToCreate {
+            project_id: project.id,
+            title: "ship it".to_string(),
+            description: None,
+            priority: Priority::Medium,
+            status_id: todo.id,
+            position: 0,
+            tags: Tags::default(),
+        })
+        .await
+        .expect("create task");
+    assert_eq!(task.status_id, todo.id);
+
+    let listed = store
+        .get_all_tasks_by_project_id(project.id)
+        .await
+        .expect("list tasks");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, task.id);
+
+    let task_id = task.id;
+    let mut moved = task;
+    moved.status_id = done.id;
+    let moved = store
+        .update_and_autoposition_task(moved)
+        .await
+        .expect("move task");
+    assert_eq!(moved.status_id, done.id);
+
+    let fetched = store
+        .get_task_by_id(task_id)
+        .await
+        .expect("get task")
+        .expect("task is present");
+    assert_eq!(fetched.status_id, done.id);
+
+    store
+        .delete_project("remote-demo".to_string())
+        .await
+        .expect("delete project");
+
+    assert!(
+        store
+            .get_project_by_name("remote-demo")
+            .await
+            .expect("look up deleted project")
+            .is_none()
+    );
 }
