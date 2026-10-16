@@ -250,9 +250,9 @@ Serve scry over the [Model Context Protocol](https://modelcontextprotocol.io) so
 | `scry mcp --http <addr>` | Serve over streamable HTTP at `http://<addr>/mcp`           |
 
 Without `--http`, the server speaks the stdio transport: stdin/stdout carry the protocol and
-logs go to stderr. With `--http`, scry serves at `http://<addr>/mcp`. Set `SCRY_MCP_TOKEN` to
-require an `Authorization: Bearer <token>` header on every HTTP request; requests are answered
-statelessly with JSON.
+logs go to stderr. With `--http`, scry serves at `http://<addr>/mcp`. Set `SCRY_MCP_TOKEN` — or
+`mcp_token` in `scry.secret.toml` — to require an `Authorization: Bearer <token>` header on
+every HTTP request; requests are answered statelessly with JSON.
 
 The tools mirror the CLI: tasks, notes, projects, statuses, and project settings. Results are
 structured JSON, and errors are returned as tool results carrying a stable `kind` (`not_found`,
@@ -276,9 +276,13 @@ client at a remote server instead).
 is configured with. On the host that holds the data:
 
 ```sh
-export SCRY_API_TOKEN=$(openssl rand -hex 32)   # optional; omit for an unauthenticated server
+# optional; omit the token for an unauthenticated server
+printf 'api_token = "%s"\n' "$(openssl rand -hex 32)" > scry.secret.toml
 DATABASE_URL=postgres://user:pass@localhost/scry scry serve --http 0.0.0.0:9000
 ```
+
+The token lives in `scry.secret.toml` (see [Configuration](#configuration)); exporting
+`SCRY_API_TOKEN` still works.
 
 `--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Use
 `127.0.0.1:9000` to accept only local connections, or `0.0.0.0:9000` to accept any.
@@ -367,6 +371,12 @@ Available options:
 - `database_url` — set the database URL, e.g. `database_url = "postgres://user:pass@localhost/scry"`. If unset, scry uses the `DATABASE_URL` environment variable, falling back to a SQLite database (see [Database](#database)).
 
 The active project is persisted automatically.
+
+Credentials belong in a separate `scry.secret.toml`, discovered the same way (`./scry.secret.toml`, then `$XDG_CONFIG_HOME/scry/scry.secret.toml`). It is never created automatically and is listed in `.gitignore`, so keep it out of version control. Its values take precedence over both `scry.toml` and the environment variables:
+
+- `database_url` — override `scry.toml`'s `database_url` and `DATABASE_URL`.
+- `api_token` — the REST API bearer token, overriding `SCRY_API_TOKEN`.
+- `mcp_token` — the MCP bearer token, overriding `SCRY_MCP_TOKEN`.
 
 ## Database
 
