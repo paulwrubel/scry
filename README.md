@@ -250,15 +250,55 @@ Serve scry over the [Model Context Protocol](https://modelcontextprotocol.io) so
 | `scry mcp --http <addr>` | Serve over streamable HTTP at `http://<addr>/mcp`           |
 
 Without `--http`, the server speaks the stdio transport: stdin/stdout carry the protocol and
-logs go to stderr. With `--http`, the address decides exposure — binding a non-loopback
-address such as `0.0.0.0:8000` makes the server reachable from other hosts, so scry warns on
-startup. Set `SCRY_MCP_TOKEN` to require an `Authorization: Bearer <token>` header on every
-HTTP request; requests are answered statelessly with JSON.
+logs go to stderr. With `--http`, scry serves at `http://<addr>/mcp`. Set `SCRY_MCP_TOKEN` to
+require an `Authorization: Bearer <token>` header on every HTTP request; requests are answered
+statelessly with JSON.
 
 The tools mirror the CLI: tasks, notes, projects, statuses, and project settings. Results are
 structured JSON, and errors are returned as tool results carrying a stable `kind` (`not_found`,
 `conflict`, `invalid`, or `internal`). See [Docker](#docker) for container usage and client
 configuration examples.
+
+### REST API
+
+Serve scry's operations as a versioned JSON REST API. This is a server surface: the CLI
+still talks to its configured database directly.
+
+| Command                    | Description                                  |
+| -------------------------- | -------------------------------------------- |
+| `scry serve --http <addr>` | Serve the REST API at `http://<addr>/api/v1` |
+
+Set `SCRY_API_TOKEN` to require an `Authorization: Bearer <token>` header on every request
+(compared in constant time). Responses are JSON; errors carry the same
+stable `kind` vocabulary as `--json` and MCP (`not_found`, `conflict`, `invalid`,
+`internal`, `config`) and map to the matching HTTP status (404, 409, 400, 500). There is
+no TLS, so put the server behind a TLS-terminating proxy or a private network if it
+leaves the host.
+
+Endpoints, all under `/api/v1`:
+
+| Method                   | Path                                     | Purpose                             |
+| ------------------------ | ---------------------------------------- | ----------------------------------- |
+| `GET`                    | `/`                                      | Server info and active project      |
+| `GET` / `PUT`            | `/active-project`                        | Read / set the active project       |
+| `GET` / `POST`           | `/projects`                              | List / create projects              |
+| `GET` / `DELETE`         | `/projects/by-name/{name}`               | Fetch / delete a project by name    |
+| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project   |
+| `GET` / `POST`           | `/projects/{id}/statuses`                | List / create statuses              |
+| `GET`                    | `/projects/{id}/statuses/by-name/{name}` | Fetch a status by name              |
+| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks     |
+| `GET`                    | `/projects/{id}/notes`                   | List a project's notes              |
+| `GET` / `PUT` / `DELETE` | `/statuses/{id}`                         | Fetch / update / delete a status    |
+| `POST`                   | `/statuses/{id}/move`                    | Reorder a status within its project |
+| `GET`                    | `/statuses/{id}/tasks`                   | List a status's tasks               |
+| `GET` / `PUT` / `DELETE` | `/tasks/{id}`                            | Fetch / update / delete a task      |
+| `POST`                   | `/tasks/{id}/move`                       | Move a task (auto-positions it)     |
+| `GET` / `POST`           | `/tasks/{id}/notes`                      | List / create a task's notes        |
+| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note      |
+| `POST`                   | `/import`                                | Apply an import plan                |
+
+Because the active project is shared server state, switching it from one client affects
+every client of the same backend.
 
 ### JSON Output
 
@@ -272,7 +312,7 @@ scry -p myapp --json add "design API"
 
 Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
-`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) or with `mcp` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
+`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) or with `mcp` or `serve` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 
 On failure, a structured error document is written to stderr:
 
