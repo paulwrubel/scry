@@ -24,6 +24,7 @@ use scry_core::models::{
 };
 use scry_core::store::ArcStore;
 use scry_postgres::PostgresStore;
+use scry_remote::RemoteStore;
 use scry_sqlite::SqliteStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -1026,6 +1027,11 @@ async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
         Ok(Arc::new(SqliteStore::new(database_url).await?))
     } else if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
         Ok(Arc::new(PostgresStore::new(database_url).await?))
+    } else if database_url.starts_with("http://") || database_url.starts_with("https://") {
+        let token = std::env::var("SCRY_API_TOKEN")
+            .ok()
+            .filter(|token| !token.is_empty());
+        Ok(Arc::new(RemoteStore::new(database_url, token).await?))
     } else {
         Err(AppError::Config(format!(
             "unsupported database URL scheme: {database_url}"

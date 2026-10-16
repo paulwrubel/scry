@@ -340,8 +340,9 @@ scry stores data in a database chosen by the `database_url` config value or, if 
 
 - **SQLite** — `sqlite:///path/to/scry.db` (or `sqlite::memory:`). This is the default: no setup, and the database lives at `$XDG_DATA_HOME/scry/scry.db` (falling back to `~/.local/share/scry/scry.db`).
 - **PostgreSQL** — `postgres://user:pass@host/db` (or `postgresql://…`). TLS is supported via the URL's `sslmode` parameter (e.g. `?sslmode=require`), which remote and managed servers commonly require.
+- **Remote (HTTP)** — `http://host:port` (or `https://…`) points scry at a running `scry serve` instance instead of a local database. Every command then reads and writes over the REST API; set `SCRY_API_TOKEN` to the server's bearer token when it requires one.
 
-Migrations run automatically on startup, so either backend needs no manual setup. To use Postgres, point scry at it:
+Migrations run automatically on startup, so a local backend needs no manual setup. To use Postgres, point scry at it:
 
 ```sh
 DATABASE_URL=postgres://user:pass@localhost/scry scry list
@@ -352,5 +353,17 @@ or set it in `scry.toml`:
 ```toml
 database_url = "postgres://user:pass@localhost/scry"
 ```
+
+To point scry at a running server instead of a local database:
+
+```sh
+# on the machine that holds the data
+scry serve --http 0.0.0.0:9000
+
+# from another machine
+DATABASE_URL=http://data-host:9000 scry list
+```
+
+Set `SCRY_API_TOKEN` on the server to require a bearer token, and export the same value wherever the client runs.
 
 For local development against Postgres, the repo ships `compose.dev.yaml` and justfile helpers: `just pg-up` starts a dev Postgres (`postgres:18`), `just setup-database-postgres` applies the migrations, and `just pg-down` stops it (`just pg-reset` also wipes its data). After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query caches with `just sqlx-prepare`.
