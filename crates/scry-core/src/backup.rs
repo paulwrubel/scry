@@ -25,7 +25,7 @@ pub struct BackupProject {
     pub notes: Vec<Note>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ImportMode {
     /// Fail if any incoming project name already exists.
     Fail,
@@ -35,7 +35,7 @@ pub enum ImportMode {
     Skip,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportPlan {
     pub mode: ImportMode,
     /// Rows to insert, with ids/foreign keys already resolved.
@@ -46,7 +46,7 @@ pub struct ImportPlan {
     pub active_project_id: Option<ProjectId>,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct ImportReport {
     pub projects: usize,
     pub statuses: usize,

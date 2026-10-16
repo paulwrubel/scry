@@ -28,6 +28,11 @@ streamable HTTP. The tools cover the same operations as the commands below (task
 notes, projects, statuses, and project settings) with structured JSON results and
 stable error kinds. Fall back to the CLI commands when MCP is unavailable.
 
+If your harness would rather speak HTTP directly, `scry serve --http <addr>` exposes the
+same operations as a versioned JSON REST API under `/api/v1`. Set `SCRY_API_TOKEN` to
+require an `Authorization: Bearer <token>` header; responses and error kinds match the
+MCP and `--json` surfaces.
+
 ## Discover the exact surface
 
 `scry` is built with `clap`, so every command and subcommand supports `--help`. You can

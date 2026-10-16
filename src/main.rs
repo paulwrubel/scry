@@ -1,7 +1,9 @@
 mod color;
 mod config;
 mod error;
+mod http_auth;
 mod mcp;
+mod server;
 mod service;
 mod skill;
 mod state;
@@ -138,10 +140,15 @@ enum Command {
     /// Serve the Model Context Protocol (MCP)
     Mcp {
         /// Serve over streamable HTTP on this address (for example `127.0.0.1:8000`)
-        /// instead of over stdio. The address decides exposure: a non-loopback
-        /// bind is reachable from other hosts.
+        /// instead of over stdio.
         #[arg(long, value_name = "ADDR")]
         http: Option<String>,
+    },
+    /// Serve the REST API over HTTP
+    Serve {
+        /// The address to bind, for example `127.0.0.1:9000`
+        #[arg(long, value_name = "ADDR")]
+        http: String,
     },
 }
 
@@ -340,7 +347,11 @@ fn print_json<T: serde::Serialize>(value: &T) -> Result<(), AppError> {
 async fn run(cli: Cli) -> Result<(), AppError> {
     let output_json = cli.json;
     if output_json
-        && (cli.command.is_none() || matches!(cli.command.as_ref(), Some(Command::Mcp { .. })))
+        && (cli.command.is_none()
+            || matches!(
+                cli.command.as_ref(),
+                Some(Command::Mcp { .. } | Command::Serve { .. })
+            ))
     {
         return Err(AppError::Usage(
             "--json is exclusive to cli commands".to_string(),
@@ -366,6 +377,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             Some(addr) => mcp::serve_http(store, addr).await,
             None => mcp::serve_stdio(store).await,
         };
+    }
+
+    if let Some(Command::Serve { http }) = &cli.command {
+        return server::serve_http(store, http).await;
     }
 
     let project = resolve_project(store.clone(), cli.project.as_deref()).await?;
@@ -939,7 +954,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             };
 
             let plan = backup::plan_import(store.as_ref(), &backup, mode).await?;
-            let report = store.apply_import(plan).await?;
+            let report = store.import(plan).await?;
 
             if output_json {
                 let document = serde_json::json!({
@@ -959,6 +974,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
         Command::Mcp { .. } => {
             unreachable!("the MCP server is handled before database-backed commands")
+        }
+        Command::Serve { .. } => {
+            unreachable!("the REST server is handled before database-backed commands")
         }
     }
 

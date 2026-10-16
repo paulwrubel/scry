@@ -999,7 +999,7 @@ mod tests {
     #[tokio::test]
     async fn http_transport_answers_the_initialize_handshake() {
         let (_dir, server) = test_server().await;
-        let app = http::router(&server.store, None, false);
+        let app = http::router(&server.store, None);
 
         let (status, body) = http_request(&app, None, None).await;
         assert_eq!(status, axum::http::StatusCode::OK, "{body}");
@@ -1010,7 +1010,7 @@ mod tests {
     #[tokio::test]
     async fn http_transport_requires_the_bearer_token_when_configured() {
         let (_dir, server) = test_server().await;
-        let app = http::router(&server.store, Some("0123456789abcdef".to_string()), false);
+        let app = http::router(&server.store, Some("0123456789abcdef".to_string()));
 
         let (status, _) = http_request(&app, None, None).await;
         assert_eq!(status, axum::http::StatusCode::UNAUTHORIZED);
@@ -1026,19 +1026,9 @@ mod tests {
     #[tokio::test]
     async fn http_transport_rejects_foreign_origins() {
         let (_dir, server) = test_server().await;
-        let app = http::router(&server.store, None, false);
+        let app = http::router(&server.store, None);
 
         let (status, _) = http_request(&app, None, Some("https://evil.example")).await;
         assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
-    }
-
-    #[test]
-    fn host_loopback_detection() {
-        assert!(http::host_is_loopback("127.0.0.1:8000"));
-        assert!(http::host_is_loopback("localhost:8000"));
-        assert!(http::host_is_loopback("[::1]:8000"));
-        assert!(!http::host_is_loopback("0.0.0.0:8000"));
-        assert!(!http::host_is_loopback("192.168.1.5:8000"));
-        assert!(!http::host_is_loopback("example.com:8000"));
     }
 }

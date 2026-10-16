@@ -1393,7 +1393,7 @@ impl Store for PostgresStore {
         Ok(())
     }
 
-    async fn apply_import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError> {
+    async fn import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError> {
         let mut tx =
             self.pool.begin().await.map_err(|e| {
                 StorageError::Database(format!("failed to begin transaction: {}", e))

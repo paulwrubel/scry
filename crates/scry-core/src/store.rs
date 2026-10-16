@@ -162,7 +162,7 @@ pub trait Store: Send + Sync {
     /// removed. Rows are inserted with the ids and timestamps carried by the plan,
     /// so callers must resolve id collisions beforehand (see
     /// `crate::backup::plan_import`).
-    async fn apply_import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError>;
+    async fn import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError>;
 
     /// Get the currently active project.
     async fn get_active_project(&self) -> Result<Project, StorageError>;
