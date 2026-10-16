@@ -50,7 +50,7 @@ async fn send(app: &Router, request: Request<Body>) -> (StatusCode, String) {
 }
 
 #[tokio::test]
-async fn index_reports_the_active_project() {
+async fn index_reports_the_server_name_and_version() {
     let (_dir, state) = test_state().await;
     let app = router::build_router(state, None);
 
@@ -58,7 +58,7 @@ async fn index_reports_the_active_project() {
 
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body.contains("\"scry\""), "{body}");
-    assert!(body.contains("\"default\""), "{body}");
+    assert!(body.contains(env!("CARGO_PKG_VERSION")), "{body}");
 }
 
 #[tokio::test]

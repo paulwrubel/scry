@@ -1,6 +1,7 @@
 //! Project tools.
 
 use super::resolve_project;
+use crate::client_state;
 use crate::error::AppError;
 use crate::service::ProjectService;
 use rmcp::schemars;
@@ -12,7 +13,7 @@ pub(crate) async fn list_projects(store: &dyn Store) -> Result<Vec<Project>, App
 }
 
 pub(crate) async fn active_project(store: &dyn Store) -> Result<Project, AppError> {
-    Ok(store.get_active_project().await?)
+    client_state::active_project(store).await
 }
 
 /// Parameters for the `project_create` tool.
@@ -79,9 +80,7 @@ pub(crate) async fn use_project(
     store: &dyn Store,
     params: &ProjectUseParams,
 ) -> Result<Project, AppError> {
-    let service = ProjectService::new(store);
-
-    Ok(service.set_active_project(&params.name).await?)
+    client_state::set_active_project(store, &params.name).await
 }
 
 /// Parameters for the `project_delete` tool.

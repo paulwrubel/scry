@@ -1,5 +1,6 @@
 //! Tool implementations, grouped by the resource they operate on.
 
+use crate::client_state;
 use crate::error::AppError;
 use scry_core::error::StorageError;
 use scry_core::models::Project;
@@ -24,6 +25,6 @@ pub(crate) async fn resolve_project(
                 "project '{name}' not found"
             )))
         }),
-        None => Ok(store.get_active_project().await?),
+        None => client_state::active_project(store).await,
     }
 }

@@ -1,3 +1,4 @@
+mod client_state;
 mod color;
 mod config;
 mod error;
@@ -667,7 +668,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
             ProjectCommand::Use { name } => {
-                let active = service.set_active_project(&name).await?;
+                let active = client_state::set_active_project(store.as_ref(), &name).await?;
                 if output_json {
                     print_json(&active)?;
                 } else {
@@ -726,7 +727,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     print_json(&removed)?;
                 } else {
                     println!("Deleted project \"{}\"", name);
-                    let new_active = store.get_active_project().await?;
+                    let new_active = client_state::active_project(store.as_ref()).await?;
                     if new_active.name != name {
                         println!("Using project \"{}\"", new_active.name);
                     }
@@ -1052,7 +1053,7 @@ async fn resolve_project(store: ArcStore, flag: Option<&str>) -> Result<Project,
             .ok_or_else(|| AppError::Usage(format!("project '{}' not found", name)))?;
         Ok(project)
     } else {
-        let project = store.get_active_project().await?;
+        let project = client_state::active_project(store.as_ref()).await?;
         Ok(project)
     }
 }

@@ -42,8 +42,6 @@ pub struct ImportPlan {
     pub projects: Vec<BackupProject>,
     /// Ids of existing projects to delete before inserting (Replace mode only; empty otherwise).
     pub project_ids_to_delete: Vec<ProjectId>,
-    /// New id for the active project when it was replaced (Replace mode only; None otherwise).
-    pub active_project_id: Option<ProjectId>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -128,10 +126,7 @@ pub async fn plan_import(
     match mode {
         ImportMode::Fail => plan_fail(backup, &existing_names, maxima),
         ImportMode::Skip => plan_skip(backup, &existing_names, maxima),
-        ImportMode::Replace => {
-            let active_name = store.get_active_project().await?.name;
-            plan_replace(backup, &existing_ids_by_name, &active_name, maxima)
-        }
+        ImportMode::Replace => plan_replace(backup, &existing_ids_by_name, maxima),
     }
 }
 
@@ -159,7 +154,6 @@ fn plan_fail(
         mode: ImportMode::Fail,
         projects: remap_projects(&backup.projects, maxima)?,
         project_ids_to_delete: Vec::new(),
-        active_project_id: None,
     })
 }
 
@@ -179,14 +173,12 @@ fn plan_skip(
         mode: ImportMode::Skip,
         projects: remap_projects(&projects, maxima)?,
         project_ids_to_delete: Vec::new(),
-        active_project_id: None,
     })
 }
 
 fn plan_replace(
     backup: &Backup,
     existing_ids_by_name: &HashMap<String, ProjectId>,
-    active_name: &str,
     maxima: IdMaxima,
 ) -> Result<ImportPlan, StorageError> {
     let projects = remap_projects(&backup.projects, maxima)?;
@@ -197,16 +189,10 @@ fn plan_replace(
         .filter_map(|entry| existing_ids_by_name.get(&entry.project.name).copied())
         .collect();
 
-    let active_project_id = projects
-        .iter()
-        .find(|entry| entry.project.name == active_name)
-        .map(|entry| entry.project.id);
-
     Ok(ImportPlan {
         mode: ImportMode::Replace,
         projects,
         project_ids_to_delete,
-        active_project_id,
     })
 }
 
@@ -538,7 +524,6 @@ mod tests {
         assert_eq!(plan.mode, ImportMode::Fail);
         assert_eq!(plan.projects.len(), 2);
         assert!(plan.project_ids_to_delete.is_empty());
-        assert_eq!(plan.active_project_id, None);
     }
 
     #[test]
@@ -555,43 +540,20 @@ mod tests {
         assert_eq!(plan.projects.len(), 1);
         assert_eq!(plan.projects[0].project.name, "keep");
         assert!(plan.project_ids_to_delete.is_empty());
-        assert_eq!(plan.active_project_id, None);
     }
 
     #[test]
-    fn plan_replace_lists_collisions_and_rehomes_active() {
+    fn plan_replace_lists_collisions() {
         let backup = backup(vec![
             backup_project(1, "alpha", None),
             backup_project(2, "beta", None),
         ]);
         let existing = HashMap::from([("alpha".to_string(), 10), ("other".to_string(), 11)]);
 
-        let plan =
-            plan_replace(&backup, &existing, "alpha", no_maxima()).expect("replace should succeed");
+        let plan = plan_replace(&backup, &existing, no_maxima()).expect("replace should succeed");
 
         assert_eq!(plan.mode, ImportMode::Replace);
         assert_eq!(plan.projects.len(), 2);
         assert_eq!(plan.project_ids_to_delete, vec![10]);
-
-        let new_alpha = plan
-            .projects
-            .iter()
-            .find(|entry| entry.project.name == "alpha")
-            .expect("alpha should remain")
-            .project
-            .id;
-        assert!(new_alpha > 0);
-        assert_eq!(plan.active_project_id, Some(new_alpha));
-    }
-
-    #[test]
-    fn plan_replace_has_no_active_when_active_name_absent() {
-        let backup = backup(vec![backup_project(1, "alpha", None)]);
-        let existing = HashMap::from([("alpha".to_string(), 10)]);
-
-        let plan =
-            plan_replace(&backup, &existing, "gamma", no_maxima()).expect("replace should succeed");
-
-        assert_eq!(plan.active_project_id, None);
     }
 }

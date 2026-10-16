@@ -373,18 +373,6 @@ impl<'a> ProjectService<'a> {
             .await?)
     }
 
-    /// Set the active project, persisted across sessions, returning it.
-    pub async fn set_active_project(&self, name: &str) -> Result<Project, ServiceError> {
-        self.store.set_active_project(name).await?;
-        let project = self.store.get_project_by_name(name).await?.ok_or_else(|| {
-            ServiceError::Storage(StorageError::NotFound(format!(
-                "project '{}' not found",
-                name
-            )))
-        })?;
-        Ok(project)
-    }
-
     pub async fn create_project(
         &self,
         name: String,

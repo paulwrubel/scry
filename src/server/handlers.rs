@@ -2,9 +2,7 @@
 //! aggregates them and holds the pieces shared across resources.
 
 use crate::error::AppError;
-use crate::server::ScryState;
 use axum::Json;
-use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
@@ -35,9 +33,6 @@ pub use delete_status::delete_status;
 
 mod delete_task;
 pub use delete_task::delete_task;
-
-mod get_active_project;
-pub use get_active_project::get_active_project;
 
 mod get_note;
 pub use get_note::get_note;
@@ -84,9 +79,6 @@ pub use move_status::move_status;
 mod move_task;
 pub use move_task::move_task;
 
-mod set_active_project;
-pub use set_active_project::set_active_project;
-
 mod update_note;
 pub use update_note::update_note;
 
@@ -129,18 +121,12 @@ impl From<AppError> for Response {
 pub struct ServerInfo {
     pub name: &'static str,
     pub version: &'static str,
-    pub active_project: String,
 }
 
-/// Report the server name, version, and active project.
-pub async fn index(State(state): State<ScryState>) -> Response {
-    match state.store.get_active_project().await {
-        Ok(project) => Json(ServerInfo {
-            name: "scry",
-            version: env!("CARGO_PKG_VERSION"),
-            active_project: project.name,
-        })
-        .into_response(),
-        Err(error) => AppError::from(error).into(),
-    }
+/// Report the server name and version.
+pub async fn index() -> Json<ServerInfo> {
+    Json(ServerInfo {
+        name: "scry",
+        version: env!("CARGO_PKG_VERSION"),
+    })
 }
