@@ -5,6 +5,7 @@ use crate::models::{
     TaskId, TaskSortingMode,
 };
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub struct TaskToCreate {
@@ -29,6 +30,18 @@ impl From<&Task> for TaskToCreate {
             tags: value.tags.clone(),
         }
     }
+}
+
+/// A project together with all of its statuses, tasks, and notes.
+///
+/// Backs the single-round-trip `GET /projects/{id}/snapshot` endpoint. `RemoteStore`
+/// deserializes the server response into this type, so it must serialize both ways.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectSnapshot {
+    pub project: Project,
+    pub statuses: Vec<Status>,
+    pub tasks: Vec<Task>,
+    pub notes: Vec<Note>,
 }
 
 pub type ArcStore = Arc<dyn Store>;
@@ -143,6 +156,14 @@ pub trait Store: Send + Sync {
     ) -> Result<Project, StorageError>;
 
     async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, StorageError>;
+
+    /// Load a project with all of its statuses, tasks, and notes in one call.
+    ///
+    /// Returns `StorageError::NotFound` when the project does not exist.
+    async fn get_project_snapshot(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<ProjectSnapshot, StorageError>;
 
     /// Look up a project by name.
     async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError>;

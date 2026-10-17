@@ -8,7 +8,7 @@ use scry_core::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Task, TaskId,
     TaskSortingMode,
 };
-use scry_core::store::{Store, TaskToCreate};
+use scry_core::store::{ProjectSnapshot, Store, TaskToCreate};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -364,6 +364,15 @@ impl Store for RemoteStore {
     async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, StorageError> {
         let id = id.to_string();
         let builder = self.request(Method::GET, &["projects", &id])?;
+        self.send_json(builder).await
+    }
+
+    async fn get_project_snapshot(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<ProjectSnapshot, StorageError> {
+        let project_id = project_id.to_string();
+        let builder = self.request(Method::GET, &["projects", &project_id, "snapshot"])?;
         self.send_json(builder).await
     }
 

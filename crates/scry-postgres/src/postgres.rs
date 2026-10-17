@@ -7,7 +7,7 @@ use scry_core::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
-use scry_core::store::{Store, TaskToCreate};
+use scry_core::store::{ProjectSnapshot, Store, TaskToCreate};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
 #[derive(Clone)]
@@ -1039,6 +1039,31 @@ impl Store for PostgresStore {
                 r.created_at,
             )?),
             None => None,
+        })
+    }
+
+    async fn get_project_snapshot(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<ProjectSnapshot, StorageError> {
+        // The four reads are independent; overlapping them hides per-query
+        // latency when Postgres is reached over the network. A missing project
+        // still pays for the three child reads, which is fine on the rare 404 path.
+        let (project, statuses, tasks, notes) = tokio::try_join!(
+            self.get_project_by_id(project_id),
+            self.get_all_statuses_by_project_id(project_id),
+            self.get_all_tasks_by_project_id(project_id),
+            self.get_all_notes_by_project_id(project_id),
+        )?;
+        let project = project.ok_or_else(|| {
+            StorageError::NotFound(format!("Project not found for id {project_id}"))
+        })?;
+
+        Ok(ProjectSnapshot {
+            project,
+            statuses,
+            tasks,
+            notes,
         })
     }
 

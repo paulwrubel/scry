@@ -251,3 +251,75 @@ async fn remote_store_round_trips_against_the_server() {
             .is_none()
     );
 }
+
+#[tokio::test]
+async fn project_snapshot_returns_the_whole_project() {
+    let (_dir, state) = test_state().await;
+    let store = state.store.clone();
+    let app = router::build_router(state, None);
+
+    let project = store
+        .create_project("state-demo".to_string(), None, TaskSortingMode::Manual, false)
+        .await
+        .expect("create project");
+    let todo = store
+        .create_status(
+            project.id,
+            "todo".to_string(),
+            0,
+            None,
+            StatusStyle::Unchecked,
+        )
+        .await
+        .expect("create todo status");
+    let task = store
+        .create_task(TaskToCreate {
+            project_id: project.id,
+            title: "ship it".to_string(),
+            description: None,
+            priority: Priority::Medium,
+            status_id: todo.id,
+            position: 0,
+            tags: Tags::default(),
+        })
+        .await
+        .expect("create task");
+    store
+        .create_note(task.id, "remember this".to_string())
+        .await
+        .expect("create note");
+
+    let (status, body) = send(
+        &app,
+        request(
+            "GET",
+            &format!("/api/v1/projects/{}/snapshot", project.id),
+            None,
+            None,
+        ),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let value = serde_json::from_str::<serde_json::Value>(&body).expect("json body");
+    assert_eq!(value["project"]["name"], "state-demo");
+    assert_eq!(value["statuses"].as_array().map(Vec::len), Some(1));
+    assert_eq!(value["tasks"].as_array().map(Vec::len), Some(1));
+    assert_eq!(value["notes"].as_array().map(Vec::len), Some(1));
+    assert_eq!(value["notes"][0]["contents"], "remember this");
+}
+
+#[tokio::test]
+async fn project_snapshot_for_missing_project_is_not_found() {
+    let (_dir, state) = test_state().await;
+    let app = router::build_router(state, None);
+
+    let (status, body) = send(
+        &app,
+        request("GET", "/api/v1/projects/999/snapshot", None, None),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(body.contains("\"kind\":\"not_found\""), "{body}");
+}

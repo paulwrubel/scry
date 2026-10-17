@@ -7,7 +7,7 @@ use scry_core::models::{
     Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
     TaskId, TaskSortingMode,
 };
-use scry_core::store::{Store, TaskToCreate};
+use scry_core::store::{ProjectSnapshot, Store, TaskToCreate};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
@@ -1067,6 +1067,30 @@ impl Store for SqliteStore {
                 r.created_at,
             )?),
             None => None,
+        })
+    }
+
+    async fn get_project_snapshot(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<ProjectSnapshot, StorageError> {
+        // The reads are independent, so overlap them. The single-connection pool
+        // serializes them anyway, but this keeps the backend in step with Postgres.
+        let (project, statuses, tasks, notes) = tokio::try_join!(
+            self.get_project_by_id(project_id),
+            self.get_all_statuses_by_project_id(project_id),
+            self.get_all_tasks_by_project_id(project_id),
+            self.get_all_notes_by_project_id(project_id),
+        )?;
+        let project = project.ok_or_else(|| {
+            StorageError::NotFound(format!("Project not found for id {project_id}"))
+        })?;
+
+        Ok(ProjectSnapshot {
+            project,
+            statuses,
+            tasks,
+            notes,
         })
     }
 
