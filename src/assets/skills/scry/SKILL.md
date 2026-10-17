@@ -93,28 +93,22 @@ Every example below includes the global `--json` flag, which must come before th
 
 Every example below includes the global `--json` flag, which must come before the subcommand.
 
-| Command                                                                    | Purpose                                                 |
-| -------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `scry --json project list`                                                 | List projects (`*` marks the active one)                |
-| `scry --json project current`                                              | Show the active project                                 |
-| `scry --json project show [name]`                                          | Show a project's details including its description      |
-| `scry --json project use <name>`                                           | Set the active project                                  |
-| `scry --json project create [-t <template>] [--description <text>] <name>` | Create a project                                        |
-| `scry --json project rename <old> <new>`                                   | Rename a project                                        |
-| `scry --json project update [--description <text>]`                        | Update a project; an empty value clears the description |
-| `scry --json project delete <name> [-f]`                                   | Delete a project and all its tasks                      |
-| `scry --json project status list`                                          | List a project's statuses                               |
-| `scry --json project status add <name>`                                    | Add a status                                            |
-| `scry --json project status remove <name>`                                 | Remove an empty status                                  |
-| `scry --json project status rename <old> <new>`                            | Rename a status                                         |
-| `scry --json project status move-up <name>`                                | Move a status up in the ordering                        |
-| `scry --json project status move-down <name>`                              | Move a status down in the ordering                      |
-| `scry --json project status set-style <name> <style>`                      | Set a status's style                                    |
-| `scry --json project set-entry-status <name>`                              | Set the status new tasks default to                     |
-| `scry --json project reset-entry-status`                                   | Default new tasks to the first status                   |
-| `scry --json project set-sort <mode>`                                      | Set the task sorting mode                               |
-| `scry --json project show-priority`                                        | Show priority in listings                               |
-| `scry --json project hide-priority`                                        | Hide priority in listings                               |
+| Command                                                                                                                                                               | Purpose                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `scry --json project list`                                                                                                                                            | List projects (`*` marks the active one)           |
+| `scry --json project current`                                                                                                                                         | Show the active project                            |
+| `scry --json project show [name]`                                                                                                                                     | Show a project's details including its description |
+| `scry --json project use <name>`                                                                                                                                      | Set the active project                             |
+| `scry --json project create [-t <template>] [--description <text>] <name>`                                                                                            | Create a project                                   |
+| `scry --json project update [--name <new>] [--description <text>] [--entry-status <status>] [--clear-entry-status] [--sort <mode>] [--show-priority/--hide-priority]` | Update project properties                          |
+| `scry --json project delete <name> [-f]`                                                                                                                              | Delete a project and all its tasks                 |
+| `scry --json project status list`                                                                                                                                     | List a project's statuses                          |
+| `scry --json project status add <name>`                                                                                                                               | Add a status                                       |
+| `scry --json project status remove <name>`                                                                                                                            | Remove an empty status                             |
+| `scry --json project status rename <old> <new>`                                                                                                                       | Rename a status                                    |
+| `scry --json project status move-up <name>`                                                                                                                           | Move a status up in the ordering                   |
+| `scry --json project status move-down <name>`                                                                                                                         | Move a status down in the ordering                 |
+| `scry --json project status set-style <name> <style>`                                                                                                                 | Set a status's style                               |
 
 Project templates seed a project's statuses and settings via
 `scry --json project create -t <template> <name>`:
@@ -123,7 +117,10 @@ Project templates seed a project's statuses and settings via
 - `kanban` - statuses `in-progress`, `backlog`, and `done`; entry status `backlog`; priority sorting.
 
 Project descriptions are freeform text; set one at create time with `--description`, change it with
-`scry --json project update --description <text>`, and clear it by passing an empty string.
+`scry --json project update --description <text>`, and clear it by passing an empty string. The same
+project update command also renames the project with `--name`, sets or clears the entry status with
+`--entry-status` or `--clear-entry-status`, changes the sort mode with `--sort`, and shows or hides
+priority with `--show-priority` or `--hide-priority`.
 
 Creating a project without `-t` leaves it with no statuses, so tasks cannot be added until you run
 `scry --json project status add <name>`.

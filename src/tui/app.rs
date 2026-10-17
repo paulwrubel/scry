@@ -350,29 +350,8 @@ impl App<'_> {
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
-            Action::SetProjectEntryStatus { status_id } => {
-                match Self::block_on(service.set_project_entry_status(state.project(), status_id)) {
-                    Ok(_) => None,
-                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-                }
-            }
-            Action::SetProjectSortingMode(mode) => {
-                match Self::block_on(service.set_project_sorting_mode(state.project(), mode)) {
-                    Ok(_) => None,
-                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-                }
-            }
-            Action::SetProjectShouldShowPriority(show) => {
-                match Self::block_on(
-                    service.set_project_should_show_priority(state.project(), show),
-                ) {
-                    Ok(_) => None,
-                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
-                }
-            }
-            Action::SetProjectDescription(description) => {
-                match Self::block_on(service.set_project_description(state.project(), description))
-                {
+            Action::UpdateProject(update) => {
+                match Self::block_on(service.update_project(state.project(), update)) {
                     Ok(_) => None,
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }

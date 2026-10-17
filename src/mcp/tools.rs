@@ -7,7 +7,6 @@ use scry_core::models::Project;
 use scry_core::store::Store;
 
 pub(crate) mod notes;
-pub(crate) mod project_settings;
 pub(crate) mod projects;
 pub(crate) mod statuses;
 pub(crate) mod tasks;

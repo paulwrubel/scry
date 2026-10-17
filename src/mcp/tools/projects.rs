@@ -3,9 +3,9 @@
 use super::resolve_project;
 use crate::client_state;
 use crate::error::AppError;
-use crate::service::ProjectService;
+use crate::service::{EntryStatusUpdate, ProjectService, ProjectUpdate};
 use rmcp::schemars;
-use scry_core::models::{PROJECT_TEMPLATES, Project};
+use scry_core::models::{PROJECT_TEMPLATES, Project, TaskSortingMode};
 use scry_core::store::Store;
 
 pub(crate) async fn list_projects(store: &dyn Store) -> Result<Vec<Project>, AppError> {
@@ -50,24 +50,71 @@ pub(crate) async fn create_project(
         .await?)
 }
 
-/// Parameters for the `project_rename` tool.
+/// Parameters for the `project_update` tool.
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct ProjectRenameParams {
-    /// The current project name.
-    pub old_name: String,
-    /// The new project name.
-    pub new_name: String,
+pub struct ProjectUpdateParams {
+    /// Project to update; defaults to the active project.
+    pub project: Option<String>,
+    /// New project name.
+    pub name: Option<String>,
+    /// New description; an empty string clears it.
+    pub description: Option<String>,
+    /// Status new tasks should default to.
+    pub entry_status: Option<String>,
+    /// Clear the entry status so new tasks use the first status.
+    pub clear_entry_status: Option<bool>,
+    /// Task ordering: alphabetical, alphabetical-case-insensitive, id, manual, or priority.
+    #[schemars(with = "Option<String>")]
+    pub sort_mode: Option<TaskSortingMode>,
+    /// Show or hide task priority in listings.
+    pub show_priority: Option<bool>,
 }
 
-pub(crate) async fn rename_project(
+pub(crate) async fn update_project(
     store: &dyn Store,
-    params: &ProjectRenameParams,
+    params: &ProjectUpdateParams,
 ) -> Result<Project, AppError> {
-    let project = resolve_project(store, Some(params.old_name.as_str())).await?;
+    let clear_entry_status = params.clear_entry_status.unwrap_or(false);
+    if params.name.is_none()
+        && params.description.is_none()
+        && params.entry_status.is_none()
+        && params.sort_mode.is_none()
+        && !clear_entry_status
+        && params.show_priority.is_none()
+    {
+        return Err(AppError::Usage(
+            "no project fields provided to update".to_string(),
+        ));
+    }
+    if params.entry_status.is_some() && clear_entry_status {
+        return Err(AppError::Usage(
+            "cannot set and clear the entry status at the same time".to_string(),
+        ));
+    }
+
+    let project = resolve_project(store, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
+    let entry_status = if clear_entry_status {
+        EntryStatusUpdate::Clear
+    } else if let Some(name) = params.entry_status.as_deref() {
+        let status = service.get_status_by_name(&project, name).await?;
+        EntryStatusUpdate::Set(status.id)
+    } else {
+        EntryStatusUpdate::Unchanged
+    };
+
     Ok(service
-        .rename_project(&project, params.new_name.clone())
+        .update_project(
+            &project,
+            ProjectUpdate {
+                name: params.name.clone(),
+                description: params.description.clone(),
+                entry_status,
+                task_sorting_mode: params.sort_mode,
+                show_priority: params.show_priority,
+            },
+        )
         .await?)
 }
 

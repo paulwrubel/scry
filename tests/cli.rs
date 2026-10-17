@@ -753,9 +753,16 @@ fn project_entry_status() {
     );
 
     assert_stdout(
-        &h.run(&["-p", "todolist", "project", "set-entry-status", "done"])
-            .success(),
-        "Set entry status of project \"todolist\" to \"done\"",
+        &h.run(&[
+            "-p",
+            "todolist",
+            "project",
+            "update",
+            "--entry-status",
+            "done",
+        ])
+        .success(),
+        "Updated project \"todolist\".",
     );
     assert_stdout(
         &h.run(&["-p", "todolist", "add", "Beta"]).success(),
@@ -764,9 +771,15 @@ fn project_entry_status() {
 
     // resetting falls back to the first status (`todo`)
     assert_stdout(
-        &h.run(&["-p", "todolist", "project", "reset-entry-status"])
-            .success(),
-        "Reset entry status of project \"todolist\"",
+        &h.run(&[
+            "-p",
+            "todolist",
+            "project",
+            "update",
+            "--clear-entry-status",
+        ])
+        .success(),
+        "Updated project \"todolist\".",
     );
     assert_stdout(
         &h.run(&["-p", "todolist", "add", "Gamma"]).success(),
@@ -775,7 +788,7 @@ fn project_entry_status() {
 }
 
 #[test]
-fn project_set_sort_mode() {
+fn project_update_sort_mode() {
     let h = Harness::new();
     create_todolist(&h, "todolist");
     h.run(&["-p", "todolist", "add", "Beta"]).success();
@@ -796,9 +809,16 @@ fn project_set_sort_mode() {
     );
 
     assert_stdout(
-        &h.run(&["-p", "todolist", "project", "set-sort", "alphabetical"])
-            .success(),
-        "Set sort mode of project \"todolist\" to \"alphabetical\"",
+        &h.run(&[
+            "-p",
+            "todolist",
+            "project",
+            "update",
+            "--sort",
+            "alphabetical",
+        ])
+        .success(),
+        "Updated project \"todolist\".",
     );
 
     assert_stdout(
@@ -838,9 +858,9 @@ fn project_priority_visibility() {
     );
 
     assert_stdout(
-        &h.run(&["-p", "kanban", "project", "hide-priority"])
+        &h.run(&["-p", "kanban", "project", "update", "--hide-priority"])
             .success(),
-        "Hiding priority in project \"kanban\"",
+        "Updated project \"kanban\".",
     );
     assert_stdout(
         &h.run(&["-p", "kanban", "list"]).success(),
@@ -856,9 +876,9 @@ fn project_priority_visibility() {
     );
 
     assert_stdout(
-        &h.run(&["-p", "kanban", "project", "show-priority"])
+        &h.run(&["-p", "kanban", "project", "update", "--show-priority"])
             .success(),
-        "Showing priority in project \"kanban\"",
+        "Updated project \"kanban\".",
     );
     assert_stdout(
         &h.run(&["-p", "kanban", "list"]).success(),
@@ -872,6 +892,66 @@ fn project_priority_visibility() {
             done (0):
         "#},
     );
+}
+
+#[test]
+fn project_update_changes_multiple_fields() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    assert_stdout(
+        &h.run(&[
+            "-p",
+            "todolist",
+            "project",
+            "update",
+            "--name",
+            "renamed",
+            "--description",
+            "project notes",
+            "--entry-status",
+            "done",
+            "--sort",
+            "priority",
+            "--show-priority",
+        ])
+        .success(),
+        "Updated project \"renamed\".",
+    );
+
+    let shown = stdout_json(&h.run(&["--json", "project", "show", "renamed"]).success());
+    assert_eq!(shown["name"], "renamed");
+    assert_eq!(shown["description"], "project notes");
+    assert!(shown["entry_status_id"].as_i64().is_some());
+    assert_eq!(shown["task_sorting_mode"], "priority");
+    assert_eq!(shown["show_priority"], true);
+}
+
+#[test]
+fn project_update_rejects_conflicting_flags() {
+    let h = Harness::new();
+    create_todolist(&h, "todolist");
+
+    h.run(&[
+        "-p",
+        "todolist",
+        "project",
+        "update",
+        "--entry-status",
+        "done",
+        "--clear-entry-status",
+    ])
+    .failure();
+
+    h.run(&[
+        "-p",
+        "todolist",
+        "project",
+        "update",
+        "--show-priority",
+        "--hide-priority",
+    ])
+    .failure();
 }
 
 #[test]
@@ -913,8 +993,15 @@ fn project_description_round_trips() {
         .expect("myapp is exported");
     assert_eq!(exported["description"], "first line\nsecond line");
 
-    h.run(&["-p", "myapp", "project", "update", "--description", "revised"])
-        .success();
+    h.run(&[
+        "-p",
+        "myapp",
+        "project",
+        "update",
+        "--description",
+        "revised",
+    ])
+    .success();
     let revised = stdout_json(&h.run(&["--json", "project", "show", "myapp"]).success());
     assert_eq!(revised["description"], "revised");
 
@@ -935,15 +1022,22 @@ fn project_description_round_trips() {
 }
 
 #[test]
-fn project_set_entry_status_rejects_unknown_status() {
+fn project_update_rejects_unknown_status() {
     let h = Harness::new();
     create_todolist(&h, "todolist");
 
-    h.run(&["-p", "todolist", "project", "set-entry-status", "missing"])
-        .failure()
-        .stderr(predicate::str::contains(
-            "Status \"missing\" not found in \"todolist\"",
-        ));
+    h.run(&[
+        "-p",
+        "todolist",
+        "project",
+        "update",
+        "--entry-status",
+        "missing",
+    ])
+    .failure()
+    .stderr(predicate::str::contains(
+        "Status \"missing\" not found in \"todolist\"",
+    ));
 }
 
 /// Parse JSON from a command's stdout.
@@ -1042,7 +1136,8 @@ fn json_enum_values_are_kebab_case() {
             "-p",
             "todolist",
             "project",
-            "set-sort",
+            "update",
+            "--sort",
             "alphabetical-case-insensitive",
         ])
         .success(),

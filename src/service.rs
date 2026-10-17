@@ -27,6 +27,27 @@ pub struct TaskChangeResult {
     pub status: Status,
 }
 
+/// Partial project input. `None` leaves a field unchanged; `Some("")` on
+/// `description` clears it.
+#[derive(Debug, Clone, Default)]
+pub struct ProjectUpdate {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub entry_status: EntryStatusUpdate,
+    pub task_sorting_mode: Option<TaskSortingMode>,
+    pub show_priority: Option<bool>,
+}
+
+/// How an update treats the project's entry status: leave it, clear it, or set
+/// it to one of the project's statuses.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum EntryStatusUpdate {
+    #[default]
+    Unchanged,
+    Clear,
+    Set(StatusId),
+}
+
 /// Frontend-agnostic, high-level operations over one project. Resolves names to
 /// ids, picks defaults, computes positions, and enforces invariants before
 /// delegating the raw writes to `Store`.
@@ -313,76 +334,32 @@ impl<'a> ProjectService<'a> {
         Ok(status)
     }
 
-    pub async fn rename_project(
+    pub async fn update_project(
         &self,
         project: &Project,
-        new_name: String,
+        update: ProjectUpdate,
     ) -> Result<Project, ServiceError> {
-        Ok(self
-            .store
-            .update_project(Project {
-                name: new_name,
-                ..project.clone()
-            })
-            .await?)
-    }
-
-    pub async fn set_project_entry_status(
-        &self,
-        project: &Project,
-        status_id: Option<StatusId>,
-    ) -> Result<Project, ServiceError> {
-        let entry_status_id = match status_id {
-            Some(id) => Some(self.status_in_project(project, id).await?.id),
-            None => None,
+        let entry_status_id = match update.entry_status {
+            EntryStatusUpdate::Unchanged => project.entry_status_id,
+            EntryStatusUpdate::Clear => None,
+            EntryStatusUpdate::Set(status_id) => {
+                Some(self.status_in_project(project, status_id).await?.id)
+            }
+        };
+        let description = match update.description {
+            Some(value) => Some(value).filter(|value| !value.is_empty()),
+            None => project.description.clone(),
         };
         Ok(self
             .store
             .update_project(Project {
-                entry_status_id,
-                ..project.clone()
-            })
-            .await?)
-    }
-
-    pub async fn set_project_sorting_mode(
-        &self,
-        project: &Project,
-        mode: TaskSortingMode,
-    ) -> Result<Project, ServiceError> {
-        Ok(self
-            .store
-            .update_project(Project {
-                task_sorting_mode: mode,
-                ..project.clone()
-            })
-            .await?)
-    }
-
-    pub async fn set_project_should_show_priority(
-        &self,
-        project: &Project,
-        show: bool,
-    ) -> Result<Project, ServiceError> {
-        Ok(self
-            .store
-            .update_project(Project {
-                show_priority: show,
-                ..project.clone()
-            })
-            .await?)
-    }
-
-    pub async fn set_project_description(
-        &self,
-        project: &Project,
-        description: String,
-    ) -> Result<Project, ServiceError> {
-        let description = Some(description).filter(|description| !description.is_empty());
-        Ok(self
-            .store
-            .update_project(Project {
+                name: update.name.unwrap_or_else(|| project.name.clone()),
                 description,
+                entry_status_id,
+                task_sorting_mode: update
+                    .task_sorting_mode
+                    .unwrap_or(project.task_sorting_mode),
+                show_priority: update.show_priority.unwrap_or(project.show_priority),
                 ..project.clone()
             })
             .await?)

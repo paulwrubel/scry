@@ -175,12 +175,14 @@ impl ScryServer {
         tool_result(tools::projects::create_project(self.store.as_ref(), &params).await)
     }
 
-    #[tool(description = "Rename a project")]
-    async fn project_rename(
+    #[tool(
+        description = "Update a project's name, description, entry status, sort mode, or priority visibility"
+    )]
+    async fn project_update(
         &self,
-        Parameters(params): Parameters<tools::projects::ProjectRenameParams>,
+        Parameters(params): Parameters<tools::projects::ProjectUpdateParams>,
     ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::projects::rename_project(self.store.as_ref(), &params).await)
+        tool_result(tools::projects::update_project(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Set the active project")]
@@ -200,40 +202,6 @@ impl ScryServer {
         Parameters(params): Parameters<tools::projects::ProjectDeleteParams>,
     ) -> Result<CallToolResult, McpError> {
         tool_result(tools::projects::delete_project(self.store.as_ref(), &params).await)
-    }
-
-    #[tool(description = "Set or clear a project's description (empty string clears it)")]
-    async fn project_set_description(
-        &self,
-        Parameters(params): Parameters<tools::project_settings::ProjectSetDescriptionParams>,
-    ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::project_settings::set_description(self.store.as_ref(), &params).await)
-    }
-
-    #[tool(
-        description = "Set or clear the project's entry status (the status new tasks default to)"
-    )]
-    async fn project_set_entry_status(
-        &self,
-        Parameters(params): Parameters<tools::project_settings::ProjectSetEntryStatusParams>,
-    ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::project_settings::set_entry_status(self.store.as_ref(), &params).await)
-    }
-
-    #[tool(description = "Set the project's task sorting mode")]
-    async fn project_set_sort_mode(
-        &self,
-        Parameters(params): Parameters<tools::project_settings::ProjectSetSortModeParams>,
-    ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::project_settings::set_sort_mode(self.store.as_ref(), &params).await)
-    }
-
-    #[tool(description = "Show or hide task priority in the project's listings")]
-    async fn project_set_show_priority(
-        &self,
-        Parameters(params): Parameters<tools::project_settings::ProjectSetShowPriorityParams>,
-    ) -> Result<CallToolResult, McpError> {
-        tool_result(tools::project_settings::set_show_priority(self.store.as_ref(), &params).await)
     }
 
     #[tool(description = "Add a status to a project")]
@@ -683,14 +651,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn project_description_round_trips() {
+    async fn project_update_round_trips() {
         let (_dir, server) = test_server().await;
 
         let created = server
             .project_create(Parameters(tools::projects::ProjectCreateParams {
                 name: "alpha".to_string(),
                 description: Some("first notes".to_string()),
-                template: None,
+                template: Some("todolist".to_string()),
             }))
             .await
             .expect("project_create");
@@ -701,34 +669,46 @@ mod tests {
         );
 
         let updated = server
-            .project_set_description(Parameters(
-                tools::project_settings::ProjectSetDescriptionParams {
-                    description: "revised notes".to_string(),
-                    project: Some("alpha".to_string()),
-                },
-            ))
+            .project_update(Parameters(tools::projects::ProjectUpdateParams {
+                project: Some("alpha".to_string()),
+                name: Some("beta".to_string()),
+                description: Some("revised notes".to_string()),
+                entry_status: Some("done".to_string()),
+                clear_entry_status: None,
+                sort_mode: Some(scry_core::models::TaskSortingMode::Priority),
+                show_priority: Some(true),
+            }))
             .await
-            .expect("project_set_description");
+            .expect("project_update");
+        let text = text_of(&updated);
+        assert!(text.contains("\"name\":\"beta\""), "{text}");
+        assert!(text.contains("\"description\":\"revised notes\""), "{text}");
+        let updated_json: serde_json::Value =
+            serde_json::from_str(&text).expect("updated project JSON");
+        assert!(updated_json["entry_status_id"].as_i64().is_some(), "{text}");
         assert!(
-            text_of(&updated).contains("\"description\":\"revised notes\""),
-            "{}",
-            text_of(&updated)
+            text.contains("\"task_sorting_mode\":\"priority\""),
+            "{text}"
         );
+        assert!(text.contains("\"show_priority\":true"), "{text}");
 
         let cleared = server
-            .project_set_description(Parameters(
-                tools::project_settings::ProjectSetDescriptionParams {
-                    description: String::new(),
-                    project: Some("alpha".to_string()),
-                },
-            ))
+            .project_update(Parameters(tools::projects::ProjectUpdateParams {
+                project: Some("beta".to_string()),
+                name: None,
+                description: Some(String::new()),
+                entry_status: None,
+                clear_entry_status: Some(true),
+                sort_mode: None,
+                show_priority: None,
+            }))
             .await
-            .expect("project_set_description");
-        assert!(
-            text_of(&cleared).contains("\"description\":null"),
-            "{}",
-            text_of(&cleared)
-        );
+            .expect("project_update");
+        let text = text_of(&cleared);
+        assert!(text.contains("\"description\":null"), "{text}");
+        let cleared_json: serde_json::Value =
+            serde_json::from_str(&text).expect("cleared project JSON");
+        assert!(cleared_json["entry_status_id"].is_null(), "{text}");
     }
 
     #[tokio::test]
@@ -748,32 +728,6 @@ mod tests {
             text_of(&result).contains("\"kind\":\"invalid\""),
             "{}",
             text_of(&result)
-        );
-    }
-
-    #[tokio::test]
-    async fn project_rename_changes_the_name() {
-        let (_dir, server) = test_server().await;
-        server
-            .project_create(Parameters(tools::projects::ProjectCreateParams {
-                name: "alpha".to_string(),
-                description: None,
-                template: None,
-            }))
-            .await
-            .expect("project_create");
-
-        let renamed = server
-            .project_rename(Parameters(tools::projects::ProjectRenameParams {
-                old_name: "alpha".to_string(),
-                new_name: "beta".to_string(),
-            }))
-            .await
-            .expect("project_rename");
-        assert!(
-            text_of(&renamed).contains("\"name\":\"beta\""),
-            "{}",
-            text_of(&renamed)
         );
     }
 
@@ -831,72 +785,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn project_settings_round_trip() {
+    async fn project_update_rejects_empty_patch() {
         let (_dir, server) = test_server().await;
 
-        let entry = server
-            .project_set_entry_status(Parameters(
-                tools::project_settings::ProjectSetEntryStatusParams {
-                    status: Some("done".to_string()),
-                    project: None,
-                },
-            ))
+        let result = server
+            .project_update(Parameters(tools::projects::ProjectUpdateParams {
+                project: None,
+                name: None,
+                description: None,
+                entry_status: None,
+                clear_entry_status: None,
+                sort_mode: None,
+                show_priority: None,
+            }))
             .await
-            .expect("project_set_entry_status");
+            .expect("project_update");
+        assert_eq!(result.is_error, Some(true));
         assert!(
-            text_of(&entry).contains("\"entry_status_id\":2"),
+            text_of(&result).contains("no project fields provided to update"),
             "{}",
-            text_of(&entry)
-        );
-
-        let sorted = server
-            .project_set_sort_mode(Parameters(
-                tools::project_settings::ProjectSetSortModeParams {
-                    mode: scry_core::models::TaskSortingMode::Priority,
-                    project: None,
-                },
-            ))
-            .await
-            .expect("project_set_sort_mode");
-        assert!(
-            text_of(&sorted).contains("\"task_sorting_mode\":\"priority\""),
-            "{}",
-            text_of(&sorted)
-        );
-
-        let shown = server
-            .project_set_show_priority(Parameters(
-                tools::project_settings::ProjectSetShowPriorityParams {
-                    enabled: true,
-                    project: None,
-                },
-            ))
-            .await
-            .expect("project_set_show_priority");
-        assert!(
-            text_of(&shown).contains("\"show_priority\":true"),
-            "{}",
-            text_of(&shown)
+            text_of(&result)
         );
     }
 
     #[tokio::test]
-    async fn project_set_entry_status_clears_when_omitted() {
+    async fn project_update_rejects_conflicting_entry_status() {
         let (_dir, server) = test_server().await;
 
-        let cleared = server
-            .project_set_entry_status(Parameters(
-                tools::project_settings::ProjectSetEntryStatusParams {
-                    status: None,
-                    project: None,
-                },
-            ))
+        let result = server
+            .project_update(Parameters(tools::projects::ProjectUpdateParams {
+                project: None,
+                name: None,
+                description: None,
+                entry_status: Some("done".to_string()),
+                clear_entry_status: Some(true),
+                sort_mode: None,
+                show_priority: None,
+            }))
             .await
-            .expect("project_set_entry_status");
+            .expect("project_update");
+        assert_eq!(result.is_error, Some(true));
         assert!(
-            text_of(&cleared).contains("\"entry_status_id\":null"),
+            text_of(&result).contains("cannot set and clear the entry status"),
             "{}",
-            text_of(&cleared)
+            text_of(&result)
         );
     }
 
