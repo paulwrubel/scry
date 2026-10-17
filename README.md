@@ -367,6 +367,7 @@ Endpoints, all under `/api/v1`:
 | `GET`                    | `/projects/{id}/statuses/by-name/{name}` | Fetch a status by name              |
 | `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks     |
 | `GET`                    | `/projects/{id}/notes`                   | List a project's notes              |
+| `GET`                    | `/projects/{id}/snapshot`                | Fetch a project snapshot            |
 | `GET` / `PUT` / `DELETE` | `/statuses/{id}`                         | Fetch / update / delete a status    |
 | `POST`                   | `/statuses/{id}/move`                    | Reorder a status within its project |
 | `GET`                    | `/statuses/{id}/tasks`                   | List a status's tasks               |

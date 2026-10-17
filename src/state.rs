@@ -5,7 +5,7 @@ use scry_core::models::StatusStyle;
 use scry_core::models::{
     Note, Priority, Project, ProjectId, Status, StatusId, Tags, Task, TaskId, TaskSortingMode,
 };
-use scry_core::store::Store;
+use scry_core::store::{ProjectSnapshot, Store};
 use serde::Serialize;
 
 // Aug 9, 2026 at 4:40pm
@@ -84,18 +84,14 @@ impl ProjectState {
         store: &dyn Store,
         project_id: ProjectId,
     ) -> Result<Self, StorageError> {
-        let project = store
-            .get_project_by_id(project_id)
-            .await?
-            .ok_or(StorageError::NotFound(format!(
-                "Project not found for id {project_id}"
-            )))?;
-        let statuses = store.get_all_statuses_by_project_id(project_id).await?;
-        let tasks = store.get_all_tasks_by_project_id(project_id).await?;
-        let notes = store.get_all_notes_by_project_id(project_id).await?;
+        let ProjectSnapshot {
+            project,
+            statuses,
+            tasks,
+            notes,
+        } = store.get_project_snapshot(project_id).await?;
 
         Ok(Self {
-            project: project.clone(),
             statuses_with_tasks: statuses
                 .iter()
                 .map(|status| {
@@ -126,6 +122,7 @@ impl ProjectState {
                     }
                 })
                 .collect(),
+            project,
         })
     }
 

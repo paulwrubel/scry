@@ -2610,6 +2610,7 @@ dependencies = [
  "clap",
  "scry-core",
  "sqlx",
+ "tokio",
 ]
 
 [[package]]
@@ -2632,6 +2633,7 @@ dependencies = [
  "clap",
  "scry-core",
  "sqlx",
+ "tokio",
 ]
 
 [[package]]

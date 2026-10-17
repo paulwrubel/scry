@@ -49,6 +49,9 @@ pub use get_project::get_project;
 mod get_project_by_name;
 pub use get_project_by_name::get_project_by_name;
 
+mod get_project_snapshot;
+pub use get_project_snapshot::get_project_snapshot;
+
 mod get_projects;
 pub use get_projects::get_projects;
 
