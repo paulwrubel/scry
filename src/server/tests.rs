@@ -108,16 +108,33 @@ async fn create_and_list_project_round_trips() {
             "POST",
             "/api/v1/projects",
             None,
-            Some(r#"{"name":"alpha"}"#),
+            Some(r#"{"name":"alpha","description":"project notes"}"#),
         ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body.contains("\"alpha\""), "{body}");
+    assert!(body.contains("\"description\":\"project notes\""), "{body}");
 
     let (status, body) = send(&app, request("GET", "/api/v1/projects", None, None)).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body.contains("\"alpha\""), "{body}");
+}
+
+#[tokio::test]
+async fn update_project_clears_an_empty_description() {
+    let (_dir, state) = test_state().await;
+    let app = router::build_router(state, None);
+
+    let body = r#"{"id":1,"name":"default","description":"","entry_status_id":null,"task_sorting_mode":"alphabetical","show_priority":false,"created_at":"2026-01-01T00:00:00Z"}"#;
+    let (status, response) = send(
+        &app,
+        request("PUT", "/api/v1/projects/1", None, Some(body)),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert!(response.contains("\"description\":null"), "{response}");
 }
 
 #[tokio::test]
@@ -173,6 +190,7 @@ async fn remote_store_round_trips_against_the_server() {
     let project = store
         .create_project(
             "remote-demo".to_string(),
+            None,
             None,
             TaskSortingMode::Manual,
             false,
@@ -261,6 +279,7 @@ async fn project_snapshot_returns_the_whole_project() {
     let project = store
         .create_project(
             "state-demo".to_string(),
+            None,
             None,
             TaskSortingMode::Manual,
             false,

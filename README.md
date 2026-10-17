@@ -180,19 +180,21 @@ scry -p myapp move 1 "in progress"
 
 ### Project Commands
 
-| Command                                      | Description                                                       |
-| -------------------------------------------- | ----------------------------------------------------------------- |
-| `scry project list`                          | List all projects (`*` marks the active one)                      |
-| `scry project current`                       | Show the active project                                           |
-| `scry project use <name>`                    | Set the active project                                            |
-| `scry project create [-t <template>] <name>` | Create a project (does not switch to it — run `scry project use`) |
-| `scry project rename <old> <new>`            | Rename a project                                                  |
-| `scry project delete <name> [-f]`            | Delete a project (prompts unless `--force`)                       |
-| `scry project set-entry-status <name>`       | Set the entry status new tasks default to                         |
-| `scry project reset-entry-status`            | Clear the entry status, so new tasks use the first status         |
-| `scry project set-sort <mode>`               | Set the task sorting mode                                         |
-| `scry project show-priority`                 | Show the priority level in task listings                          |
-| `scry project hide-priority`                 | Hide the priority level in task listings                          |
+| Command                                                             | Description                                                       |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `scry project list`                                                 | List all projects (`*` marks the active one)                      |
+| `scry project current`                                              | Show the active project                                           |
+| `scry project show [name]`                                          | Show a project's details, including its description               |
+| `scry project use <name>`                                           | Set the active project                                            |
+| `scry project create [-t <template>] [--description <text>] <name>` | Create a project (does not switch to it — run `scry project use`) |
+| `scry project rename <old> <new>`                                   | Rename a project                                                  |
+| `scry project update [--description <text>]`                        | Update project properties; an empty `--description` clears it     |
+| `scry project delete <name> [-f]`                                   | Delete a project (prompts unless `--force`)                       |
+| `scry project set-entry-status <name>`                              | Set the entry status new tasks default to                         |
+| `scry project reset-entry-status`                                   | Clear the entry status, so new tasks use the first status         |
+| `scry project set-sort <mode>`                                      | Set the task sorting mode                                         |
+| `scry project show-priority`                                        | Show the priority level in task listings                          |
+| `scry project hide-priority`                                        | Hide the priority level in task listings                          |
 
 `<mode>` is one of `alphabetical`, `alphabetical-case-insensitive`, `id`, `manual`, `priority`.
 
@@ -233,7 +235,7 @@ scry export > scry-backup.json
 scry import --replace-existing-projects < scry-backup.json
 ```
 
-The document is a single object, `{ "version": 1, "app_version": "0.20.0", "projects": [ ... ] }`. `version` is the format version checked on import and `app_version` is informational, recording the binary that produced the backup. Each project carries its own fields (`id`, `name`, `entry_status_id`, `task_sorting_mode`, `show_priority`, `created_at`) alongside nested `statuses`, `tasks`, and `notes` arrays. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` and `"style": "checked"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
+The document is a single object, `{ "version": 1, "app_version": "0.20.0", "projects": [ ... ] }`. `version` is the format version checked on import and `app_version` is informational, recording the binary that produced the backup. Each project carries its own fields (`id`, `name`, `description`, `entry_status_id`, `task_sorting_mode`, `show_priority`, `created_at`) alongside nested `statuses`, `tasks`, and `notes` arrays. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` and `"style": "checked"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
 
 Import assigns fresh ids and rewrites the related `project_id`, `status_id`, and `task_id` references while preserving the other fields and timestamps. The `version` field is validated, and a backup from an unsupported version is rejected. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `statuses`, `tasks`, and `notes`.
 

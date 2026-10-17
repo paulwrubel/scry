@@ -138,7 +138,8 @@ impl Root<'_> {
                     | Action::AddTaskNote { .. }
                     | Action::SetProjectEntryStatus { .. }
                     | Action::SetProjectSortingMode(_)
-                    | Action::SetProjectShouldShowPriority(_) => {
+                    | Action::SetProjectShouldShowPriority(_)
+                    | Action::SetProjectDescription(_) => {
                         self.popup = None;
                         vec![action]
                     }

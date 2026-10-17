@@ -70,6 +70,7 @@ pub enum Action {
     },
     SetProjectSortingMode(TaskSortingMode),
     SetProjectShouldShowPriority(bool),
+    SetProjectDescription(String),
 }
 
 impl Action {
@@ -93,6 +94,7 @@ impl Action {
                 | Action::SetProjectEntryStatus { .. }
                 | Action::SetProjectSortingMode(_)
                 | Action::SetProjectShouldShowPriority(_)
+                | Action::SetProjectDescription(_)
                 | Action::Refresh
         )
     }

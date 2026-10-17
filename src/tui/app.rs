@@ -370,6 +370,13 @@ impl App<'_> {
                     Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
                 }
             }
+            Action::SetProjectDescription(description) => {
+                match Self::block_on(service.set_project_description(state.project(), description))
+                {
+                    Ok(_) => None,
+                    Err(e) => Some(Action::OpenPopupErrorInfo(e.to_string())),
+                }
+            }
         }
     }
 
@@ -405,6 +412,7 @@ mod tests {
                     project: Project {
                         id: 1,
                         name: "test".to_string(),
+                        description: None,
                         entry_status_id: None,
                         task_sorting_mode: TaskSortingMode::Manual,
                         show_priority: false,
@@ -562,6 +570,7 @@ mod tests {
         async fn create_project(
             &self,
             _name: String,
+            _description: Option<String>,
             _entry_status_id: Option<StatusId>,
             _task_sorting_mode: TaskSortingMode,
             _show_priority: bool,

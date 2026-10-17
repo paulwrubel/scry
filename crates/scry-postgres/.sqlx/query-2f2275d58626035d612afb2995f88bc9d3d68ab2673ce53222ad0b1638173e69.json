@@ -1,12 +1,12 @@
 {
-  "db_name": "SQLite",
-  "query": "\n                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at\n                FROM projects\n                WHERE id = ?\n            ",
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at\n                FROM projects\n                ORDER BY name ASC\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id",
         "ordinal": 0,
-        "type_info": "Integer",
+        "name": "id",
+        "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "projects",
@@ -15,8 +15,8 @@
         }
       },
       {
-        "name": "name",
         "ordinal": 1,
+        "name": "name",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -26,9 +26,20 @@
         }
       },
       {
-        "name": "entry_status_id",
         "ordinal": 2,
-        "type_info": "Integer",
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "entry_status_id",
+        "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "projects",
@@ -37,8 +48,8 @@
         }
       },
       {
+        "ordinal": 4,
         "name": "task_sorting_mode",
-        "ordinal": 3,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -48,8 +59,8 @@
         }
       },
       {
+        "ordinal": 5,
         "name": "show_priority",
-        "ordinal": 4,
         "type_info": "Bool",
         "origin": {
           "Table": {
@@ -59,9 +70,9 @@
         }
       },
       {
+        "ordinal": 6,
         "name": "created_at",
-        "ordinal": 5,
-        "type_info": "Text",
+        "type_info": "Timestamptz",
         "origin": {
           "Table": {
             "table": "projects",
@@ -71,16 +82,17 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Left": []
     },
     "nullable": [
       false,
       false,
+      true,
       true,
       false,
       false,
       false
     ]
   },
-  "hash": "75e8fe7b2be7023a5e29b3ac499e7aeca5d2a60f1cbcd767428421b74585e6bf"
+  "hash": "2f2275d58626035d612afb2995f88bc9d3d68ab2673ce53222ad0b1638173e69"
 }

@@ -105,6 +105,12 @@ enum ProjectCommand {
     /// Hide the priority level in the task title line
     #[command(aliases(["hp"]))]
     HidePriority,
+    /// Set the project's freeform description; an empty string clears it
+    #[command(aliases(["set-desc", "desc", "sd"]))]
+    SetDescription {
+        /// The new project description (empty string clears it)
+        description: String,
+    },
 }
 
 /// Parse a command line (without the leading "/") into an Action to emit.
@@ -242,6 +248,9 @@ pub fn parse_command(state: &ProjectState, line: &str) -> Vec<Action> {
                 } else {
                     vec![]
                 }
+            }
+            ProjectCommand::SetDescription { description } => {
+                vec![Action::SetProjectDescription(description)]
             }
         },
     }

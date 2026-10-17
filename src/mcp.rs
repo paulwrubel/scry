@@ -202,6 +202,14 @@ impl ScryServer {
         tool_result(tools::projects::delete_project(self.store.as_ref(), &params).await)
     }
 
+    #[tool(description = "Set or clear a project's description (empty string clears it)")]
+    async fn project_set_description(
+        &self,
+        Parameters(params): Parameters<tools::project_settings::ProjectSetDescriptionParams>,
+    ) -> Result<CallToolResult, McpError> {
+        tool_result(tools::project_settings::set_description(self.store.as_ref(), &params).await)
+    }
+
     #[tool(
         description = "Set or clear the project's entry status (the status new tasks default to)"
     )]
@@ -652,6 +660,7 @@ mod tests {
         let created = server
             .project_create(Parameters(tools::projects::ProjectCreateParams {
                 name: "todolist".to_string(),
+                description: None,
                 template: Some("todolist".to_string()),
             }))
             .await
@@ -674,12 +683,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn project_description_round_trips() {
+        let (_dir, server) = test_server().await;
+
+        let created = server
+            .project_create(Parameters(tools::projects::ProjectCreateParams {
+                name: "alpha".to_string(),
+                description: Some("first notes".to_string()),
+                template: None,
+            }))
+            .await
+            .expect("project_create");
+        assert!(
+            text_of(&created).contains("\"description\":\"first notes\""),
+            "{}",
+            text_of(&created)
+        );
+
+        let updated = server
+            .project_set_description(Parameters(
+                tools::project_settings::ProjectSetDescriptionParams {
+                    description: "revised notes".to_string(),
+                    project: Some("alpha".to_string()),
+                },
+            ))
+            .await
+            .expect("project_set_description");
+        assert!(
+            text_of(&updated).contains("\"description\":\"revised notes\""),
+            "{}",
+            text_of(&updated)
+        );
+
+        let cleared = server
+            .project_set_description(Parameters(
+                tools::project_settings::ProjectSetDescriptionParams {
+                    description: String::new(),
+                    project: Some("alpha".to_string()),
+                },
+            ))
+            .await
+            .expect("project_set_description");
+        assert!(
+            text_of(&cleared).contains("\"description\":null"),
+            "{}",
+            text_of(&cleared)
+        );
+    }
+
+    #[tokio::test]
     async fn project_create_rejects_unknown_templates() {
         let (_dir, server) = test_server().await;
 
         let result = server
             .project_create(Parameters(tools::projects::ProjectCreateParams {
                 name: "mystery".to_string(),
+                description: None,
                 template: Some("nope".to_string()),
             }))
             .await
@@ -698,6 +757,7 @@ mod tests {
         server
             .project_create(Parameters(tools::projects::ProjectCreateParams {
                 name: "alpha".to_string(),
+                description: None,
                 template: None,
             }))
             .await
@@ -723,6 +783,7 @@ mod tests {
         server
             .project_create(Parameters(tools::projects::ProjectCreateParams {
                 name: "alpha".to_string(),
+                description: None,
                 template: None,
             }))
             .await
@@ -749,6 +810,7 @@ mod tests {
         server
             .project_create(Parameters(tools::projects::ProjectCreateParams {
                 name: "alpha".to_string(),
+                description: None,
                 template: None,
             }))
             .await
