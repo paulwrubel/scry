@@ -64,7 +64,10 @@ fn build_projects_router() -> Router<ScryState> {
             get(handlers::get_tasks_by_project).post(handlers::create_task),
         )
         .route("/{project_id}/notes", get(handlers::get_notes_by_project))
-        .route("/{project_id}/snapshot", get(handlers::get_project_snapshot))
+        .route(
+            "/{project_id}/snapshot",
+            get(handlers::get_project_snapshot),
+        )
         .route(
             "/{project_id}/statuses/by-name/{name}",
             get(handlers::get_status_by_name),
