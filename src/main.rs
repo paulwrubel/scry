@@ -12,7 +12,7 @@ mod state;
 mod tui;
 
 use crate::color::ColorChoice;
-use crate::service::{ProjectService, TaskInput};
+use crate::service::{EntryStatusUpdate, ProjectService, ProjectUpdate, TaskInput};
 use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
 use chrono::Local;
@@ -195,35 +195,30 @@ enum ProjectCommand {
         /// The project name
         name: String,
     },
-    /// Rename a project
-    Rename {
-        /// The current project name
-        old_name: String,
-        /// The new project name
-        new_name: String,
-    },
     /// Update project properties
     Update {
+        /// New project name
+        #[arg(long)]
+        name: Option<String>,
         /// New description (empty string clears it)
         #[arg(long)]
         description: Option<String>,
+        /// Set the entry status new tasks default to
+        #[arg(long, conflicts_with = "clear_entry_status")]
+        entry_status: Option<String>,
+        /// Clear the entry status so new tasks use the first status
+        #[arg(long, conflicts_with = "entry_status")]
+        clear_entry_status: bool,
+        /// Set the task sorting mode
+        #[arg(long)]
+        sort: Option<TaskSortingMode>,
+        /// Show the priority level in task listings
+        #[arg(long, conflicts_with = "hide_priority")]
+        show_priority: bool,
+        /// Hide the priority level in task listings
+        #[arg(long, conflicts_with = "show_priority")]
+        hide_priority: bool,
     },
-    /// Set the entry status, so new tasks default to it
-    SetEntryStatus {
-        /// The status name
-        name: String,
-    },
-    /// Reset the entry status, so new tasks default to the first status
-    ResetEntryStatus,
-    /// Set the task sorting mode for the project
-    SetSort {
-        /// The sorting mode
-        mode: TaskSortingMode,
-    },
-    /// Show the priority level in the task list
-    ShowPriority,
-    /// Hide the priority level in the task list
-    HidePriority,
     /// Delete a project and all its tasks
     Delete {
         /// The project name
@@ -897,81 +892,59 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     println!("{}", project.name);
                 }
             }
-            ProjectCommand::Rename { old_name, new_name } => {
-                let renamed = service.rename_project(&project, new_name.clone()).await?;
-                if output_json {
-                    print_json(&renamed)?;
-                } else {
-                    println!("Renamed project \"{}\" --> \"{}\"", old_name, new_name);
-                }
-            }
-            ProjectCommand::Update { description } => {
-                let Some(description) = description else {
+            ProjectCommand::Update {
+                name,
+                description,
+                entry_status,
+                clear_entry_status,
+                sort,
+                show_priority,
+                hide_priority,
+            } => {
+                if name.is_none()
+                    && description.is_none()
+                    && entry_status.is_none()
+                    && sort.is_none()
+                    && !clear_entry_status
+                    && !show_priority
+                    && !hide_priority
+                {
                     return Err(AppError::Usage(
                         "No flags provided. Use 'scry project update --help' for available options."
                             .to_string(),
                     ));
+                }
+                let entry_status = if clear_entry_status {
+                    EntryStatusUpdate::Clear
+                } else if let Some(status_name) = entry_status {
+                    let status = service.get_status_by_name(&project, &status_name).await?;
+                    EntryStatusUpdate::Set(status.id)
+                } else {
+                    EntryStatusUpdate::Unchanged
+                };
+                let show_priority = if show_priority {
+                    Some(true)
+                } else if hide_priority {
+                    Some(false)
+                } else {
+                    None
                 };
                 let updated = service
-                    .set_project_description(&project, description)
+                    .update_project(
+                        &project,
+                        ProjectUpdate {
+                            name,
+                            description,
+                            entry_status,
+                            task_sorting_mode: sort,
+                            show_priority,
+                        },
+                    )
                     .await?;
                 if output_json {
                     print_json(&updated)?;
                 } else {
                     println!("Updated project \"{}\".", updated.name);
-                }
-            }
-            ProjectCommand::SetEntryStatus { name } => {
-                let status = service.get_status_by_name(&project, &name).await?;
-                let updated = service
-                    .set_project_entry_status(&project, Some(status.id))
-                    .await?;
-                if output_json {
-                    print_json(&updated)?;
-                } else {
-                    println!(
-                        "Set entry status of project \"{}\" to \"{}\"",
-                        project.name, name
-                    );
-                }
-            }
-            ProjectCommand::ResetEntryStatus => {
-                let updated = service.set_project_entry_status(&project, None).await?;
-                if output_json {
-                    print_json(&updated)?;
-                } else {
-                    println!("Reset entry status of project \"{}\"", project.name);
-                }
-            }
-            ProjectCommand::SetSort { mode } => {
-                let updated = service.set_project_sorting_mode(&project, mode).await?;
-                if output_json {
-                    print_json(&updated)?;
-                } else {
-                    println!(
-                        "Set sort mode of project \"{}\" to \"{}\"",
-                        project.name, mode
-                    );
-                }
-            }
-            ProjectCommand::ShowPriority => {
-                let updated = service
-                    .set_project_should_show_priority(&project, true)
-                    .await?;
-                if output_json {
-                    print_json(&updated)?;
-                } else {
-                    println!("Showing priority in project \"{}\"", project.name);
-                }
-            }
-            ProjectCommand::HidePriority => {
-                let updated = service
-                    .set_project_should_show_priority(&project, false)
-                    .await?;
-                if output_json {
-                    print_json(&updated)?;
-                } else {
-                    println!("Hiding priority in project \"{}\"", project.name);
                 }
             }
             ProjectCommand::Status(status_cmd) => match status_cmd {

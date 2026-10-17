@@ -1,7 +1,7 @@
-use crate::service::TaskInput;
+use crate::service::{ProjectUpdate, TaskInput};
 use crate::state::TaskWithNotes;
 use crate::tui::component::popup::ConfirmDeleteEntity;
-use scry_core::models::{Color, StatusId, StatusStyle, TaskId, TaskSortingMode};
+use scry_core::models::{Color, StatusId, StatusStyle, TaskId};
 
 /// Cross-cutting actions that components emit to the parent coordinator.
 /// Internal component state changes (cursor movement, scrolling, text editing)
@@ -65,12 +65,7 @@ pub enum Action {
     },
 
     // ── projects ──
-    SetProjectEntryStatus {
-        status_id: Option<StatusId>,
-    },
-    SetProjectSortingMode(TaskSortingMode),
-    SetProjectShouldShowPriority(bool),
-    SetProjectDescription(String),
+    UpdateProject(ProjectUpdate),
 }
 
 impl Action {
@@ -91,10 +86,7 @@ impl Action {
                 | Action::MoveStatusUp { .. }
                 | Action::MoveStatusDown { .. }
                 | Action::DeleteStatus { .. }
-                | Action::SetProjectEntryStatus { .. }
-                | Action::SetProjectSortingMode(_)
-                | Action::SetProjectShouldShowPriority(_)
-                | Action::SetProjectDescription(_)
+                | Action::UpdateProject(_)
                 | Action::Refresh
         )
     }
