@@ -127,11 +127,8 @@ async fn update_project_clears_an_empty_description() {
     let app = router::build_router(state, None);
 
     let body = r#"{"id":1,"name":"default","description":"","entry_status_id":null,"task_sorting_mode":"alphabetical","show_priority":false,"created_at":"2026-01-01T00:00:00Z"}"#;
-    let (status, response) = send(
-        &app,
-        request("PUT", "/api/v1/projects/1", None, Some(body)),
-    )
-    .await;
+    let (status, response) =
+        send(&app, request("PUT", "/api/v1/projects/1", None, Some(body))).await;
 
     assert_eq!(status, StatusCode::OK, "{response}");
     assert!(response.contains("\"description\":null"), "{response}");
