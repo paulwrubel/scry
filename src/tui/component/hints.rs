@@ -16,6 +16,7 @@ impl Hints {
             // initialize hints with static, always-available actions
             vec!["[/] ".to_span(), "command".dim()],
             vec!["[f]".to_span(), "ilter".dim()],
+            vec!["[r]".to_span(), "efresh".dim()],
             vec!["[a]".to_span(), "dd".dim()],
         ];
 

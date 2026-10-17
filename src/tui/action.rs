@@ -10,6 +10,10 @@ pub enum Action {
     // ── lifecycle ──
     Quit,
 
+    /// Force a reload of the cached project snapshot, picking up edits made
+    /// by other clients (CLI, another TUI, an agent over MCP/HTTP).
+    Refresh,
+
     OpenPopupAddNote(TaskId),
     OpenPopupAddOrEditTask(Option<TaskWithNotes>),
     OpenPopupConfirmDelete(ConfirmDeleteEntity),
@@ -66,4 +70,30 @@ pub enum Action {
     },
     SetProjectSortingMode(TaskSortingMode),
     SetProjectShouldShowPriority(bool),
+}
+
+impl Action {
+    /// Actions that invalidate the cached project snapshot: every action that
+    /// attempts a store write, plus an explicit refresh.
+    pub fn is_mutable(&self) -> bool {
+        matches!(
+            self,
+            Action::CreateTask(_)
+                | Action::UpdateTask { .. }
+                | Action::DuplicateTask(_)
+                | Action::DeleteTask(_)
+                | Action::AddTaskNote { .. }
+                | Action::CreateStatus { .. }
+                | Action::RenameStatus { .. }
+                | Action::SetStatusColor { .. }
+                | Action::SetStatusStyle { .. }
+                | Action::MoveStatusUp { .. }
+                | Action::MoveStatusDown { .. }
+                | Action::DeleteStatus { .. }
+                | Action::SetProjectEntryStatus { .. }
+                | Action::SetProjectSortingMode(_)
+                | Action::SetProjectShouldShowPriority(_)
+                | Action::Refresh
+        )
+    }
 }
