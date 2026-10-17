@@ -24,6 +24,12 @@ impl TaskDetails {
     }
 
     pub fn set_task(&mut self, task: Option<TaskWithNotes>) {
+        let current_task_id = self.task.as_ref().map(|task| task.id);
+        let new_task_id = task.as_ref().map(|task| task.id);
+        if new_task_id != current_task_id {
+            self.scroll_offset = 0;
+        }
+
         self.task = task;
     }
 
@@ -138,17 +144,68 @@ impl TaskDetails {
             details_text.push_line(Line::default());
         }
 
-        // clamp the scroll amount
-        let text_height = details_text.height() as u16;
-        let area_height = ctx.area.height;
-        self.scroll_offset = self
-            .scroll_offset
-            .clamp(0, text_height.saturating_sub(area_height));
+        let paragraph = Paragraph::new(details_text).wrap(Wrap { trim: false });
 
-        ctx.with_area(details_area).render(
-            Paragraph::new(details_text)
-                .scroll((self.scroll_offset, 0))
-                .wrap(Wrap { trim: false }),
-        );
+        // line_count counts wrapped display rows, unlike Text::height()'s logical lines
+        self.scroll_offset = self.scroll_offset.min(Self::max_scroll_offset(
+            &paragraph,
+            details_area.width,
+            details_area.height,
+        ));
+
+        ctx.with_area(details_area)
+            .render(paragraph.scroll((self.scroll_offset, 0)));
+    }
+
+    fn max_scroll_offset(paragraph: &Paragraph<'_>, width: u16, area_height: u16) -> u16 {
+        (paragraph.line_count(width) as u16).saturating_sub(area_height)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TaskDetails;
+    use crate::state::TaskWithNotes;
+    use chrono::Utc;
+    use ratatui::widgets::{Paragraph, Wrap};
+    use scry_core::models::{Priority, Tags};
+
+    fn task(id: i64) -> TaskWithNotes {
+        TaskWithNotes {
+            id,
+            project_id: 1,
+            title: format!("task {id}"),
+            description: None,
+            priority: Priority::default(),
+            status_id: 1,
+            position: id as i32,
+            tags: Tags::default(),
+            created_at: Utc::now(),
+            notes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn long_wrapped_text_reports_scrollable_height() {
+        let paragraph = Paragraph::new("word ".repeat(200)).wrap(Wrap { trim: false });
+        assert!(TaskDetails::max_scroll_offset(&paragraph, 20, 10) > 0);
+    }
+
+    #[test]
+    fn short_text_does_not_scroll() {
+        let paragraph = Paragraph::new("short").wrap(Wrap { trim: false });
+        assert_eq!(TaskDetails::max_scroll_offset(&paragraph, 20, 10), 0);
+    }
+
+    #[test]
+    fn set_task_resets_scroll_only_when_task_changes() {
+        let mut details = TaskDetails::new(Some(task(1)));
+        details.scroll_offset = 5;
+
+        details.set_task(Some(task(1)));
+        assert_eq!(details.scroll_offset, 5);
+
+        details.set_task(Some(task(2)));
+        assert_eq!(details.scroll_offset, 0);
     }
 }
