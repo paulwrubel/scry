@@ -59,6 +59,7 @@ struct CreateNoteBody {
 #[derive(Serialize)]
 struct CreateProjectBody {
     name: String,
+    description: Option<String>,
     entry_status_id: Option<StatusId>,
     task_sorting_mode: TaskSortingMode,
     show_priority: bool,
@@ -347,12 +348,14 @@ impl Store for RemoteStore {
     async fn create_project(
         &self,
         name: String,
+        description: Option<String>,
         entry_status_id: Option<StatusId>,
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
     ) -> Result<Project, StorageError> {
         let body = CreateProjectBody {
             name,
+            description,
             entry_status_id,
             task_sorting_mode,
             show_priority,

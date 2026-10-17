@@ -21,6 +21,8 @@ pub(crate) async fn active_project(store: &dyn Store) -> Result<Project, AppErro
 pub struct ProjectCreateParams {
     /// The new project name.
     pub name: String,
+    /// Optional freeform project description.
+    pub description: Option<String>,
     /// Optional template seeding statuses and settings: `todolist` or `kanban`.
     pub template: Option<String>,
 }
@@ -44,7 +46,7 @@ pub(crate) async fn create_project(
     };
 
     Ok(service
-        .create_project(params.name.clone(), template)
+        .create_project(params.name.clone(), params.description.clone(), template)
         .await?)
 }
 

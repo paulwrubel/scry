@@ -105,6 +105,7 @@ fn status_from_fields(
 fn project_from_fields(
     id: i64,
     name: String,
+    description: Option<String>,
     entry_status_id: Option<StatusId>,
     task_sorting_mode: String,
     show_priority: bool,
@@ -117,6 +118,7 @@ fn project_from_fields(
     Ok(Project {
         id,
         name,
+        description,
         entry_status_id,
         task_sorting_mode: task_sorting_mode.as_str().into(),
         show_priority,
@@ -997,6 +999,7 @@ impl Store for SqliteStore {
     async fn create_project(
         &self,
         name: String,
+        description: Option<String>,
         entry_status_id: Option<StatusId>,
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
@@ -1005,11 +1008,12 @@ impl Store for SqliteStore {
 
         let result = sqlx::query!(
             r#"
-                INSERT INTO projects (name, entry_status_id, task_sorting_mode, show_priority, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO projects (name, description, entry_status_id, task_sorting_mode, show_priority, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 RETURNING id
             "#,
             &name,
+            &description,
             entry_status_id,
             task_sorting_mode.to_string(),
             show_priority,
@@ -1022,6 +1026,7 @@ impl Store for SqliteStore {
             Ok(r) => Project {
                 id: r.id,
                 name: name.clone(),
+                description,
                 entry_status_id,
                 task_sorting_mode,
                 show_priority,
@@ -1047,7 +1052,7 @@ impl Store for SqliteStore {
     async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 WHERE id = ?
             "#,
@@ -1061,6 +1066,7 @@ impl Store for SqliteStore {
             Some(r) => Some(project_from_fields(
                 r.id,
                 r.name,
+                r.description,
                 r.entry_status_id,
                 r.task_sorting_mode,
                 r.show_priority,
@@ -1097,7 +1103,7 @@ impl Store for SqliteStore {
     async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 WHERE name = ?
             "#,
@@ -1111,6 +1117,7 @@ impl Store for SqliteStore {
             Some(r) => Some(project_from_fields(
                 r.id,
                 r.name,
+                r.description,
                 r.entry_status_id,
                 r.task_sorting_mode,
                 r.show_priority,
@@ -1123,7 +1130,7 @@ impl Store for SqliteStore {
     async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError> {
         let rows = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 ORDER BY name ASC
             "#,
@@ -1137,6 +1144,7 @@ impl Store for SqliteStore {
                 project_from_fields(
                     r.id,
                     r.name,
+                    r.description,
                     r.entry_status_id,
                     r.task_sorting_mode,
                     r.show_priority,
@@ -1150,10 +1158,11 @@ impl Store for SqliteStore {
         let result = sqlx::query!(
             r#"
                 UPDATE projects
-                SET name = ?, entry_status_id = ?, task_sorting_mode = ?, show_priority = ?
+                SET name = ?, description = ?, entry_status_id = ?, task_sorting_mode = ?, show_priority = ?
                 WHERE id = ?
             "#,
             &project.name,
+            &project.description,
             &project.entry_status_id,
             &project.task_sorting_mode.to_string(),
             &project.show_priority,
@@ -1202,7 +1211,7 @@ impl Store for SqliteStore {
 
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 WHERE name = ?
             "#,
@@ -1216,6 +1225,7 @@ impl Store for SqliteStore {
         let project = project_from_fields(
             row.id,
             row.name,
+            row.description,
             row.entry_status_id,
             row.task_sorting_mode,
             row.show_priority,
@@ -1305,11 +1315,12 @@ impl Store for SqliteStore {
 
             sqlx::query!(
                 r#"
-                    INSERT INTO projects (id, name, entry_status_id, task_sorting_mode, show_priority, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO projects (id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 "#,
                 project.id,
                 &project.name,
+                project.description.as_deref(),
                 project.entry_status_id,
                 project.task_sorting_mode.to_string(),
                 project.show_priority,

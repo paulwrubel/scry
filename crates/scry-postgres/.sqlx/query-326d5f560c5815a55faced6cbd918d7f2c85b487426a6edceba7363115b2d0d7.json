@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                INSERT INTO projects (name, entry_status_id, task_sorting_mode, show_priority, created_at)\n                VALUES ($1, $2, $3, $4, $5)\n                RETURNING id\n            ",
+  "query": "\n                INSERT INTO projects (name, description, entry_status_id, task_sorting_mode, show_priority, created_at)\n                VALUES ($1, $2, $3, $4, $5, $6)\n                RETURNING id\n            ",
   "describe": {
     "columns": [
       {
@@ -18,6 +18,7 @@
     "parameters": {
       "Left": [
         "Text",
+        "Text",
         "Int8",
         "Text",
         "Bool",
@@ -28,5 +29,5 @@
       false
     ]
   },
-  "hash": "425e217b8721416ec1e116d163d7eed0d3bdf1ca8eed10c3a38643f6af5b39ae"
+  "hash": "326d5f560c5815a55faced6cbd918d7f2c85b487426a6edceba7363115b2d0d7"
 }

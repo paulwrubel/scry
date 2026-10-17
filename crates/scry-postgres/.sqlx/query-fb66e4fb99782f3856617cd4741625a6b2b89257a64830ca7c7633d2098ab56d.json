@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at\n                FROM projects\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at\n                FROM projects\n                WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "entry_status_id",
         "type_info": "Int8",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "task_sorting_mode",
         "type_info": "Text",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "show_priority",
         "type_info": "Bool",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -79,10 +90,11 @@
       false,
       false,
       true,
+      true,
       false,
       false,
       false
     ]
   },
-  "hash": "16db20529b4e2a2cdf27605a355115f4e54834eb97033f5bee24056cdc2c8f69"
+  "hash": "fb66e4fb99782f3856617cd4741625a6b2b89257a64830ca7c7633d2098ab56d"
 }

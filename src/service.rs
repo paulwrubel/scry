@@ -373,14 +373,31 @@ impl<'a> ProjectService<'a> {
             .await?)
     }
 
+    pub async fn set_project_description(
+        &self,
+        project: &Project,
+        description: String,
+    ) -> Result<Project, ServiceError> {
+        let description = Some(description).filter(|description| !description.is_empty());
+        Ok(self
+            .store
+            .update_project(Project {
+                description,
+                ..project.clone()
+            })
+            .await?)
+    }
+
     pub async fn create_project(
         &self,
         name: String,
+        description: Option<String>,
         template: Option<ProjectTemplate>,
     ) -> Result<Project, ServiceError> {
+        let description = description.filter(|description| !description.is_empty());
         let project = self
             .store
-            .create_project(name, None, TaskSortingMode::default(), false)
+            .create_project(name, description, None, TaskSortingMode::default(), false)
             .await?;
 
         let Some(template) = template else {

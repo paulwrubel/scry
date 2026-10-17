@@ -146,10 +146,11 @@ pub trait Store: Send + Sync {
 
     async fn delete_status(&self, id: StatusId) -> Result<(), StorageError>;
 
-    /// Create a new project.
+    /// Create a new project. The description is optional freeform text.
     async fn create_project(
         &self,
         name: String,
+        description: Option<String>,
         entry_status_id: Option<StatusId>,
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,

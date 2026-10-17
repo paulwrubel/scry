@@ -282,6 +282,7 @@ fn remap_projects(
             project: Project {
                 id: new_project_id,
                 name: backup_project.project.name.clone(),
+                description: backup_project.project.description.clone(),
                 entry_status_id,
                 task_sorting_mode: backup_project.project.task_sorting_mode,
                 show_priority: backup_project.project.show_priority,
@@ -306,6 +307,7 @@ mod tests {
         Project {
             id,
             name: name.to_string(),
+            description: None,
             entry_status_id,
             task_sorting_mode: TaskSortingMode::Manual,
             show_priority: false,
@@ -400,6 +402,19 @@ mod tests {
         assert_eq!(imported.tasks[0].status_id, 201);
         assert_eq!(imported.notes[0].id, 401);
         assert_eq!(imported.notes[0].task_id, 301);
+    }
+
+    #[test]
+    fn remap_projects_preserves_description() {
+        let mut source = backup_project(1, "alpha", None);
+        source.project.description = Some("freeform project notes".to_string());
+
+        let remapped = remap_projects(&[source], no_maxima()).expect("remap should succeed");
+
+        assert_eq!(
+            remapped[0].project.description.as_deref(),
+            Some("freeform project notes")
+        );
     }
 
     #[test]

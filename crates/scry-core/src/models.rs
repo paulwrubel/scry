@@ -378,6 +378,7 @@ pub const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
 pub struct Project {
     pub id: ProjectId,
     pub name: String,
+    pub description: Option<String>,
     pub entry_status_id: Option<StatusId>,
     pub task_sorting_mode: TaskSortingMode,
     pub show_priority: bool,

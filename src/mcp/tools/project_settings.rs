@@ -7,6 +7,27 @@ use rmcp::schemars;
 use scry_core::models::{Project, TaskSortingMode};
 use scry_core::store::Store;
 
+/// Parameters for the `project_set_description` tool.
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ProjectSetDescriptionParams {
+    /// New description; an empty string clears it.
+    pub description: String,
+    /// Project to configure; defaults to the active project.
+    pub project: Option<String>,
+}
+
+pub(crate) async fn set_description(
+    store: &dyn Store,
+    params: &ProjectSetDescriptionParams,
+) -> Result<Project, AppError> {
+    let project = resolve_project(store, params.project.as_deref()).await?;
+    let service = ProjectService::new(store);
+
+    Ok(service
+        .set_project_description(&project, params.description.clone())
+        .await?)
+}
+
 /// Parameters for the `project_set_entry_status` tool.
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ProjectSetEntryStatusParams {

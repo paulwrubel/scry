@@ -875,6 +875,66 @@ fn project_priority_visibility() {
 }
 
 #[test]
+fn project_description_round_trips() {
+    let h = Harness::new();
+    h.run(&[
+        "project",
+        "create",
+        "--description",
+        "first line\nsecond line",
+        "myapp",
+    ])
+    .success();
+
+    assert_stdout(
+        &h.run(&["project", "show", "myapp"]).success(),
+        indoc! {r#"
+            myapp
+                first line
+                second line
+
+            Entry status: (first status)
+            Sort mode:    alphabetical
+            Priority:     hidden
+            Created at:   [TIMESTAMP]
+        "#},
+    );
+
+    let shown = stdout_json(&h.run(&["--json", "project", "show", "myapp"]).success());
+    assert_eq!(shown["name"], "myapp");
+    assert_eq!(shown["description"], "first line\nsecond line");
+
+    let backup = stdout_json(&h.run(&["export"]).success());
+    let exported = backup["projects"]
+        .as_array()
+        .expect("projects array")
+        .iter()
+        .find(|project| project.get("name").and_then(Value::as_str) == Some("myapp"))
+        .expect("myapp is exported");
+    assert_eq!(exported["description"], "first line\nsecond line");
+
+    h.run(&["-p", "myapp", "project", "update", "--description", "revised"])
+        .success();
+    let revised = stdout_json(&h.run(&["--json", "project", "show", "myapp"]).success());
+    assert_eq!(revised["description"], "revised");
+
+    // `project show` defaults to the active project when no name is given.
+    h.run(&["project", "use", "myapp"]).success();
+    let active = stdout_json(&h.run(&["--json", "project", "show"]).success());
+    assert_eq!(active["name"], "myapp");
+
+    // An empty value clears the description.
+    h.run(&["project", "update", "--description", ""]).success();
+    let cleared = stdout_json(&h.run(&["--json", "project", "show"]).success());
+    assert_eq!(cleared["description"], Value::Null);
+
+    // Updating with no flags is a usage error.
+    h.run(&["project", "update"])
+        .failure()
+        .stderr(predicate::str::contains("No flags provided"));
+}
+
+#[test]
 fn project_set_entry_status_rejects_unknown_status() {
     let h = Harness::new();
     create_todolist(&h, "todolist");
@@ -1604,6 +1664,16 @@ fn import_replace_existing_projects_replaces_conflicts() {
 fn import_round_trip_preserves_fields_and_timestamps() {
     let source = Harness::new();
     create_todolist(&source, "myapp");
+    source
+        .run(&[
+            "-p",
+            "myapp",
+            "project",
+            "update",
+            "--description",
+            "project notes",
+        ])
+        .success();
     source
         .run(&[
             "-p",

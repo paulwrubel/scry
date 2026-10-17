@@ -174,6 +174,11 @@ enum ProjectCommand {
     List,
     /// Show the currently active project
     Current,
+    /// Show a project's details
+    Show {
+        /// The project name (defaults to the active project)
+        name: Option<String>,
+    },
     /// Set the active project
     Use {
         /// The project name
@@ -184,6 +189,9 @@ enum ProjectCommand {
         /// The name of a template for the project
         #[arg(short = 't')]
         template_name: Option<String>,
+        /// The project description
+        #[arg(long)]
+        description: Option<String>,
         /// The project name
         name: String,
     },
@@ -193,6 +201,12 @@ enum ProjectCommand {
         old_name: String,
         /// The new project name
         new_name: String,
+    },
+    /// Update project properties
+    Update {
+        /// New description (empty string clears it)
+        #[arg(long)]
+        description: Option<String>,
     },
     /// Set the entry status, so new tasks default to it
     SetEntryStatus {
@@ -423,9 +437,50 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
                 return Ok(());
             }
+            ProjectCommand::Show { name } => {
+                let project =
+                    resolve_project(store.clone(), name.as_deref().or(cli.project.as_deref()))
+                        .await?;
+                if output_json {
+                    print_json(&project)?;
+                } else {
+                    let statuses = store.get_all_statuses_by_project_id(project.id).await?;
+                    let entry_status_name = project
+                        .entry_status_id
+                        .and_then(|id| statuses.iter().find(|status| status.id == id))
+                        .map(|status| status.name.as_str())
+                        .unwrap_or("(first status)");
+                    println!("{}", project.name);
+                    if let Some(description) = &project.description {
+                        for line in description.lines() {
+                            println!("    {}", line);
+                        }
+                    }
+                    println!();
+                    println!("Entry status: {}", entry_status_name);
+                    println!("Sort mode:    {}", project.task_sorting_mode);
+                    println!(
+                        "Priority:     {}",
+                        if project.show_priority {
+                            "shown"
+                        } else {
+                            "hidden"
+                        }
+                    );
+                    println!(
+                        "Created at:   {}",
+                        project
+                            .created_at
+                            .with_timezone(&Local)
+                            .format(DATETIME_FORMAT_STR)
+                    );
+                }
+                return Ok(());
+            }
             ProjectCommand::Create {
                 name,
                 template_name,
+                description,
             } => {
                 let template: Option<&ProjectTemplate> = match template_name {
                     Some(requested) => {
@@ -443,7 +498,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 };
 
                 let project = service
-                    .create_project(name.clone(), template.copied())
+                    .create_project(name.clone(), description.clone(), template.copied())
                     .await?;
 
                 if output_json {
@@ -830,6 +885,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Command::Project(project_cmd) => match project_cmd {
             ProjectCommand::List
             | ProjectCommand::Create { .. }
+            | ProjectCommand::Show { .. }
             | ProjectCommand::Use { .. }
             | ProjectCommand::Delete { .. } => {
                 unreachable!("handled before the active project is resolved")
@@ -847,6 +903,22 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     print_json(&renamed)?;
                 } else {
                     println!("Renamed project \"{}\" --> \"{}\"", old_name, new_name);
+                }
+            }
+            ProjectCommand::Update { description } => {
+                let Some(description) = description else {
+                    return Err(AppError::Usage(
+                        "No flags provided. Use 'scry project update --help' for available options."
+                            .to_string(),
+                    ));
+                };
+                let updated = service
+                    .set_project_description(&project, description)
+                    .await?;
+                if output_json {
+                    print_json(&updated)?;
+                } else {
+                    println!("Updated project \"{}\".", updated.name);
                 }
             }
             ProjectCommand::SetEntryStatus { name } => {

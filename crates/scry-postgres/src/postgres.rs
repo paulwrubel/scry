@@ -84,6 +84,7 @@ fn status_from_fields(
 fn project_from_fields(
     id: i64,
     name: String,
+    description: Option<String>,
     entry_status_id: Option<StatusId>,
     task_sorting_mode: String,
     show_priority: bool,
@@ -92,6 +93,7 @@ fn project_from_fields(
     Ok(Project {
         id,
         name,
+        description,
         entry_status_id,
         task_sorting_mode: task_sorting_mode.as_str().into(),
         show_priority,
@@ -969,6 +971,7 @@ impl Store for PostgresStore {
     async fn create_project(
         &self,
         name: String,
+        description: Option<String>,
         entry_status_id: Option<StatusId>,
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
@@ -977,11 +980,12 @@ impl Store for PostgresStore {
 
         let result = sqlx::query!(
             r#"
-                INSERT INTO projects (name, entry_status_id, task_sorting_mode, show_priority, created_at)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO projects (name, description, entry_status_id, task_sorting_mode, show_priority, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING id
             "#,
             &name,
+            description.as_deref(),
             entry_status_id,
             task_sorting_mode.to_string(),
             show_priority,
@@ -994,6 +998,7 @@ impl Store for PostgresStore {
             Ok(r) => Project {
                 id: r.id,
                 name: name.clone(),
+                description,
                 entry_status_id,
                 task_sorting_mode,
                 show_priority,
@@ -1019,7 +1024,7 @@ impl Store for PostgresStore {
     async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 WHERE id = $1
             "#,
@@ -1033,6 +1038,7 @@ impl Store for PostgresStore {
             Some(r) => Some(project_from_fields(
                 r.id,
                 r.name,
+                r.description,
                 r.entry_status_id,
                 r.task_sorting_mode,
                 r.show_priority,
@@ -1070,7 +1076,7 @@ impl Store for PostgresStore {
     async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, StorageError> {
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 WHERE name = $1
             "#,
@@ -1084,6 +1090,7 @@ impl Store for PostgresStore {
             Some(r) => Some(project_from_fields(
                 r.id,
                 r.name,
+                r.description,
                 r.entry_status_id,
                 r.task_sorting_mode,
                 r.show_priority,
@@ -1096,7 +1103,7 @@ impl Store for PostgresStore {
     async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError> {
         let rows = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 ORDER BY name ASC
             "#,
@@ -1110,6 +1117,7 @@ impl Store for PostgresStore {
                 project_from_fields(
                     r.id,
                     r.name,
+                    r.description,
                     r.entry_status_id,
                     r.task_sorting_mode,
                     r.show_priority,
@@ -1123,10 +1131,11 @@ impl Store for PostgresStore {
         let result = sqlx::query!(
             r#"
                 UPDATE projects
-                SET name = $1, entry_status_id = $2, task_sorting_mode = $3, show_priority = $4
-                WHERE id = $5
+                SET name = $1, description = $2, entry_status_id = $3, task_sorting_mode = $4, show_priority = $5
+                WHERE id = $6
             "#,
             &project.name,
+            project.description.as_deref(),
             project.entry_status_id,
             &project.task_sorting_mode.to_string(),
             &project.show_priority,
@@ -1175,7 +1184,7 @@ impl Store for PostgresStore {
 
         let row = sqlx::query!(
             r#"
-                SELECT id, name, entry_status_id, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at
                 FROM projects
                 WHERE name = $1
             "#,
@@ -1189,6 +1198,7 @@ impl Store for PostgresStore {
         let project = project_from_fields(
             row.id,
             row.name,
+            row.description,
             row.entry_status_id,
             row.task_sorting_mode,
             row.show_priority,
@@ -1278,11 +1288,12 @@ impl Store for PostgresStore {
 
             sqlx::query!(
                 r#"
-                    INSERT INTO projects (id, name, entry_status_id, task_sorting_mode, show_priority, created_at)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO projects (id, name, description, entry_status_id, task_sorting_mode, show_priority, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                 "#,
                 project.id,
                 &project.name,
+                project.description.as_deref(),
                 project.entry_status_id,
                 project.task_sorting_mode.to_string(),
                 project.show_priority,
