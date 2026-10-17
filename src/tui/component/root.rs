@@ -161,7 +161,7 @@ impl Root<'_> {
                         vec![action]
                     }
                     // unhandled actions bubble up unchanged
-                    Action::Quit => vec![action],
+                    Action::Quit | Action::Refresh => vec![action],
                 }
             })
             .collect::<Vec<_>>()
@@ -213,6 +213,7 @@ impl Root<'_> {
 
                 vec![]
             }
+            (KeyModifiers::NONE, KeyCode::Char('r')) => self.handle_action(state, Action::Refresh),
             (KeyModifiers::NONE, KeyCode::Char('a')) => {
                 self.handle_action(state, Action::OpenPopupAddOrEditTask(None))
             }

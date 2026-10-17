@@ -259,7 +259,12 @@ async fn project_snapshot_returns_the_whole_project() {
     let app = router::build_router(state, None);
 
     let project = store
-        .create_project("state-demo".to_string(), None, TaskSortingMode::Manual, false)
+        .create_project(
+            "state-demo".to_string(),
+            None,
+            TaskSortingMode::Manual,
+            false,
+        )
         .await
         .expect("create project");
     let todo = store
