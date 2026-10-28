@@ -1,17 +1,5 @@
 set shell := ["bash", "-uc"]
 
-# rebuild the sqlite database fresh (used for the sqlite offline query cache)
-[group('validate')]
-setup-database:
-    rm -f scry.db
-    touch scry.db
-    sqlx migrate run --source crates/scry-sqlite/migrations
-
-# regenerate the sqlite offline query cache by rebuilding the DB fresh
-[group('validate')]
-sqlx-prepare-sqlite: setup-database
-    cd crates/scry-sqlite && SQLX_OFFLINE=false cargo sqlx prepare --database-url sqlite://{{justfile_directory()}}/scry.db
-
 # start the dev postgres and wait for it to be healthy
 [group('validate')]
 pg-up:
@@ -40,14 +28,13 @@ sqlx-prepare-postgres: setup-database-postgres
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
     cd crates/scry-postgres && SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
-# regenerate both offline query caches
+# regenerate the Postgres offline query cache
 [group('validate')]
-sqlx-prepare: sqlx-prepare-sqlite sqlx-prepare-postgres
+sqlx-prepare: sqlx-prepare-postgres
 
-# verify both offline query caches are up to date (used in CI)
+# verify the Postgres offline query cache is up to date (used in CI)
 [group('validate')]
-sqlx-prepare-check: setup-database setup-database-postgres
-    cd crates/scry-sqlite && SQLX_OFFLINE=false cargo sqlx prepare --check --database-url sqlite://{{justfile_directory()}}/scry.db
+sqlx-prepare-check: setup-database-postgres
     cd crates/scry-postgres && SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
 # run all validation checks: test, check, clippy
@@ -56,17 +43,17 @@ validate:  test check clippy
 
 # run the test suite
 [group('validate')]
-test: setup-database
+test:
     cargo test --workspace
 
 # type-check without compiling (fast feedback)
 [group('validate')]
-check: setup-database
+check:
     cargo check --workspace
 
 # lint for common mistakes and style issues
 [group('validate')]
-clippy: setup-database
+clippy:
     cargo clippy --workspace -- -D warnings
 
 # bump patch version (x.y.Z → x.y.Z+1)
@@ -144,4 +131,3 @@ install:
 [group('misc')]
 clean:
     cargo clean
-    rm -f ./scry.db

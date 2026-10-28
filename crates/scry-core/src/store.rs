@@ -34,8 +34,8 @@ impl From<&Task> for TaskToCreate {
 
 /// A project together with all of its statuses, tasks, and notes.
 ///
-/// Backs the single-round-trip `GET /projects/{id}/snapshot` endpoint. `RemoteStore`
-/// deserializes the server response into this type, so it must serialize both ways.
+/// Backs the single-round-trip `GET /projects/{id}/snapshot` endpoint, and must
+/// serialize both ways so the server response can be deserialized into it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectSnapshot {
     pub project: Project,
