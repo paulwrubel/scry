@@ -25,8 +25,6 @@ use scry_core::models::{
 };
 use scry_core::store::ArcStore;
 use scry_postgres::PostgresStore;
-use scry_remote::RemoteStore;
-use scry_sqlite::SqliteStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -403,8 +401,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
 
     let config = ScryConfig::load()?;
     let secrets = ScrySecrets::load()?;
-    let database_url = secrets.resolved_database_url(&config);
-    let store = connect_store(&database_url, secrets.api_token()).await?;
+    let database_url = secrets.resolved_database_url(&config)?;
+    let store = connect_store(&database_url).await?;
 
     if let Some(Command::Mcp { http }) = &cli.command {
         return match http.as_deref() {
@@ -1131,22 +1129,15 @@ fn skill_target(harness: Option<Harness>, dir: Option<&Path>) -> Result<PathBuf,
     }
 }
 
-/// Open the store for the backend named by the database URL's scheme.
+/// Open the Postgres store for the given database URL.
 ///
-/// `api_token` is only used by the remote (`http(s)`) backend.
-async fn connect_store(
-    database_url: &str,
-    api_token: Option<String>,
-) -> Result<ArcStore, AppError> {
-    if database_url.starts_with("sqlite:") {
-        Ok(Arc::new(SqliteStore::new(database_url).await?))
-    } else if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
+/// Only Postgres URLs (`postgres://` and `postgresql://`) are supported.
+async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
+    if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
         Ok(Arc::new(PostgresStore::new(database_url).await?))
-    } else if database_url.starts_with("http://") || database_url.starts_with("https://") {
-        Ok(Arc::new(RemoteStore::new(database_url, api_token).await?))
     } else {
         Err(AppError::Config(format!(
-            "unsupported database URL scheme: {database_url}"
+            "unsupported database URL {database_url}: only postgres:// and postgresql:// are supported"
         )))
     }
 }

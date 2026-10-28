@@ -51,15 +51,15 @@ API on port 8000:
 
 ```sh
 docker pull ghcr.io/paulwrubel/scry:0.22.0
-docker run --rm -p 8000:8000 -v scry-data:/data ghcr.io/paulwrubel/scry:0.22.0
+docker run --rm -p 8000:8000 -v "$PWD/scry.docker.toml:/app/scry.toml:ro" ghcr.io/paulwrubel/scry:0.22.0
 ```
 
 Passing a command overrides the image default. The same tag also serves the stdio MCP server
 or the MCP server over HTTP:
 
 ```sh
-docker run -i --rm -v scry-data:/data ghcr.io/paulwrubel/scry:0.22.0 mcp
-docker run --rm -p 8000:8000 -v scry-data:/data ghcr.io/paulwrubel/scry:0.22.0 mcp --http 0.0.0.0:8000
+docker run -i --rm -v "$PWD/scry.docker.toml:/app/scry.toml:ro" ghcr.io/paulwrubel/scry:0.22.0 mcp
+docker run --rm -p 8000:8000 -v "$PWD/scry.docker.toml:/app/scry.toml:ro" ghcr.io/paulwrubel/scry:0.22.0 mcp --http 0.0.0.0:8000
 ```
 
 See [Running a server](#running-a-server) for the host-side REST API setup and the
@@ -74,7 +74,7 @@ See [Running a server](#running-a-server) for the host-side REST API setup and t
 The client launches the container as a child process; its stdin/stdout carry the protocol.
 
 ```sh
-docker run -i --rm -v scry-data:/data scry mcp
+docker run -i --rm -v "$PWD/scry.docker.toml:/app/scry.toml:ro" scry mcp
 ```
 
 `-i` keeps stdin open (the stdio transport requires it); do not add `-t`, which can corrupt the framing. A client config looks like:
@@ -84,7 +84,7 @@ docker run -i --rm -v scry-data:/data scry mcp
   "mcpServers": {
     "scry": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-v", "scry-data:/data", "scry", "mcp"]
+      "args": ["run", "-i", "--rm", "-v", "./scry.docker.toml:/app/scry.toml:ro", "scry", "mcp"]
     }
   }
 }
@@ -96,7 +96,7 @@ docker run -i --rm -v scry-data:/data scry mcp
 SCRY_MCP_TOKEN=$(openssl rand -hex 32) docker compose up -d
 ```
 
-This starts the server on `http://127.0.0.1:8000/mcp`, published on host loopback only, with the database on the `scry-data` volume. The container reads its config from `/app/scry.toml`, which compose mounts from `scry.docker.toml`. A client config looks like:
+This starts the server on `http://127.0.0.1:8000/mcp`, published on host loopback only. The container reads its config from `/app/scry.toml`, which compose mounts from `scry.docker.toml`; that config's `database_url` points at an external PostgreSQL server. A client config looks like:
 
 ```json
 {
@@ -114,8 +114,7 @@ The `headers` entry is only needed when `SCRY_MCP_TOKEN` is set; without it the 
 
 ### Notes
 
-- The container runs as UID/GID `1000`; for a bind-mounted database owned by a different UID, run with `--user "$(id -u):$(id -g)"`.
-- SQLite is single-writer: do not run the container and a host `scry` against the same database at once.
+- A reachable PostgreSQL server configured via `scry.toml` is required.
 - The HTTP transport has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
 - Client config key names vary between harnesses.
 
@@ -302,8 +301,7 @@ configuration examples.
 ### REST API
 
 Serve scry's operations as a versioned JSON REST API. This is a server surface: the CLI
-still talks to its configured database directly (see [Database](#database) to point a
-client at a remote server instead).
+still talks to its configured database directly (see [Database](#database)).
 
 | Command                    | Description                                  |
 | -------------------------- | -------------------------------------------- |
@@ -311,14 +309,20 @@ client at a remote server instead).
 
 #### Running a server
 
-`scry serve` reads the same `database_url` as every other command — `scry.toml`, else
-`DATABASE_URL`, else the local SQLite file — so it serves whichever database that machine
-is configured with. On the host that holds the data:
+`scry serve` reads `database_url` only from `scry.toml` or `scry.secret.toml`, so it serves
+whichever database that machine is configured with. On the host that holds the data, point
+`scry.toml` at the database:
+
+```toml
+database_url = "postgres://user:pass@localhost/scry"
+```
+
+Then start the server:
 
 ```sh
 # optional; omit the token for an unauthenticated server
 printf 'api_token = "%s"\n' "$(openssl rand -hex 32)" > scry.secret.toml
-DATABASE_URL=postgres://user:pass@localhost/scry scry serve --http 0.0.0.0:8000
+scry serve --http 0.0.0.0:8000
 ```
 
 The token lives in `scry.secret.toml` (see [Configuration](#configuration)); exporting
@@ -333,17 +337,10 @@ curl http://127.0.0.1:8000/api/v1
 # {"name":"scry","version":"0.21.2"}
 ```
 
-Then point a client at it — the CLI, MCP server, and REST server share the same `database_url`, and the token
-comes from that machine's `scry.secret.toml` (`api_token`) or `SCRY_API_TOKEN`:
-
-```sh
-DATABASE_URL=http://data-host:8000 scry list
-```
-
 The container image runs it the same way:
 
 ```sh
-docker run -d -p 8000:8000 -v scry-data:/data scry serve --http 0.0.0.0:8000
+docker run -d -p 8000:8000 -v "$PWD/scry.docker.toml:/app/scry.toml:ro" scry serve --http 0.0.0.0:8000
 ```
 
 Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) requires an
@@ -351,8 +348,7 @@ Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) requires an
 (compared in constant time). Responses are JSON; errors carry the same stable `kind`
 vocabulary as `--json` and MCP (`not_found`, `conflict`, `invalid`, `internal`, `config`)
 and map to the matching HTTP status (404, 409, 400, 500). There is no TLS, so put the
-server behind a TLS-terminating proxy or a private network if it leaves the host. If the
-backend is SQLite, the server is the only writer — do not also run a local `scry` against the same file; use PostgreSQL if you need concurrent writers.
+server behind a TLS-terminating proxy or a private network if it leaves the host.
 
 Endpoints, all under `/api/v1`:
 
@@ -406,47 +402,29 @@ scry looks for `scry.toml` in the current directory first, then `$XDG_CONFIG_HOM
 
 Available options:
 
-- `database_url` — set the database URL, e.g. `database_url = "postgres://user:pass@localhost/scry"`. If unset, scry uses the `DATABASE_URL` environment variable, falling back to a SQLite database (see [Database](#database)).
+- `database_url` — the PostgreSQL connection URL, required: `database_url = "postgres://user:pass@localhost/scry"` (see [Database](#database)).
 - `state_file` — override the location of the client-local state file that records the active project. A leading `~` expands to `$HOME`; a relative path resolves against the current directory. If unset, scry uses `$XDG_STATE_HOME/scry/state.toml`, falling back to `~/.local/state/scry/state.toml` (see [Active Project](#active-project)).
 
 The active project is **not** stored here or in the database — it lives in the XDG state directory, per machine (see [Active Project](#active-project)).
 
 Credentials belong in a separate `scry.secret.toml`, discovered the same way (`./scry.secret.toml`, then `$XDG_CONFIG_HOME/scry/scry.secret.toml`). It is never created automatically and is listed in `.gitignore`, so keep it out of version control. Its values take precedence over both `scry.toml` and the environment variables:
 
-- `database_url` — override `scry.toml`'s `database_url` and `DATABASE_URL`.
+- `database_url` — override `scry.toml`'s `database_url`.
 - `api_token` — the REST API bearer token, overriding `SCRY_API_TOKEN`.
 - `mcp_token` — the MCP bearer token, overriding `SCRY_MCP_TOKEN`.
 
 ## Database
 
-scry stores data in a database chosen by the `database_url` config value or, if unset, the `DATABASE_URL` environment variable. The backend is selected by the URL scheme:
-
-- **SQLite** — `sqlite:///path/to/scry.db` (or `sqlite::memory:`). This is the default: no setup, and the database lives at `$XDG_DATA_HOME/scry/scry.db` (falling back to `~/.local/share/scry/scry.db`).
-- **PostgreSQL** — `postgres://user:pass@host/db` (or `postgresql://…`). TLS is supported via the URL's `sslmode` parameter (e.g. `?sslmode=require`), which remote and managed servers commonly require.
-- **Remote (HTTP)** — `http://host:port` (or `https://…`) points scry at a running `scry serve` instance instead of a local database. Every command then reads and writes over the REST API; set `SCRY_API_TOKEN` to the server's bearer token when it requires one. For `https://` URLs, TLS validation uses the operating system trust store, so corporate roots such as Zscaler's are trusted; setting `SSL_CERT_FILE` or `SSL_CERT_DIR` overrides which roots are loaded.
-
-Migrations run automatically on startup, so a local backend needs no manual setup. To use Postgres, point scry at it:
-
-```sh
-DATABASE_URL=postgres://user:pass@localhost/scry scry list
-```
-
-or set it in `scry.toml`:
+scry stores its data in PostgreSQL. `database_url` must be set in `scry.toml` or `scry.secret.toml`; if neither sets it, startup fails with a configuration error:
 
 ```toml
 database_url = "postgres://user:pass@localhost/scry"
 ```
 
-To point scry at a running server instead of a local database:
+The URL syntax is `postgres://user:pass@host/db` (or `postgresql://…`). TLS is supported via the URL's `sslmode` parameter (e.g. `?sslmode=require`), which remote and managed servers commonly require.
 
-```sh
-# on the machine that holds the data
-scry serve --http 0.0.0.0:8000
+Migrations run automatically on startup, so no manual setup is needed.
 
-# from another machine
-DATABASE_URL=http://data-host:8000 scry list
-```
+The CLI connects to PostgreSQL directly and does not proxy through the REST server.
 
-Set `SCRY_API_TOKEN` on the server to require a bearer token, and export the same value wherever the client runs.
-
-For local development against Postgres, the repo ships `compose.dev.yaml` and justfile helpers: `just pg-up` starts a dev Postgres (`postgres:18`), `just setup-database-postgres` applies the migrations, and `just pg-down` stops it (`just pg-reset` also wipes its data). After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query caches with `just sqlx-prepare`.
+For local development against Postgres, the repo ships `compose.dev.yaml` and justfile helpers: `just pg-up` starts a dev Postgres (`postgres:18`), `just setup-database-postgres` applies the migrations, and `just pg-down` stops it (`just pg-reset` also wipes its data). After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query cache with `just sqlx-prepare`, which now rebuilds only the Postgres cache.

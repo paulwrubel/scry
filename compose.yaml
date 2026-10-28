@@ -10,10 +10,10 @@ services:
     ports:
       # Publish on the host loopback only. Use `8000:8000` to expose it further.
       - "127.0.0.1:8000:8000"
+    extra_hosts:
+      # Lets the container reach a PostgreSQL server running on the host.
+      - "host.docker.internal:host-gateway"
     volumes:
-      # Config the container reads from its working directory (WORKDIR /app).
+      # Config the container reads from its working directory (WORKDIR /app);
+      # it points at an external PostgreSQL server.
       - ./scry.docker.toml:/app/scry.toml:ro
-      - scry-data:/data
-
-volumes:
-  scry-data:

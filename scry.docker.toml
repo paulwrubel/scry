@@ -1,3 +1,4 @@
-# Configuration mounted into the container (see compose.yaml).
-# The database lives on the `scry-data` volume mounted at /data.
-database_url = "sqlite:///data/scry.db"
+# Configuration mounted into the container at /app/scry.toml (see compose.yaml).
+# Point `database_url` at your own PostgreSQL server; host.docker.internal
+# reaches a server running on the Docker host.
+database_url = "postgres://postgres:postgres@host.docker.internal:5432/scry"

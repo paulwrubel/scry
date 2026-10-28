@@ -14,27 +14,16 @@ const LEGACY_CONFIG_FILE: &str = "config.toml";
 /// must not be committed.
 const SECRET_FILE: &str = "scry.secret.toml";
 
-/// Environment variable holding the database URL.
-const DATABASE_URL_ENV: &str = "DATABASE_URL";
 /// Environment variable holding the REST API bearer token.
 const API_TOKEN_ENV: &str = "SCRY_API_TOKEN";
 /// Environment variable holding the MCP bearer token.
 const MCP_TOKEN_ENV: &str = "SCRY_MCP_TOKEN";
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ScryConfig {
-    pub database_url: String,
+    pub database_url: Option<String>,
     pub state_file: Option<String>,
-}
-
-impl Default for ScryConfig {
-    fn default() -> Self {
-        ScryConfig {
-            database_url: Self::resolve_database_url(),
-            state_file: None,
-        }
-    }
 }
 
 impl ScryConfig {
@@ -68,22 +57,6 @@ impl ScryConfig {
 
         toml::from_str(&content)
             .map_err(|e| AppError::Config(format!("failed to parse {:?}: {}", path, e)))
-    }
-
-    fn resolve_database_url() -> String {
-        if let Ok(url) = std::env::var(DATABASE_URL_ENV) {
-            return url;
-        }
-        let dir = if let Ok(d) = std::env::var("XDG_DATA_HOME") {
-            PathBuf::from(d).join("scry")
-        } else {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("scry")
-        };
-        format!("sqlite://{}", dir.join("scry.db").display())
     }
 
     fn xdg_dir() -> PathBuf {
@@ -130,11 +103,18 @@ impl ScrySecrets {
             .map_err(|e| AppError::Config(format!("failed to parse {:?}: {}", path, e)))
     }
 
-    /// Resolve the database URL: this file's value, else `config`'s.
-    pub fn resolved_database_url(&self, config: &ScryConfig) -> String {
+    /// Resolve the database URL: this file's value, else `config`'s, else an
+    /// error when neither is configured.
+    pub fn resolved_database_url(&self, config: &ScryConfig) -> Result<String, AppError> {
         self.database_url
             .clone()
-            .unwrap_or_else(|| config.database_url.clone())
+            .or_else(|| config.database_url.clone())
+            .ok_or_else(|| {
+                AppError::Config(
+                    "no database configured: set `database_url` in scry.toml or scry.secret.toml"
+                        .to_string(),
+                )
+            })
     }
 
     /// The REST token: this file's value, else `SCRY_API_TOKEN`.
@@ -174,16 +154,16 @@ mod tests {
         let dir = TempDir::new().expect("temp dir");
         write_config(
             &dir.path().join(CONFIG_FILE),
-            "database_url = \"sqlite://local.db\"\n",
+            "database_url = \"postgres://local.db\"\n",
         );
         let xdg = dir.path().join("xdg");
         write_config(
             &xdg.join(CONFIG_FILE),
-            "database_url = \"sqlite://xdg.db\"\n",
+            "database_url = \"postgres://xdg.db\"\n",
         );
 
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load");
-        assert_eq!(config.database_url, "sqlite://local.db");
+        assert_eq!(config.database_url.as_deref(), Some("postgres://local.db"));
     }
 
     #[test]
@@ -192,11 +172,11 @@ mod tests {
         let xdg = dir.path().join("xdg");
         write_config(
             &xdg.join(CONFIG_FILE),
-            "database_url = \"sqlite://xdg.db\"\n",
+            "database_url = \"postgres://xdg.db\"\n",
         );
 
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load");
-        assert_eq!(config.database_url, "sqlite://xdg.db");
+        assert_eq!(config.database_url.as_deref(), Some("postgres://xdg.db"));
     }
 
     #[test]
@@ -205,15 +185,15 @@ mod tests {
         let xdg = dir.path().join("xdg");
         write_config(
             &xdg.join(CONFIG_FILE),
-            "database_url = \"sqlite://new.db\"\n",
+            "database_url = \"postgres://new.db\"\n",
         );
         write_config(
             &xdg.join(LEGACY_CONFIG_FILE),
-            "database_url = \"sqlite://legacy.db\"\n",
+            "database_url = \"postgres://legacy.db\"\n",
         );
 
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load");
-        assert_eq!(config.database_url, "sqlite://new.db");
+        assert_eq!(config.database_url.as_deref(), Some("postgres://new.db"));
     }
 
     #[test]
@@ -222,11 +202,11 @@ mod tests {
         let xdg = dir.path().join("xdg");
         write_config(
             &xdg.join(LEGACY_CONFIG_FILE),
-            "database_url = \"sqlite://legacy.db\"\n",
+            "database_url = \"postgres://legacy.db\"\n",
         );
 
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load");
-        assert_eq!(config.database_url, "sqlite://legacy.db");
+        assert_eq!(config.database_url.as_deref(), Some("postgres://legacy.db"));
     }
 
     #[test]
@@ -235,11 +215,7 @@ mod tests {
         let xdg = dir.path().join("xdg");
 
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load");
-        assert!(
-            config.database_url.contains("scry.db"),
-            "{}",
-            config.database_url
-        );
+        assert!(config.database_url.is_none());
     }
 
     #[test]
@@ -247,12 +223,15 @@ mod tests {
         let dir = TempDir::new().expect("temp dir");
         write_config(
             &dir.path().join(SECRET_FILE),
-            "database_url = \"sqlite://secret.db\"\napi_token = \"rest-token\"\nmcp_token = \"mcp-token\"\n",
+            "database_url = \"postgres://secret.db\"\napi_token = \"rest-token\"\nmcp_token = \"mcp-token\"\n",
         );
         let xdg = dir.path().join("xdg");
 
         let secrets = ScrySecrets::load_from(dir.path(), &xdg).expect("load");
-        assert_eq!(secrets.database_url.as_deref(), Some("sqlite://secret.db"));
+        assert_eq!(
+            secrets.database_url.as_deref(),
+            Some("postgres://secret.db")
+        );
         assert_eq!(secrets.api_token.as_deref(), Some("rest-token"));
         assert_eq!(secrets.mcp_token.as_deref(), Some("mcp-token"));
     }
@@ -262,17 +241,22 @@ mod tests {
         let dir = TempDir::new().expect("temp dir");
         write_config(
             &dir.path().join(CONFIG_FILE),
-            "database_url = \"sqlite://config.db\"\n",
+            "database_url = \"postgres://config.db\"\n",
         );
         write_config(
             &dir.path().join(SECRET_FILE),
-            "database_url = \"sqlite://secret.db\"\n",
+            "database_url = \"postgres://secret.db\"\n",
         );
         let xdg = dir.path().join("xdg");
 
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load config");
         let secrets = ScrySecrets::load_from(dir.path(), &xdg).expect("load secrets");
-        assert_eq!(secrets.resolved_database_url(&config), "sqlite://secret.db");
+        assert_eq!(
+            secrets
+                .resolved_database_url(&config)
+                .expect("resolve database url"),
+            "postgres://secret.db"
+        );
     }
 
     #[test]
@@ -281,7 +265,7 @@ mod tests {
         let xdg = dir.path().join("xdg");
         write_config(
             &dir.path().join(CONFIG_FILE),
-            "database_url = \"sqlite://config.db\"\n",
+            "database_url = \"postgres://config.db\"\n",
         );
 
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load config");
@@ -289,7 +273,12 @@ mod tests {
         assert!(secrets.database_url.is_none());
         assert!(secrets.api_token.is_none());
         assert!(secrets.mcp_token.is_none());
-        assert_eq!(secrets.resolved_database_url(&config), "sqlite://config.db");
+        assert_eq!(
+            secrets
+                .resolved_database_url(&config)
+                .expect("resolve database url"),
+            "postgres://config.db"
+        );
     }
 
     #[test]
@@ -310,11 +299,27 @@ mod tests {
         let dir = TempDir::new().expect("temp dir");
         write_config(
             &dir.path().join(CONFIG_FILE),
-            "database_url = \"sqlite://local.db\"\n",
+            "database_url = \"postgres://local.db\"\n",
         );
         let xdg = dir.path().join("xdg");
 
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load");
         assert!(config.state_file.is_none());
+    }
+
+    #[test]
+    fn missing_database_url_is_an_error() {
+        let dir = TempDir::new().expect("temp dir");
+        let xdg = dir.path().join("xdg");
+
+        let config = ScryConfig::load_from(dir.path(), &xdg).expect("load config");
+        let secrets = ScrySecrets::load_from(dir.path(), &xdg).expect("load secrets");
+        let error = secrets
+            .resolved_database_url(&config)
+            .expect_err("missing database url should error");
+        assert!(
+            error.to_string().contains("database_url"),
+            "unexpected error: {error}"
+        );
     }
 }

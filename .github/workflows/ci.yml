@@ -40,5 +40,5 @@ jobs:
       - name: Validate (test -> check -> clippy)
         run: just validate
 
-      - name: Check offline query caches (sqlite + postgres)
+      - name: Check offline query cache (postgres)
         run: just sqlx-prepare-check

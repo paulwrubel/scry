@@ -9,7 +9,6 @@ anstyle = "1"
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
-indoc = "2.0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
@@ -28,22 +27,14 @@ axum-extra = { version = "0.12.6", features = ["typed-header"] }
 tower-http = { version = "0.6", features = ["cors"] }
 subtle = "2"
 scry-core = { path = "crates/scry-core" }
-scry-sqlite = { path = "crates/scry-sqlite" }
 scry-postgres = { path = "crates/scry-postgres" }
-scry-remote = { path = "crates/scry-remote" }
 
 [workspace]
 members = [
     "crates/scry-core",
-    "crates/scry-sqlite",
     "crates/scry-postgres",
-    "crates/scry-remote",
 ]
 resolver = "3"
 
 [dev-dependencies]
-assert_cmd = "2.2.2"
 assert_fs = "1.1.4"
-predicates = "3.1.4"
-regex = "1.13.1"
-tower = { version = "0.5.3", features = ["util"] }
