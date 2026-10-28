@@ -115,7 +115,7 @@ The `headers` entry is only needed when `SCRY_MCP_TOKEN` is set; without it the 
 ### Notes
 
 - The container runs as UID/GID `1000`; for a bind-mounted database owned by a different UID, run with `--user "$(id -u):$(id -g)"`.
-- SQLite is single-writer: do not run the container and a host `scry` or TUI against the same database at once.
+- SQLite is single-writer: do not run the container and a host `scry` against the same database at once.
 - The HTTP transport has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
 - Client config key names vary between harnesses.
 
@@ -161,7 +161,9 @@ scry -p myapp move 1 "in progress"
 
 `--color <auto|always|never>` — when to colorize output. `auto` (the default) colorizes only when stdout is a terminal and `NO_COLOR` is unset.
 
-`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand (the TUI) or with `mcp`, `serve`, `docs`, or `skill` is an error. See [JSON Output](#json-output).
+`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand or with `mcp`, `serve`, `docs`, or `skill` is an error. See [JSON Output](#json-output).
+
+Running `scry` with no subcommand prints the top-level help and exits.
 
 ### Task Commands
 
@@ -331,7 +333,7 @@ curl http://127.0.0.1:8000/api/v1
 # {"name":"scry","version":"0.21.2"}
 ```
 
-Then point a client at it — the CLI and TUI read the same `database_url`, and the token
+Then point a client at it — the CLI, MCP server, and REST server share the same `database_url`, and the token
 comes from that machine's `scry.secret.toml` (`api_token`) or `SCRY_API_TOKEN`:
 
 ```sh
@@ -350,8 +352,7 @@ Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) requires an
 vocabulary as `--json` and MCP (`not_found`, `conflict`, `invalid`, `internal`, `config`)
 and map to the matching HTTP status (404, 409, 400, 500). There is no TLS, so put the
 server behind a TLS-terminating proxy or a private network if it leaves the host. If the
-backend is SQLite, the server is the only writer — do not also run a local `scry` or the
-TUI against the same file; use PostgreSQL if you need concurrent writers.
+backend is SQLite, the server is the only writer — do not also run a local `scry` against the same file; use PostgreSQL if you need concurrent writers.
 
 Endpoints, all under `/api/v1`:
 
@@ -387,7 +388,7 @@ scry -p myapp --json add "design API"
 
 Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
-`--json` applies only to one-shot subcommands; passing it with no subcommand (which would launch the TUI) or with `mcp`, `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
+`--json` applies only to one-shot subcommands; passing it with no subcommand or with `mcp`, `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 
 On failure, a structured error document is written to stderr:
 

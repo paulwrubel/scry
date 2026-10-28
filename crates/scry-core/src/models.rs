@@ -3,10 +3,8 @@ use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use ratatui::{style::Style, text::Span};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use strum::IntoEnumIterator;
 
 pub type NoteId = i64;
 pub type TaskId = i64;
@@ -41,29 +39,6 @@ impl Display for Color {
                 .expect("Color has no skipped variants")
                 .get_name(),
         )
-    }
-}
-
-impl From<Color> for ratatui::style::Color {
-    fn from(color: Color) -> Self {
-        match color {
-            Color::Black => Self::Black,
-            Color::Red => Self::Red,
-            Color::Green => Self::Green,
-            Color::Yellow => Self::Yellow,
-            Color::Blue => Self::Blue,
-            Color::Magenta => Self::Magenta,
-            Color::Cyan => Self::Cyan,
-            Color::Gray => Self::Gray,
-            Color::DarkGray => Self::DarkGray,
-            Color::LightRed => Self::LightRed,
-            Color::LightGreen => Self::LightGreen,
-            Color::LightYellow => Self::LightYellow,
-            Color::LightBlue => Self::LightBlue,
-            Color::LightMagenta => Self::LightMagenta,
-            Color::LightCyan => Self::LightCyan,
-            Color::White => Self::White,
-        }
     }
 }
 
@@ -200,7 +175,6 @@ impl<'a> IntoIterator for &'a Tags {
     TryFromPrimitive,
     IntoPrimitive,
     strum::Display,
-    strum::EnumIter,
 )]
 #[serde(rename_all = "kebab-case")]
 #[repr(i64)]
@@ -227,43 +201,6 @@ impl Priority {
             Priority::Low => Color::Blue,
             Priority::Minimal => Color::Magenta,
         }
-    }
-
-    pub fn next(&self) -> Self {
-        Self::iter()
-            .cycle()
-            .skip_while(|p| p != self)
-            .nth(1)
-            .expect("should cycle forever")
-    }
-
-    pub fn previous(&self) -> Self {
-        Self::iter()
-            .rev()
-            .cycle()
-            .skip_while(|p| p != self)
-            .nth(1)
-            .expect("should cycle forever")
-    }
-
-    pub fn index(&self) -> usize {
-        Self::iter().position(|p| p == *self).expect("must match")
-    }
-
-    pub fn short_span(&self) -> Span<'static> {
-        Span::styled(
-            format!("p{}", i64::from(*self)),
-            Style::default().fg(self.color().into()),
-        )
-    }
-}
-
-impl From<Priority> for Span<'_> {
-    fn from(value: Priority) -> Self {
-        Span::styled(
-            format!("p{} - {}", i64::from(value), value),
-            Style::default().fg(value.color().into()),
-        )
     }
 }
 

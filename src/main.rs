@@ -9,14 +9,13 @@ mod server;
 mod service;
 mod skill;
 mod state;
-mod tui;
 
 use crate::color::ColorChoice;
 use crate::service::{EntryStatusUpdate, ProjectService, ProjectUpdate, TaskInput};
 use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
 use chrono::Local;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::{AppError, ServiceError};
 use scry_core::backup::{self, BACKUP_VERSION, Backup, ImportMode};
@@ -391,6 +390,17 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         return run_skill(command);
     }
 
+    if cli.command.is_none() {
+        Cli::command()
+            .print_help()
+            .map_err(|error| AppError::Internal(format!("failed to print help: {error}")))?;
+        println!();
+        println!(
+            "The interactive TUI has been removed. Run `scry serve` for the REST API, or `scry --help` for available commands."
+        );
+        return Ok(());
+    }
+
     let config = ScryConfig::load()?;
     let secrets = ScrySecrets::load()?;
     let database_url = secrets.resolved_database_url(&config);
@@ -622,10 +632,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
 
     let project = resolve_project(store.clone(), cli.project.as_deref()).await?;
 
-    let Some(command) = cli.command else {
-        let mut app = tui::App::new(config, store, project.id);
-        return app.run().await;
-    };
+    let command = cli.command.expect("no subcommand is handled above");
 
     match command {
         Command::Add {
