@@ -43,7 +43,7 @@ pub fn status(color: Option<Color>, text: &str) -> String {
     }
 }
 
-/// The TUI's short priority label (`pN`).
+/// The short priority label (`pN`).
 pub fn priority(priority: Priority) -> String {
     paint(
         Style::new().fg_color(Some(AnsiColor::from(priority.color()).into())),
@@ -51,7 +51,7 @@ pub fn priority(priority: Priority) -> String {
     )
 }
 
-/// The TUI's long priority label (`pN - Name`).
+/// The long priority label (`pN - Name`).
 pub fn priority_long(priority: Priority) -> String {
     paint(
         Style::new().fg_color(Some(AnsiColor::from(priority.color()).into())),
@@ -59,15 +59,14 @@ pub fn priority_long(priority: Priority) -> String {
     )
 }
 
-/// A tag, colored with the TUI's deterministic hash-based palette.
+/// A tag, colored with the deterministic hash-based palette.
 pub fn tag(tag: &str) -> String {
     let (r, g, b) = tag_rgb(tag);
     let style = Style::new().fg_color(Some(AnsiStyleColor::Rgb(RgbColor(r, g, b))));
     paint(style, tag)
 }
 
-// The TUI tag palette (`src/tui/component/shared/colored_tags.rs`), shared here
-// so CLI tags render identically.
+// The deterministic tag palette, so CLI tags render consistently.
 const TAG_HASH_SEED: u32 = 1870435234;
 const TAG_PALETTE: [(u8, u8, u8); 14] = [
     (0xFF, 0xD6, 0xE0),
@@ -86,7 +85,7 @@ const TAG_PALETTE: [(u8, u8, u8); 14] = [
     (0x5C, 0x54, 0x70),
 ];
 
-/// The TUI's deterministic tag color.
+/// The deterministic tag color.
 pub fn tag_rgb(tag: &str) -> (u8, u8, u8) {
     let index = XxHash32::oneshot(TAG_HASH_SEED, tag.as_bytes()) as usize % TAG_PALETTE.len();
     TAG_PALETTE[index]
