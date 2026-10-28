@@ -1196,6 +1196,17 @@ fn json_without_subcommand_errors() {
 }
 
 #[test]
+fn bare_invocation_prints_help_and_pointer() {
+    let h = Harness::new();
+    h.run(&[])
+        .success()
+        .stdout(predicate::str::contains("Usage: scry"))
+        .stdout(predicate::str::contains(
+            "The interactive TUI has been removed. Run `scry serve` for the REST API, or `scry --help` for available commands.",
+        ));
+}
+
+#[test]
 fn json_project_commands_return_models() {
     let h = Harness::new();
     create_todolist(&h, "todolist");

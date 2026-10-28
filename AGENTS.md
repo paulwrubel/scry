@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`scry` is a terminal task manager with a SQLite or PostgreSQL backend: a clap CLI, a ratatui interactive TUI (launched when run with **no subcommand**), and an in-process MCP server (`scry mcp`). Rust edition 2024. It is a Cargo workspace: the root `scry` binary plus `crates/scry-core` (domain types and the `Store` trait), `crates/scry-sqlite` (`SqliteStore`), and `crates/scry-postgres` (`PostgresStore`). Integration tests live in `tests/cli.rs` and drive the built binary against isolated scratch databases; `just test` runs them (`cargo test --workspace`).
+`scry` is a terminal task manager with a SQLite or PostgreSQL backend: a clap CLI and an in-process MCP server (`scry mcp`). Rust edition 2024. It is a Cargo workspace: the root `scry` binary plus `crates/scry-core` (domain types and the `Store` trait), `crates/scry-sqlite` (`SqliteStore`), and `crates/scry-postgres` (`PostgresStore`). Integration tests live in `tests/cli.rs` and drive the built binary against isolated scratch databases; `just test` runs them (`cargo test --workspace`).
 
 ## Tooling prerequisites
 
@@ -26,12 +26,12 @@ All SQL lives in `sqlx::query!`/`query_as!` macros in `crates/scry-sqlite/src/sq
 
 ## Architecture
 
-- `src/main.rs` — clap command definitions, one-shot handlers, and backend dispatch (`connect_store`); no subcommand launches the TUI.
+- `src/main.rs` — clap command definitions, one-shot handlers, and backend dispatch (`connect_store`); with no subcommand it prints the top-level help.
 - `src/mcp.rs` plus `src/mcp/` — in-process MCP server exposing task/project/status/note operations as tools, over stdio by default or streamable HTTP with `scry mcp --http <addr>`.
 - `crates/scry-core/src/store.rs` — `Store` async trait declaring every DB operation. Two implementors: `SqliteStore` (`crates/scry-sqlite/src/sqlite.rs`) and `PostgresStore` (`crates/scry-postgres/src/postgres.rs`). All `query!` calls live in those two files. Add new persistence via the trait plus each implementor.
 - `crates/scry-core/src/models.rs` — domain types (`Task`, `Project`, `Status`, `Priority`, …) and ID aliases. `crates/scry-core/src/backup.rs` defines the JSON backup/import format. `src/service.rs` holds business logic (`ProjectService`), `src/config.rs` handles config and DB URL resolution, and `src/skill.rs` implements the embedded Agent Skill command.
 - Row->model mapping is hand-rolled per query via the `*_from_fields` helpers in each store. SQLite stores timestamps as RFC3339 TEXT; enums are stored as their `Display`/string names (or numeric for `Priority`) — route all conversions through these helpers rather than deserializing directly.
-- `src/tui/` — command-driven ratatui app: `app.rs` (event loop), `command.rs` (internal command enum), `action.rs` (input actions), `component/` (panes; `root.rs` dispatches; `popup/` are overlays; `shared/` are reusable widgets). Shared app state lives in `src/state.rs`.
+- `src/state.rs` — shared read/query model used by `scry list`/`scry show` and MCP `task_list`/`task_show`: `ProjectState` groups a project snapshot into statuses with tasks and notes, applies the project's sorting mode, and supports substring filtering. It has no UI dependencies.
 - The SQLite pool is `max_connections(1)` with `foreign_keys(true)` — no concurrent SQLite writers. The Postgres pool uses sqlx defaults, so concurrent writers are possible there.
 
 ## Release process
