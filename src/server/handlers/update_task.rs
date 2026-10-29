@@ -16,7 +16,7 @@ pub async fn update_task(
 ) -> Response {
     task.id = id;
 
-    match state.store.update_task(task).await {
+    match state.service.update_task_by_id(id, task).await {
         Ok(task) => Json(task).into_response(),
         Err(error) => AppError::from(error).into(),
     }

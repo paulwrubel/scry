@@ -10,8 +10,8 @@ use crate::server::ScryState;
 
 /// Update a task and auto-position it within its (possibly new) status.
 ///
-/// The caller sends the full task, so this stays a direct mapping onto
-/// `Store::update_and_autoposition_task`; changing `status_id` moves the task.
+/// The service validates the task and target status against the project, then
+/// auto-positions it; changing `status_id` moves the task.
 pub async fn move_task(
     State(state): State<ScryState>,
     Path(id): Path<TaskId>,
@@ -19,7 +19,7 @@ pub async fn move_task(
 ) -> Response {
     task.id = id;
 
-    match state.store.update_and_autoposition_task(task).await {
+    match state.service.update_task_by_id(id, task).await {
         Ok(task) => Json(task).into_response(),
         Err(error) => AppError::from(error).into(),
     }

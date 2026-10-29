@@ -24,14 +24,11 @@ pub async fn create_project(
     State(state): State<ScryState>,
     Json(body): Json<CreateProjectRequest>,
 ) -> Response {
-    let description = body
-        .description
-        .filter(|description| !description.is_empty());
     match state
-        .store
-        .create_project(
+        .service
+        .create_project_with(
             body.name,
-            description,
+            body.description,
             body.entry_status_id,
             body.task_sorting_mode.unwrap_or_default(),
             body.show_priority.unwrap_or_default(),

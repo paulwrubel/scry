@@ -27,6 +27,7 @@ All SQL lives in `sqlx::query!`/`query_as!` macros in `src/postgres.rs`, and is 
 ## Architecture
 
 - `src/main.rs` — clap command definitions, one-shot handlers, and backend dispatch (`connect_store`); with no subcommand it prints the top-level help.
+- `src/service.rs` — `ProjectService` owns the store and is the only write path. Every mutation (CLI, REST handlers, import) goes through it; reads may use `Store` directly. The REST `ScryState` holds a `store` for reads and a `service` for writes.
 - `crates/scry-core/src/store.rs` — `Store` async trait declaring every DB operation. One implementor: `PostgresStore` (`src/postgres.rs`). All `query!` calls live there. Add new persistence via the trait plus the implementor.
 - `crates/scry-core/src/models.rs` — domain types (`Task`, `Project`, `Status`, `Priority`, …) and ID aliases. `crates/scry-core/src/backup.rs` defines the JSON backup/import format. `src/service.rs` holds business logic (`ProjectService`), `src/config.rs` handles config and DB URL resolution, and `src/skill.rs` implements the embedded Agent Skill command.
 - Row->model mapping is hand-rolled per query via the `*_from_fields` helpers in the store. Enums are stored as their `Display`/string names (or numeric for `Priority`) — route all conversions through these helpers rather than deserializing directly.

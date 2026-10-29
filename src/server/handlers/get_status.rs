@@ -10,7 +10,7 @@ use crate::server::ScryState;
 
 /// Fetch a status by id; responds with `null` when it does not exist.
 pub async fn get_status(State(state): State<ScryState>, Path(id): Path<StatusId>) -> Response {
-    match state.store.get_status_by_id(id).await {
+    match state.service.find_status(id).await {
         Ok(status) => Json(status).into_response(),
         Err(error) => AppError::from(error).into(),
     }

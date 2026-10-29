@@ -407,7 +407,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         return server::serve_http(store, http, secrets.api_token()).await;
     }
 
-    let service = ProjectService::new(store.as_ref());
+    let service = ProjectService::new(store.clone());
 
     // These commands create, list, select, or remove projects, or move data in
     // and out; none of them needs an active project, so they run even when the
@@ -606,7 +606,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         };
 
         let plan = backup::plan_import(store.as_ref(), &backup, mode).await?;
-        let report = store.import(plan).await?;
+        let report = service.import(plan).await?;
 
         if output_json {
             let document = serde_json::json!({

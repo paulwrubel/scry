@@ -15,10 +15,7 @@ pub async fn update_project(
     Json(mut project): Json<Project>,
 ) -> Response {
     project.id = id;
-    project.description = project
-        .description
-        .filter(|description| !description.is_empty());
-    match state.store.update_project(project).await {
+    match state.service.replace_project(project).await {
         Ok(project) => Json(project).into_response(),
         Err(error) => AppError::from(error).into(),
     }

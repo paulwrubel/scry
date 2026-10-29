@@ -12,7 +12,7 @@ pub async fn get_project_by_name(
     State(state): State<ScryState>,
     Path(name): Path<String>,
 ) -> Response {
-    match state.store.get_project_by_name(&name).await {
+    match state.service.find_project_by_name(&name).await {
         Ok(project) => Json(project).into_response(),
         Err(error) => AppError::from(error).into(),
     }

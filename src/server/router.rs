@@ -2,6 +2,7 @@
 
 use crate::error::AppError;
 use crate::http_auth::require_token;
+use crate::service::ProjectService;
 use axum::Router;
 use axum::http::{Method, header};
 use axum::routing::{get, post};
@@ -133,7 +134,8 @@ pub async fn serve_http(
         .parse()
         .map_err(|error| AppError::Usage(format!("invalid address '{addr}': {error}")))?;
 
-    let state = ScryState { store };
+    let service = ProjectService::new(store);
+    let state = ScryState { service };
     let router = build_router(state, token);
 
     let listener = tokio::net::TcpListener::bind(addr)
