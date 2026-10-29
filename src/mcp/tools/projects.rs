@@ -2,6 +2,7 @@
 
 use super::resolve_project;
 use crate::client_state;
+use crate::config::ScryConfig;
 use crate::error::AppError;
 use crate::service::{EntryStatusUpdate, ProjectService, ProjectUpdate};
 use rmcp::schemars;
@@ -12,8 +13,11 @@ pub(crate) async fn list_projects(store: &dyn Store) -> Result<Vec<Project>, App
     Ok(store.get_all_projects().await?)
 }
 
-pub(crate) async fn active_project(store: &dyn Store) -> Result<Project, AppError> {
-    client_state::active_project(store).await
+pub(crate) async fn active_project(
+    store: &dyn Store,
+    config: &ScryConfig,
+) -> Result<Project, AppError> {
+    client_state::active_project(store, config).await
 }
 
 /// Parameters for the `project_create` tool.
@@ -72,6 +76,7 @@ pub struct ProjectUpdateParams {
 
 pub(crate) async fn update_project(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &ProjectUpdateParams,
 ) -> Result<Project, AppError> {
     let clear_entry_status = params.clear_entry_status.unwrap_or(false);
@@ -92,7 +97,7 @@ pub(crate) async fn update_project(
         ));
     }
 
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
     let entry_status = if clear_entry_status {
@@ -127,9 +132,10 @@ pub struct ProjectUseParams {
 
 pub(crate) async fn use_project(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &ProjectUseParams,
 ) -> Result<Project, AppError> {
-    client_state::set_active_project(store, &params.name).await
+    client_state::set_active_project(store, config, &params.name).await
 }
 
 /// Parameters for the `project_delete` tool.

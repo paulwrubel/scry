@@ -43,6 +43,14 @@ struct Cli {
     #[arg(long)]
     json: bool,
 
+    /// Read configuration from this file instead of the discovered default
+    #[arg(long, value_name = "PATH")]
+    config: Option<PathBuf>,
+
+    /// Read secrets from this file instead of the discovered default
+    #[arg(long, value_name = "PATH")]
+    secrets: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -399,15 +407,15 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         return Ok(());
     }
 
-    let config = ScryConfig::load()?;
-    let secrets = ScrySecrets::load()?;
+    let config = ScryConfig::load(cli.config.as_deref())?;
+    let secrets = ScrySecrets::load(cli.secrets.as_deref())?;
     let database_url = secrets.resolved_database_url(&config)?;
     let store = connect_store(&database_url).await?;
 
     if let Some(Command::Mcp { http }) = &cli.command {
         return match http.as_deref() {
-            Some(addr) => mcp::serve_http(store, addr, secrets.mcp_token()).await,
-            None => mcp::serve_stdio(store).await,
+            Some(addr) => mcp::serve_http(store, addr, secrets.mcp_token(), config).await,
+            None => mcp::serve_stdio(store, config).await,
         };
     }
 
@@ -429,7 +437,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 } else if projects.is_empty() {
                     eprintln!("No projects. Run 'scry project create <name>' to create one.");
                 } else {
-                    let active_id = client_state::active_project(store.as_ref())
+                    let active_id = client_state::active_project(store.as_ref(), &config)
                         .await
                         .ok()
                         .map(|project| project.id);
@@ -441,9 +449,12 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 return Ok(());
             }
             ProjectCommand::Show { name } => {
-                let project =
-                    resolve_project(store.clone(), name.as_deref().or(cli.project.as_deref()))
-                        .await?;
+                let project = resolve_project(
+                    store.clone(),
+                    &config,
+                    name.as_deref().or(cli.project.as_deref()),
+                )
+                .await?;
                 if output_json {
                     print_json(&project)?;
                 } else {
@@ -521,7 +532,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 return Ok(());
             }
             ProjectCommand::Use { name } => {
-                let active = client_state::set_active_project(store.as_ref(), name).await?;
+                let active =
+                    client_state::set_active_project(store.as_ref(), &config, name).await?;
                 if output_json {
                     print_json(&active)?;
                 } else {
@@ -546,7 +558,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     print_json(&removed)?;
                 } else {
                     println!("Deleted project \"{}\"", name);
-                    if let Ok(new_active) = client_state::active_project(store.as_ref()).await
+                    if let Ok(new_active) =
+                        client_state::active_project(store.as_ref(), &config).await
                         && new_active.name != *name
                     {
                         println!("Using project \"{}\"", new_active.name);
@@ -628,7 +641,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         return Ok(());
     }
 
-    let project = resolve_project(store.clone(), cli.project.as_deref()).await?;
+    let project = resolve_project(store.clone(), &config, cli.project.as_deref()).await?;
 
     let command = cli.command.expect("no subcommand is handled above");
 
@@ -1143,7 +1156,11 @@ async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
 }
 
 /// Resolve which project to use: --project flag takes precedence over active project.
-async fn resolve_project(store: ArcStore, flag: Option<&str>) -> Result<Project, AppError> {
+async fn resolve_project(
+    store: ArcStore,
+    config: &ScryConfig,
+    flag: Option<&str>,
+) -> Result<Project, AppError> {
     if let Some(name) = flag {
         let project = store
             .get_project_by_name(name)
@@ -1151,7 +1168,7 @@ async fn resolve_project(store: ArcStore, flag: Option<&str>) -> Result<Project,
             .ok_or_else(|| AppError::Usage(format!("project '{}' not found", name)))?;
         Ok(project)
     } else {
-        let project = client_state::active_project(store.as_ref()).await?;
+        let project = client_state::active_project(store.as_ref(), config).await?;
         Ok(project)
     }
 }

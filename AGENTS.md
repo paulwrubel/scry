@@ -1,21 +1,22 @@
 # AGENTS.md
 
-`scry` is a terminal task manager with a PostgreSQL backend: a clap CLI and an in-process MCP server (`scry mcp`). Rust edition 2024. It is a Cargo workspace: the root `scry` binary plus `crates/scry-core` (domain types and the `Store` trait) and `crates/scry-postgres` (`PostgresStore`). The tests are unit tests that need no database; `just test` runs them (`cargo test --workspace`).
+`scry` is a terminal task manager with a PostgreSQL backend: a clap CLI and an in-process MCP server (`scry mcp`). Rust edition 2024. It is a Cargo workspace: the root `scry` binary plus `crates/scry-core` (domain types and the `Store` trait) and `crates/scry-postgres` (`PostgresStore`). The tests are unit tests that need no database; `just cargo-test` (alias `just test`) runs them (`cargo test --workspace`).
 
 ## Tooling prerequisites
 
-- The standard workflow uses `just` and sqlx-cli (`cargo install just sqlx-cli`). The `sqlx-prepare*` and `setup-database*` targets need sqlx-cli; the Postgres targets also need Docker, since they start and stop the dev Postgres defined in `compose.dev.yaml`.
-- rust-analyzer is configured to run `cargo clippy` as its check command (`.vscode/settings.json`), and `just clippy` is `cargo clippy --workspace -- -D warnings`. Keep clippy clean at `-D warnings`; CI runs it through `just validate` (`.github/workflows/ci.yml`), so `just validate` is your local gate: `test` -> `check` -> `clippy`.
+- The standard workflow uses `just` and sqlx-cli (`cargo install just sqlx-cli`). The `sqlx-prepare*` and `run-postgres` targets need sqlx-cli; the Postgres targets also need Docker, since they start and stop the dev Postgres defined in `compose.dev.yaml`.
+- `just run-local` starts the dev Postgres, applies migrations, and runs the REST server with `--config scry.dev.toml --secrets scry.dev-secrets.toml`; `just run-postgres` only starts Postgres and applies migrations. `just pg-down` keeps the data volume and `just pg-reset` wipes it.
+- rust-analyzer is configured to run `cargo clippy` as its check command (`.vscode/settings.json`), and `just cargo-clippy` (alias `just clippy`) is `cargo clippy --workspace -- -D warnings`. Keep clippy clean at `-D warnings`; CI runs it through `just validate` (`.github/workflows/ci.yml`), so `just validate` is your local gate: `cargo-test` -> `cargo-check` -> `cargo-clippy`.
 
 ## sqlx compile-time database (the #1 gotcha)
 
 All SQL lives in `sqlx::query!`/`query_as!` macros in `crates/scry-postgres/src/postgres.rs`, and is resolved at compile time against the committed offline cache in `crates/scry-postgres/.sqlx/`.
 
 - `.env` (committed) sets only `SQLX_OFFLINE=true`. sqlx reads `.env` at compile time, so ordinary `cargo build`/`check`/`test`/`clippy` resolve queries from `.sqlx/` and do **not** need a live database. A fresh clone therefore compiles without any database.
-- Regenerating the cache is what needs a database. `just setup-database-postgres` applies the migrations to the dev Postgres, and `just sqlx-prepare` runs `sqlx-prepare-postgres`, which brings up the dev Postgres (`pg-up`), prepares against it, and tears it down.
+- Regenerating the cache is what needs a database. `just run-postgres` starts the dev Postgres and applies the migrations, and `just sqlx-prepare` runs `sqlx-prepare-postgres`, which brings up the dev Postgres (`pg-up`), prepares against it, and tears it down.
 - After editing SQL in a `query!` macro or adding a migration, run `just sqlx-prepare`. Changing a query changes its hash, so a stale `.sqlx/*.json` breaks the build. Commit the migration and the regenerated cache together.
 - `just sqlx-prepare-check` verifies the cache is current, using the dev Postgres as well; CI runs it. Release CI (`.github/workflows/release.yml`) builds with `SQLX_OFFLINE=true` against the committed cache.
-- The runtime database is **not** the compile DB. The app never reads `.env`; it takes `database_url` only from `scry.toml` or `scry.secret.toml`, with no environment-variable override and no local-file fallback — a missing URL is a startup configuration error, and only `postgres://` / `postgresql://` URLs are accepted. `cargo run` therefore talks to whichever database the resolved config points at, so point `database_url` at a scratch database when you do not want to touch real user data. The backend is built with sqlx's `tls-rustls` feature (`crates/scry-postgres/Cargo.toml`), so URLs whose `sslmode` requires TLS connect correctly; removing that feature breaks them with a "built without TLS support" error.
+- The runtime database is **not** the compile DB. The app never reads `.env`; it takes `database_url` only from `scry.toml` or `scry.secret.toml` (or the files named by `--config` / `--secrets`), with no environment-variable override and no local-file fallback — a missing URL is a startup configuration error, and only `postgres://` / `postgresql://` URLs are accepted. `cargo run` therefore talks to whichever database the resolved config points at, so point `database_url` at a scratch database when you do not want to touch real user data. The backend is built with sqlx's `tls-rustls` feature (`crates/scry-postgres/Cargo.toml`), so URLs whose `sslmode` requires TLS connect correctly; removing that feature breaks them with a "built without TLS support" error.
 
 ## Migrations
 

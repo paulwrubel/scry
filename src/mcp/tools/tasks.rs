@@ -1,6 +1,7 @@
 //! Task tools.
 
 use super::resolve_project;
+use crate::config::ScryConfig;
 use crate::error::{AppError, ServiceError};
 use crate::service::{ProjectService, TaskInput};
 use crate::state::{ProjectState, TaskWithNotes};
@@ -21,9 +22,10 @@ pub struct TaskListParams {
 
 pub(crate) async fn list_tasks(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &TaskListParams,
 ) -> Result<Vec<Task>, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let mut state = ProjectState::load_from_store(store, project.id).await?;
 
     if let Some(search) = params.search.as_deref().filter(|search| !search.is_empty()) {
@@ -52,9 +54,10 @@ pub struct TaskShowParams {
 
 pub(crate) async fn show_task(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &TaskShowParams,
 ) -> Result<TaskWithNotes, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let state = ProjectState::load_from_store(store, project.id).await?;
 
     state.get_task_by_id(params.id).cloned().ok_or_else(|| {
@@ -83,8 +86,12 @@ pub struct TaskAddParams {
     pub project: Option<String>,
 }
 
-pub(crate) async fn add_task(store: &dyn Store, params: &TaskAddParams) -> Result<Task, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+pub(crate) async fn add_task(
+    store: &dyn Store,
+    config: &ScryConfig,
+    params: &TaskAddParams,
+) -> Result<Task, AppError> {
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
     let status = match params.status.as_deref() {
@@ -125,6 +132,7 @@ pub struct TaskUpdateParams {
 
 pub(crate) async fn update_task(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &TaskUpdateParams,
 ) -> Result<Task, AppError> {
     if params.title.is_none()
@@ -138,7 +146,7 @@ pub(crate) async fn update_task(
         ));
     }
 
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
     let status = match params.status.as_deref() {
@@ -170,9 +178,10 @@ pub struct TaskMoveParams {
 
 pub(crate) async fn move_task(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &TaskMoveParams,
 ) -> Result<Task, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
     let status = service.get_status_by_name(&project, &params.status).await?;
 
@@ -193,9 +202,10 @@ pub struct TaskDuplicateParams {
 
 pub(crate) async fn duplicate_task(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &TaskDuplicateParams,
 ) -> Result<Task, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
     Ok(service.duplicate_task(&project, params.id).await?.task)
@@ -212,9 +222,10 @@ pub struct TaskDeleteParams {
 
 pub(crate) async fn delete_task(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &TaskDeleteParams,
 ) -> Result<Task, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
     Ok(service.delete_task(&project, params.id).await?)

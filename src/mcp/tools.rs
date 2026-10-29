@@ -1,6 +1,7 @@
 //! Tool implementations, grouped by the resource they operate on.
 
 use crate::client_state;
+use crate::config::ScryConfig;
 use crate::error::AppError;
 use scry_core::error::StorageError;
 use scry_core::models::Project;
@@ -16,6 +17,7 @@ pub(crate) mod tasks;
 /// tool error so the agent can correct itself.
 pub(crate) async fn resolve_project(
     store: &dyn Store,
+    config: &ScryConfig,
     name: Option<&str>,
 ) -> Result<Project, AppError> {
     match name {
@@ -24,6 +26,6 @@ pub(crate) async fn resolve_project(
                 "project '{name}' not found"
             )))
         }),
-        None => client_state::active_project(store).await,
+        None => client_state::active_project(store, config).await,
     }
 }

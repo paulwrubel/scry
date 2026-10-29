@@ -19,7 +19,7 @@ const API_TOKEN_ENV: &str = "SCRY_API_TOKEN";
 /// Environment variable holding the MCP bearer token.
 const MCP_TOKEN_ENV: &str = "SCRY_MCP_TOKEN";
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ScryConfig {
     pub database_url: Option<String>,
@@ -27,15 +27,18 @@ pub struct ScryConfig {
 }
 
 impl ScryConfig {
-    /// Load configuration. The first file that exists wins:
-    /// `./scry.toml` in the current working directory, then
-    /// `$XDG_CONFIG_HOME/scry/scry.toml`, then the legacy
-    /// `$XDG_CONFIG_HOME/scry/config.toml` (or their `~/.config/scry/`
-    /// equivalents). With none present, the defaults apply. No file is ever
-    /// created.
+    /// Load configuration. When `config_path` is `Some`, that file is loaded
+    /// exactly. Otherwise the first file that exists wins: `./scry.toml` in the
+    /// current working directory, then `$XDG_CONFIG_HOME/scry/scry.toml`, then
+    /// the legacy `$XDG_CONFIG_HOME/scry/config.toml` (or their
+    /// `~/.config/scry/` equivalents). With none present, the defaults apply. No
+    /// file is ever created.
     ///
     /// Returns the default merged with the file's set properties.
-    pub fn load() -> Result<Self, AppError> {
+    pub fn load(config_path: Option<&Path>) -> Result<Self, AppError> {
+        if let Some(path) = config_path {
+            return Self::load_file(path);
+        }
         let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         Self::load_from(&dir, &Self::xdg_dir())
     }
@@ -52,7 +55,12 @@ impl ScryConfig {
             return Ok(ScryConfig::default());
         };
 
-        let content = std::fs::read_to_string(&path)
+        Self::load_file(&path)
+    }
+
+    /// Read and parse the config file at `path`.
+    fn load_file(path: &Path) -> Result<Self, AppError> {
+        let content = std::fs::read_to_string(path)
             .map_err(|e| AppError::Config(format!("failed to read {:?}: {}", path, e)))?;
 
         toml::from_str(&content)
@@ -80,10 +88,14 @@ pub struct ScrySecrets {
 }
 
 impl ScrySecrets {
-    /// Load secrets from the first `scry.secret.toml` that exists, using the
-    /// same discovery as [`ScryConfig::load`]. With none present every field is
-    /// unset. No file is ever created.
-    pub fn load() -> Result<Self, AppError> {
+    /// Load secrets. When `secrets_path` is `Some`, that file is loaded exactly;
+    /// otherwise the first `scry.secret.toml` that exists is used, with the same
+    /// discovery as [`ScryConfig::load`]. With none present every field is unset.
+    /// No file is ever created.
+    pub fn load(secrets_path: Option<&Path>) -> Result<Self, AppError> {
+        if let Some(path) = secrets_path {
+            return Self::load_file(path);
+        }
         let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         Self::load_from(&dir, &ScryConfig::xdg_dir())
     }
@@ -96,7 +108,12 @@ impl ScrySecrets {
             return Ok(Self::default());
         };
 
-        let content = std::fs::read_to_string(&path)
+        Self::load_file(&path)
+    }
+
+    /// Read and parse the secrets file at `path`.
+    fn load_file(path: &Path) -> Result<Self, AppError> {
+        let content = std::fs::read_to_string(path)
             .map_err(|e| AppError::Config(format!("failed to read {:?}: {}", path, e)))?;
 
         toml::from_str(&content)
@@ -319,6 +336,64 @@ mod tests {
             .expect_err("missing database url should error");
         assert!(
             error.to_string().contains("database_url"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn explicit_config_file_is_loaded() {
+        let dir = TempDir::new().expect("temp dir");
+        write_config(
+            &dir.path().join(CONFIG_FILE),
+            "database_url = \"postgres://discovered.db\"\n",
+        );
+        let explicit = dir.path().join("explicit.toml");
+        write_config(&explicit, "database_url = \"postgres://explicit.db\"\n");
+
+        let config = ScryConfig::load(Some(&explicit)).expect("load");
+        assert_eq!(
+            config.database_url.as_deref(),
+            Some("postgres://explicit.db")
+        );
+    }
+
+    #[test]
+    fn missing_explicit_config_file_is_an_error() {
+        let dir = TempDir::new().expect("temp dir");
+        let missing = dir.path().join("missing.toml");
+
+        let error = ScryConfig::load(Some(&missing)).expect_err("missing config should error");
+        assert!(
+            error.to_string().contains("failed to read"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn explicit_secrets_file_is_loaded() {
+        let dir = TempDir::new().expect("temp dir");
+        let explicit = dir.path().join("explicit.secret.toml");
+        write_config(
+            &explicit,
+            "database_url = \"postgres://secret.db\"\napi_token = \"rest-token\"\n",
+        );
+
+        let secrets = ScrySecrets::load(Some(&explicit)).expect("load");
+        assert_eq!(
+            secrets.database_url.as_deref(),
+            Some("postgres://secret.db")
+        );
+        assert_eq!(secrets.api_token.as_deref(), Some("rest-token"));
+    }
+
+    #[test]
+    fn missing_explicit_secrets_file_is_an_error() {
+        let dir = TempDir::new().expect("temp dir");
+        let missing = dir.path().join("missing.secret.toml");
+
+        let error = ScrySecrets::load(Some(&missing)).expect_err("missing secrets should error");
+        assert!(
+            error.to_string().contains("failed to read"),
             "unexpected error: {error}"
         );
     }

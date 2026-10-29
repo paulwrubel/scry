@@ -162,6 +162,10 @@ scry -p myapp move 1 "in progress"
 
 `--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand or with `mcp`, `serve`, `docs`, or `skill` is an error. See [JSON Output](#json-output).
 
+`--config <path>` — read configuration from this file instead of discovering `./scry.toml`, `$XDG_CONFIG_HOME/scry/scry.toml`, or the legacy config name.
+
+`--secrets <path>` — read secrets from this file instead of discovering `./scry.secret.toml` or `$XDG_CONFIG_HOME/scry/scry.secret.toml`.
+
 Running `scry` with no subcommand prints the top-level help and exits.
 
 ### Task Commands
@@ -398,7 +402,7 @@ Because the output is the bare data, some context that the human output carries 
 
 ## Configuration
 
-scry looks for `scry.toml` in the current directory first, then `$XDG_CONFIG_HOME/scry/scry.toml` (falling back to `~/.config/scry/scry.toml`), and finally the legacy `$XDG_CONFIG_HOME/scry/config.toml`. The file is never created automatically — create one manually only if you want to override the defaults.
+scry looks for `scry.toml` in the current directory first, then `$XDG_CONFIG_HOME/scry/scry.toml` (falling back to `~/.config/scry/scry.toml`), and finally the legacy `$XDG_CONFIG_HOME/scry/config.toml`. The file is never created automatically — create one manually only if you want to override the defaults. Pass `--config <path>` to load a specific file instead of discovering one.
 
 Available options:
 
@@ -407,7 +411,7 @@ Available options:
 
 The active project is **not** stored here or in the database — it lives in the XDG state directory, per machine (see [Active Project](#active-project)).
 
-Credentials belong in a separate `scry.secret.toml`, discovered the same way (`./scry.secret.toml`, then `$XDG_CONFIG_HOME/scry/scry.secret.toml`). It is never created automatically and is listed in `.gitignore`, so keep it out of version control. Its values take precedence over both `scry.toml` and the environment variables:
+Credentials belong in a separate `scry.secret.toml`, discovered the same way (`./scry.secret.toml`, then `$XDG_CONFIG_HOME/scry/scry.secret.toml`), or loaded explicitly with `--secrets <path>`. It is never created automatically and is listed in `.gitignore`, so keep it out of version control. Its values take precedence over both `scry.toml` and the environment variables:
 
 - `database_url` — override `scry.toml`'s `database_url`.
 - `api_token` — the REST API bearer token, overriding `SCRY_API_TOKEN`.
@@ -427,4 +431,4 @@ Migrations run automatically on startup, so no manual setup is needed.
 
 The CLI connects to PostgreSQL directly and does not proxy through the REST server.
 
-For local development against Postgres, the repo ships `compose.dev.yaml` and justfile helpers: `just pg-up` starts a dev Postgres (`postgres:18`), `just setup-database-postgres` applies the migrations, and `just pg-down` stops it (`just pg-reset` also wipes its data). After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query cache with `just sqlx-prepare`, which now rebuilds only the Postgres cache.
+For local development against Postgres, the repo ships `compose.dev.yaml`, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and justfile helpers. `just run-local` starts a dev Postgres (`postgres:18`), applies the migrations, and runs the REST server with `--config scry.dev.toml --secrets scry.dev-secrets.toml`; `just run-postgres` only starts Postgres and applies migrations. `just pg-down` stops Postgres while keeping its data, and `just pg-reset` also wipes the data volume. `just run-docker` starts the MCP server stack in Docker against the host dev Postgres. After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query cache with `just sqlx-prepare`, which rebuilds only the Postgres cache.
