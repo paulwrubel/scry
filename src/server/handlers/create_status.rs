@@ -25,8 +25,8 @@ pub async fn create_status(
     Json(body): Json<CreateStatusRequest>,
 ) -> Response {
     match state
-        .store
-        .create_status(
+        .service
+        .create_status_in_project(
             project_id,
             body.name,
             body.position.unwrap_or(0),

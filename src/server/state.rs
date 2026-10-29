@@ -1,9 +1,9 @@
 //! Shared state threaded through the REST API handlers.
 
-use scry_core::store::ArcStore;
+use crate::service::ProjectService;
 
-/// Shared state every REST handler operates on: the database store.
+/// Shared state every REST handler operates on: the project service.
 #[derive(Clone)]
 pub struct ScryState {
-    pub store: ArcStore,
+    pub service: ProjectService,
 }

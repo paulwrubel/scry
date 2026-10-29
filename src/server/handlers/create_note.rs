@@ -21,7 +21,7 @@ pub async fn create_note(
     Path(task_id): Path<TaskId>,
     Json(body): Json<CreateNoteRequest>,
 ) -> Response {
-    match state.store.create_note(task_id, body.contents).await {
+    match state.service.add_note(task_id, body.contents).await {
         Ok(note) => Json(note).into_response(),
         Err(error) => AppError::from(error).into(),
     }

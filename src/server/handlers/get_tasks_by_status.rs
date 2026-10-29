@@ -13,7 +13,7 @@ pub async fn get_tasks_by_status(
     State(state): State<ScryState>,
     Path(status_id): Path<StatusId>,
 ) -> Response {
-    match state.store.get_all_tasks_by_status_id(status_id).await {
+    match state.service.list_tasks_by_status(status_id).await {
         Ok(tasks) => Json(tasks).into_response(),
         Err(error) => AppError::from(error).into(),
     }

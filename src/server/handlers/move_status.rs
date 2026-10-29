@@ -4,7 +4,6 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use scry_core::error::StorageError;
 use scry_core::models::StatusId;
 use serde::Deserialize;
 
@@ -23,20 +22,7 @@ pub async fn move_status(
     Path(id): Path<StatusId>,
     Json(body): Json<MoveStatusRequest>,
 ) -> Response {
-    let project_id = match state.store.get_status_by_id(id).await {
-        Ok(Some(status)) => status.project_id,
-        Ok(None) => {
-            return AppError::Storage(StorageError::NotFound(format!("status {id} not found")))
-                .into();
-        }
-        Err(error) => return AppError::from(error).into(),
-    };
-
-    match state
-        .store
-        .reorder_status(project_id, id, body.position)
-        .await
-    {
+    match state.service.move_status_by_id(id, body.position).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(error) => AppError::from(error).into(),
     }

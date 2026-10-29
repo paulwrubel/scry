@@ -16,7 +16,7 @@ pub async fn update_note(
 ) -> Response {
     note.id = id;
 
-    match state.store.update_note(note).await {
+    match state.service.update_note(note).await {
         Ok(note) => Json(note).into_response(),
         Err(error) => AppError::from(error).into(),
     }

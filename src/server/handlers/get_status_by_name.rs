@@ -14,8 +14,8 @@ pub async fn get_status_by_name(
     Path((project_id, status_name)): Path<(ProjectId, String)>,
 ) -> Response {
     match state
-        .store
-        .get_status_by_project_id_and_status_name(project_id, status_name)
+        .service
+        .find_status_by_name(project_id, status_name)
         .await
     {
         Ok(status) => Json(status).into_response(),

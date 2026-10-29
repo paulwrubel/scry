@@ -10,8 +10,8 @@ use crate::server::ScryState;
 
 /// Delete a status by id; responds with `204 No Content` on success.
 pub async fn delete_status(State(state): State<ScryState>, Path(id): Path<StatusId>) -> Response {
-    match state.store.delete_status(id).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+    match state.service.delete_status_by_id(id).await {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(error) => AppError::from(error).into(),
     }
 }

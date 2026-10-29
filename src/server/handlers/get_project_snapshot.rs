@@ -13,7 +13,7 @@ pub async fn get_project_snapshot(
     State(state): State<ScryState>,
     Path(project_id): Path<ProjectId>,
 ) -> Response {
-    match state.store.get_project_snapshot(project_id).await {
+    match state.service.project_snapshot(project_id).await {
         Ok(project_snapshot) => Json(project_snapshot).into_response(),
         Err(error) => AppError::from(error).into(),
     }

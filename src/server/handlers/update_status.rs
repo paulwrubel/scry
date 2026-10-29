@@ -15,7 +15,8 @@ pub async fn update_status(
     Json(mut status): Json<Status>,
 ) -> Response {
     status.id = id;
-    match state.store.update_status(status).await {
+
+    match state.service.replace_status_by_id(status).await {
         Ok(status) => Json(status).into_response(),
         Err(error) => AppError::from(error).into(),
     }

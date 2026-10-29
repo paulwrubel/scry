@@ -13,7 +13,7 @@ pub async fn get_statuses(
     State(state): State<ScryState>,
     Path(project_id): Path<ProjectId>,
 ) -> Response {
-    match state.store.get_all_statuses_by_project_id(project_id).await {
+    match state.service.list_statuses(project_id).await {
         Ok(statuses) => Json(statuses).into_response(),
         Err(error) => AppError::from(error).into(),
     }

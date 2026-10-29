@@ -10,7 +10,7 @@ use crate::server::ScryState;
 
 /// Fetch a note by id; responds with `null` when it does not exist.
 pub async fn get_note(State(state): State<ScryState>, Path(id): Path<NoteId>) -> Response {
-    match state.store.get_note_by_id(id).await {
+    match state.service.find_note(id).await {
         Ok(note) => Json(note).into_response(),
         Err(error) => AppError::from(error).into(),
     }

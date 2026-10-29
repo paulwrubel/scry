@@ -9,7 +9,7 @@ use crate::server::ScryState;
 
 /// List every project.
 pub async fn get_projects(State(state): State<ScryState>) -> Response {
-    match state.store.get_all_projects().await {
+    match state.service.list_projects().await {
         Ok(projects) => Json(projects).into_response(),
         Err(error) => AppError::from(error).into(),
     }
