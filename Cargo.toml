@@ -13,6 +13,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.9", features = [
+    "runtime-tokio",
+    "postgres",
+    "chrono",
+    "migrate",
+    "tls-rustls",
+] }
 twox-hash = "2.1.4"
 num_enum = "0.7.6"
 axum = "0.8.9"
@@ -20,12 +27,10 @@ axum-extra = { version = "0.12.6", features = ["typed-header"] }
 tower-http = { version = "0.6", features = ["cors"] }
 subtle = "2"
 scry-core = { path = "crates/scry-core" }
-scry-postgres = { path = "crates/scry-postgres" }
 
 [workspace]
 members = [
     "crates/scry-core",
-    "crates/scry-postgres",
 ]
 resolver = "3"
 
