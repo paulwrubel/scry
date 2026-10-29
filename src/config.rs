@@ -16,8 +16,6 @@ const SECRET_FILE: &str = "scry.secret.toml";
 
 /// Environment variable holding the REST API bearer token.
 const API_TOKEN_ENV: &str = "SCRY_API_TOKEN";
-/// Environment variable holding the MCP bearer token.
-const MCP_TOKEN_ENV: &str = "SCRY_MCP_TOKEN";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -84,7 +82,6 @@ impl ScryConfig {
 pub struct ScrySecrets {
     pub database_url: Option<String>,
     pub api_token: Option<String>,
-    pub mcp_token: Option<String>,
 }
 
 impl ScrySecrets {
@@ -139,13 +136,6 @@ impl ScrySecrets {
         self.api_token
             .clone()
             .or_else(|| non_empty_env(API_TOKEN_ENV))
-    }
-
-    /// The MCP token: this file's value, else `SCRY_MCP_TOKEN`.
-    pub fn mcp_token(&self) -> Option<String> {
-        self.mcp_token
-            .clone()
-            .or_else(|| non_empty_env(MCP_TOKEN_ENV))
     }
 }
 
@@ -240,7 +230,7 @@ mod tests {
         let dir = TempDir::new().expect("temp dir");
         write_config(
             &dir.path().join(SECRET_FILE),
-            "database_url = \"postgres://secret.db\"\napi_token = \"rest-token\"\nmcp_token = \"mcp-token\"\n",
+            "database_url = \"postgres://secret.db\"\napi_token = \"rest-token\"\n",
         );
         let xdg = dir.path().join("xdg");
 
@@ -250,7 +240,6 @@ mod tests {
             Some("postgres://secret.db")
         );
         assert_eq!(secrets.api_token.as_deref(), Some("rest-token"));
-        assert_eq!(secrets.mcp_token.as_deref(), Some("mcp-token"));
     }
 
     #[test]
@@ -289,7 +278,6 @@ mod tests {
         let secrets = ScrySecrets::load_from(dir.path(), &xdg).expect("load secrets");
         assert!(secrets.database_url.is_none());
         assert!(secrets.api_token.is_none());
-        assert!(secrets.mcp_token.is_none());
         assert_eq!(
             secrets
                 .resolved_database_url(&config)

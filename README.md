@@ -35,8 +35,7 @@ cargo build --release
 
 Prebuilt images are published to GitHub Container Registry on each release as
 `ghcr.io/paulwrubel/scry` (see [Published images](#published-images)). The image's default
-command serves the REST API on port 8000; the MCP surfaces are one command override away. To
-build an image from source instead, use:
+command serves the REST API on port 8000. To build an image from source instead, use:
 
 ```sh
 docker build -t scry .
@@ -54,69 +53,16 @@ docker pull ghcr.io/paulwrubel/scry:0.22.0
 docker run --rm -p 8000:8000 -v "$PWD/scry.docker.toml:/app/scry.toml:ro" ghcr.io/paulwrubel/scry:0.22.0
 ```
 
-Passing a command overrides the image default. The same tag also serves the stdio MCP server
-or the MCP server over HTTP:
-
-```sh
-docker run -i --rm -v "$PWD/scry.docker.toml:/app/scry.toml:ro" ghcr.io/paulwrubel/scry:0.22.0 mcp
-docker run --rm -p 8000:8000 -v "$PWD/scry.docker.toml:/app/scry.toml:ro" ghcr.io/paulwrubel/scry:0.22.0 mcp --http 0.0.0.0:8000
-```
-
-See [Running a server](#running-a-server) for the host-side REST API setup and the
-[MCP Server](#mcp-server) section for the tools.
+See [Running a server](#running-a-server) for the host-side REST API setup.
 
 - GitHub Container Registry packages are private by default: for an unauthenticated pull (e.g.
   from a k3s node), switch the package to public in the repository's package settings, or give
   the cluster an image pull secret.
 
-### stdio
-
-The client launches the container as a child process; its stdin/stdout carry the protocol.
-
-```sh
-docker run -i --rm -v "$PWD/scry.docker.toml:/app/scry.toml:ro" scry mcp
-```
-
-`-i` keeps stdin open (the stdio transport requires it); do not add `-t`, which can corrupt the framing. A client config looks like:
-
-```json
-{
-  "mcpServers": {
-    "scry": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-v", "./scry.docker.toml:/app/scry.toml:ro", "scry", "mcp"]
-    }
-  }
-}
-```
-
-### HTTP
-
-```sh
-SCRY_MCP_TOKEN=$(openssl rand -hex 32) docker compose up -d
-```
-
-This starts the server on `http://127.0.0.1:8000/mcp`, published on host loopback only. The container reads its config from `/app/scry.toml`, which compose mounts from `scry.docker.toml`; that config's `database_url` points at an external PostgreSQL server. A client config looks like:
-
-```json
-{
-  "mcpServers": {
-    "scry": {
-      "type": "http",
-      "url": "http://127.0.0.1:8000/mcp",
-      "headers": { "Authorization": "Bearer <token>" }
-    }
-  }
-}
-```
-
-The `headers` entry is only needed when `SCRY_MCP_TOKEN` is set; without it the endpoint is unauthenticated.
-
 ### Notes
 
 - A reachable PostgreSQL server configured via `scry.toml` is required.
-- The HTTP transport has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
-- Client config key names vary between harnesses.
+- The REST API has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
 
 ## Core Concepts
 
@@ -160,7 +106,7 @@ scry -p myapp move 1 "in progress"
 
 `--color <auto|always|never>` — when to colorize output. `auto` (the default) colorizes only when stdout is a terminal and `NO_COLOR` is unset.
 
-`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand or with `mcp`, `serve`, `docs`, or `skill` is an error. See [JSON Output](#json-output).
+`--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand or with `serve`, `docs`, or `skill` is an error. See [JSON Output](#json-output).
 
 `--config <path>` — read configuration from this file instead of discovering `./scry.toml`, `$XDG_CONFIG_HOME/scry/scry.toml`, or the legacy config name.
 
@@ -282,26 +228,6 @@ On the `--harness` paths, `~/.config` honors `$XDG_CONFIG_HOME` when it is set. 
 skills from `.claude/skills/` and `.agents/skills/`, so installing for `claude-code` or `agents`
 covers opencode too. Do not install twice: skill names must be unique across discovery locations.
 
-### MCP Server
-
-Serve scry over the [Model Context Protocol](https://modelcontextprotocol.io) so MCP clients
-(Claude Code, opencode, and others) can drive it through tools instead of the CLI.
-
-| Command                  | Description                                                 |
-| ------------------------ | ----------------------------------------------------------- |
-| `scry mcp`               | Serve over stdio (the client launches scry as a subprocess) |
-| `scry mcp --http <addr>` | Serve over streamable HTTP at `http://<addr>/mcp`           |
-
-Without `--http`, the server speaks the stdio transport: stdin/stdout carry the protocol and
-logs go to stderr. With `--http`, scry serves at `http://<addr>/mcp`. Set `SCRY_MCP_TOKEN` — or
-`mcp_token` in `scry.secret.toml` — to require an `Authorization: Bearer <token>` header on
-every HTTP request; requests are answered statelessly with JSON.
-
-The tools mirror the CLI: tasks, notes, projects, statuses, and project settings. Results are
-structured JSON, and errors are returned as tool results carrying a stable `kind` (`not_found`,
-`conflict`, `invalid`, or `internal`). See [Docker](#docker) for container usage and client
-configuration examples.
-
 ### REST API
 
 Serve scry's operations as a versioned JSON REST API. This is a server surface: the CLI
@@ -350,7 +276,7 @@ docker run -d -p 8000:8000 -v "$PWD/scry.docker.toml:/app/scry.toml:ro" scry ser
 Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) requires an
 `Authorization: Bearer <token>` header on every request
 (compared in constant time). Responses are JSON; errors carry the same stable `kind`
-vocabulary as `--json` and MCP (`not_found`, `conflict`, `invalid`, `internal`, `config`)
+vocabulary as `--json` (`not_found`, `conflict`, `invalid`, `internal`, `config`)
 and map to the matching HTTP status (404, 409, 400, 500). There is no TLS, so put the
 server behind a TLS-terminating proxy or a private network if it leaves the host.
 
@@ -388,7 +314,7 @@ scry -p myapp --json add "design API"
 
 Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
-`--json` applies only to one-shot subcommands; passing it with no subcommand or with `mcp`, `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
+`--json` applies only to one-shot subcommands; passing it with no subcommand or with `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 
 On failure, a structured error document is written to stderr:
 
@@ -415,7 +341,6 @@ Credentials belong in a separate `scry.secret.toml`, discovered the same way (`.
 
 - `database_url` — override `scry.toml`'s `database_url`.
 - `api_token` — the REST API bearer token, overriding `SCRY_API_TOKEN`.
-- `mcp_token` — the MCP bearer token, overriding `SCRY_MCP_TOKEN`.
 
 ## Database
 
@@ -431,4 +356,4 @@ Migrations run automatically on startup, so no manual setup is needed.
 
 The CLI connects to PostgreSQL directly and does not proxy through the REST server.
 
-For local development against Postgres, the repo ships `compose.dev.yaml`, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and justfile helpers. `just run-local` starts a dev Postgres (`postgres:18`), applies the migrations, and runs the REST server with `--config scry.dev.toml --secrets scry.dev-secrets.toml`; `just run-postgres` only starts Postgres and applies migrations. `just pg-down` stops Postgres while keeping its data, and `just pg-reset` also wipes the data volume. `just run-docker` starts the MCP server stack in Docker against the host dev Postgres. After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query cache with `just sqlx-prepare`, which rebuilds only the Postgres cache.
+For local development against Postgres, the repo ships `compose.dev.yaml`, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and justfile helpers. `just run-local` starts a dev Postgres (`postgres:18`), applies the migrations, and runs the REST server with `--config scry.dev.toml --secrets scry.dev-secrets.toml`; `just run-postgres` only starts Postgres and applies migrations. `just pg-down` stops Postgres while keeping its data, and `just pg-reset` also wipes the data volume. `just run-docker` starts the REST server stack in Docker against the host dev Postgres. After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query cache with `just sqlx-prepare`, which rebuilds only the Postgres cache.

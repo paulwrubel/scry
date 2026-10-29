@@ -38,6 +38,5 @@ USER scry
 EXPOSE 8000
 
 ENTRYPOINT ["scry"]
-# Defaults to the REST API on 0.0.0.0:8000; override the command for another
-# surface, e.g. command: ["mcp"] for stdio or ["mcp", "--http", "0.0.0.0:8000"].
+# Defaults to the REST API on 0.0.0.0:8000.
 CMD ["serve", "--http", "0.0.0.0:8000"]

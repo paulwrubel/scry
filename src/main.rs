@@ -4,7 +4,6 @@ mod config;
 mod docs;
 mod error;
 mod http_auth;
-mod mcp;
 mod server;
 mod service;
 mod skill;
@@ -147,13 +146,6 @@ enum Command {
     /// Manage the agent skill that teaches coding agents to drive scry
     #[command(subcommand)]
     Skill(SkillCommand),
-    /// Serve the Model Context Protocol (MCP)
-    Mcp {
-        /// Serve over streamable HTTP on this address (for example `127.0.0.1:8000`)
-        /// instead of over stdio.
-        #[arg(long, value_name = "ADDR")]
-        http: Option<String>,
-    },
     /// Serve the REST API over HTTP
     Serve {
         /// The address to bind, for example `127.0.0.1:9000`
@@ -369,9 +361,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         && (cli.command.is_none()
             || matches!(
                 cli.command.as_ref(),
-                Some(
-                    Command::Mcp { .. } | Command::Serve { .. } | Command::Docs | Command::Skill(_)
-                )
+                Some(Command::Serve { .. } | Command::Docs | Command::Skill(_))
             ))
     {
         return Err(AppError::Usage(
@@ -411,13 +401,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let secrets = ScrySecrets::load(cli.secrets.as_deref())?;
     let database_url = secrets.resolved_database_url(&config)?;
     let store = connect_store(&database_url).await?;
-
-    if let Some(Command::Mcp { http }) = &cli.command {
-        return match http.as_deref() {
-            Some(addr) => mcp::serve_http(store, addr, secrets.mcp_token(), config).await,
-            None => mcp::serve_stdio(store, config).await,
-        };
-    }
 
     if let Some(Command::Serve { http }) = &cli.command {
         return server::serve_http(store, http, secrets.api_token()).await;
@@ -1094,9 +1077,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Command::Import { .. } => unreachable!("handled before the active project is resolved"),
         Command::Docs => unreachable!("docs is handled before database setup"),
         Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
-        Command::Mcp { .. } => {
-            unreachable!("the MCP server is handled before database-backed commands")
-        }
         Command::Serve { .. } => {
             unreachable!("the REST server is handled before database-backed commands")
         }

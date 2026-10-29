@@ -30,7 +30,7 @@ run-postgres: pg-up
 run-local: run-postgres
     cargo run -- --config scry.dev.toml --secrets scry.dev-secrets.toml serve --http 127.0.0.1:8000
 
-# start the MCP server stack in Docker against the host dev postgres
+# start the REST server stack in Docker against the host dev postgres
 [group('run')]
 run-docker: run-postgres
     docker compose up -d --build
