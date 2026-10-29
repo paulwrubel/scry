@@ -4,12 +4,14 @@ mod config;
 mod docs;
 mod error;
 mod http_auth;
+mod postgres;
 mod server;
 mod service;
 mod skill;
 mod state;
 
 use crate::color::ColorChoice;
+use crate::postgres::PostgresStore;
 use crate::service::{EntryStatusUpdate, ProjectService, ProjectUpdate, TaskInput};
 use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState};
@@ -23,7 +25,6 @@ use scry_core::models::{
     TaskSortingMode,
 };
 use scry_core::store::ArcStore;
-use scry_postgres::PostgresStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

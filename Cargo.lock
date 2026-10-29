@@ -1445,9 +1445,9 @@ dependencies = [
  "clap",
  "num_enum",
  "scry-core",
- "scry-postgres",
  "serde",
  "serde_json",
+ "sqlx",
  "subtle",
  "tokio",
  "toml",
@@ -1467,18 +1467,6 @@ dependencies = [
  "num_enum",
  "serde",
  "strum",
-]
-
-[[package]]
-name = "scry-postgres"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "clap",
- "scry-core",
- "sqlx",
- "tokio",
 ]
 
 [[package]]

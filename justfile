@@ -23,7 +23,7 @@ pg-reset:
 # start the dev postgres and apply migrations
 [group('run')]
 run-postgres: pg-up
-    sqlx migrate run --source crates/scry-postgres/migrations --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+    sqlx migrate run --source migrations --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
 # run the REST server locally against the dev postgres
 [group('run')]
@@ -41,7 +41,7 @@ sqlx-prepare-postgres: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
-    cd crates/scry-postgres && SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+    SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
 # verify the Postgres offline query cache is up to date (used in CI)
 [group('validate')]
@@ -49,7 +49,7 @@ sqlx-prepare-check: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
-    cd crates/scry-postgres && SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+    SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
 # run all validation checks: test, check, clippy
 [group('validate')]
