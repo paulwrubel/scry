@@ -1,5 +1,6 @@
 //! Streamable HTTP transport for the MCP server.
 
+use crate::config::ScryConfig;
 use crate::error::AppError;
 use crate::http_auth::require_token;
 use axum::Router;
@@ -20,22 +21,22 @@ const LOOPBACK_ORIGINS: &[&str] = &["http://localhost:*", "http://127.0.0.1:*", 
 /// Sessions are disabled and simple request-response calls are answered with
 /// JSON. Browser origins are restricted to loopback, and an optional bearer
 /// token gates every request.
-pub(crate) fn router(store: &ArcStore, token: Option<String>) -> Router {
+pub(crate) fn router(store: &ArcStore, token: Option<String>, config: ScryConfig) -> Router {
     let store = store.clone();
 
     // A non-loopback bind is legitimate (see `serve_http`), so the loopback-only
     // Host allow-list is disabled; the bearer token and the Origin allow-list
     // remain the gate.
-    let config = StreamableHttpServerConfig::default()
+    let server_config = StreamableHttpServerConfig::default()
         .with_legacy_session_mode(false)
         .with_json_response(true)
         .with_allowed_origins(LOOPBACK_ORIGINS.iter().copied())
         .disable_allowed_hosts();
 
     let service = StreamableHttpService::new(
-        move || Ok(ScryServer::new(store.clone())),
+        move || Ok(ScryServer::new(store.clone(), config.clone())),
         LocalSessionManager::default().into(),
-        config,
+        server_config,
     );
 
     let router = Router::new().nest_service("/mcp", service);
@@ -48,12 +49,13 @@ pub async fn serve_http(
     store: ArcStore,
     addr: &str,
     token: Option<String>,
+    config: ScryConfig,
 ) -> Result<(), AppError> {
     let addr: SocketAddr = addr
         .parse()
         .map_err(|error| AppError::Usage(format!("invalid address '{addr}': {error}")))?;
 
-    let router = router(&store, token);
+    let router = router(&store, token, config);
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

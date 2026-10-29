@@ -1,59 +1,76 @@
 set shell := ["bash", "-uc"]
 
+default:
+    @just --list
+
+alias run := run-local
+
 # start the dev postgres and wait for it to be healthy
-[group('validate')]
+[group('run')]
 pg-up:
     docker compose -f compose.dev.yaml up -d --wait
 
 # stop the dev postgres (keep its data)
-[group('validate')]
+[group('run')]
 pg-down:
     docker compose -f compose.dev.yaml down
 
 # stop the dev postgres and wipe its data volume
-[group('validate')]
+[group('run')]
 pg-reset:
     docker compose -f compose.dev.yaml down -v
 
-# run the postgres migrations against the local postgres
-[group('validate')]
-setup-database-postgres: pg-up
+# start the dev postgres and apply migrations
+[group('run')]
+run-postgres: pg-up
     sqlx migrate run --source crates/scry-postgres/migrations --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+
+# run the REST server locally against the dev postgres
+[group('run')]
+run-local: run-postgres
+    cargo run -- --config scry.dev.toml --secrets scry.dev-secrets.toml serve --http 127.0.0.1:8000
+
+# start the MCP server stack in Docker against the host dev postgres
+[group('run')]
+run-docker: run-postgres
+    docker compose up -d --build
 
 # regenerate the postgres offline query cache against the local postgres
 [group('validate')]
-sqlx-prepare-postgres: setup-database-postgres
+sqlx-prepare-postgres: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
     cd crates/scry-postgres && SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
-# regenerate the Postgres offline query cache
-[group('validate')]
-sqlx-prepare: sqlx-prepare-postgres
-
 # verify the Postgres offline query cache is up to date (used in CI)
 [group('validate')]
-sqlx-prepare-check: setup-database-postgres
+sqlx-prepare-check: run-postgres
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
     cd crates/scry-postgres && SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
 # run all validation checks: test, check, clippy
 [group('validate')]
-validate:  test check clippy
+validate: cargo-test cargo-check cargo-clippy
 
 # run the test suite
+alias test := cargo-test
 [group('validate')]
-test:
+cargo-test:
     cargo test --workspace
 
 # type-check without compiling (fast feedback)
+alias check := cargo-check
 [group('validate')]
-check:
+cargo-check:
     cargo check --workspace
 
 # lint for common mistakes and style issues
+alias clippy := cargo-clippy
 [group('validate')]
-clippy:
+cargo-clippy:
     cargo clippy --workspace -- -D warnings
 
 # bump patch version (x.y.Z → x.y.Z+1)
@@ -114,6 +131,10 @@ _release type do_push="":
         echo "Release prepared locally. To publish, run:"; \
         echo "  git push origin main v$next"; \
     fi
+
+# regenerate the Postgres offline query cache
+[group('build')]
+sqlx-prepare: sqlx-prepare-postgres
 
 # build an optimized release binary
 [group('build')]

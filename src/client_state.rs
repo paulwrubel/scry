@@ -10,7 +10,6 @@ use scry_core::store::Store;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-#[cfg(not(test))]
 use crate::config::ScryConfig;
 use crate::error::AppError;
 
@@ -27,8 +26,8 @@ pub struct ClientState {
 impl ClientState {
     /// Load the client state from its default location. A missing file is not an
     /// error; it yields the default state.
-    pub fn load() -> Result<Self, AppError> {
-        Self::load_from(&state_path()?)
+    pub fn load(config: &ScryConfig) -> Result<Self, AppError> {
+        Self::load_from(&resolve_state_path(config.state_file.as_deref()))
     }
 
     /// Load the client state from `path`. A missing file yields the default state.
@@ -52,8 +51,8 @@ impl ClientState {
 
     /// Write the client state to its default location, creating the parent
     /// directory first.
-    pub fn save(&self) -> Result<(), AppError> {
-        self.save_to(&state_path()?)
+    pub fn save(&self, config: &ScryConfig) -> Result<(), AppError> {
+        self.save_to(&resolve_state_path(config.state_file.as_deref()))
     }
 
     /// Write the client state to `path`, creating the parent directory first.
@@ -71,24 +70,6 @@ impl ClientState {
         std::fs::write(path, content)
             .map_err(|error| AppError::Config(format!("failed to write {:?}: {}", path, error)))
     }
-}
-
-/// The state file location. Defaults to `$XDG_STATE_HOME/scry/state.toml`,
-/// falling back to `~/.local/state/scry/state.toml`, and can be overridden by
-/// the `state_file` config option.
-#[cfg(not(test))]
-fn state_path() -> Result<PathBuf, AppError> {
-    let config = ScryConfig::load()?;
-    Ok(resolve_state_path(config.state_file.as_deref()))
-}
-
-/// In tests, redirect to a per-process scratch file so the suite never reads or
-/// writes the real user state.
-#[cfg(test)]
-fn state_path() -> Result<PathBuf, AppError> {
-    Ok(std::env::temp_dir()
-        .join(format!("scry-test-state-{}", std::process::id()))
-        .join(STATE_FILE))
 }
 
 /// Resolve the state file path, honoring a configured override when present.
@@ -133,8 +114,8 @@ fn default_state_path() -> PathBuf {
 
 /// Resolve the active project: the state file's project when it still exists,
 /// otherwise the project named `default`. Errors when neither is present.
-pub async fn active_project(store: &dyn Store) -> Result<Project, AppError> {
-    let state = ClientState::load()?;
+pub async fn active_project(store: &dyn Store, config: &ScryConfig) -> Result<Project, AppError> {
+    let state = ClientState::load(config)?;
 
     if let Some(name) = &state.active_project
         && let Some(project) = store.get_project_by_name(name).await?
@@ -154,7 +135,11 @@ pub async fn active_project(store: &dyn Store) -> Result<Project, AppError> {
 }
 
 /// Make `name` the active project, verifying it exists first.
-pub async fn set_active_project(store: &dyn Store, name: &str) -> Result<Project, AppError> {
+pub async fn set_active_project(
+    store: &dyn Store,
+    config: &ScryConfig,
+    name: &str,
+) -> Result<Project, AppError> {
     let project = store.get_project_by_name(name).await?.ok_or_else(|| {
         AppError::Storage(StorageError::NotFound(format!(
             "project '{}' not found",
@@ -165,7 +150,7 @@ pub async fn set_active_project(store: &dyn Store, name: &str) -> Result<Project
     ClientState {
         active_project: Some(name.to_string()),
     }
-    .save()?;
+    .save(config)?;
 
     Ok(project)
 }

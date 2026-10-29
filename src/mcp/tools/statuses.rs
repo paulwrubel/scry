@@ -1,6 +1,7 @@
 //! Status tools.
 
 use super::resolve_project;
+use crate::config::ScryConfig;
 use crate::error::AppError;
 use crate::service::ProjectService;
 use rmcp::schemars;
@@ -16,9 +17,10 @@ pub struct StatusListParams {
 
 pub(crate) async fn list_statuses(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &StatusListParams,
 ) -> Result<Vec<Status>, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     Ok(store.get_all_statuses_by_project_id(project.id).await?)
 }
 
@@ -33,9 +35,10 @@ pub struct StatusAddParams {
 
 pub(crate) async fn add_status(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &StatusAddParams,
 ) -> Result<Status, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
 
     Ok(service.create_status(&project, params.name.clone()).await?)
@@ -52,9 +55,10 @@ pub struct StatusRemoveParams {
 
 pub(crate) async fn remove_status(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &StatusRemoveParams,
 ) -> Result<Status, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
     let status = service.get_status_by_name(&project, &params.name).await?;
 
@@ -74,9 +78,10 @@ pub struct StatusRenameParams {
 
 pub(crate) async fn rename_status(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &StatusRenameParams,
 ) -> Result<Status, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
     let status = service
         .get_status_by_name(&project, &params.old_name)
@@ -110,9 +115,10 @@ pub struct StatusMoveParams {
 
 pub(crate) async fn move_status(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &StatusMoveParams,
 ) -> Result<Status, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
     let status = service.get_status_by_name(&project, &params.name).await?;
 
@@ -140,9 +146,10 @@ pub struct StatusSetColorParams {
 
 pub(crate) async fn set_status_color(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &StatusSetColorParams,
 ) -> Result<Status, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
     let status = service.get_status_by_name(&project, &params.name).await?;
 
@@ -165,9 +172,10 @@ pub struct StatusSetStyleParams {
 
 pub(crate) async fn set_status_style(
     store: &dyn Store,
+    config: &ScryConfig,
     params: &StatusSetStyleParams,
 ) -> Result<Status, AppError> {
-    let project = resolve_project(store, params.project.as_deref()).await?;
+    let project = resolve_project(store, config, params.project.as_deref()).await?;
     let service = ProjectService::new(store);
     let status = service.get_status_by_name(&project, &params.name).await?;
 
