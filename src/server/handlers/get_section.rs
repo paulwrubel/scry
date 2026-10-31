@@ -11,7 +11,7 @@ use crate::server::ScryState;
 
 /// Fetch a section by id; a missing section is a `404`.
 pub async fn get_section(State(state): State<ScryState>, Path(id): Path<SectionId>) -> Response {
-    match state.service.find_section(id).await {
+    match state.service.get_section(id).await {
         Ok(Some(section)) => Json(section).into_response(),
         Ok(None) => {
             AppError::Storage(StorageError::NotFound(format!("section {id} not found"))).into()

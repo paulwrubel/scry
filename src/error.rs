@@ -59,7 +59,6 @@ pub enum ServiceError {
     SectionNotFound {
         section: String,
         project: String,
-        suggestion: Option<String>,
     },
     TaskNotFound {
         task_id: TaskId,
@@ -97,16 +96,8 @@ impl From<StorageError> for ServiceError {
 impl fmt::Display for ServiceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::SectionNotFound {
-                section,
-                project,
-                suggestion,
-            } => {
-                write!(f, "Section \"{section}\" not found in \"{project}\".")?;
-                if let Some(suggestion) = suggestion {
-                    write!(f, " Did you mean \"{suggestion}\"?")?;
-                }
-                Ok(())
+            Self::SectionNotFound { section, project } => {
+                write!(f, "Section \"{section}\" not found in \"{project}\".")
             }
             Self::TaskNotFound { task_id, project } => {
                 write!(f, "Task {task_id} not found in \"{project}\"")

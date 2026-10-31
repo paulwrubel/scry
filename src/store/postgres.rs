@@ -883,8 +883,7 @@ impl Store for PostgresStore {
         project_id: ProjectId,
         name: &str,
     ) -> Result<Option<Section>, StorageError> {
-        // Matches the expression behind the unique index so lookups agree with
-        // the constraint: surrounding whitespace and case are ignored.
+        // Exact match: the database compares and returns names byte-for-byte.
         match sqlx::query!(
             r#"
                 SELECT
@@ -895,7 +894,7 @@ impl Store for PostgresStore {
                     color,
                     created_at
                 FROM sections
-                WHERE project_id = $1 AND lower(btrim(name)) = lower(btrim($2::TEXT))
+                WHERE project_id = $1 AND name = $2
             "#,
             project_id,
             name,
@@ -1105,143 +1104,6 @@ impl Store for PostgresStore {
                 id
             )));
         }
-
-        tx.commit()
-            .await
-            .map_err(|e| StorageError::Database(format!("failed to commit transaction: {}", e)))?;
-
-        Ok(())
-    }
-
-    async fn merge_sections(
-        &self,
-        source_id: SectionId,
-        target_id: SectionId,
-    ) -> Result<(), StorageError> {
-        if source_id == target_id {
-            return Err(StorageError::Invalid(
-                "cannot merge a section into itself".to_string(),
-            ));
-        }
-
-        let mut tx =
-            self.pool.begin().await.map_err(|e| {
-                StorageError::Database(format!("failed to begin transaction: {}", e))
-            })?;
-
-        let source = sqlx::query!(
-            r#"
-                SELECT id, project_id
-                FROM sections
-                WHERE id = $1
-                FOR UPDATE
-            "#,
-            source_id,
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to look up section: {}", e)))?
-        .ok_or_else(|| {
-            StorageError::NotFound(format!("source section with id '{}' not found", source_id))
-        })?;
-
-        let target = sqlx::query!(
-            r#"
-                SELECT id, project_id
-                FROM sections
-                WHERE id = $1
-                FOR UPDATE
-            "#,
-            target_id,
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to look up section: {}", e)))?
-        .ok_or_else(|| {
-            StorageError::NotFound(format!("target section with id '{}' not found", target_id))
-        })?;
-
-        if source.project_id != target.project_id {
-            return Err(StorageError::Invalid(format!(
-                "cannot merge section '{}' from project {} into section '{}' from project {}",
-                source_id, source.project_id, target_id, target.project_id
-            )));
-        }
-
-        // Source tasks append after the target's existing tasks in their current
-        // relative order.
-        let target_tasks = sqlx::query!(
-            r#"
-                SELECT id, position
-                FROM tasks
-                WHERE section_id = $1
-                ORDER BY position ASC, id ASC
-                FOR UPDATE
-            "#,
-            target_id,
-        )
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))?;
-
-        let source_tasks = sqlx::query!(
-            r#"
-                SELECT id, position
-                FROM tasks
-                WHERE section_id = $1
-                ORDER BY position ASC, id ASC
-                FOR UPDATE
-            "#,
-            source_id,
-        )
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))?;
-
-        let last_target = match target_tasks.last() {
-            Some(task) => Some(
-                Position::parse(task.position.as_str())
-                    .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
-            ),
-            None => None,
-        };
-
-        let positions = n_keys_between(last_target.as_ref(), None, source_tasks.len())
-            .map_err(|e| StorageError::Invalid(format!("failed to generate position keys: {e}")))?;
-
-        if !source_tasks.is_empty() {
-            let ids: Vec<Uuid> = source_tasks.iter().map(|task| task.id).collect();
-            let keys: Vec<String> = positions
-                .iter()
-                .map(|position| position.as_str().to_string())
-                .collect();
-
-            sqlx::query!(
-                r#"
-                    UPDATE tasks
-                    SET section_id = $1, position = data.position
-                    FROM unnest($2::UUID[], $3::TEXT[]) AS data(id, position)
-                    WHERE tasks.id = data.id
-                "#,
-                target_id,
-                &ids,
-                &keys,
-            )
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StorageError::Database(format!("failed to merge section tasks: {}", e)))?;
-        }
-
-        sqlx::query!(
-            r#"
-                DELETE FROM sections
-                WHERE id = $1
-            "#,
-            source_id,
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to delete section: {}", e)))?;
 
         tx.commit()
             .await

@@ -592,10 +592,6 @@ mod tests {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn merge_sections(&self, _: SectionId, _: SectionId) -> Result<(), StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
         async fn create_project(
             &self,
             _: ProjectId,
