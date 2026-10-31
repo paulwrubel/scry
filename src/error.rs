@@ -1,5 +1,5 @@
 use scry_core::error::StorageError;
-use scry_core::models::TaskId;
+use scry_core::ids::TaskId;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -70,6 +70,20 @@ pub enum ServiceError {
     },
     SectionNameRequired,
     TitleRequired,
+    TaskHandleNotFound {
+        short_id: String,
+    },
+    NoteHandleNotFound {
+        short_id: String,
+    },
+    AmbiguousTaskHandle {
+        short_id: String,
+        candidates: Vec<String>,
+    },
+    AmbiguousNoteHandle {
+        short_id: String,
+        candidates: Vec<String>,
+    },
 
     Storage(StorageError),
 }
@@ -102,6 +116,28 @@ impl fmt::Display for ServiceError {
             }
             Self::SectionNameRequired => write!(f, "A section name is required"),
             Self::TitleRequired => write!(f, "A task title is required"),
+            Self::TaskHandleNotFound { short_id } => {
+                write!(f, "No task matches short id \"{short_id}\"")
+            }
+            Self::NoteHandleNotFound { short_id } => {
+                write!(f, "No note matches short id \"{short_id}\"")
+            }
+            Self::AmbiguousTaskHandle {
+                short_id,
+                candidates,
+            } => write!(
+                f,
+                "Short id \"{short_id}\" matches multiple tasks: {}. Use a longer prefix.",
+                candidates.join(", ")
+            ),
+            Self::AmbiguousNoteHandle {
+                short_id,
+                candidates,
+            } => write!(
+                f,
+                "Short id \"{short_id}\" matches multiple notes: {}. Use a longer prefix.",
+                candidates.join(", ")
+            ),
             Self::Storage(error) => write!(f, "{error}"),
         }
     }
@@ -113,8 +149,10 @@ impl ServiceError {
     fn kind(&self) -> &'static str {
         match self {
             Self::SectionNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
+            Self::TaskHandleNotFound { .. } | Self::NoteHandleNotFound { .. } => "not_found",
             Self::SectionNameTaken { .. } => "conflict",
             Self::SectionNameRequired | Self::TitleRequired => "invalid",
+            Self::AmbiguousTaskHandle { .. } | Self::AmbiguousNoteHandle { .. } => "invalid",
             Self::Storage(error) => error.kind(),
         }
     }

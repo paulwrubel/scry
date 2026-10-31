@@ -6,10 +6,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-pub type NoteId = i64;
-pub type TaskId = i64;
-pub type ProjectId = i64;
-pub type SectionId = i64;
+pub use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
@@ -246,7 +243,9 @@ pub enum TaskSortingMode {
         "alphaci",
     ]))]
     AlphabeticalCaseInsensitive,
-    Id,
+    /// Creation order, oldest first. `id` is kept as an alias for old configs.
+    #[value(alias = "id")]
+    Created,
     #[value(aliases(["none","position","pos"]))]
     Manual,
     #[value(aliases(["pri"]))]

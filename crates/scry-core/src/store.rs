@@ -1,14 +1,15 @@
 use crate::backup::{ImportPlan, ImportReport};
 use crate::error::StorageError;
+use crate::ids::{NoteId, ProjectId, SectionId, ShortId, TaskId};
 use crate::models::{
-    Color, Lifecycle, Note, NoteId, Priority, Project, ProjectId, Section, SectionId, Tags, Task,
-    TaskId, TaskSortingMode,
+    Color, Lifecycle, Note, Priority, Project, Section, Tags, Task, TaskSortingMode,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub struct TaskToCreate {
+    pub id: TaskId,
     pub project_id: ProjectId,
     pub title: String,
     pub description: Option<String>,
@@ -51,6 +52,24 @@ pub trait Store: Send + Sync {
     /// Get a task by its id
     async fn get_task_by_id(&self, id: TaskId) -> Result<Option<Task>, StorageError>;
 
+    /// Find task ids whose UUID begins with a short-id prefix.
+    ///
+    /// The prefix is compared against the normalized dashless form, at most
+    /// `limit` ids are returned in ascending UUID order, and callers pass a small
+    /// limit to detect an ambiguous prefix.
+    async fn find_task_ids_by_short_id(
+        &self,
+        short_id: &ShortId,
+        limit: i64,
+    ) -> Result<Vec<TaskId>, StorageError>;
+
+    /// Return every task id in the database, across all projects and including
+    /// closed tasks.
+    ///
+    /// Display handles are unique per entity type across the whole database, so
+    /// computing them requires the complete id set.
+    async fn get_all_task_ids(&self) -> Result<Vec<TaskId>, StorageError>;
+
     /// List tasks in a project
     ///
     /// Results are ordered by position ascending, then task ID ascending.
@@ -92,13 +111,20 @@ pub trait Store: Send + Sync {
     /// Duplicate a task as an open copy in the same section, inserting it
     /// immediately after the source by shifting later tasks in that group up by one.
     ///
+    /// The duplicate is inserted with `new_id`, which the caller supplies.
     /// Performed in a single transaction.
-    async fn duplicate_task(&self, id: TaskId) -> Result<Task, StorageError>;
+    async fn duplicate_task(&self, id: TaskId, new_id: TaskId) -> Result<Task, StorageError>;
 
     /// Delete a task
     async fn delete_task(&self, id: TaskId) -> Result<(), StorageError>;
 
-    async fn create_note(&self, task_id: TaskId, contents: String) -> Result<Note, StorageError>;
+    /// Add a note to a task. The caller supplies the note id.
+    async fn create_note(
+        &self,
+        id: NoteId,
+        task_id: TaskId,
+        contents: String,
+    ) -> Result<Note, StorageError>;
 
     // The note read/update/delete methods below are not wired into the UI yet;
     // they are scaffolding for the future note editing and deletion features.
@@ -127,8 +153,26 @@ pub trait Store: Send + Sync {
     #[allow(dead_code)]
     async fn delete_note(&self, id: NoteId) -> Result<(), StorageError>;
 
+    /// Find note ids whose UUID begins with a short-id prefix.
+    ///
+    /// The prefix is compared against the normalized dashless form, at most
+    /// `limit` ids are returned in ascending UUID order, and callers pass a small
+    /// limit to detect an ambiguous prefix.
+    async fn find_note_ids_by_short_id(
+        &self,
+        short_id: &ShortId,
+        limit: i64,
+    ) -> Result<Vec<NoteId>, StorageError>;
+
+    /// Return every note id in the database.
+    ///
+    /// Display handles are unique per entity type across the whole database, so
+    /// computing them requires the complete id set.
+    async fn get_all_note_ids(&self) -> Result<Vec<NoteId>, StorageError>;
+
     async fn create_section(
         &self,
+        id: SectionId,
         project_id: ProjectId,
         name: String,
         position: i32,
@@ -187,6 +231,7 @@ pub trait Store: Send + Sync {
     /// Create a new project. The description is optional freeform text.
     async fn create_project(
         &self,
+        id: ProjectId,
         name: String,
         description: Option<String>,
         task_sorting_mode: TaskSortingMode,
@@ -218,8 +263,8 @@ pub trait Store: Send + Sync {
     /// In `Replace` mode the existing projects listed in `plan.project_ids_to_delete`
     /// are removed (along with their sections, tasks, and notes) before the plan's
     /// projects are inserted; in `Skip` and `Fail` mode no existing data is
-    /// removed. Rows are inserted with the ids and timestamps carried by the plan,
-    /// so callers must resolve id collisions beforehand (see
-    /// `crate::backup::plan_import`).
+    /// removed. Rows are inserted or updated by the UUID ids and carry the
+    /// timestamps held by the plan, so callers must resolve project-name
+    /// collisions beforehand (see `crate::backup::plan_import`).
     async fn import(&self, plan: ImportPlan) -> Result<ImportReport, StorageError>;
 }

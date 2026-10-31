@@ -20,10 +20,12 @@ use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::{AppError, ServiceError};
 use scry_core::backup::{self, ImportMode};
+use scry_core::ids::{ShortId, TaskId};
 use scry_core::models::{
     CloseReason, Color, Lifecycle, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Section,
     Tags, Task, TaskSortingMode,
 };
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -78,8 +80,8 @@ enum Command {
     },
     /// Move a task to a section
     Move {
-        /// The task ID
-        id: i64,
+        /// The task ID or a unique short id prefix
+        id: ShortId,
         /// The target section
         section: Option<String>,
         /// Move the task to No section
@@ -88,8 +90,8 @@ enum Command {
     },
     /// Update task properties
     Update {
-        /// The task ID
-        id: i64,
+        /// The task ID or a unique short id prefix
+        id: ShortId,
         /// New title
         #[arg(long)]
         title: Option<String>,
@@ -114,31 +116,31 @@ enum Command {
     },
     /// Duplicate an existing task
     Duplicate {
-        /// The task ID
-        id: i64,
+        /// The task ID or a unique short id prefix
+        id: ShortId,
     },
     /// Delete a task
     Delete {
-        /// The task ID
-        id: i64,
+        /// The task ID or a unique short id prefix
+        id: ShortId,
     },
     /// Close a task with a reason
     Close {
-        /// The task ID
-        id: i64,
+        /// The task ID or a unique short id prefix
+        id: ShortId,
         /// The reason for closing
         #[arg(long)]
         reason: CloseReason,
     },
     /// Open a closed task
     Open {
-        /// The task ID
-        id: i64,
+        /// The task ID or a unique short id prefix
+        id: ShortId,
     },
     /// Show full details for a task
     Show {
-        /// The task ID
-        id: i64,
+        /// The task ID or a unique short id prefix
+        id: ShortId,
     },
     /// List tasks in the active project
     List {
@@ -189,8 +191,8 @@ enum Command {
 enum NoteCommand {
     /// Add a note to a task
     Add {
-        /// The task ID
-        task_id: i64,
+        /// The task ID or a unique short id prefix
+        task_id: ShortId,
         /// The note contents
         contents: String,
     },
@@ -657,9 +659,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             if output_json {
                 print_json(&change.task)?;
             } else {
+                let handle = display_task_handle(&service, change.task.id).await?;
                 println!(
                     "Created task {} in \"{}\" [{}]: {}",
-                    change.task.id,
+                    handle,
                     project.name,
                     section_label(&change.section),
                     change.task.title
@@ -676,15 +679,17 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     "Specify a section or --no-section.".to_string(),
                 ));
             }
+            let task = resolve_task(&service, &project, &id).await?;
             let section =
                 resolve_section_input(&service, &project, section, None, no_section).await?;
-            let change = service.move_task(&project, id, section, None).await?;
+            let change = service.move_task(&project, task.id, section, None).await?;
             if output_json {
                 print_json(&change.task)?;
             } else {
+                let handle = display_task_handle(&service, change.task.id).await?;
                 println!(
                     "Moved task {} --> \"{}\"",
-                    change.task.id,
+                    handle,
                     section_label(&change.section)
                 );
             }
@@ -721,57 +726,69 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 tags: tags.map(|tags| Tags::from(tags.as_str())),
                 section,
             };
-            let updated = service.update_task(&project, id, patch).await?;
+            let task = resolve_task(&service, &project, &id).await?;
+            let updated = service.update_task(&project, task.id, patch).await?;
             if output_json {
                 print_json(&updated)?;
             } else {
-                println!("Updated task {}.", updated.id);
+                let handle = display_task_handle(&service, updated.id).await?;
+                println!("Updated task {}.", handle);
             }
         }
         Command::Duplicate { id } => {
-            let change = service.duplicate_task(&project, id).await?;
+            let source = resolve_task(&service, &project, &id).await?;
+            let source_handle = display_task_handle(&service, source.id).await?;
+            let change = service.duplicate_task(&project, source.id).await?;
             if output_json {
                 print_json(&change.task)?;
             } else {
+                let new_handle = display_task_handle(&service, change.task.id).await?;
                 println!(
                     "Duplicated task {} as task {} in \"{}\" [{}]",
-                    id,
-                    change.task.id,
+                    source_handle,
+                    new_handle,
                     project.name,
                     section_label(&change.section)
                 );
             }
         }
         Command::Delete { id } => {
-            let removed = service.delete_task(&project, id).await?;
+            let task = resolve_task(&service, &project, &id).await?;
+            let handle = display_task_handle(&service, task.id).await?;
+            let removed = service.delete_task(&project, task.id).await?;
             if output_json {
                 print_json(&removed)?;
             } else {
-                println!("Deleted task {} from \"{}\"", id, project.name);
+                println!("Deleted task {} from \"{}\"", handle, project.name);
             }
         }
         Command::Close { id, reason } => {
-            let task = service.close_task(&project, id, reason).await?;
+            let resolved = resolve_task(&service, &project, &id).await?;
+            let task = service.close_task(&project, resolved.id, reason).await?;
             if output_json {
                 print_json(&task)?;
             } else {
-                println!("Closed task {} as {}", task.id, reason);
+                let handle = display_task_handle(&service, task.id).await?;
+                println!("Closed task {} as {}", handle, reason);
             }
         }
         Command::Open { id } => {
-            let task = service.open_task(&project, id).await?;
+            let resolved = resolve_task(&service, &project, &id).await?;
+            let task = service.open_task(&project, resolved.id).await?;
             if output_json {
                 print_json(&task)?;
             } else {
-                println!("Opened task {}", task.id);
+                let handle = display_task_handle(&service, task.id).await?;
+                println!("Opened task {}", handle);
             }
         }
         Command::Show { id } => {
+            let resolved = resolve_task(&service, &project, &id).await?;
             let state = ProjectState::from_snapshot(service.project_snapshot(project.id).await?);
 
-            let Some(task) = state.get_task_by_id(id) else {
+            let Some(task) = state.get_task_by_id(resolved.id) else {
                 return Err(AppError::Service(ServiceError::TaskNotFound {
-                    task_id: id,
+                    task_id: resolved.id,
                     project: project.name.clone(),
                 }));
             };
@@ -799,7 +816,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 .with_timezone(&Local)
                 .format(DATETIME_FORMAT_STR);
 
-            println!("{} #{}", task.title, task.id);
+            let handle = display_task_handle(&service, task.id).await?;
+            println!("{} #{}", task.title, handle);
             println!();
 
             if let Some(description) = &task.description {
@@ -873,6 +891,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 return Ok(());
             }
 
+            let handles = service.task_handles().await?;
+
             println!("project \"{}\"\n", state.project().name);
 
             let show_priority = state.project().show_priority;
@@ -897,24 +917,27 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 );
 
                 for task in &group.tasks_with_notes {
-                    anstream::println!("{}", task_line(task, show_priority));
+                    anstream::println!("{}", task_line(task, show_priority, &handles));
                 }
             }
 
             if include_closed {
                 println!("Closed ({}):", state.closed_tasks().len());
                 for task in state.closed_tasks() {
-                    anstream::println!("{}", task_line(task, show_priority));
+                    anstream::println!("{}", task_line(task, show_priority, &handles));
                 }
             }
         }
         Command::Note(note_cmd) => match note_cmd {
             NoteCommand::Add { task_id, contents } => {
-                let note = service.add_task_note(&project, task_id, contents).await?;
+                let task = resolve_task(&service, &project, &task_id).await?;
+                let note = service.add_task_note(&project, task.id, contents).await?;
                 if output_json {
                     print_json(&note)?;
                 } else {
-                    println!("Added note {} to task {}.", note.id, note.task_id);
+                    let note_handle = service.note_handle(note.id).await?;
+                    let task_handle = display_task_handle(&service, task.id).await?;
+                    println!("Added note {} to task {}.", note_handle, task_handle);
                 }
             }
         },
@@ -1185,6 +1208,29 @@ async fn resolve_project(
     }
 }
 
+/// Resolve a short id to a task and reject a handle that names a task in another
+/// project, so a typo cannot operate cross-project.
+async fn resolve_task(
+    service: &ProjectService,
+    project: &Project,
+    short_id: &ShortId,
+) -> Result<Task, AppError> {
+    let task = service.resolve_task_handle(short_id).await?;
+    if task.project_id != project.id {
+        return Err(ServiceError::TaskNotFound {
+            task_id: task.id,
+            project: project.name.clone(),
+        }
+        .into());
+    }
+    Ok(task)
+}
+
+/// Render the short handle for a task id at the built-in 4-character floor.
+async fn display_task_handle(service: &ProjectService, id: TaskId) -> Result<String, AppError> {
+    Ok(service.task_handle(id).await?)
+}
+
 /// Resolve the section flags shared by `add`, `move`, and `update` into the
 /// service's section-selection input.
 async fn resolve_section_input(
@@ -1214,7 +1260,11 @@ fn section_label(section: &Option<Section>) -> &str {
 
 /// Render one task line for the human `list` output, including the lifecycle
 /// marker so open and closed tasks share the same format.
-fn task_line(task: &TaskWithNotes, show_priority: bool) -> String {
+fn task_line(
+    task: &TaskWithNotes,
+    show_priority: bool,
+    handles: &HashMap<TaskId, String>,
+) -> String {
     let checkbox = match &task.lifecycle {
         Lifecycle::Open => "[ ]",
         Lifecycle::Closed { reason, .. } => match reason {
@@ -1223,7 +1273,12 @@ fn task_line(task: &TaskWithNotes, show_priority: bool) -> String {
         },
     };
 
-    let mut line = format!("  {}  {}", task.id, checkbox);
+    // fall back to the full hex id if the handle map is missing this task
+    let id = handles
+        .get(&task.id)
+        .cloned()
+        .unwrap_or_else(|| task.id.simple().to_string());
+    let mut line = format!("  {}  {}", id, checkbox);
     if show_priority {
         line.push_str(&format!("  {}", color::priority(task.priority)));
     }

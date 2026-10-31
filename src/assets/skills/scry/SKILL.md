@@ -33,10 +33,11 @@ Prefer this over guessing command names, flags, or values.
   human-readable text output.
 - Enum values in JSON are kebab-case and match the CLI's accepted arguments, so a value
   read from JSON can be passed straight back to the CLI.
-  - Examples: `scry --json list`, `scry --json show 42`, `scry -p myapp --json add "design API"`.
-- `scry --json add` returns the new task including its `id`; read `id` from the JSON to
-  chain follow-up calls.
-- `scry --json show <id>` includes full detail (description, priority, tags, timestamps,
+  - Examples: `scry --json list`, `scry --json show 4f3a`, `scry -p myapp --json add "design API"`.
+- `--json` always emits full UUIDs, never handles. Store and pass full UUIDs for
+  reliability: use the `id` field returned by `scry --json add` rather than a handle,
+  because handles can lengthen as more tasks and notes are created.
+- `scry --json show <handle>` includes full detail (description, priority, tags, timestamps,
   section, lifecycle, and notes), while `scry --json list` omits descriptions, notes, and
   timestamps. Use `scry --json show` when full detail is needed.
 - `scry --json list` output is the stable machine format; never parse the human-readable
@@ -62,20 +63,22 @@ project unless overridden.
 
 Every example below includes the global `--json` flag, which must come before the subcommand.
 
-| Command                                                                                                                                      | Purpose                          |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | -------------------------- |
-| `scry --json add <title> [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>]`               | Add a task                       |
-| `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                   | List tasks grouped by section    |
-| `scry --json show <id>`                                                                                                                      | Show full task details and notes |
-| `scry --json move <id> [<section>] [--no-section]`                                                                                           | Move a task to a section         |
-| `scry --json update <id> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section]` | Update task properties           |
-| `scry --json close <id> --reason <completed                                                                                                  | cancelled>`                      | Close a task with a reason |
-| `scry --json open <id>`                                                                                                                      | Reopen a closed task             |
-| `scry --json duplicate <id>`                                                                                                                 | Duplicate a task                 |
-| `scry --json note add <task-id> <contents>`                                                                                                  | Add a note to a task             |
-| `scry --json delete <id>`                                                                                                                    | Delete a task permanently        |
+| Command                                                                                                                                          | Purpose                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| `scry --json add <title> [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>]`                   | Add a task                       |
+| `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                       | List tasks grouped by section    |
+| `scry --json show <handle>`                                                                                                                      | Show full task details and notes |
+| `scry --json move <handle> [<section>] [--no-section]`                                                                                           | Move a task to a section         |
+| `scry --json update <handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section]` | Update task properties           |
+| `scry --json close <handle> --reason <completed \| cancelled>`                                                                                   | Close a task with a reason       |
+| `scry --json open <handle>`                                                                                                                      | Reopen a closed task             |
+| `scry --json duplicate <handle>`                                                                                                                 | Duplicate a task                 |
+| `scry --json note add <task-handle> <contents>`                                                                                                  | Add a note to a task             |
+| `scry --json delete <handle>`                                                                                                                    | Delete a task permanently        |
 
 `<level>` is one of `minimal`, `low`, `medium`, `high`, `critical` (aliases `p5`-`p1`).
+
+Task and note arguments take a handle: the shortest unique prefix of that task's or note's UUID, at least 4 lowercase hex characters. Dashes are optional and, when present, must sit at the canonical UUID positions (after 8, 12, 16, or 20 hex characters). A full UUID always works.
 
 Sections are created explicitly: `--section <name>` must name an existing section and fails
 with the closest match suggested, while `--new-section <name>` (or `scry section add`)
@@ -116,7 +119,9 @@ Project descriptions are freeform text; set one at create time with `--descripti
 it with `scry --json project update --description <text>`, and clear it by passing an empty
 string. The same project update command also renames the project with `--name`, changes the
 sort mode with `--sort`, and shows or hides priority with `--show-priority` or
-`--hide-priority`.
+`--hide-priority`. The sort modes are `alphabetical`, `alphabetical-case-insensitive`,
+`created` (creation order, oldest first; `id` is accepted as an alias), `manual`, and
+`priority`.
 
 Creating a project without `-t` leaves it with no sections. Tasks still work and land in No
 section; add sections later with `scry --json section add <name>`.
@@ -125,7 +130,7 @@ section; add sections later with `scry --json section add <name>`.
 
 - Do **not** run destructive commands (`scry delete`, `scry project delete`,
   `scry section remove`) without explicit user confirmation.
-- Never guess an ID for a destructive action; confirm it with `scry show <id>` first
+- Never guess a handle for a destructive action; confirm it with `scry show <handle>` first
   when there is any doubt.
 - `scry close` closes a task but keeps it; `scry delete` removes it permanently.
 - The active project is local to this machine, but changing it still alters the user's

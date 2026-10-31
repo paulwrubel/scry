@@ -1,12 +1,19 @@
+use std::collections::HashMap;
+
 use crate::error::ServiceError;
 use chrono::Utc;
 use scry_core::backup::{self, Backup, ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
+use scry_core::ids::{
+    MIN_SHORT_ID_LENGTH, NoteId, ProjectId, SectionId, ShortId, TaskId, distinguishing_prefixes,
+    shortest_handle, shortest_handles, template_section_id,
+};
 use scry_core::models::{
-    CloseReason, Color, Lifecycle, Note, NoteId, Priority, Project, ProjectId, ProjectTemplate,
-    Section, SectionId, Tags, Task, TaskId, TaskSortingMode,
+    CloseReason, Color, Lifecycle, Note, Priority, Project, ProjectTemplate, Section, Tags, Task,
+    TaskSortingMode,
 };
 use scry_core::store::{ArcStore, ProjectSnapshot, TaskContentUpdate, TaskToCreate};
+use uuid::Uuid;
 
 /// How an operation selects a task's section: leave it alone, clear it, use an
 /// existing section, or create one by name.
@@ -76,6 +83,7 @@ impl ProjectService {
         let task = self
             .store
             .create_task(TaskToCreate {
+                id: Uuid::new_v4(),
                 project_id: project.id,
                 title,
                 description: input
@@ -106,7 +114,7 @@ impl ProjectService {
         id: TaskId,
     ) -> Result<TaskChangeResult, ServiceError> {
         self.task_in_project(project, id).await?;
-        let task = self.store.duplicate_task(id).await?;
+        let task = self.store.duplicate_task(id, Uuid::new_v4()).await?;
         let section = match task.section_id {
             Some(section_id) => Some(self.section_in_project(project, section_id).await?),
             None => None,
@@ -294,7 +302,10 @@ impl ProjectService {
         contents: String,
     ) -> Result<Note, ServiceError> {
         self.task_in_project(project, task_id).await?;
-        Ok(self.store.create_note(task_id, contents).await?)
+        Ok(self
+            .store
+            .create_note(Uuid::new_v4(), task_id, contents)
+            .await?)
     }
 
     pub async fn add_note(&self, task_id: TaskId, contents: String) -> Result<Note, ServiceError> {
@@ -327,6 +338,71 @@ impl ProjectService {
         Ok(())
     }
 
+    // display handles are unique per entity type across the whole database,
+    // including closed tasks and every project, so they need the complete id
+    // set; display always starts at the 4-character floor
+    pub async fn task_handles(&self) -> Result<HashMap<TaskId, String>, ServiceError> {
+        let ids = self.store.get_all_task_ids().await?;
+        Ok(shortest_handles(ids, MIN_SHORT_ID_LENGTH))
+    }
+
+    // display starts at the 4-character floor
+    pub async fn task_handle(&self, id: TaskId) -> Result<String, ServiceError> {
+        let ids = self.store.get_all_task_ids().await?;
+        Ok(shortest_handle(id, ids, MIN_SHORT_ID_LENGTH))
+    }
+
+    // display starts at the 4-character floor
+    pub async fn note_handle(&self, id: NoteId) -> Result<String, ServiceError> {
+        let ids = self.store.get_all_note_ids().await?;
+        Ok(shortest_handle(id, ids, MIN_SHORT_ID_LENGTH))
+    }
+
+    pub async fn resolve_task_handle(&self, short_id: &ShortId) -> Result<Task, ServiceError> {
+        let matches = self.store.find_task_ids_by_short_id(short_id, 2).await?;
+        match matches.len() {
+            0 => Err(ServiceError::TaskHandleNotFound {
+                short_id: short_id.to_string(),
+            }),
+            1 => self.task_by_id(matches[0]).await,
+            _ => {
+                let all = self
+                    .store
+                    .find_task_ids_by_short_id(short_id, i64::MAX)
+                    .await?;
+                let candidates = distinguishing_prefixes(&all, short_id.len());
+                Err(ServiceError::AmbiguousTaskHandle {
+                    short_id: short_id.to_string(),
+                    candidates,
+                })
+            }
+        }
+    }
+
+    // the current API has no note-prefix entry point; this exists so note handles
+    // resolve like task handles wherever note ids are later accepted
+    #[allow(dead_code)]
+    pub async fn resolve_note_handle(&self, short_id: &ShortId) -> Result<Note, ServiceError> {
+        let matches = self.store.find_note_ids_by_short_id(short_id, 2).await?;
+        match matches.len() {
+            0 => Err(ServiceError::NoteHandleNotFound {
+                short_id: short_id.to_string(),
+            }),
+            1 => self.note_by_id(matches[0]).await,
+            _ => {
+                let all = self
+                    .store
+                    .find_note_ids_by_short_id(short_id, i64::MAX)
+                    .await?;
+                let candidates = distinguishing_prefixes(&all, short_id.len());
+                Err(ServiceError::AmbiguousNoteHandle {
+                    short_id: short_id.to_string(),
+                    candidates,
+                })
+            }
+        }
+    }
+
     pub async fn create_section(
         &self,
         project: &Project,
@@ -343,9 +419,10 @@ impl ProjectService {
             .map(|section| section.position)
             .max()
             .map_or(0, |position| position + 1);
+        let id = Uuid::new_v4();
         Ok(self
             .store
-            .create_section(project.id, name, position, color)
+            .create_section(id, project.id, name, position, color)
             .await?)
     }
 
@@ -594,9 +671,11 @@ impl ProjectService {
             Some(template) => (template.task_sorting_mode, template.show_priority),
             None => (TaskSortingMode::default(), false),
         };
+        let id = Uuid::new_v4();
         let project = self
             .store
             .create_project(
+                id,
                 name,
                 description.filter(|description| !description.is_empty()),
                 task_sorting_mode,
@@ -609,8 +688,10 @@ impl ProjectService {
         };
 
         for section in template.sections {
+            let id = template_section_id(project.id, section.name);
             self.store
                 .create_section(
+                    id,
                     project.id,
                     section.name.to_string(),
                     section.position,
@@ -629,9 +710,11 @@ impl ProjectService {
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
     ) -> Result<Project, ServiceError> {
+        let id = Uuid::new_v4();
         Ok(self
             .store
             .create_project(
+                id,
                 name,
                 description.filter(|description| !description.is_empty()),
                 task_sorting_mode,
@@ -810,6 +893,12 @@ impl ProjectService {
     async fn task_by_id(&self, id: TaskId) -> Result<Task, ServiceError> {
         self.store.get_task_by_id(id).await?.ok_or_else(|| {
             ServiceError::Storage(StorageError::NotFound(format!("task {id} not found")))
+        })
+    }
+
+    async fn note_by_id(&self, id: NoteId) -> Result<Note, ServiceError> {
+        self.store.get_note_by_id(id).await?.ok_or_else(|| {
+            ServiceError::Storage(StorageError::NotFound(format!("note {id} not found")))
         })
     }
 
