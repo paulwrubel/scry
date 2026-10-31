@@ -11,7 +11,10 @@ mod state;
 mod store;
 
 use crate::color::ColorChoice;
-use crate::service::{ProjectService, ProjectSetup, SectionInput, TaskInput, UpdateProject};
+use crate::service::{
+    ColorChange, ProjectService, ProjectSetup, SectionInput, TaskInput, UpdateProject,
+    UpdateSection,
+};
 use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState, TaskWithNotes};
 use crate::store::{ArcStore, PostgresStore};
@@ -859,7 +862,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             }
 
             let selected_section_id = match &section {
-                Some(name) => Some(service.get_section_by_name(&project, name).await?.id),
+                Some(name) => Some(service.get_section_by_name(project.id, name).await?.id),
                 None => None,
             };
             let groups: Vec<_> = state
@@ -1017,7 +1020,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
             SectionCommand::Remove { name } => {
-                let section = service.get_section_by_name(&project, &name).await?;
+                let section = service.get_section_by_name(project.id, &name).await?;
                 let removed = service.delete_section(&project, section.id).await?;
                 if output_json {
                     print_json(&removed)?;
@@ -1029,9 +1032,15 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
             SectionCommand::Rename { old_name, new_name } => {
-                let section = service.get_section_by_name(&project, &old_name).await?;
+                let section = service.get_section_by_name(project.id, &old_name).await?;
                 let renamed = service
-                    .rename_section(&project, section.id, new_name.clone())
+                    .update_section(
+                        section.id,
+                        UpdateSection {
+                            name: Some(new_name.clone()),
+                            color: ColorChange::Keep,
+                        },
+                    )
                     .await?;
                 if output_json {
                     print_json(&renamed)?;
@@ -1043,8 +1052,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
             SectionCommand::Merge { source, target } => {
-                let source_section = service.get_section_by_name(&project, &source).await?;
-                let target_section = service.get_section_by_name(&project, &target).await?;
+                let source_section = service.get_section_by_name(project.id, &source).await?;
+                let target_section = service.get_section_by_name(project.id, &target).await?;
                 let (source_section, target_section) = service
                     .merge_sections(&project, source_section.id, target_section.id)
                     .await?;
@@ -1058,9 +1067,15 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
             SectionCommand::SetColor { name, color } => {
-                let section = service.get_section_by_name(&project, &name).await?;
+                let section = service.get_section_by_name(project.id, &name).await?;
                 let updated = service
-                    .set_section_color(&project, section.id, Some(color))
+                    .update_section(
+                        section.id,
+                        UpdateSection {
+                            name: None,
+                            color: ColorChange::Set(color),
+                        },
+                    )
                     .await?;
                 if output_json {
                     print_json(&updated)?;
@@ -1072,9 +1087,15 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
             SectionCommand::ResetColor { name } => {
-                let section = service.get_section_by_name(&project, &name).await?;
+                let section = service.get_section_by_name(project.id, &name).await?;
                 let updated = service
-                    .set_section_color(&project, section.id, None)
+                    .update_section(
+                        section.id,
+                        UpdateSection {
+                            name: None,
+                            color: ColorChange::Clear,
+                        },
+                    )
                     .await?;
                 if output_json {
                     print_json(&updated)?;
@@ -1203,7 +1224,7 @@ async fn resolve_section_input(
     } else if let Some(name) = new_section {
         Ok(SectionInput::New(name))
     } else if let Some(name) = section {
-        let section = service.get_section_by_name(project, &name).await?;
+        let section = service.get_section_by_name(project.id, &name).await?;
         Ok(SectionInput::Existing(section.id))
     } else {
         Ok(SectionInput::Unchanged)

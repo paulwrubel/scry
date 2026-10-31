@@ -12,7 +12,7 @@ use scry_core::models::{
     CloseReason, Color, Lifecycle, Note, Priority, Project, ProjectTemplate, Section, Tags, Task,
     TaskSortingMode,
 };
-use scry_core::position::{Position, key_between};
+use scry_core::position::{Position, key_between, n_keys_between};
 use scry_core::store::{ArcStore, ProjectSnapshot, TaskContentUpdate, TaskToCreate};
 use uuid::Uuid;
 
@@ -62,6 +62,24 @@ pub struct UpdateProject {
     pub description: Option<String>,
     pub task_sorting_mode: Option<TaskSortingMode>,
     pub show_priority: Option<bool>,
+}
+
+/// How an update changes a section's color.
+#[derive(Debug, Clone, Copy)]
+pub enum ColorChange {
+    /// Leave the current color unchanged.
+    Keep,
+    /// Remove the section's color.
+    Clear,
+    /// Set the section's color.
+    Set(Color),
+}
+
+/// Partial section input. `None` leaves the name unchanged.
+#[derive(Debug, Clone)]
+pub struct UpdateSection {
+    pub name: Option<String>,
+    pub color: ColorChange,
 }
 
 /// How a new project's sorting mode, priority flag, and sections are chosen.
@@ -450,50 +468,26 @@ impl ProjectService {
         self.create_section(&project, name, color).await
     }
 
-    /// Look up a section by name within a project, ignoring case and surrounding
-    /// whitespace. On a miss, suggests the closest existing name when one is
-    /// close enough to be a likely typo.
+    /// Look up a section by its exact name within a project.
     pub async fn get_section_by_name(
-        &self,
-        project: &Project,
-        name: &str,
-    ) -> Result<Section, ServiceError> {
-        let name = name.trim();
-        if let Some(section) = self
-            .store
-            .get_section_by_name(project.id, name)
-            .await?
-            .filter(|section| section.project_id == project.id)
-        {
-            return Ok(section);
-        }
-
-        let sections = self
-            .store
-            .get_all_sections_by_project_id(project.id)
-            .await?;
-        let names = sections
-            .into_iter()
-            .map(|section| section.name)
-            .collect::<Vec<_>>();
-        let suggestion = suggest_name(name, &names);
-        Err(ServiceError::SectionNotFound {
-            section: name.to_string(),
-            project: project.name.clone(),
-            suggestion,
-        })
-    }
-
-    pub async fn find_section(&self, id: SectionId) -> Result<Option<Section>, ServiceError> {
-        Ok(self.store.get_section_by_id(id).await?)
-    }
-
-    pub async fn find_section_by_name(
         &self,
         project_id: ProjectId,
         name: &str,
-    ) -> Result<Option<Section>, ServiceError> {
-        Ok(self.store.get_section_by_name(project_id, name).await?)
+    ) -> Result<Section, ServiceError> {
+        match self.store.get_section_by_name(project_id, name).await? {
+            Some(section) => Ok(section),
+            None => {
+                let project = self.project_by_id(project_id).await?;
+                Err(ServiceError::SectionNotFound {
+                    section: name.to_string(),
+                    project: project.name,
+                })
+            }
+        }
+    }
+
+    pub async fn get_section(&self, id: SectionId) -> Result<Option<Section>, ServiceError> {
+        Ok(self.store.get_section_by_id(id).await?)
     }
 
     pub async fn list_sections(&self, project_id: ProjectId) -> Result<Vec<Section>, ServiceError> {
@@ -503,46 +497,26 @@ impl ProjectService {
             .await?)
     }
 
-    pub async fn rename_section(
-        &self,
-        project: &Project,
-        section_id: SectionId,
-        new_name: String,
-    ) -> Result<Section, ServiceError> {
-        let section = self.section_in_project(project, section_id).await?;
-        let name = self
-            .validated_section_name(project, Some(section.id), new_name)
-            .await?;
-        Ok(self
-            .store
-            .update_section(Section { name, ..section })
-            .await?)
-    }
-
-    pub async fn set_section_color(
-        &self,
-        project: &Project,
-        section_id: SectionId,
-        color: Option<Color>,
-    ) -> Result<Section, ServiceError> {
-        let section = self.section_in_project(project, section_id).await?;
-        Ok(self
-            .store
-            .update_section(Section { color, ..section })
-            .await?)
-    }
-
-    pub async fn update_section_by_id(
+    /// Update a section's name and color, leaving untouched fields alone.
+    pub async fn update_section(
         &self,
         section_id: SectionId,
-        name: String,
-        color: Option<Color>,
+        update: UpdateSection,
     ) -> Result<Section, ServiceError> {
         let section = self.section_by_id(section_id).await?;
-        let project = self.project_by_id(section.project_id).await?;
-        let name = self
-            .validated_section_name(&project, Some(section.id), name)
-            .await?;
+        let name = match update.name {
+            Some(name) => {
+                let project = self.project_by_id(section.project_id).await?;
+                self.validated_section_name(&project, Some(section.id), name)
+                    .await?
+            }
+            None => section.name.clone(),
+        };
+        let color = match update.color {
+            ColorChange::Keep => section.color,
+            ColorChange::Clear => None,
+            ColorChange::Set(color) => Some(color),
+        };
         Ok(self
             .store
             .update_section(Section {
@@ -585,7 +559,18 @@ impl ProjectService {
                 "cannot merge a section into itself".to_string(),
             )));
         }
-        self.store.merge_sections(source.id, target.id).await?;
+
+        let source_tasks = self.tasks_in_section(project.id, Some(source.id)).await?;
+        let last_target = self.last_task_position(project.id, Some(target.id)).await?;
+        let positions = n_keys_between(last_target.as_ref(), None, source_tasks.len())
+            .map_err(position_error)?;
+        for (task, position) in source_tasks.iter().zip(positions) {
+            self.store
+                .move_task(task.id, Some(target.id), position)
+                .await?;
+        }
+        self.store.delete_section(source.id).await?;
+
         Ok((source, target))
     }
 
@@ -659,7 +644,7 @@ impl ProjectService {
         Ok(self.store.get_all_projects().await?)
     }
 
-    pub async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, ServiceError> {
+    pub async fn get_project(&self, id: ProjectId) -> Result<Option<Project>, ServiceError> {
         Ok(self.store.get_project_by_id(id).await?)
     }
 
@@ -743,7 +728,7 @@ impl ProjectService {
         exclude: Option<SectionId>,
         name: String,
     ) -> Result<String, ServiceError> {
-        let name = name.trim().to_string();
+        let name = name.to_string();
         if name.is_empty() {
             return Err(ServiceError::SectionNameRequired);
         }
@@ -751,9 +736,10 @@ impl ProjectService {
             .store
             .get_all_sections_by_project_id(project.id)
             .await?;
-        if sections.iter().any(|section| {
-            Some(section.id) != exclude && normalize_name(&section.name) == normalize_name(&name)
-        }) {
+        if sections
+            .iter()
+            .any(|section| Some(section.id) != exclude && section.name == name)
+        {
             return Err(ServiceError::SectionNameTaken { section: name });
         }
         Ok(name)
@@ -841,83 +827,6 @@ impl ProjectService {
             .ok_or_else(|| ServiceError::SectionNotFound {
                 section: id.to_string(),
                 project: project.name.clone(),
-                suggestion: None,
             })
-    }
-}
-
-/// Normalize a section name for case- and whitespace-insensitive comparison.
-fn normalize_name(name: &str) -> String {
-    name.trim().to_lowercase()
-}
-
-/// Levenshtein distance between two strings, measured in characters.
-fn levenshtein_distance(left: &str, right: &str) -> usize {
-    let left = left.chars().collect::<Vec<_>>();
-    let right = right.chars().collect::<Vec<_>>();
-    let mut previous = (0..=right.len()).collect::<Vec<_>>();
-    let mut current = vec![0; right.len() + 1];
-
-    for (row, left_char) in left.iter().enumerate() {
-        current[0] = row + 1;
-        for (column, right_char) in right.iter().enumerate() {
-            let substitution = previous[column] + if left_char == right_char { 0 } else { 1 };
-            current[column + 1] = (previous[column + 1] + 1)
-                .min(current[column] + 1)
-                .min(substitution);
-        }
-        std::mem::swap(&mut previous, &mut current);
-    }
-
-    previous[right.len()]
-}
-
-/// The closest existing section name when it is within a small edit-distance
-/// threshold, so a typo can be reported back with a suggestion.
-fn suggest_name(typed: &str, candidates: &[String]) -> Option<String> {
-    let typed = normalize_name(typed);
-    let threshold = std::cmp::max(2, typed.chars().count() / 3);
-    candidates
-        .iter()
-        .map(|candidate| {
-            let distance = levenshtein_distance(&typed, &normalize_name(candidate));
-            (distance, candidate)
-        })
-        .filter(|(distance, _)| *distance <= threshold)
-        .min_by_key(|(distance, _)| *distance)
-        .map(|(_, candidate)| candidate)
-        .cloned()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::suggest_name;
-
-    fn names(names: &[&str]) -> Vec<String> {
-        names.iter().map(|name| name.to_string()).collect()
-    }
-
-    #[test]
-    fn near_miss_suggests_closest_name() {
-        let candidates = names(&["Backlog", "In Progress", "Review"]);
-        assert_eq!(
-            suggest_name("Backlogg", &candidates),
-            Some("Backlog".to_string())
-        );
-    }
-
-    #[test]
-    fn far_off_name_has_no_suggestion() {
-        let candidates = names(&["Backlog", "In Progress", "Review"]);
-        assert_eq!(suggest_name("Completely Different", &candidates), None);
-    }
-
-    #[test]
-    fn suggestion_normalizes_case_and_whitespace() {
-        let candidates = names(&["In Progress"]);
-        assert_eq!(
-            suggest_name("  in progres ", &candidates),
-            Some("In Progress".to_string())
-        );
     }
 }

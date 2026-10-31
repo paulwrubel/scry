@@ -81,7 +81,7 @@ Sections are optional, ordered groupings within a project. A task has zero or on
 
 New sections append to the end of the project's section order. There is currently no way to reorder sections.
 
-Sections are created explicitly, either with `scry section add <name>` or with `--new-section <name>` when adding or updating a task. `--section <name>` must name an existing section; an unknown name fails with the closest match suggested. Section names are trimmed and case-insensitively unique per project. There is no default or entry section: new tasks go to No section unless a section is specified, and `--no-section` on `move` or `update` moves a task back to No section.
+Sections are created explicitly, either with `scry section add <name>` or with `--new-section <name>` when adding or updating a task. `--section <name>` must name an existing section, matched exactly: section names are neither trimmed nor case-folded, so two sections may differ only by case. There is no default or entry section: new tasks go to No section unless a section is specified, and `--no-section` on `move` or `update` moves a task back to No section.
 
 Sections carry no completion semantics: a section named "Done" does not close anything. Deleting a section moves its tasks to No section; merging two sections moves the source's tasks into the target and deletes the source. Empty sections are allowed.
 
@@ -146,7 +146,7 @@ Task and note arguments accept a full UUID or a unique short prefix of at least 
 
 `<level>` is one of `minimal`, `low`, `medium`, `high`, `critical` (aliases `p5`–`p1`).
 
-With `--include-closed`, `scry list` renders closed tasks in a trailing **Closed** group, marking completed tasks `[x]` and cancelled tasks `[~]`. Without it, closed tasks are hidden. An unknown `--section` name fails with a suggestion naming the closest existing section.
+With `--include-closed`, `scry list` renders closed tasks in a trailing **Closed** group, marking completed tasks `[x]` and cancelled tasks `[~]`. Without it, closed tasks are hidden. An unknown `--section` name fails.
 
 Tasks append when they are created or moved into a section. There is currently no command or REST field for placing a task at a particular position within its section.
 

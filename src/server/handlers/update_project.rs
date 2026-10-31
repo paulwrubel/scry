@@ -39,7 +39,7 @@ pub async fn update_project(
     Path(id): Path<ProjectId>,
     Json(body): Json<UpdateProjectRequest>,
 ) -> Response {
-    let existing = match state.service.get_project_by_id(id).await {
+    let existing = match state.service.get_project(id).await {
         Ok(Some(project)) => project,
         Ok(None) => {
             return AppError::Storage(StorageError::NotFound(format!("project {id} not found")))

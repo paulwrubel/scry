@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::server::ScryState;
+use crate::service::{ColorChange, UpdateSection};
 
 /// Request body for updating a section.
 #[derive(Deserialize)]
@@ -24,7 +25,14 @@ pub async fn update_section(
 ) -> Response {
     match state
         .service
-        .update_section_by_id(id, body.name, body.color)
+        .update_section(
+            id,
+            UpdateSection {
+                name: Some(body.name),
+                // PUT replaces the row, so an omitted color clears it.
+                color: body.color.map_or(ColorChange::Clear, ColorChange::Set),
+            },
+        )
         .await
     {
         Ok(section) => Json(section).into_response(),

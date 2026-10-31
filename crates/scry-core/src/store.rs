@@ -207,17 +207,6 @@ pub trait Store: Send + Sync {
     /// Performed atomically in a single transaction.
     async fn delete_section(&self, id: SectionId) -> Result<(), StorageError>;
 
-    /// Merge a source section into a target section, appending the source's tasks
-    /// to the end of the target in their current relative order before deleting
-    /// the source.
-    ///
-    /// Performed atomically in a single transaction.
-    async fn merge_sections(
-        &self,
-        source_id: SectionId,
-        target_id: SectionId,
-    ) -> Result<(), StorageError>;
-
     /// Create a new project. The description is optional freeform text.
     async fn create_project(
         &self,
