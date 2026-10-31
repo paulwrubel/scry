@@ -1,7 +1,7 @@
 use crate::backup::{ImportPlan, ImportReport};
 use crate::error::StorageError;
 use crate::models::{
-    Color, Note, NoteId, Priority, Project, ProjectId, Status, StatusId, StatusStyle, Tags, Task,
+    Color, Lifecycle, Note, NoteId, Priority, Project, ProjectId, Section, SectionId, Tags, Task,
     TaskId, TaskSortingMode,
 };
 use async_trait::async_trait;
@@ -13,33 +13,30 @@ pub struct TaskToCreate {
     pub title: String,
     pub description: Option<String>,
     pub priority: Priority,
-    pub status_id: i64,
+    pub section_id: Option<SectionId>,
     pub position: i32,
     pub tags: Tags,
 }
 
-impl From<&Task> for TaskToCreate {
-    fn from(value: &Task) -> Self {
-        Self {
-            project_id: value.project_id,
-            title: value.title.clone(),
-            description: value.description.clone(),
-            priority: value.priority,
-            status_id: value.status_id,
-            position: value.position,
-            tags: value.tags.clone(),
-        }
-    }
+/// The content fields of a task that can be edited in place.
+///
+/// Section, position, and lifecycle each have their own dedicated operations and
+/// are intentionally excluded from this payload.
+pub struct TaskContentUpdate {
+    pub title: String,
+    pub description: Option<String>,
+    pub priority: Priority,
+    pub tags: Tags,
 }
 
-/// A project together with all of its statuses, tasks, and notes.
+/// A project together with all of its sections, tasks, and notes.
 ///
 /// Backs the single-round-trip `GET /projects/{id}/snapshot` endpoint, and must
 /// serialize both ways so the server response can be deserialized into it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectSnapshot {
     pub project: Project,
-    pub statuses: Vec<Status>,
+    pub sections: Vec<Section>,
     pub tasks: Vec<Task>,
     pub notes: Vec<Note>,
 }
@@ -62,21 +59,41 @@ pub trait Store: Send + Sync {
         project_id: ProjectId,
     ) -> Result<Vec<Task>, StorageError>;
 
-    /// List tasks in a status
+    /// List tasks in a section, including closed tasks
     ///
     /// Results are ordered by position ascending, then task ID ascending.
-    async fn get_all_tasks_by_status_id(
+    async fn get_all_tasks_by_section_id(
         &self,
-        status_id: StatusId,
+        section_id: SectionId,
     ) -> Result<Vec<Task>, StorageError>;
 
-    /// Edit an existing task, writing the position of the Task to the DB exactly
-    async fn update_task(&self, task: Task) -> Result<Task, StorageError>;
-
-    /// Edit an existing task, auto-updating the position to by the maximum+1 of the new target status, if changed.
+    /// Edit an existing task's content fields only.
     ///
-    /// Callers generally should lean on calling this method instead of the generic update when in doubt.
-    async fn update_and_autoposition_task(&self, task: Task) -> Result<Task, StorageError>;
+    /// Returns the updated task, or `StorageError::NotFound` when the task does
+    /// not exist.
+    async fn update_task(
+        &self,
+        id: TaskId,
+        task_content_update: TaskContentUpdate,
+    ) -> Result<Task, StorageError>;
+
+    /// Move a task to a section and position, writing both in a single statement.
+    async fn move_task(
+        &self,
+        id: TaskId,
+        section_id: Option<SectionId>,
+        position: i32,
+    ) -> Result<Task, StorageError>;
+
+    /// Set a task's lifecycle, writing `closed_at` and `close_reason` together in
+    /// a single statement.
+    async fn set_lifecycle(&self, id: TaskId, lifecycle: Lifecycle) -> Result<Task, StorageError>;
+
+    /// Duplicate a task as an open copy in the same section, inserting it
+    /// immediately after the source by shifting later tasks in that group up by one.
+    ///
+    /// Performed in a single transaction.
+    async fn duplicate_task(&self, id: TaskId) -> Result<Task, StorageError>;
 
     /// Delete a task
     async fn delete_task(&self, id: TaskId) -> Result<(), StorageError>;
@@ -110,55 +127,75 @@ pub trait Store: Send + Sync {
     #[allow(dead_code)]
     async fn delete_note(&self, id: NoteId) -> Result<(), StorageError>;
 
-    async fn create_status(
+    async fn create_section(
         &self,
         project_id: ProjectId,
         name: String,
         position: i32,
         color: Option<Color>,
-        style: StatusStyle,
-    ) -> Result<Status, StorageError>;
+    ) -> Result<Section, StorageError>;
 
-    async fn get_status_by_id(&self, id: StatusId) -> Result<Option<Status>, StorageError>;
+    async fn get_section_by_id(&self, id: SectionId) -> Result<Option<Section>, StorageError>;
 
-    async fn get_status_by_project_id_and_status_name(
+    /// Look up a section by name within a project, ignoring case and surrounding
+    /// whitespace.
+    async fn get_section_by_name(
         &self,
         project_id: ProjectId,
-        status_name: String,
-    ) -> Result<Option<Status>, StorageError>;
+        name: &str,
+    ) -> Result<Option<Section>, StorageError>;
 
-    async fn get_all_statuses_by_project_id(
+    /// List all sections in a project
+    ///
+    /// Results are ordered by position ascending, then section ID ascending.
+    async fn get_all_sections_by_project_id(
         &self,
         project_id: ProjectId,
-    ) -> Result<Vec<Status>, StorageError>;
+    ) -> Result<Vec<Section>, StorageError>;
 
-    async fn update_status(&self, status: Status) -> Result<Status, StorageError>;
+    /// Edit an existing section, writing its name and color.
+    async fn update_section(&self, section: Section) -> Result<Section, StorageError>;
 
-    /// Move a status to a new position (0-based) within its project.
-    /// Other statuses are shifted to accommodate the new position.
-    /// The new position is clamped to [0, number of statuses - 1].
-    async fn reorder_status(
+    /// Move a section to a new position (0-based) within its project.
+    /// Other sections are shifted to accommodate the new position.
+    /// The new position is clamped to the existing section count, and sections
+    /// are assigned consecutive positions in list order.
+    async fn reorder_section(
         &self,
         project_id: ProjectId,
-        status_id: StatusId,
+        section_id: SectionId,
         new_position: i32,
     ) -> Result<(), StorageError>;
 
-    async fn delete_status(&self, id: StatusId) -> Result<(), StorageError>;
+    /// Delete a section, moving its tasks to the end of the No section group in
+    /// their current relative order.
+    ///
+    /// Performed atomically in a single transaction.
+    async fn delete_section(&self, id: SectionId) -> Result<(), StorageError>;
+
+    /// Merge a source section into a target section, appending the source's tasks
+    /// to the end of the target in their current relative order before deleting
+    /// the source.
+    ///
+    /// Performed atomically in a single transaction.
+    async fn merge_sections(
+        &self,
+        source_id: SectionId,
+        target_id: SectionId,
+    ) -> Result<(), StorageError>;
 
     /// Create a new project. The description is optional freeform text.
     async fn create_project(
         &self,
         name: String,
         description: Option<String>,
-        entry_status_id: Option<StatusId>,
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
     ) -> Result<Project, StorageError>;
 
     async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, StorageError>;
 
-    /// Load a project with all of its statuses, tasks, and notes in one call.
+    /// Load a project with all of its sections, tasks, and notes in one call.
     ///
     /// Returns `StorageError::NotFound` when the project does not exist.
     async fn get_project_snapshot(
@@ -174,12 +211,12 @@ pub trait Store: Send + Sync {
 
     async fn update_project(&self, project: Project) -> Result<Project, StorageError>;
 
-    async fn delete_project(&self, name: String) -> Result<(), StorageError>;
+    async fn delete_project_by_id(&self, id: ProjectId) -> Result<(), StorageError>;
 
     /// Apply an import plan atomically.
     ///
     /// In `Replace` mode the existing projects listed in `plan.project_ids_to_delete`
-    /// are removed (along with their statuses, tasks, and notes) before the plan's
+    /// are removed (along with their sections, tasks, and notes) before the plan's
     /// projects are inserted; in `Skip` and `Fail` mode no existing data is
     /// removed. Rows are inserted with the ids and timestamps carried by the plan,
     /// so callers must resolve id collisions beforehand (see

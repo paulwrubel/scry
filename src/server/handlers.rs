@@ -7,14 +7,17 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 
+mod close_task;
+pub use close_task::close_task;
+
 mod create_note;
 pub use create_note::create_note;
 
 mod create_project;
 pub use create_project::create_project;
 
-mod create_status;
-pub use create_status::create_status;
+mod create_section;
+pub use create_section::create_section;
 
 mod create_task;
 pub use create_task::create_task;
@@ -22,14 +25,11 @@ pub use create_task::create_task;
 mod delete_note;
 pub use delete_note::delete_note;
 
-mod delete_project;
-pub use delete_project::delete_project;
-
 mod delete_project_by_id;
 pub use delete_project_by_id::delete_project_by_id;
 
-mod delete_status;
-pub use delete_status::delete_status;
+mod delete_section;
+pub use delete_section::delete_section;
 
 mod delete_task;
 pub use delete_task::delete_task;
@@ -55,14 +55,14 @@ pub use get_project_snapshot::get_project_snapshot;
 mod get_projects;
 pub use get_projects::get_projects;
 
-mod get_status;
-pub use get_status::get_status;
+mod get_section;
+pub use get_section::get_section;
 
-mod get_status_by_name;
-pub use get_status_by_name::get_status_by_name;
+mod get_section_by_name;
+pub use get_section_by_name::get_section_by_name;
 
-mod get_statuses;
-pub use get_statuses::get_statuses;
+mod get_sections;
+pub use get_sections::get_sections;
 
 mod get_task;
 pub use get_task::get_task;
@@ -70,17 +70,23 @@ pub use get_task::get_task;
 mod get_tasks_by_project;
 pub use get_tasks_by_project::get_tasks_by_project;
 
-mod get_tasks_by_status;
-pub use get_tasks_by_status::get_tasks_by_status;
+mod get_tasks_by_section;
+pub use get_tasks_by_section::get_tasks_by_section;
 
 mod import;
 pub use import::import;
 
-mod move_status;
-pub use move_status::move_status;
+mod merge_section;
+pub use merge_section::merge_section;
+
+mod move_section;
+pub use move_section::move_section;
 
 mod move_task;
 pub use move_task::move_task;
+
+mod open_task;
+pub use open_task::open_task;
 
 mod update_note;
 pub use update_note::update_note;
@@ -88,8 +94,8 @@ pub use update_note::update_note;
 mod update_project;
 pub use update_project::update_project;
 
-mod update_status;
-pub use update_status::update_status;
+mod update_section;
+pub use update_section::update_section;
 
 mod update_task;
 pub use update_task::update_task;

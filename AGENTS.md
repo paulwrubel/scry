@@ -10,7 +10,7 @@
 
 ## sqlx compile-time database (the #1 gotcha)
 
-All SQL lives in `sqlx::query!`/`query_as!` macros in `src/postgres.rs`, and is resolved at compile time against the committed offline cache in `.sqlx/`.
+All SQL lives in `sqlx::query!`/`query_as!` macros in `src/store/postgres.rs`, and is resolved at compile time against the committed offline cache in `.sqlx/`.
 
 - `.env` (committed) sets only `SQLX_OFFLINE=true`. sqlx reads `.env` at compile time, so ordinary `cargo build`/`check`/`test`/`clippy` resolve queries from `.sqlx/` and do **not** need a live database. A fresh clone therefore compiles without any database.
 - Regenerating the cache is what needs a database. `just run-postgres` starts the dev Postgres and applies the migrations, and `just sqlx-prepare` runs `sqlx-prepare-postgres`, which brings up the dev Postgres (`pg-up`), prepares against it, and tears it down.
@@ -20,18 +20,18 @@ All SQL lives in `sqlx::query!`/`query_as!` macros in `src/postgres.rs`, and is 
 
 ## Migrations
 
-- `migrations/` holds the migrations. They are reversible sqlx pairs (`<ts>_<name>.up.sql` / `.down.sql`) matching `sqlx migrate add -r <name>` output. Add new migrations that way, filling in both files.
-- Migrations are embedded (`sqlx::migrate!("./migrations")` in `src/postgres.rs`) and auto-run on **every app startup**. Existing user databases upgrade in place, so new migrations must be additive/backward-compatible.
+- `migrations/` holds one fresh reversible pair, `20261031164943_init.up.sql` / `.down.sql`, which creates the sections/lifecycle schema from scratch. There is no legacy migration path and no data migration from the pre-refactor schema; a pre-refactor database must be recreated or restored from a version 2 backup. Add future migrations with `sqlx migrate add -r <name>`, filling in both files.
+- Migrations are embedded (`sqlx::migrate!("./migrations")` in `src/store/postgres.rs`) and auto-run on **every app startup**. Existing user databases upgrade in place, so new migrations must be additive/backward-compatible.
 - The root crate has a `build.rs` that reruns when `migrations/` changes, so new migrations trigger a rebuild automatically.
 
 ## Architecture
 
 - `src/main.rs` — clap command definitions, one-shot handlers, and backend dispatch (`connect_store`); with no subcommand it prints the top-level help.
-- `src/service.rs` — `ProjectService` owns the store and is the only write path. Every mutation (CLI, REST handlers, import) goes through it; reads may use `Store` directly. The REST `ScryState` holds a `store` for reads and a `service` for writes.
-- `crates/scry-core/src/store.rs` — `Store` async trait declaring every DB operation. One implementor: `PostgresStore` (`src/postgres.rs`). All `query!` calls live there. Add new persistence via the trait plus the implementor.
-- `crates/scry-core/src/models.rs` — domain types (`Task`, `Project`, `Status`, `Priority`, …) and ID aliases. `crates/scry-core/src/backup.rs` defines the JSON backup/import format. `src/service.rs` holds business logic (`ProjectService`), `src/config.rs` handles config and DB URL resolution, and `src/skill.rs` implements the embedded Agent Skill command.
+- `src/service.rs` — `ProjectService` owns the store and is the only write path. It is the operations layer: it resolves section names to ids (failing with a closest-match suggestion), creates sections only when explicitly asked (`--new-section` or `section add`), computes integer task positions, stamps `closed_at` on close and clears the lifecycle on open, and enforces task and section invariants before delegating raw writes to `Store`. Every mutation (CLI, REST handlers, import) goes through it; reads may use `Store` directly. The REST `ScryState` holds the service.
+- `crates/scry-core/src/store.rs` — `Store` async trait declaring every DB operation. One implementor: `PostgresStore` (`src/store/postgres.rs`). All `query!` calls live there. It covers task CRUD plus `move_task` (section and position atomically), `set_lifecycle`, and `duplicate_task`; section CRUD plus `delete_section` (tasks fall back to No section) and `merge_sections` (source tasks move to the target); note and project CRUD; snapshots; and import. Add new persistence via the trait plus the implementor.
+- `crates/scry-core/src/models.rs` — domain types (`Task`, `Project`, `Section`, `Lifecycle`, `CloseReason`, `Priority`, …) and ID aliases. A task has a nullable `section_id`, an integer `position`, and a `lifecycle` of `Open` or `Closed { closed_at, reason }`. `crates/scry-core/src/backup.rs` defines the JSON backup/import format; it is version 2, with no v1 upgrade support, and import rejects every other version. `src/config.rs` handles config and DB URL resolution, and `src/skill.rs` implements the embedded Agent Skill command.
 - Row->model mapping is hand-rolled per query via the `*_from_fields` helpers in the store. Enums are stored as their `Display`/string names (or numeric for `Priority`) — route all conversions through these helpers rather than deserializing directly.
-- `src/state.rs` — shared read/query model used by `scry list`/`scry show`: `ProjectState` groups a project snapshot into statuses with tasks and notes, applies the project's sorting mode, and supports substring filtering. It has no UI dependencies.
+- `src/state.rs` — shared read/query model used by `scry list`/`scry show`: `ProjectState` groups a project snapshot into ordered section groups plus a trailing `No section` group, keeps closed tasks in a separate collection (rendered only by `--include-closed`), applies the project's sorting mode, and supports substring filtering. It has no UI dependencies.
 - The Postgres pool uses sqlx defaults, so concurrent writers are possible.
 
 ## Release process

@@ -1466,6 +1466,7 @@ dependencies = [
  "itertools",
  "num_enum",
  "serde",
+ "serde_json",
  "strum",
 ]
 

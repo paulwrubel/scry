@@ -6,12 +6,12 @@
 
 use scry_core::error::StorageError;
 use scry_core::models::Project;
-use scry_core::store::Store;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::config::ScryConfig;
 use crate::error::AppError;
+use crate::service::ProjectService;
 
 /// TOML file holding the client-local active project.
 const STATE_FILE: &str = "state.toml";
@@ -114,17 +114,20 @@ fn default_state_path() -> PathBuf {
 
 /// Resolve the active project: the state file's project when it still exists,
 /// otherwise the project named `default`. Errors when neither is present.
-pub async fn active_project(store: &dyn Store, config: &ScryConfig) -> Result<Project, AppError> {
+pub async fn active_project(
+    service: &ProjectService,
+    config: &ScryConfig,
+) -> Result<Project, AppError> {
     let state = ClientState::load(config)?;
 
     if let Some(name) = &state.active_project
-        && let Some(project) = store.get_project_by_name(name).await?
+        && let Some(project) = service.find_project_by_name(name).await?
     {
         return Ok(project);
     }
 
-    store
-        .get_project_by_name("default")
+    service
+        .find_project_by_name("default")
         .await?
         .ok_or_else(|| {
             AppError::Usage(
@@ -136,11 +139,11 @@ pub async fn active_project(store: &dyn Store, config: &ScryConfig) -> Result<Pr
 
 /// Make `name` the active project, verifying it exists first.
 pub async fn set_active_project(
-    store: &dyn Store,
+    service: &ProjectService,
     config: &ScryConfig,
     name: &str,
 ) -> Result<Project, AppError> {
-    let project = store.get_project_by_name(name).await?.ok_or_else(|| {
+    let project = service.find_project_by_name(name).await?.ok_or_else(|| {
         AppError::Storage(StorageError::NotFound(format!(
             "project '{}' not found",
             name

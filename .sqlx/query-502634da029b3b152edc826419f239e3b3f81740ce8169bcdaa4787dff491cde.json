@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE sections\n                SET position = data.position\n                FROM unnest($1::BIGINT[], $2::INTEGER[]) AS data(id, position)\n                WHERE sections.id = data.id\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "502634da029b3b152edc826419f239e3b3f81740ce8169bcdaa4787dff491cde"
+}

@@ -3,7 +3,7 @@
 use axum::Json;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
-use scry_core::models::{StatusId, TaskSortingMode};
+use scry_core::models::TaskSortingMode;
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -14,7 +14,6 @@ use crate::server::ScryState;
 pub struct CreateProjectRequest {
     pub name: String,
     pub description: Option<String>,
-    pub entry_status_id: Option<StatusId>,
     pub task_sorting_mode: Option<TaskSortingMode>,
     pub show_priority: Option<bool>,
 }
@@ -29,7 +28,6 @@ pub async fn create_project(
         .create_project_with(
             body.name,
             body.description,
-            body.entry_status_id,
             body.task_sorting_mode.unwrap_or_default(),
             body.show_priority.unwrap_or_default(),
         )

@@ -56,11 +56,19 @@ impl From<ServiceError> for AppError {
 
 #[derive(Debug, Clone)]
 pub enum ServiceError {
-    StatusNotFound { status: String, project: String },
-    TaskNotFound { task_id: TaskId, project: String },
-    StatusNotEmpty { status: String, count: usize },
-    StatusNameTaken { status: String },
-    ProjectHasNoStatuses,
+    SectionNotFound {
+        section: String,
+        project: String,
+        suggestion: Option<String>,
+    },
+    TaskNotFound {
+        task_id: TaskId,
+        project: String,
+    },
+    SectionNameTaken {
+        section: String,
+    },
+    SectionNameRequired,
     TitleRequired,
 
     Storage(StorageError),
@@ -75,20 +83,24 @@ impl From<StorageError> for ServiceError {
 impl fmt::Display for ServiceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::StatusNotFound { status, project } => {
-                write!(f, "Status \"{status}\" not found in \"{project}\"")
+            Self::SectionNotFound {
+                section,
+                project,
+                suggestion,
+            } => {
+                write!(f, "Section \"{section}\" not found in \"{project}\".")?;
+                if let Some(suggestion) = suggestion {
+                    write!(f, " Did you mean \"{suggestion}\"?")?;
+                }
+                Ok(())
             }
             Self::TaskNotFound { task_id, project } => {
                 write!(f, "Task {task_id} not found in \"{project}\"")
             }
-            Self::StatusNotEmpty { status, count } => write!(
-                f,
-                "Cannot delete status with active tasks. Status \"{status}\" contains {count} tasks"
-            ),
-            Self::StatusNameTaken { status } => {
-                write!(f, "Status \"{status}\" already exists in project")
+            Self::SectionNameTaken { section } => {
+                write!(f, "Section \"{section}\" already exists in this project.")
             }
-            Self::ProjectHasNoStatuses => write!(f, "Project has no statuses"),
+            Self::SectionNameRequired => write!(f, "A section name is required"),
             Self::TitleRequired => write!(f, "A task title is required"),
             Self::Storage(error) => write!(f, "{error}"),
         }
@@ -100,9 +112,9 @@ impl std::error::Error for ServiceError {}
 impl ServiceError {
     fn kind(&self) -> &'static str {
         match self {
-            Self::StatusNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
-            Self::StatusNotEmpty { .. } | Self::StatusNameTaken { .. } => "conflict",
-            Self::ProjectHasNoStatuses | Self::TitleRequired => "invalid",
+            Self::SectionNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
+            Self::SectionNameTaken { .. } => "conflict",
+            Self::SectionNameRequired | Self::TitleRequired => "invalid",
             Self::Storage(error) => error.kind(),
         }
     }
