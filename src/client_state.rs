@@ -121,13 +121,13 @@ pub async fn active_project(
     let state = ClientState::load(config)?;
 
     if let Some(name) = &state.active_project
-        && let Some(project) = service.find_project_by_name(name).await?
+        && let Some(project) = service.get_project_by_name(name).await?
     {
         return Ok(project);
     }
 
     service
-        .find_project_by_name("default")
+        .get_project_by_name("default")
         .await?
         .ok_or_else(|| {
             AppError::Usage(
@@ -143,7 +143,7 @@ pub async fn set_active_project(
     config: &ScryConfig,
     name: &str,
 ) -> Result<Project, AppError> {
-    let project = service.find_project_by_name(name).await?.ok_or_else(|| {
+    let project = service.get_project_by_name(name).await?.ok_or_else(|| {
         AppError::Storage(StorageError::NotFound(format!(
             "project '{}' not found",
             name

@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::server::ScryState;
+use crate::service::ProjectSetup;
 
 /// Request body for creating a project; omitted fields fall back to defaults.
 #[derive(Deserialize)]
@@ -25,11 +26,13 @@ pub async fn create_project(
 ) -> Response {
     match state
         .service
-        .create_project_with(
+        .create_project(
             body.name,
             body.description,
-            body.task_sorting_mode.unwrap_or_default(),
-            body.show_priority.unwrap_or_default(),
+            ProjectSetup::Explicit {
+                task_sorting_mode: body.task_sorting_mode.unwrap_or_default(),
+                show_priority: body.show_priority.unwrap_or_default(),
+            },
         )
         .await
     {
