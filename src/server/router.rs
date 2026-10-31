@@ -7,7 +7,6 @@ use axum::Router;
 use axum::http::{Method, header};
 use axum::routing::{get, post};
 use axum::serve;
-use scry_core::store::ArcStore;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -34,7 +33,7 @@ fn build_api_router() -> Router<ScryState> {
         .route("/", get(handlers::index))
         .route("/import", post(handlers::import))
         .nest("/projects", build_projects_router())
-        .nest("/statuses", build_statuses_router())
+        .nest("/sections", build_sections_router())
         .nest("/tasks", build_tasks_router())
         .nest("/notes", build_notes_router())
 }
@@ -46,10 +45,7 @@ fn build_projects_router() -> Router<ScryState> {
             "/",
             get(handlers::get_projects).post(handlers::create_project),
         )
-        .route(
-            "/by-name/{name}",
-            get(handlers::get_project_by_name).delete(handlers::delete_project),
-        )
+        .route("/by-name/{name}", get(handlers::get_project_by_name))
         .route(
             "/{id}",
             get(handlers::get_project)
@@ -57,8 +53,12 @@ fn build_projects_router() -> Router<ScryState> {
                 .delete(handlers::delete_project_by_id),
         )
         .route(
-            "/{project_id}/statuses",
-            get(handlers::get_statuses).post(handlers::create_status),
+            "/{project_id}/sections",
+            get(handlers::get_sections).post(handlers::create_section),
+        )
+        .route(
+            "/{project_id}/sections/by-name/{name}",
+            get(handlers::get_section_by_name),
         )
         .route(
             "/{project_id}/tasks",
@@ -69,23 +69,20 @@ fn build_projects_router() -> Router<ScryState> {
             "/{project_id}/snapshot",
             get(handlers::get_project_snapshot),
         )
-        .route(
-            "/{project_id}/statuses/by-name/{name}",
-            get(handlers::get_status_by_name),
-        )
 }
 
-/// Routes nested under `/statuses`.
-fn build_statuses_router() -> Router<ScryState> {
+/// Routes nested under `/sections`.
+fn build_sections_router() -> Router<ScryState> {
     Router::new()
         .route(
             "/{id}",
-            get(handlers::get_status)
-                .put(handlers::update_status)
-                .delete(handlers::delete_status),
+            get(handlers::get_section)
+                .put(handlers::update_section)
+                .delete(handlers::delete_section),
         )
-        .route("/{id}/move", post(handlers::move_status))
-        .route("/{id}/tasks", get(handlers::get_tasks_by_status))
+        .route("/{id}/move", post(handlers::move_section))
+        .route("/{id}/merge", post(handlers::merge_section))
+        .route("/{id}/tasks", get(handlers::get_tasks_by_section))
 }
 
 /// Routes nested under `/tasks`.
@@ -98,6 +95,8 @@ fn build_tasks_router() -> Router<ScryState> {
                 .delete(handlers::delete_task),
         )
         .route("/{id}/move", post(handlers::move_task))
+        .route("/{id}/close", post(handlers::close_task))
+        .route("/{id}/open", post(handlers::open_task))
         .route(
             "/{id}/notes",
             get(handlers::get_notes_by_task).post(handlers::create_note),
@@ -126,7 +125,7 @@ pub fn build_router(state: ScryState, token: Option<String>) -> Router {
 
 /// Serve the REST API over HTTP on `addr`.
 pub async fn serve_http(
-    store: ArcStore,
+    service: ProjectService,
     addr: &str,
     token: Option<String>,
 ) -> Result<(), AppError> {
@@ -134,7 +133,6 @@ pub async fn serve_http(
         .parse()
         .map_err(|error| AppError::Usage(format!("invalid address '{addr}': {error}")))?;
 
-    let service = ProjectService::new(store);
     let state = ScryState { service };
     let router = build_router(state, token);
 

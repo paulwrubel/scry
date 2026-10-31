@@ -4,27 +4,26 @@ mod config;
 mod docs;
 mod error;
 mod http_auth;
-mod postgres;
 mod server;
 mod service;
 mod skill;
 mod state;
+mod store;
 
 use crate::color::ColorChoice;
-use crate::postgres::PostgresStore;
-use crate::service::{EntryStatusUpdate, ProjectService, ProjectUpdate, TaskInput};
+use crate::service::{ProjectService, ProjectUpdate, SectionInput, TaskInput};
 use crate::skill::Harness;
-use crate::state::{DATETIME_FORMAT_STR, ProjectState};
+use crate::state::{DATETIME_FORMAT_STR, ProjectState, TaskWithNotes};
+use crate::store::{ArcStore, PostgresStore};
 use chrono::Local;
 use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::{AppError, ServiceError};
-use scry_core::backup::{self, BACKUP_VERSION, Backup, ImportMode};
+use scry_core::backup::{self, ImportMode};
 use scry_core::models::{
-    Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, StatusStyle, Tags, Task,
-    TaskSortingMode,
+    CloseReason, Color, Lifecycle, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Section,
+    Tags, Task, TaskSortingMode,
 };
-use scry_core::store::ArcStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -70,16 +69,22 @@ enum Command {
         /// Comma-separated tags
         #[arg(long)]
         tags: Option<String>,
-        /// The target status (defaults to the project entry status, otherwise the first status)
-        #[arg(long)]
-        status: Option<String>,
+        /// Place the task in an existing section
+        #[arg(long, conflicts_with = "new_section")]
+        section: Option<String>,
+        /// Create a new section for the task
+        #[arg(long, conflicts_with = "section")]
+        new_section: Option<String>,
     },
-    /// Move a task to a new status (alias for update --status)
+    /// Move a task to a section
     Move {
         /// The task ID
         id: i64,
-        /// The target status
-        status: String,
+        /// The target section
+        section: Option<String>,
+        /// Move the task to No section
+        #[arg(long, conflicts_with = "section")]
+        no_section: bool,
     },
     /// Update task properties
     Update {
@@ -97,9 +102,15 @@ enum Command {
         /// Comma-separated tags (empty string clears them)
         #[arg(long)]
         tags: Option<String>,
-        /// Move the task to a new status
-        #[arg(long)]
-        status: Option<String>,
+        /// Move the task to an existing section
+        #[arg(long, conflicts_with_all = ["new_section", "no_section"])]
+        section: Option<String>,
+        /// Move the task to a new section
+        #[arg(long, conflicts_with_all = ["section", "no_section"])]
+        new_section: Option<String>,
+        /// Move the task to No section
+        #[arg(long, conflicts_with_all = ["section", "new_section"])]
+        no_section: bool,
     },
     /// Duplicate an existing task
     Duplicate {
@@ -111,6 +122,19 @@ enum Command {
         /// The task ID
         id: i64,
     },
+    /// Close a task with a reason
+    Close {
+        /// The task ID
+        id: i64,
+        /// The reason for closing
+        #[arg(long)]
+        reason: CloseReason,
+    },
+    /// Open a closed task
+    Open {
+        /// The task ID
+        id: i64,
+    },
     /// Show full details for a task
     Show {
         /// The task ID
@@ -118,12 +142,15 @@ enum Command {
     },
     /// List tasks in the active project
     List {
-        /// Show only tasks in a specific status
+        /// Show only tasks in a specific section
         #[arg(long)]
-        status: Option<String>,
+        section: Option<String>,
         /// Case-insensitive substring filter over task titles and tags
         #[arg(long)]
         search: Option<String>,
+        /// Include closed tasks after the open sections
+        #[arg(long)]
+        include_closed: bool,
     },
     /// Manage notes on a task
     #[command(subcommand)]
@@ -142,6 +169,9 @@ enum Command {
     /// Manage projects
     #[command(subcommand)]
     Project(ProjectCommand),
+    /// Manage sections in the active or -p project
+    #[command(subcommand)]
+    Section(SectionCommand),
     /// Print the bundled documentation (the README) to stdout
     Docs,
     /// Manage the agent skill that teaches coding agents to drive scry
@@ -201,12 +231,6 @@ enum ProjectCommand {
         /// New description (empty string clears it)
         #[arg(long)]
         description: Option<String>,
-        /// Set the entry status new tasks default to
-        #[arg(long, conflicts_with = "clear_entry_status")]
-        entry_status: Option<String>,
-        /// Clear the entry status so new tasks use the first status
-        #[arg(long, conflicts_with = "entry_status")]
-        clear_entry_status: bool,
         /// Set the task sorting mode
         #[arg(long)]
         sort: Option<TaskSortingMode>,
@@ -225,59 +249,59 @@ enum ProjectCommand {
         #[arg(short, long)]
         force: bool,
     },
-    /// Manage statuses within a project
-    #[command(subcommand)]
-    Status(StatusCommand),
 }
 
 #[derive(Subcommand)]
-enum StatusCommand {
-    /// List statuses for a project
+enum SectionCommand {
+    /// List sections for a project
     List,
-    /// Add a new status
+    /// Add a new section
     Add {
-        /// The status name
+        /// The section name
         name: String,
+        /// The section color
+        #[arg(long)]
+        color: Option<Color>,
     },
-    /// Remove a status from a project. Requires the status have no assigned tasks.
+    /// Remove a section, moving its tasks to No section
     Remove {
-        /// The status name
+        /// The section name
         name: String,
     },
-    /// Rename a status
+    /// Rename a section
     Rename {
-        /// The current status name
+        /// The current section name
         old_name: String,
-        /// The new status name
+        /// The new section name
         new_name: String,
     },
-    /// Move a status up in the ordering for the project
+    /// Merge a section into another section
+    Merge {
+        /// The section to merge from
+        source: String,
+        /// The section to merge into
+        target: String,
+    },
+    /// Move a section up in the ordering for the project
     MoveUp {
-        /// The status name
+        /// The section name
         name: String,
     },
-    /// Move a status down in the ordering for the project
+    /// Move a section down in the ordering for the project
     MoveDown {
-        /// The status name
+        /// The section name
         name: String,
     },
-    /// Set the style for a status
-    SetStyle {
-        /// The status name
-        name: String,
-        /// The style to apply
-        style: StatusStyle,
-    },
-    /// Set the color for a status
+    /// Set the color for a section
     SetColor {
-        /// The status name
+        /// The section name
         name: String,
         /// The color to apply
         color: Color,
     },
-    /// Reset the color for a status
+    /// Reset the color for a section
     ResetColor {
-        /// The status name
+        /// The section name
         name: String,
     },
 }
@@ -398,12 +422,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let secrets = ScrySecrets::load(cli.secrets.as_deref())?;
     let database_url = secrets.resolved_database_url(&config)?;
     let store = connect_store(&database_url).await?;
+    let service = ProjectService::new(store);
 
     if let Some(Command::Serve { http }) = &cli.command {
-        return server::serve_http(store, http, secrets.api_token()).await;
+        return server::serve_http(service, http, secrets.api_token()).await;
     }
-
-    let service = ProjectService::new(store.clone());
 
     // These commands create, list, select, or remove projects, or move data in
     // and out; none of them needs an active project, so they run even when the
@@ -411,13 +434,13 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     if let Some(Command::Project(subcommand)) = cli.command.as_ref() {
         match subcommand {
             ProjectCommand::List => {
-                let projects = store.get_all_projects().await?;
+                let projects = service.list_projects().await?;
                 if output_json {
                     print_json(&projects)?;
                 } else if projects.is_empty() {
                     eprintln!("No projects. Run 'scry project create <name>' to create one.");
                 } else {
-                    let active_id = client_state::active_project(store.as_ref(), &config)
+                    let active_id = client_state::active_project(&service, &config)
                         .await
                         .ok()
                         .map(|project| project.id);
@@ -430,7 +453,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             }
             ProjectCommand::Show { name } => {
                 let project = resolve_project(
-                    store.clone(),
+                    &service,
                     &config,
                     name.as_deref().or(cli.project.as_deref()),
                 )
@@ -438,12 +461,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 if output_json {
                     print_json(&project)?;
                 } else {
-                    let statuses = store.get_all_statuses_by_project_id(project.id).await?;
-                    let entry_status_name = project
-                        .entry_status_id
-                        .and_then(|id| statuses.iter().find(|status| status.id == id))
-                        .map(|status| status.name.as_str())
-                        .unwrap_or("(first status)");
                     println!("{}", project.name);
                     if let Some(description) = &project.description {
                         for line in description.lines() {
@@ -451,7 +468,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         }
                     }
                     println!();
-                    println!("Entry status: {}", entry_status_name);
                     println!("Sort mode:    {}", project.task_sorting_mode);
                     println!(
                         "Priority:     {}",
@@ -501,7 +517,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     println!("Created project \"{}\"", project.name);
                     if template.is_none() {
                         println!(
-                            "Note: this project has no statuses yet. Add one with 'scry project status add <name>'."
+                            "Note: sections are optional. Add one with 'scry section add <name>'."
                         );
                     }
                     println!(
@@ -512,8 +528,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 return Ok(());
             }
             ProjectCommand::Use { name } => {
-                let active =
-                    client_state::set_active_project(store.as_ref(), &config, name).await?;
+                let active = client_state::set_active_project(&service, &config, name).await?;
                 if output_json {
                     print_json(&active)?;
                 } else {
@@ -522,6 +537,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 return Ok(());
             }
             ProjectCommand::Delete { name, force } => {
+                let project = service
+                    .find_project_by_name(name)
+                    .await?
+                    .ok_or_else(|| AppError::Usage(format!("project '{name}' not found")))?;
                 if !force && !output_json {
                     use std::io::Write;
                     print!("Delete project \"{}\" and all its tasks? [y/N]: ", name);
@@ -533,13 +552,12 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         return Ok(());
                     }
                 }
-                let removed = service.delete_project(name).await?;
+                let removed = service.delete_project_by_id(project.id).await?;
                 if output_json {
                     print_json(&removed)?;
                 } else {
                     println!("Deleted project \"{}\"", name);
-                    if let Ok(new_active) =
-                        client_state::active_project(store.as_ref(), &config).await
+                    if let Ok(new_active) = client_state::active_project(&service, &config).await
                         && new_active.name != *name
                     {
                         println!("Using project \"{}\"", new_active.name);
@@ -554,8 +572,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     if let Some(Command::Export) = cli.command.as_ref() {
         let export_project_id = match cli.project.as_deref() {
             Some(name) => Some(
-                store
-                    .get_project_by_name(name)
+                service
+                    .find_project_by_name(name)
                     .await?
                     .ok_or_else(|| AppError::Usage(format!("project '{name}' not found")))?
                     .id,
@@ -563,7 +581,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             None => None,
         };
 
-        let mut backup = backup::export(store.as_ref(), export_project_id).await?;
+        let mut backup = service.export(export_project_id).await?;
         backup.app_version = env!("CARGO_PKG_VERSION").to_string();
         let json = serde_json::to_string_pretty(&backup)
             .map_err(|e| AppError::Internal(format!("failed to serialize JSON: {e}")))?;
@@ -583,15 +601,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             .read_to_string(&mut input)
             .map_err(|e| AppError::Internal(format!("failed to read stdin: {e}")))?;
 
-        let backup: Backup = serde_json::from_str(&input)
-            .map_err(|e| AppError::Usage(format!("invalid backup JSON: {e}")))?;
-
-        if backup.version != BACKUP_VERSION {
-            return Err(AppError::Usage(format!(
-                "unsupported backup version {}; this build supports version {BACKUP_VERSION}",
-                backup.version
-            )));
-        }
+        let backup = backup::parse(&input).map_err(|error| AppError::Usage(error.to_string()))?;
 
         let mode = if *replace_existing_projects {
             ImportMode::Replace
@@ -601,27 +611,27 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             ImportMode::Fail
         };
 
-        let plan = backup::plan_import(store.as_ref(), &backup, mode).await?;
+        let plan = service.plan_import(&backup, mode).await?;
         let report = service.import(plan).await?;
 
         if output_json {
             let document = serde_json::json!({
                 "projects": report.projects,
-                "statuses": report.statuses,
+                "sections": report.sections,
                 "tasks": report.tasks,
                 "notes": report.notes,
             });
             print_json(&document)?;
         } else {
             println!(
-                "Imported {} project(s), {} status(es), {} task(s), {} note(s)",
-                report.projects, report.statuses, report.tasks, report.notes
+                "Imported {} project(s), {} section(s), {} task(s), {} note(s)",
+                report.projects, report.sections, report.tasks, report.notes
             );
         }
         return Ok(());
     }
 
-    let project = resolve_project(store.clone(), &config, cli.project.as_deref()).await?;
+    let project = resolve_project(&service, &config, cli.project.as_deref()).await?;
 
     let command = cli.command.expect("no subcommand is handled above");
 
@@ -631,18 +641,17 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             description,
             priority,
             tags,
-            status,
+            section,
+            new_section,
         } => {
-            let status_id = match status {
-                Some(name) => Some(service.get_status_by_name(&project, &name).await?.id),
-                None => None,
-            };
+            let section =
+                resolve_section_input(&service, &project, section, new_section, false).await?;
             let new_task = TaskInput {
                 title: Some(title),
                 description,
                 priority,
                 tags: tags.map(|tags| Tags::from(tags.as_str())),
-                status: status_id,
+                section,
             };
             let change = service.create_task(&project, new_task).await?;
             if output_json {
@@ -650,19 +659,33 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             } else {
                 println!(
                     "Created task {} in \"{}\" [{}]: {}",
-                    change.task.id, project.name, change.status.name, change.task.title
+                    change.task.id,
+                    project.name,
+                    section_label(&change.section),
+                    change.task.title
                 );
             }
         }
-        Command::Move { id, status } => {
-            let status = service.get_status_by_name(&project, &status).await?;
-            let change = service.move_task(&project, id, status.id).await?;
+        Command::Move {
+            id,
+            section,
+            no_section,
+        } => {
+            if section.is_none() && !no_section {
+                return Err(AppError::Usage(
+                    "Specify a section or --no-section.".to_string(),
+                ));
+            }
+            let section =
+                resolve_section_input(&service, &project, section, None, no_section).await?;
+            let change = service.move_task(&project, id, section, None).await?;
             if output_json {
                 print_json(&change.task)?;
             } else {
                 println!(
                     "Moved task {} --> \"{}\"",
-                    change.task.id, change.status.name
+                    change.task.id,
+                    section_label(&change.section)
                 );
             }
         }
@@ -672,29 +695,31 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             description,
             priority,
             tags,
-            status,
+            section,
+            new_section,
+            no_section,
         } => {
             if title.is_none()
                 && description.is_none()
                 && priority.is_none()
                 && tags.is_none()
-                && status.is_none()
+                && section.is_none()
+                && new_section.is_none()
+                && !no_section
             {
                 return Err(AppError::Usage(
                     "No flags provided. Use 'scry update --help' for available options."
                         .to_string(),
                 ));
             }
-            let status_id = match status {
-                Some(name) => Some(service.get_status_by_name(&project, &name).await?.id),
-                None => None,
-            };
+            let section =
+                resolve_section_input(&service, &project, section, new_section, no_section).await?;
             let patch = TaskInput {
                 title,
                 description,
                 priority,
                 tags: tags.map(|tags| Tags::from(tags.as_str())),
-                status: status_id,
+                section,
             };
             let updated = service.update_task(&project, id, patch).await?;
             if output_json {
@@ -710,7 +735,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             } else {
                 println!(
                     "Duplicated task {} as task {} in \"{}\" [{}]",
-                    id, change.task.id, project.name, change.status.name
+                    id,
+                    change.task.id,
+                    project.name,
+                    section_label(&change.section)
                 );
             }
         }
@@ -722,8 +750,24 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 println!("Deleted task {} from \"{}\"", id, project.name);
             }
         }
+        Command::Close { id, reason } => {
+            let task = service.close_task(&project, id, reason).await?;
+            if output_json {
+                print_json(&task)?;
+            } else {
+                println!("Closed task {} as {}", task.id, reason);
+            }
+        }
+        Command::Open { id } => {
+            let task = service.open_task(&project, id).await?;
+            if output_json {
+                print_json(&task)?;
+            } else {
+                println!("Opened task {}", task.id);
+            }
+        }
         Command::Show { id } => {
-            let state = ProjectState::load_from_store(store.as_ref(), project.id).await?;
+            let state = ProjectState::from_snapshot(service.project_snapshot(project.id).await?);
 
             let Some(task) = state.get_task_by_id(id) else {
                 return Err(AppError::Service(ServiceError::TaskNotFound {
@@ -737,9 +781,19 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 return Ok(());
             }
 
-            let status = state.get_status_by_id(task.status_id);
-            let status_name = status.map(|s| s.name.as_str()).unwrap_or("unknown");
-            let status_color = status.and_then(|s| s.color);
+            let section = task
+                .section_id
+                .and_then(|section_id| state.get_section_by_id(section_id))
+                .cloned();
+            let section_color = section.as_ref().and_then(|section| section.color);
+            let state_label = match &task.lifecycle {
+                Lifecycle::Open => "open".to_string(),
+                Lifecycle::Closed { closed_at, reason } => format!(
+                    "{} {}",
+                    reason.as_str(),
+                    closed_at.with_timezone(&Local).format(DATETIME_FORMAT_STR)
+                ),
+            };
             let created_at = task
                 .created_at
                 .with_timezone(&Local)
@@ -756,7 +810,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             println!();
 
             anstream::println!("Priority:    {}", color::priority_long(task.priority));
-            anstream::println!("Status:      {}", color::status(status_color, status_name));
+            anstream::println!(
+                "Section:     {}",
+                color::status(section_color, section_label(&section))
+            );
+            anstream::println!("State:       {}", state_label);
             let tags = task
                 .tags
                 .iter()
@@ -777,91 +835,76 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 println!();
             }
         }
-        Command::List { status, search } => {
-            let mut state = ProjectState::load_from_store(store.as_ref(), project.id).await?;
+        Command::List {
+            section,
+            search,
+            include_closed,
+        } => {
+            let mut state =
+                ProjectState::from_snapshot(service.project_snapshot(project.id).await?);
             if let Some(search) = search.filter(|s| !s.is_empty()) {
                 state = state.with_substring_filter(search);
             }
 
+            let selected_section_id = match &section {
+                Some(name) => Some(service.get_section_by_name(&project, name).await?.id),
+                None => None,
+            };
+            let groups: Vec<_> = state
+                .section_groups()
+                .filter(|group| match selected_section_id {
+                    Some(section_id) => group
+                        .section
+                        .as_ref()
+                        .is_some_and(|section| section.id == section_id),
+                    None => true,
+                })
+                .collect();
+
             if output_json {
-                let tasks: Vec<Task> = state
-                    .statuses()
-                    .filter(|status_def| match &status {
-                        Some(filter) => status_def.name == *filter,
-                        None => true,
-                    })
-                    .flat_map(|status_def| state.tasks_in_status(status_def.id))
-                    .map(Task::from)
+                let mut tasks: Vec<Task> = groups
+                    .iter()
+                    .flat_map(|group| group.tasks_with_notes.iter().map(Task::from))
                     .collect();
+                if include_closed {
+                    tasks.extend(state.closed_tasks().iter().map(Task::from));
+                }
                 print_json(&tasks)?;
                 return Ok(());
             }
 
             println!("project \"{}\"\n", state.project().name);
 
-            let statuses_to_show: Vec<_> = state
-                .statuses()
-                .filter(|status_def| match &status {
-                    Some(filter) => status_def.name == *filter,
-                    None => true,
-                })
-                .collect();
+            let show_priority = state.project().show_priority;
 
-            let total_tasks: usize = statuses_to_show
-                .iter()
-                .map(|status_def| state.tasks_in_status(status_def.id).len())
-                .sum();
-
-            if total_tasks == 0 {
+            if groups.is_empty() && (!include_closed || state.closed_tasks().is_empty()) {
                 println!("No tasks.");
                 return Ok(());
             }
 
-            let show_priority = state.project().show_priority;
-            let entry_status_id = state.project().entry_status_id;
+            for group in &groups {
+                let header = format!(
+                    "{} ({}):",
+                    section_label(&group.section),
+                    group.tasks_with_notes.len()
+                );
+                anstream::println!(
+                    "{}",
+                    color::status(
+                        group.section.as_ref().and_then(|section| section.color),
+                        &header
+                    )
+                );
 
-            for status_def in statuses_to_show {
-                let status_tasks = state.tasks_in_status(status_def.id);
-
-                let marker = if entry_status_id == Some(status_def.id) {
-                    "* "
-                } else {
-                    ""
-                };
-                let header = format!("{}{} ({}):", marker, status_def.name, status_tasks.len());
-                anstream::println!("{}", color::status(status_def.color, &header));
-
-                for task in &status_tasks {
-                    let icon = match status_def.style {
-                        StatusStyle::None | StatusStyle::Strikethrough | StatusStyle::Hidden => "",
-                        StatusStyle::Unchecked => "[ ]",
-                        StatusStyle::Checked => "[x]",
-                    };
-
-                    let mut line = format!("  {}", task.id);
-                    if !icon.is_empty() {
-                        line.push_str(&format!("  {}", icon));
-                    }
-                    if show_priority {
-                        line.push_str(&format!("  {}", color::priority(task.priority)));
-                    }
-                    line.push_str(&format!("  {}", task.title));
-
-                    let tags = task
-                        .tags
-                        .iter()
-                        .map(|tag| color::tag(tag))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    if !tags.is_empty() {
-                        line.push_str(&format!("  {}", tags));
-                    }
-
-                    anstream::println!("{}", line);
+                for task in &group.tasks_with_notes {
+                    anstream::println!("{}", task_line(task, show_priority));
                 }
+            }
 
-                if !status_tasks.is_empty() {
-                    println!();
+            if include_closed {
+                println!("Closed ({}):", state.closed_tasks().len());
+                for task in state.closed_tasks() {
+                    anstream::println!("{}", task_line(task, show_priority));
                 }
             }
         }
@@ -893,17 +936,13 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             ProjectCommand::Update {
                 name,
                 description,
-                entry_status,
-                clear_entry_status,
                 sort,
                 show_priority,
                 hide_priority,
             } => {
                 if name.is_none()
                     && description.is_none()
-                    && entry_status.is_none()
                     && sort.is_none()
-                    && !clear_entry_status
                     && !show_priority
                     && !hide_priority
                 {
@@ -912,14 +951,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                             .to_string(),
                     ));
                 }
-                let entry_status = if clear_entry_status {
-                    EntryStatusUpdate::Clear
-                } else if let Some(status_name) = entry_status {
-                    let status = service.get_status_by_name(&project, &status_name).await?;
-                    EntryStatusUpdate::Set(status.id)
-                } else {
-                    EntryStatusUpdate::Unchanged
-                };
                 let show_priority = if show_priority {
                     Some(true)
                 } else if hide_priority {
@@ -933,7 +964,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         ProjectUpdate {
                             name,
                             description,
-                            entry_status,
                             task_sorting_mode: sort,
                             show_priority,
                         },
@@ -945,130 +975,135 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     println!("Updated project \"{}\".", updated.name);
                 }
             }
-            ProjectCommand::Status(status_cmd) => match status_cmd {
-                StatusCommand::List => {
-                    let statuses = store.get_all_statuses_by_project_id(project.id).await?;
-                    if output_json {
-                        print_json(&statuses)?;
-                    } else {
-                        println!("Statuses for \"{}\":", project.name);
-                        for s in &statuses {
-                            anstream::println!("  {}", color::status(s.color, &s.name));
-                        }
+        },
+        Command::Section(section_cmd) => match section_cmd {
+            SectionCommand::List => {
+                let sections = service.list_sections(project.id).await?;
+                if output_json {
+                    print_json(&sections)?;
+                } else {
+                    println!("Sections for \"{}\":", project.name);
+                    for section in &sections {
+                        anstream::println!("  {}", color::status(section.color, &section.name));
                     }
                 }
-                StatusCommand::Add { name } => {
-                    let status = service.create_status(&project, name).await?;
-                    if output_json {
-                        print_json(&status)?;
-                    } else {
-                        println!(
-                            "Added status \"{}\" to project \"{}\"",
-                            status.name, project.name
-                        );
-                    }
+            }
+            SectionCommand::Add { name, color } => {
+                let section = service.create_section(&project, name, color).await?;
+                if output_json {
+                    print_json(&section)?;
+                } else {
+                    println!(
+                        "Added section \"{}\" to project \"{}\"",
+                        section.name, project.name
+                    );
                 }
-                StatusCommand::Remove { name } => {
-                    let status = service.get_status_by_name(&project, &name).await?;
-                    let removed = service.delete_status(&project, status.id).await?;
-                    if output_json {
-                        print_json(&removed)?;
-                    } else {
-                        println!(
-                            "Removed status \"{}\" from project \"{}\"",
+            }
+            SectionCommand::Remove { name } => {
+                let section = service.get_section_by_name(&project, &name).await?;
+                let removed = service.delete_section(&project, section.id).await?;
+                if output_json {
+                    print_json(&removed)?;
+                } else {
+                    println!(
+                        "Removed section \"{}\" from project \"{}\"; its tasks moved to No section",
+                        name, project.name
+                    );
+                }
+            }
+            SectionCommand::Rename { old_name, new_name } => {
+                let section = service.get_section_by_name(&project, &old_name).await?;
+                let renamed = service
+                    .rename_section(&project, section.id, new_name.clone())
+                    .await?;
+                if output_json {
+                    print_json(&renamed)?;
+                } else {
+                    println!(
+                        "Renamed section \"{}\" --> \"{}\" in project \"{}\"",
+                        old_name, new_name, project.name
+                    );
+                }
+            }
+            SectionCommand::Merge { source, target } => {
+                let source_section = service.get_section_by_name(&project, &source).await?;
+                let target_section = service.get_section_by_name(&project, &target).await?;
+                let (source_section, target_section) = service
+                    .merge_sections(&project, source_section.id, target_section.id)
+                    .await?;
+                if output_json {
+                    print_json(&target_section)?;
+                } else {
+                    println!(
+                        "Merged section \"{}\" into \"{}\"",
+                        source_section.name, target_section.name
+                    );
+                }
+            }
+            SectionCommand::MoveUp { name } => {
+                let section = service.get_section_by_name(&project, &name).await?;
+                let moved = service.move_section_up(&project, section.id).await?;
+                if output_json {
+                    print_json(moved.as_ref().unwrap_or(&section))?;
+                } else {
+                    match moved {
+                        Some(_) => println!(
+                            "Moved section \"{}\" up in project \"{}\"",
                             name, project.name
-                        );
-                    }
-                }
-                StatusCommand::Rename { old_name, new_name } => {
-                    let status = service.get_status_by_name(&project, &old_name).await?;
-                    let renamed = service
-                        .rename_status(&project, status.id, new_name.clone())
-                        .await?;
-                    if output_json {
-                        print_json(&renamed)?;
-                    } else {
-                        println!(
-                            "Renamed status \"{}\" --> \"{}\" in project \"{}\"",
-                            old_name, new_name, project.name
-                        );
-                    }
-                }
-                StatusCommand::MoveUp { name } => {
-                    let status = service.get_status_by_name(&project, &name).await?;
-                    let moved = service.move_status_up(&project, status.id).await?;
-                    if output_json {
-                        print_json(moved.as_ref().unwrap_or(&status))?;
-                    } else {
-                        match moved {
-                            Some(_) => println!(
-                                "Moved status \"{}\" up in project \"{}\"",
-                                name, project.name
-                            ),
-                            None => eprintln!(
-                                "Status \"{}\" is already at the top of \"{}\"",
-                                name, project.name
-                            ),
-                        }
-                    }
-                }
-                StatusCommand::MoveDown { name } => {
-                    let status = service.get_status_by_name(&project, &name).await?;
-                    let moved = service.move_status_down(&project, status.id).await?;
-                    if output_json {
-                        print_json(moved.as_ref().unwrap_or(&status))?;
-                    } else {
-                        match moved {
-                            Some(_) => println!(
-                                "Moved status \"{}\" down in project \"{}\"",
-                                name, project.name
-                            ),
-                            None => eprintln!(
-                                "Status \"{}\" is already at the bottom of \"{}\"",
-                                name, project.name
-                            ),
-                        }
-                    }
-                }
-                StatusCommand::SetStyle { name, style } => {
-                    let status = service.get_status_by_name(&project, &name).await?;
-                    let updated = service.set_status_style(&project, status.id, style).await?;
-                    if output_json {
-                        print_json(&updated)?;
-                    } else {
-                        println!(
-                            "Set style of status \"{}\" to \"{}\" in project \"{}\"",
-                            name, style, project.name
-                        );
-                    }
-                }
-                StatusCommand::SetColor { name, color } => {
-                    let status = service.get_status_by_name(&project, &name).await?;
-                    let updated = service
-                        .set_status_color(&project, status.id, Some(color))
-                        .await?;
-                    if output_json {
-                        print_json(&updated)?;
-                    } else {
-                        println!(
-                            "Set color of status \"{}\" to \"{}\" in project \"{}\"",
-                            name, color, project.name
-                        );
-                    }
-                }
-                StatusCommand::ResetColor { name } => {
-                    let status = service.get_status_by_name(&project, &name).await?;
-                    let updated = service.set_status_color(&project, status.id, None).await?;
-                    if output_json {
-                        print_json(&updated)?;
-                    } else {
-                        println!(
-                            "Reset color of status \"{}\" in project \"{}\"",
+                        ),
+                        None => eprintln!(
+                            "Section \"{}\" is already at the top of \"{}\"",
                             name, project.name
-                        );
+                        ),
                     }
                 }
-            },
+            }
+            SectionCommand::MoveDown { name } => {
+                let section = service.get_section_by_name(&project, &name).await?;
+                let moved = service.move_section_down(&project, section.id).await?;
+                if output_json {
+                    print_json(moved.as_ref().unwrap_or(&section))?;
+                } else {
+                    match moved {
+                        Some(_) => println!(
+                            "Moved section \"{}\" down in project \"{}\"",
+                            name, project.name
+                        ),
+                        None => eprintln!(
+                            "Section \"{}\" is already at the bottom of \"{}\"",
+                            name, project.name
+                        ),
+                    }
+                }
+            }
+            SectionCommand::SetColor { name, color } => {
+                let section = service.get_section_by_name(&project, &name).await?;
+                let updated = service
+                    .set_section_color(&project, section.id, Some(color))
+                    .await?;
+                if output_json {
+                    print_json(&updated)?;
+                } else {
+                    println!(
+                        "Set color of section \"{}\" to \"{}\" in project \"{}\"",
+                        name, color, project.name
+                    );
+                }
+            }
+            SectionCommand::ResetColor { name } => {
+                let section = service.get_section_by_name(&project, &name).await?;
+                let updated = service
+                    .set_section_color(&project, section.id, None)
+                    .await?;
+                if output_json {
+                    print_json(&updated)?;
+                } else {
+                    println!(
+                        "Reset color of section \"{}\" in project \"{}\"",
+                        name, project.name
+                    );
+                }
+            }
         },
         Command::Export => unreachable!("handled before the active project is resolved"),
         Command::Import { .. } => unreachable!("handled before the active project is resolved"),
@@ -1134,18 +1169,75 @@ async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
 
 /// Resolve which project to use: --project flag takes precedence over active project.
 async fn resolve_project(
-    store: ArcStore,
+    service: &ProjectService,
     config: &ScryConfig,
     flag: Option<&str>,
 ) -> Result<Project, AppError> {
     if let Some(name) = flag {
-        let project = store
-            .get_project_by_name(name)
+        let project = service
+            .find_project_by_name(name)
             .await?
             .ok_or_else(|| AppError::Usage(format!("project '{}' not found", name)))?;
         Ok(project)
     } else {
-        let project = client_state::active_project(store.as_ref(), config).await?;
+        let project = client_state::active_project(service, config).await?;
         Ok(project)
     }
+}
+
+/// Resolve the section flags shared by `add`, `move`, and `update` into the
+/// service's section-selection input.
+async fn resolve_section_input(
+    service: &ProjectService,
+    project: &Project,
+    section: Option<String>,
+    new_section: Option<String>,
+    no_section: bool,
+) -> Result<SectionInput, AppError> {
+    if no_section {
+        Ok(SectionInput::NoSection)
+    } else if let Some(name) = new_section {
+        Ok(SectionInput::New(name))
+    } else if let Some(name) = section {
+        let section = service.get_section_by_name(project, &name).await?;
+        Ok(SectionInput::Existing(section.id))
+    } else {
+        Ok(SectionInput::Unchanged)
+    }
+}
+
+fn section_label(section: &Option<Section>) -> &str {
+    section
+        .as_ref()
+        .map_or("No section", |section| section.name.as_str())
+}
+
+/// Render one task line for the human `list` output, including the lifecycle
+/// marker so open and closed tasks share the same format.
+fn task_line(task: &TaskWithNotes, show_priority: bool) -> String {
+    let checkbox = match &task.lifecycle {
+        Lifecycle::Open => "[ ]",
+        Lifecycle::Closed { reason, .. } => match reason {
+            CloseReason::Completed => "[x]",
+            CloseReason::Cancelled => "[~]",
+        },
+    };
+
+    let mut line = format!("  {}  {}", task.id, checkbox);
+    if show_priority {
+        line.push_str(&format!("  {}", color::priority(task.priority)));
+    }
+    line.push_str(&format!("  {}", task.title));
+
+    let tags = task
+        .tags
+        .iter()
+        .map(|tag| color::tag(tag))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !tags.is_empty() {
+        line.push_str(&format!("  {}", tags));
+    }
+
+    line
 }

@@ -1,10 +1,11 @@
 use crate::error::StorageError;
-use crate::models::{Note, Project, ProjectId, Status, Task};
+use crate::models::{Note, Project, ProjectId, Section, Task};
 use crate::store::Store;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
-pub const BACKUP_VERSION: u32 = 1;
+pub const BACKUP_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Backup {
@@ -17,10 +18,10 @@ pub struct Backup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupProject {
     // flatten keeps each project's own fields at the object's top level, alongside
-    // the related collections, so the format reads naturally.
+    // the related sections, tasks, and notes, so the format reads naturally.
     #[serde(flatten)]
     pub project: Project,
-    pub statuses: Vec<Status>,
+    pub sections: Vec<Section>,
     pub tasks: Vec<Task>,
     pub notes: Vec<Note>,
 }
@@ -47,7 +48,7 @@ pub struct ImportPlan {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct ImportReport {
     pub projects: usize,
-    pub statuses: usize,
+    pub sections: usize,
     pub tasks: usize,
     pub notes: usize,
 }
@@ -55,9 +56,60 @@ pub struct ImportReport {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct IdMaxima {
     pub project: i64,
-    pub status: i64,
+    pub section: i64,
     pub task: i64,
     pub note: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BackupError {
+    InvalidJson(String),
+    UnsupportedVersion { found: u32, supported: u32 },
+}
+
+impl fmt::Display for BackupError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidJson(message) => write!(f, "invalid backup JSON: {message}"),
+            Self::UnsupportedVersion { found, supported } => write!(
+                f,
+                "unsupported backup version {found}; this build supports version {supported}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for BackupError {}
+
+/// Parse a backup document.
+///
+/// Only the current format version is accepted; older backups must be transformed
+/// manually before import.
+pub fn parse(input: &str) -> Result<Backup, BackupError> {
+    let value: serde_json::Value =
+        serde_json::from_str(input).map_err(|error| BackupError::InvalidJson(error.to_string()))?;
+
+    let version = value
+        .get("version")
+        .ok_or_else(|| {
+            BackupError::InvalidJson("backup is missing a numeric version field".to_string())
+        })?
+        .as_u64()
+        .ok_or_else(|| {
+            BackupError::InvalidJson("backup version field must be a positive integer".to_string())
+        })?;
+    let version = u32::try_from(version).map_err(|_| {
+        BackupError::InvalidJson(format!("backup version {version} is out of range"))
+    })?;
+
+    if version != BACKUP_VERSION {
+        return Err(BackupError::UnsupportedVersion {
+            found: version,
+            supported: BACKUP_VERSION,
+        });
+    }
+
+    serde_json::from_value(value).map_err(|error| BackupError::InvalidJson(error.to_string()))
 }
 
 pub async fn export(store: &dyn Store, project: Option<ProjectId>) -> Result<Backup, StorageError> {
@@ -72,12 +124,12 @@ pub async fn export(store: &dyn Store, project: Option<ProjectId>) -> Result<Bac
 
     let mut backup_projects = Vec::with_capacity(projects.len());
     for project in projects {
-        let statuses = store.get_all_statuses_by_project_id(project.id).await?;
+        let sections = store.get_all_sections_by_project_id(project.id).await?;
         let tasks = store.get_all_tasks_by_project_id(project.id).await?;
         let notes = store.get_all_notes_by_project_id(project.id).await?;
         backup_projects.push(BackupProject {
             project,
-            statuses,
+            sections,
             tasks,
             notes,
         });
@@ -106,14 +158,14 @@ pub async fn plan_import(
 
     let mut maxima = IdMaxima {
         project: 0,
-        status: 0,
+        section: 0,
         task: 0,
         note: 0,
     };
     for project in &existing {
         maxima.project = maxima.project.max(project.id);
-        for status in store.get_all_statuses_by_project_id(project.id).await? {
-            maxima.status = maxima.status.max(status.id);
+        for section in store.get_all_sections_by_project_id(project.id).await? {
+            maxima.section = maxima.section.max(section.id);
         }
         for task in store.get_all_tasks_by_project_id(project.id).await? {
             maxima.task = maxima.task.max(task.id);
@@ -200,7 +252,7 @@ fn remap_projects(
     projects: &[BackupProject],
     maxima: IdMaxima,
 ) -> Result<Vec<BackupProject>, StorageError> {
-    let mut next_status = maxima.status;
+    let mut next_section = maxima.section;
     let mut next_task = maxima.task;
     let mut next_note = maxima.note;
 
@@ -209,30 +261,35 @@ fn remap_projects(
     for (index, backup_project) in projects.iter().enumerate() {
         let new_project_id = maxima.project + 1 + index as i64;
 
-        let mut status_ids = HashMap::new();
-        let mut statuses = Vec::with_capacity(backup_project.statuses.len());
-        for status in &backup_project.statuses {
-            next_status += 1;
-            status_ids.insert(status.id, next_status);
-            statuses.push(Status {
-                id: next_status,
+        let mut section_ids = HashMap::new();
+        let mut sections = Vec::with_capacity(backup_project.sections.len());
+        for section in &backup_project.sections {
+            next_section += 1;
+            section_ids.insert(section.id, next_section);
+            sections.push(Section {
+                id: next_section,
                 project_id: new_project_id,
-                name: status.name.clone(),
-                position: status.position,
-                color: status.color,
-                style: status.style,
+                name: section.name.clone(),
+                position: section.position,
+                color: section.color,
+                created_at: section.created_at,
             });
         }
 
         let mut task_ids = HashMap::new();
         let mut tasks = Vec::with_capacity(backup_project.tasks.len());
         for task in &backup_project.tasks {
-            let new_status_id = status_ids.get(&task.status_id).copied().ok_or_else(|| {
-                StorageError::Invalid(format!(
-                    "task {} references unknown status {}",
-                    task.id, task.status_id
-                ))
-            })?;
+            let new_section_id = match task.section_id {
+                None => None,
+                Some(section_id) => {
+                    Some(section_ids.get(&section_id).copied().ok_or_else(|| {
+                        StorageError::Invalid(format!(
+                            "task {} references unknown section {}",
+                            task.id, section_id
+                        ))
+                    })?)
+                }
+            };
             next_task += 1;
             task_ids.insert(task.id, next_task);
             tasks.push(Task {
@@ -241,8 +298,9 @@ fn remap_projects(
                 title: task.title.clone(),
                 description: task.description.clone(),
                 priority: task.priority,
-                status_id: new_status_id,
+                section_id: new_section_id,
                 position: task.position,
+                lifecycle: task.lifecycle.clone(),
                 tags: task.tags.clone(),
                 created_at: task.created_at,
             });
@@ -265,30 +323,16 @@ fn remap_projects(
             });
         }
 
-        let entry_status_id = backup_project
-            .project
-            .entry_status_id
-            .map(|old| {
-                status_ids.get(&old).copied().ok_or_else(|| {
-                    StorageError::Invalid(format!(
-                        "project {} references unknown entry status {old}",
-                        backup_project.project.id
-                    ))
-                })
-            })
-            .transpose()?;
-
         remapped.push(BackupProject {
             project: Project {
                 id: new_project_id,
                 name: backup_project.project.name.clone(),
                 description: backup_project.project.description.clone(),
-                entry_status_id,
                 task_sorting_mode: backup_project.project.task_sorting_mode,
                 show_priority: backup_project.project.show_priority,
                 created_at: backup_project.project.created_at,
             },
-            statuses,
+            sections,
             tasks,
             notes,
         });
@@ -300,41 +344,46 @@ fn remap_projects(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Priority, StatusStyle, Tags, TaskSortingMode};
+    use crate::models::{Lifecycle, Priority, SectionId, Tags, TaskSortingMode};
     use chrono::Utc;
 
-    fn project(id: ProjectId, name: &str, entry_status_id: Option<i64>) -> Project {
+    fn project(id: ProjectId, name: &str) -> Project {
         Project {
             id,
             name: name.to_string(),
             description: None,
-            entry_status_id,
             task_sorting_mode: TaskSortingMode::Manual,
             show_priority: false,
             created_at: Utc::now(),
         }
     }
 
-    fn status(id: i64, project_id: ProjectId) -> Status {
-        Status {
+    fn section(id: i64, project_id: ProjectId) -> Section {
+        Section {
             id,
             project_id,
-            name: format!("status-{id}"),
+            name: format!("section-{id}"),
             position: 0,
             color: None,
-            style: StatusStyle::None,
+            created_at: Utc::now(),
         }
     }
 
-    fn task(id: i64, project_id: ProjectId, status_id: i64) -> Task {
+    fn task(
+        id: i64,
+        project_id: ProjectId,
+        section_id: Option<SectionId>,
+        lifecycle: Lifecycle,
+    ) -> Task {
         Task {
             id,
             project_id,
             title: format!("task-{id}"),
             description: None,
             priority: Priority::Medium,
-            status_id,
+            section_id,
             position: 0,
+            lifecycle,
             tags: Tags::default(),
             created_at: Utc::now(),
         }
@@ -349,10 +398,10 @@ mod tests {
         }
     }
 
-    fn backup_project(id: ProjectId, name: &str, entry_status_id: Option<i64>) -> BackupProject {
+    fn backup_project(id: ProjectId, name: &str) -> BackupProject {
         BackupProject {
-            project: project(id, name, entry_status_id),
-            statuses: vec![],
+            project: project(id, name),
+            sections: vec![],
             tasks: vec![],
             notes: vec![],
         }
@@ -369,7 +418,7 @@ mod tests {
     fn no_maxima() -> IdMaxima {
         IdMaxima {
             project: 0,
-            status: 0,
+            section: 0,
             task: 0,
             note: 0,
         }
@@ -378,14 +427,17 @@ mod tests {
     #[test]
     fn remap_projects_rewrites_ids_and_foreign_keys() {
         let projects = vec![BackupProject {
-            project: project(5, "imported", Some(70)),
-            statuses: vec![status(70, 5)],
-            tasks: vec![task(30, 5, 70)],
+            project: project(5, "imported"),
+            sections: vec![section(70, 5)],
+            tasks: vec![
+                task(30, 5, Some(70), Lifecycle::Open),
+                task(31, 5, None, Lifecycle::Open),
+            ],
             notes: vec![note(90, 30)],
         }];
         let maxima = IdMaxima {
             project: 100,
-            status: 200,
+            section: 200,
             task: 300,
             note: 400,
         };
@@ -394,19 +446,20 @@ mod tests {
 
         let imported = &remapped[0];
         assert_eq!(imported.project.id, 101);
-        assert_eq!(imported.project.entry_status_id, Some(201));
-        assert_eq!(imported.statuses[0].id, 201);
-        assert_eq!(imported.statuses[0].project_id, 101);
+        assert_eq!(imported.sections[0].id, 201);
+        assert_eq!(imported.sections[0].project_id, 101);
         assert_eq!(imported.tasks[0].id, 301);
         assert_eq!(imported.tasks[0].project_id, 101);
-        assert_eq!(imported.tasks[0].status_id, 201);
+        assert_eq!(imported.tasks[0].section_id, Some(201));
+        assert_eq!(imported.tasks[1].id, 302);
+        assert_eq!(imported.tasks[1].section_id, None);
         assert_eq!(imported.notes[0].id, 401);
         assert_eq!(imported.notes[0].task_id, 301);
     }
 
     #[test]
     fn remap_projects_preserves_description() {
-        let mut source = backup_project(1, "alpha", None);
+        let mut source = backup_project(1, "alpha");
         source.project.description = Some("freeform project notes".to_string());
 
         let remapped = remap_projects(&[source], no_maxima()).expect("remap should succeed");
@@ -421,21 +474,21 @@ mod tests {
     fn remap_projects_allocates_fresh_unique_ids_across_projects() {
         let projects = vec![
             BackupProject {
-                project: project(1, "first", Some(10)),
-                statuses: vec![status(10, 1)],
-                tasks: vec![task(20, 1, 10)],
+                project: project(1, "first"),
+                sections: vec![section(10, 1)],
+                tasks: vec![task(20, 1, Some(10), Lifecycle::Open)],
                 notes: vec![note(30, 20)],
             },
             BackupProject {
-                project: project(2, "second", Some(11)),
-                statuses: vec![status(11, 2)],
-                tasks: vec![task(21, 2, 11)],
+                project: project(2, "second"),
+                sections: vec![section(11, 2)],
+                tasks: vec![task(21, 2, Some(11), Lifecycle::Open)],
                 notes: vec![note(31, 21)],
             },
         ];
         let maxima = IdMaxima {
             project: 5,
-            status: 6,
+            section: 6,
             task: 7,
             note: 8,
         };
@@ -443,9 +496,9 @@ mod tests {
         let remapped = remap_projects(&projects, maxima).expect("remap should succeed");
 
         let project_ids: Vec<_> = remapped.iter().map(|p| p.project.id).collect();
-        let status_ids: Vec<_> = remapped
+        let section_ids: Vec<_> = remapped
             .iter()
-            .flat_map(|p| p.statuses.iter().map(|s| s.id))
+            .flat_map(|p| p.sections.iter().map(|s| s.id))
             .collect();
         let task_ids: Vec<_> = remapped
             .iter()
@@ -457,22 +510,22 @@ mod tests {
             .collect();
 
         assert!(project_ids.iter().all(|id| *id > maxima.project));
-        assert!(status_ids.iter().all(|id| *id > maxima.status));
+        assert!(section_ids.iter().all(|id| *id > maxima.section));
         assert!(task_ids.iter().all(|id| *id > maxima.task));
         assert!(note_ids.iter().all(|id| *id > maxima.note));
 
-        for ids in [&project_ids, &status_ids, &task_ids, &note_ids] {
+        for ids in [&project_ids, &section_ids, &task_ids, &note_ids] {
             let unique: HashSet<_> = ids.iter().collect();
             assert_eq!(unique.len(), ids.len(), "ids must not collide: {ids:?}");
         }
     }
 
     #[test]
-    fn remap_projects_rejects_task_with_unknown_status() {
+    fn remap_projects_rejects_task_with_unknown_section() {
         let projects = vec![BackupProject {
-            project: project(1, "imported", None),
-            statuses: vec![status(10, 1)],
-            tasks: vec![task(20, 1, 999)],
+            project: project(1, "imported"),
+            sections: vec![section(10, 1)],
+            tasks: vec![task(20, 1, Some(999), Lifecycle::Open)],
             notes: vec![],
         }];
 
@@ -485,25 +538,10 @@ mod tests {
     #[test]
     fn remap_projects_rejects_note_with_unknown_task() {
         let projects = vec![BackupProject {
-            project: project(1, "imported", None),
-            statuses: vec![status(10, 1)],
-            tasks: vec![task(20, 1, 10)],
+            project: project(1, "imported"),
+            sections: vec![section(10, 1)],
+            tasks: vec![task(20, 1, Some(10), Lifecycle::Open)],
             notes: vec![note(30, 999)],
-        }];
-
-        assert!(matches!(
-            remap_projects(&projects, no_maxima()),
-            Err(StorageError::Invalid(_))
-        ));
-    }
-
-    #[test]
-    fn remap_projects_rejects_project_with_unknown_entry_status() {
-        let projects = vec![BackupProject {
-            project: project(1, "imported", Some(999)),
-            statuses: vec![status(10, 1)],
-            tasks: vec![],
-            notes: vec![],
         }];
 
         assert!(matches!(
@@ -515,8 +553,8 @@ mod tests {
     #[test]
     fn plan_fail_rejects_colliding_names() {
         let backup = backup(vec![
-            backup_project(1, "keep", None),
-            backup_project(2, "collide", None),
+            backup_project(1, "keep"),
+            backup_project(2, "collide"),
         ]);
         let existing = HashSet::from(["collide".to_string()]);
 
@@ -528,10 +566,7 @@ mod tests {
 
     #[test]
     fn plan_fail_remaps_all_projects_when_no_collision() {
-        let backup = backup(vec![
-            backup_project(1, "alpha", None),
-            backup_project(2, "beta", None),
-        ]);
+        let backup = backup(vec![backup_project(1, "alpha"), backup_project(2, "beta")]);
 
         let plan = plan_fail(&backup, &HashSet::new(), no_maxima())
             .expect("fail should succeed when clear");
@@ -543,10 +578,7 @@ mod tests {
 
     #[test]
     fn plan_skip_drops_colliding_projects() {
-        let backup = backup(vec![
-            backup_project(1, "keep", None),
-            backup_project(2, "skip", None),
-        ]);
+        let backup = backup(vec![backup_project(1, "keep"), backup_project(2, "skip")]);
         let existing = HashSet::from(["skip".to_string()]);
 
         let plan = plan_skip(&backup, &existing, no_maxima()).expect("skip should succeed");
@@ -559,10 +591,7 @@ mod tests {
 
     #[test]
     fn plan_replace_lists_collisions() {
-        let backup = backup(vec![
-            backup_project(1, "alpha", None),
-            backup_project(2, "beta", None),
-        ]);
+        let backup = backup(vec![backup_project(1, "alpha"), backup_project(2, "beta")]);
         let existing = HashMap::from([("alpha".to_string(), 10), ("other".to_string(), 11)]);
 
         let plan = plan_replace(&backup, &existing, no_maxima()).expect("replace should succeed");
@@ -570,5 +599,18 @@ mod tests {
         assert_eq!(plan.mode, ImportMode::Replace);
         assert_eq!(plan.projects.len(), 2);
         assert_eq!(plan.project_ids_to_delete, vec![10]);
+    }
+
+    #[test]
+    fn parse_rejects_unsupported_version() {
+        let json = r#"{ "version": 1, "projects": [] }"#;
+
+        assert!(matches!(
+            parse(json),
+            Err(BackupError::UnsupportedVersion {
+                found: 1,
+                supported: BACKUP_VERSION
+            })
+        ));
     }
 }

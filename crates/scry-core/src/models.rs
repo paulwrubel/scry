@@ -9,7 +9,7 @@ use std::fmt::Display;
 pub type NoteId = i64;
 pub type TaskId = i64;
 pub type ProjectId = i64;
-pub type StatusId = i64;
+pub type SectionId = i64;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
@@ -65,32 +65,56 @@ impl From<Color> for AnsiColor {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
-pub enum StatusStyle {
-    #[default]
-    #[value(alias("default"))]
-    None,
-    Unchecked,
-    Checked,
-    #[value(alias("strike"))]
-    Strikethrough,
-    Hidden,
+pub enum CloseReason {
+    Completed,
+    Cancelled,
 }
 
-impl Display for StatusStyle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            self.to_possible_value()
-                .expect("StatusStyle has no skipped variants")
-                .get_name(),
-        )
+impl CloseReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+        }
     }
 }
 
-impl From<&str> for StatusStyle {
-    fn from(value: &str) -> Self {
-        Self::from_str(value, false).unwrap_or_default()
+impl Display for CloseReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "kebab-case")]
+pub enum Lifecycle {
+    #[default]
+    Open,
+    Closed {
+        closed_at: DateTime<Utc>,
+        reason: CloseReason,
+    },
+}
+
+impl Lifecycle {
+    pub fn is_closed(&self) -> bool {
+        matches!(self, Self::Closed { .. })
+    }
+
+    pub fn closed_at(&self) -> Option<DateTime<Utc>> {
+        match self {
+            Self::Open => None,
+            Self::Closed { closed_at, .. } => Some(*closed_at),
+        }
+    }
+
+    pub fn reason(&self) -> Option<CloseReason> {
+        match self {
+            Self::Open => None,
+            Self::Closed { reason, .. } => Some(*reason),
+        }
     }
 }
 
@@ -248,64 +272,44 @@ impl From<&str> for TaskSortingMode {
 #[derive(Debug, Clone, Copy)]
 pub struct ProjectTemplate {
     pub name: &'static str,
-    pub entry_status_name: Option<&'static str>,
     pub task_sorting_mode: TaskSortingMode,
     pub show_priority: bool,
-    pub statuses: &'static [ProjectTemplateStatus],
+    pub sections: &'static [ProjectTemplateSection],
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct ProjectTemplateStatus {
+pub struct ProjectTemplateSection {
     pub name: &'static str,
     pub position: i32,
     pub color: Option<Color>,
-    pub style: StatusStyle,
 }
 
 pub const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
     ProjectTemplate {
         name: "todolist",
-        entry_status_name: Some("todo"),
         task_sorting_mode: TaskSortingMode::Manual,
         show_priority: false,
-        statuses: &[
-            ProjectTemplateStatus {
-                name: "todo",
-                position: 0,
-                color: None,
-                style: StatusStyle::Unchecked,
-            },
-            ProjectTemplateStatus {
-                name: "done",
-                position: 1,
-                color: Some(Color::Green),
-                style: StatusStyle::Checked,
-            },
-        ],
+        sections: &[],
     },
     ProjectTemplate {
         name: "kanban",
-        entry_status_name: Some("backlog"),
         task_sorting_mode: TaskSortingMode::Priority,
         show_priority: true,
-        statuses: &[
-            ProjectTemplateStatus {
-                name: "in-progress",
-                position: 0,
-                color: Some(Color::Blue),
-                style: StatusStyle::None,
-            },
-            ProjectTemplateStatus {
+        sections: &[
+            ProjectTemplateSection {
                 name: "backlog",
-                position: 1,
+                position: 0,
                 color: None,
-                style: StatusStyle::None,
             },
-            ProjectTemplateStatus {
-                name: "done",
+            ProjectTemplateSection {
+                name: "in-progress",
+                position: 1,
+                color: Some(Color::Blue),
+            },
+            ProjectTemplateSection {
+                name: "review",
                 position: 2,
-                color: Some(Color::Green),
-                style: StatusStyle::Strikethrough,
+                color: Some(Color::Yellow),
             },
         ],
     },
@@ -316,20 +320,19 @@ pub struct Project {
     pub id: ProjectId,
     pub name: String,
     pub description: Option<String>,
-    pub entry_status_id: Option<StatusId>,
     pub task_sorting_mode: TaskSortingMode,
     pub show_priority: bool,
     pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Status {
-    pub id: StatusId,
+pub struct Section {
+    pub id: SectionId,
     pub project_id: ProjectId,
     pub name: String,
     pub position: i32,
     pub color: Option<Color>,
-    pub style: StatusStyle,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -339,10 +342,17 @@ pub struct Task {
     pub title: String,
     pub description: Option<String>,
     pub priority: Priority,
-    pub status_id: i64,
+    pub section_id: Option<SectionId>,
     pub position: i32,
+    pub lifecycle: Lifecycle,
     pub tags: Tags,
     pub created_at: DateTime<Utc>,
+}
+
+impl Task {
+    pub fn is_closed(&self) -> bool {
+        self.lifecycle.is_closed()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

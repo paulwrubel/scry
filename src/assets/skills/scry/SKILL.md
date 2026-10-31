@@ -1,6 +1,6 @@
 ---
 name: scry
-description: Manage tasks, todos, and projects with the scry terminal task manager CLI. Use when the user asks to track work, add or complete todos, move tasks through a workflow such as backlog, in-progress, or done, organize tasks into projects, or inspect existing tasks and notes.
+description: Manage tasks, todos, and projects with the scry terminal task manager CLI. Use when the user asks to track work, add or complete todos, move tasks between sections such as backlog, in-progress, or review, organize tasks into projects, or inspect existing tasks and notes.
 license: MIT
 ---
 
@@ -13,9 +13,9 @@ license: MIT
 Use it when the user asks to:
 
 - Track work or manage a todo list.
-- Add, update, complete, or delete tasks.
-- Move tasks through a workflow (for example backlog -> in progress -> done).
-- Organize work into projects, or inspect projects and their statuses.
+- Add, update, close, reopen, or delete tasks.
+- Move tasks between sections (for example backlog, in-progress, or review).
+- Organize work into projects, or inspect projects and their sections.
 - Read a task's details or notes.
 
 ## Discover the exact surface
@@ -23,12 +23,12 @@ Use it when the user asks to:
 `scry` is built with `clap`, so every command and subcommand supports `--help`. You can
 append `--help` to essentially any command to get accurate, current usage, its arguments,
 and the accepted values of any enum option (shown as `[possible values: ...]`). For
-example: `scry --help`, `scry add --help`, or `scry project status set-style --help`.
+example: `scry --help`, `scry add --help`, or `scry section set-color --help`.
 Prefer this over guessing command names, flags, or values.
 
 ## Output for agents
 
-- Always pass `--json` to task, project, and status commands. It returns compact,
+- Always pass `--json` to task, project, and section commands. It returns compact,
   machine-readable JSON and disables color automatically, so never parse the
   human-readable text output.
 - Enum values in JSON are kebab-case and match the CLI's accepted arguments, so a value
@@ -37,10 +37,11 @@ Prefer this over guessing command names, flags, or values.
 - `scry --json add` returns the new task including its `id`; read `id` from the JSON to
   chain follow-up calls.
 - `scry --json show <id>` includes full detail (description, priority, tags, timestamps,
-  and notes), while `scry --json list` omits descriptions, notes, and timestamps. Use
-  `scry --json show` when full detail is needed.
+  section, lifecycle, and notes), while `scry --json list` omits descriptions, notes, and
+  timestamps. Use `scry --json show` when full detail is needed.
 - `scry --json list` output is the stable machine format; never parse the human-readable
-  `list` columns without the `--json` flag.
+  text output without the `--json` flag. Closed tasks are hidden unless you pass
+  `--include-closed`.
 
 ## Active project
 
@@ -54,67 +55,78 @@ project unless overridden.
 - If no active project is set — or the one it names no longer exists — commands fall back
   to the `default` project. A task command with no resolvable active project fails with an
   actionable error; set one with `scry project use <name>`.
-- The built-in `default` project exists automatically with `todo` and `done` statuses;
-  no setup is required.
+- The built-in `default` project exists automatically with no sections; tasks go to
+  **No section** until you add sections. No setup is required.
 
 ## Core task commands
 
 Every example below includes the global `--json` flag, which must come before the subcommand.
 
-| Command                                                                                                  | Purpose                          |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `scry --json add <title> [--description <text>] [--priority <level>] [--tags <a,b>] [--status <name>]`   | Add a task                       |
-| `scry --json list [--status <name>] [--search <text>]`                                                   | List tasks grouped by status     |
-| `scry --json show <id>`                                                                                  | Show full task details and notes |
-| `scry --json move <id> <status>`                                                                         | Move a task to a status          |
-| `scry --json update <id> [--title ...] [--description ...] [--priority ...] [--tags ...] [--status ...]` | Update task properties           |
-| `scry --json duplicate <id>`                                                                             | Duplicate a task                 |
-| `scry --json note add <task-id> <contents>`                                                              | Add a note to a task             |
-| `scry --json delete <id>`                                                                                | Delete a task                    |
+| Command                                                                                                                                      | Purpose                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | -------------------------- |
+| `scry --json add <title> [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>]`               | Add a task                       |
+| `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                   | List tasks grouped by section    |
+| `scry --json show <id>`                                                                                                                      | Show full task details and notes |
+| `scry --json move <id> [<section>] [--no-section]`                                                                                           | Move a task to a section         |
+| `scry --json update <id> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section]` | Update task properties           |
+| `scry --json close <id> --reason <completed                                                                                                  | cancelled>`                      | Close a task with a reason |
+| `scry --json open <id>`                                                                                                                      | Reopen a closed task             |
+| `scry --json duplicate <id>`                                                                                                                 | Duplicate a task                 |
+| `scry --json note add <task-id> <contents>`                                                                                                  | Add a note to a task             |
+| `scry --json delete <id>`                                                                                                                    | Delete a task permanently        |
 
 `<level>` is one of `minimal`, `low`, `medium`, `high`, `critical` (aliases `p5`-`p1`).
 
-## Project and status commands
+Sections are created explicitly: `--section <name>` must name an existing section and fails
+with the closest match suggested, while `--new-section <name>` (or `scry section add`)
+creates one. New tasks go to No section unless one of those flags is given, and `--no-section`
+on `move` or `update` moves a task back to No section. `close` and `open` change
+only the lifecycle; they never change a task's section or position.
+
+## Project and section commands
 
 Every example below includes the global `--json` flag, which must come before the subcommand.
 
-| Command                                                                                                                                                               | Purpose                                            |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `scry --json project list`                                                                                                                                            | List projects (`*` marks the active one)           |
-| `scry --json project current`                                                                                                                                         | Show the active project                            |
-| `scry --json project show [name]`                                                                                                                                     | Show a project's details including its description |
-| `scry --json project use <name>`                                                                                                                                      | Set the active project                             |
-| `scry --json project create [-t <template>] [--description <text>] <name>`                                                                                            | Create a project                                   |
-| `scry --json project update [--name <new>] [--description <text>] [--entry-status <status>] [--clear-entry-status] [--sort <mode>] [--show-priority/--hide-priority]` | Update project properties                          |
-| `scry --json project delete <name> [-f]`                                                                                                                              | Delete a project and all its tasks                 |
-| `scry --json project status list`                                                                                                                                     | List a project's statuses                          |
-| `scry --json project status add <name>`                                                                                                                               | Add a status                                       |
-| `scry --json project status remove <name>`                                                                                                                            | Remove an empty status                             |
-| `scry --json project status rename <old> <new>`                                                                                                                       | Rename a status                                    |
-| `scry --json project status move-up <name>`                                                                                                                           | Move a status up in the ordering                   |
-| `scry --json project status move-down <name>`                                                                                                                         | Move a status down in the ordering                 |
-| `scry --json project status set-style <name> <style>`                                                                                                                 | Set a status's style                               |
+| Command                                                                                                              | Purpose                                            |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `scry --json project list`                                                                                           | List projects (`*` marks the active one)           |
+| `scry --json project current`                                                                                        | Show the active project                            |
+| `scry --json project show [name]`                                                                                    | Show a project's details including its description |
+| `scry --json project use <name>`                                                                                     | Set the active project                             |
+| `scry --json project create [-t <template>] [--description <text>] <name>`                                           | Create a project                                   |
+| `scry --json project update [--name <new>] [--description <text>] [--sort <mode>] [--show-priority/--hide-priority]` | Update project properties                          |
+| `scry --json project delete <name> [-f]`                                                                             | Delete a project and all its tasks                 |
+| `scry --json section list`                                                                                           | List a project's sections                          |
+| `scry --json section add <name> [--color <color>]`                                                                   | Add a section                                      |
+| `scry --json section remove <name>`                                                                                  | Delete a section, moving its tasks to No section   |
+| `scry --json section rename <old> <new>`                                                                             | Rename a section                                   |
+| `scry --json section merge <source> <target>`                                                                        | Merge the source into the target                   |
+| `scry --json section move-up <name>`                                                                                 | Move a section up in the ordering                  |
+| `scry --json section move-down <name>`                                                                               | Move a section down in the ordering                |
+| `scry --json section set-color <name> <color>`                                                                       | Set a section's color                              |
+| `scry --json section reset-color <name>`                                                                             | Clear a section's color                            |
 
-Project templates seed a project's statuses and settings via
+Project templates seed a project's sections and settings via
 `scry --json project create -t <template> <name>`:
 
-- `todolist` - statuses `todo` and `done`; entry status `todo`.
-- `kanban` - statuses `in-progress`, `backlog`, and `done`; entry status `backlog`; priority sorting.
+- `todolist` - no sections; manual sorting.
+- `kanban` - sections `backlog`, `in-progress`, and `review`; priority sorting.
 
-Project descriptions are freeform text; set one at create time with `--description`, change it with
-`scry --json project update --description <text>`, and clear it by passing an empty string. The same
-project update command also renames the project with `--name`, sets or clears the entry status with
-`--entry-status` or `--clear-entry-status`, changes the sort mode with `--sort`, and shows or hides
-priority with `--show-priority` or `--hide-priority`.
+Project descriptions are freeform text; set one at create time with `--description`, change
+it with `scry --json project update --description <text>`, and clear it by passing an empty
+string. The same project update command also renames the project with `--name`, changes the
+sort mode with `--sort`, and shows or hides priority with `--show-priority` or
+`--hide-priority`.
 
-Creating a project without `-t` leaves it with no statuses, so tasks cannot be added until you run
-`scry --json project status add <name>`.
+Creating a project without `-t` leaves it with no sections. Tasks still work and land in No
+section; add sections later with `scry --json section add <name>`.
 
 ## Safety
 
 - Do **not** run destructive commands (`scry delete`, `scry project delete`,
-  `scry project status remove`) without explicit user confirmation.
+  `scry section remove`) without explicit user confirmation.
 - Never guess an ID for a destructive action; confirm it with `scry show <id>` first
   when there is any doubt.
+- `scry close` closes a task but keeps it; `scry delete` removes it permanently.
 - The active project is local to this machine, but changing it still alters the user's
   later commands; prefer `-p/--project` when operating on a specific project.

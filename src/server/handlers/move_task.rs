@@ -1,26 +1,39 @@
-//! Handler for moving a task, auto-positioning it within its status.
+//! Handler for moving a task to a section and/or position.
 
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use scry_core::models::{Task, TaskId};
+use scry_core::models::{SectionId, TaskId};
+use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::server::ScryState;
+use crate::service::SectionInput;
 
-/// Update a task and auto-position it within its (possibly new) status.
-///
-/// The service validates the task and target status against the project, then
-/// auto-positions it; changing `status_id` moves the task.
+/// Request body for moving a task; an omitted `section_id` means no section.
+#[derive(Deserialize)]
+pub struct MoveTaskRequest {
+    pub section_id: Option<SectionId>,
+    pub position: Option<i32>,
+}
+
+/// Move a task into a section (or no section) at an optional position.
 pub async fn move_task(
     State(state): State<ScryState>,
     Path(id): Path<TaskId>,
-    Json(mut task): Json<Task>,
+    Json(body): Json<MoveTaskRequest>,
 ) -> Response {
-    task.id = id;
+    let section = match body.section_id {
+        Some(section_id) => SectionInput::Existing(section_id),
+        None => SectionInput::NoSection,
+    };
 
-    match state.service.update_task_by_id(id, task).await {
-        Ok(task) => Json(task).into_response(),
+    match state
+        .service
+        .move_task_by_id(id, section, body.position)
+        .await
+    {
+        Ok(change) => Json(change.task).into_response(),
         Err(error) => AppError::from(error).into(),
     }
 }

@@ -1,31 +1,43 @@
 use crate::error::ServiceError;
-use scry_core::backup::{ImportPlan, ImportReport};
+use chrono::Utc;
+use scry_core::backup::{self, Backup, ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
 use scry_core::models::{
-    Color, Note, NoteId, Priority, Project, ProjectId, ProjectTemplate, Status, StatusId,
-    StatusStyle, Tags, Task, TaskId, TaskSortingMode,
+    CloseReason, Color, Lifecycle, Note, NoteId, Priority, Project, ProjectId, ProjectTemplate,
+    Section, SectionId, Tags, Task, TaskId, TaskSortingMode,
 };
-use scry_core::store::{ArcStore, ProjectSnapshot, TaskToCreate};
+use scry_core::store::{ArcStore, ProjectSnapshot, TaskContentUpdate, TaskToCreate};
+
+/// How an operation selects a task's section: leave it alone, clear it, use an
+/// existing section, or create one by name.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum SectionInput {
+    #[default]
+    Unchanged,
+    NoSection,
+    Existing(SectionId),
+    New(String),
+}
 
 /// Partial task input, shared by create and update. `None` leaves a field
 /// unchanged on update; `Some("")` on `description` clears it; `Some(Tags)` on
 /// `tags` sets them (an empty `Tags` clears them). `title` is required when
-/// creating a task. `status` is the id of one of the project's statuses.
+/// creating a task. On create, `SectionInput::Unchanged` means no section.
 #[derive(Debug, Clone, Default)]
 pub struct TaskInput {
     pub title: Option<String>,
     pub description: Option<String>,
     pub priority: Option<Priority>,
     pub tags: Option<Tags>,
-    pub status: Option<StatusId>,
+    pub section: SectionInput,
 }
 
-/// A task plus the resolved status it now lives in, so callers can name it
-/// without a second lookup.
+/// A task plus the section it now lives in, so callers can name it without a
+/// second lookup. `None` means the task has no section.
 #[derive(Debug, Clone)]
 pub struct TaskChangeResult {
     pub task: Task,
-    pub status: Status,
+    pub section: Option<Section>,
 }
 
 /// Partial project input. `None` leaves a field unchanged; `Some("")` on
@@ -34,19 +46,8 @@ pub struct TaskChangeResult {
 pub struct ProjectUpdate {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub entry_status: EntryStatusUpdate,
     pub task_sorting_mode: Option<TaskSortingMode>,
     pub show_priority: Option<bool>,
-}
-
-/// How an update treats the project's entry status: leave it, clear it, or set
-/// it to one of the project's statuses.
-#[derive(Debug, Clone, Copy, Default)]
-pub enum EntryStatusUpdate {
-    #[default]
-    Unchanged,
-    Clear,
-    Set(StatusId),
 }
 
 /// Frontend-agnostic, high-level operations over one project. Resolves names to
@@ -68,28 +69,9 @@ impl ProjectService {
         input: TaskInput,
     ) -> Result<TaskChangeResult, ServiceError> {
         let title = input.title.ok_or(ServiceError::TitleRequired)?;
-
-        let status = match input.status {
-            Some(id) => self.status_in_project(project, id).await?,
-            None => {
-                let statuses = self
-                    .store
-                    .get_all_statuses_by_project_id(project.id)
-                    .await?;
-                self.default_status(&statuses, project.entry_status_id)
-                    .cloned()
-                    .ok_or(ServiceError::ProjectHasNoStatuses)?
-            }
-        };
-
-        let position = self
-            .store
-            .get_all_tasks_by_status_id(status.id)
-            .await?
-            .iter()
-            .map(|task| task.position)
-            .max()
-            .map_or(0, |position| position + 1);
+        let section = self.resolve_section(project, input.section).await?;
+        let section_id = section.as_ref().map(|section| section.id);
+        let position = self.next_position(project.id, section_id).await?;
 
         let task = self
             .store
@@ -100,13 +82,13 @@ impl ProjectService {
                     .description
                     .filter(|description| !description.is_empty()),
                 priority: input.priority.unwrap_or_default(),
-                status_id: status.id,
+                section_id,
                 position,
                 tags: input.tags.unwrap_or_default(),
             })
             .await?;
 
-        Ok(TaskChangeResult { task, status })
+        Ok(TaskChangeResult { task, section })
     }
 
     pub async fn create_task_in_project(
@@ -123,10 +105,13 @@ impl ProjectService {
         project: &Project,
         id: TaskId,
     ) -> Result<TaskChangeResult, ServiceError> {
-        let source = self.task_in_project(project, id).await?;
-        let status = self.status_in_project(project, source.status_id).await?;
-        let task = self.store.create_task(TaskToCreate::from(&source)).await?;
-        Ok(TaskChangeResult { task, status })
+        self.task_in_project(project, id).await?;
+        let task = self.store.duplicate_task(id).await?;
+        let section = match task.section_id {
+            Some(section_id) => Some(self.section_in_project(project, section_id).await?),
+            None => None,
+        };
+        Ok(TaskChangeResult { task, section })
     }
 
     pub async fn list_tasks_by_project(
@@ -136,11 +121,11 @@ impl ProjectService {
         Ok(self.store.get_all_tasks_by_project_id(project_id).await?)
     }
 
-    pub async fn list_tasks_by_status(
+    pub async fn list_tasks_by_section(
         &self,
-        status_id: StatusId,
+        section_id: SectionId,
     ) -> Result<Vec<Task>, ServiceError> {
-        Ok(self.store.get_all_tasks_by_status_id(status_id).await?)
+        Ok(self.store.get_all_tasks_by_section_id(section_id).await?)
     }
 
     pub async fn find_task(&self, id: TaskId) -> Result<Option<Task>, ServiceError> {
@@ -153,89 +138,141 @@ impl ProjectService {
         id: TaskId,
         patch: TaskInput,
     ) -> Result<Task, ServiceError> {
-        let task = self.task_in_project(project, id).await?;
-        let status_id = match patch.status {
-            Some(id) => self.status_in_project(project, id).await?.id,
-            None => task.status_id,
-        };
-        let updated = self
-            .store
-            .update_and_autoposition_task(Task {
-                id: task.id,
-                project_id: task.project_id,
-                title: patch.title.unwrap_or(task.title),
-                description: match patch.description {
-                    Some(description) => {
-                        Some(description).filter(|description| !description.is_empty())
-                    }
-                    None => task.description,
-                },
-                priority: patch.priority.unwrap_or(task.priority),
-                status_id,
-                position: task.position,
-                tags: patch.tags.unwrap_or(task.tags),
-                created_at: task.created_at,
-            })
-            .await?;
-        Ok(updated)
-    }
+        let mut task = self.task_in_project(project, id).await?;
 
-    pub async fn update_task_model(
-        &self,
-        project: &Project,
-        task: Task,
-    ) -> Result<Task, ServiceError> {
-        let existing = self.task_in_project(project, task.id).await?;
-        let validated_status = self.status_in_project(project, task.status_id).await?;
+        if patch.section != SectionInput::Unchanged {
+            let section = self.resolve_section(project, patch.section).await?;
+            let section_id = section.as_ref().map(|section| section.id);
+            if section_id != task.section_id {
+                let position = self.next_position(project.id, section_id).await?;
+                task = self.store.move_task(task.id, section_id, position).await?;
+            }
+        }
+
+        let description = match patch.description {
+            Some(description) => Some(description).filter(|description| !description.is_empty()),
+            None => task.description,
+        };
+
         Ok(self
             .store
-            .update_and_autoposition_task(Task {
-                id: existing.id,
-                project_id: existing.project_id,
-                title: task.title,
-                description: task.description.filter(|d| !d.is_empty()),
-                priority: task.priority,
-                status_id: validated_status.id,
-                position: existing.position,
-                tags: task.tags,
-                created_at: existing.created_at,
-            })
+            .update_task(
+                task.id,
+                TaskContentUpdate {
+                    title: patch.title.unwrap_or(task.title),
+                    description,
+                    priority: patch.priority.unwrap_or(task.priority),
+                    tags: patch.tags.unwrap_or(task.tags),
+                },
+            )
             .await?)
     }
 
     pub async fn update_task_by_id(
         &self,
         task_id: TaskId,
-        task: Task,
+        patch: TaskInput,
     ) -> Result<Task, ServiceError> {
-        let existing = self.task_by_id(task_id).await?;
-        let project = self.project_by_id(existing.project_id).await?;
-        self.update_task_model(
-            &project,
-            Task {
-                id: task_id,
-                ..task
-            },
-        )
-        .await
+        let task = self.task_by_id(task_id).await?;
+        let project = self.project_by_id(task.project_id).await?;
+        self.update_task(&project, task_id, patch).await
     }
 
     pub async fn move_task(
         &self,
         project: &Project,
         id: TaskId,
-        status_id: StatusId,
+        section: SectionInput,
+        position: Option<i32>,
     ) -> Result<TaskChangeResult, ServiceError> {
-        let status = self.status_in_project(project, status_id).await?;
         let task = self.task_in_project(project, id).await?;
+        let unchanged = section == SectionInput::Unchanged;
+        let section = if unchanged {
+            match task.section_id {
+                Some(section_id) => Some(self.section_in_project(project, section_id).await?),
+                None => None,
+            }
+        } else {
+            self.resolve_section(project, section).await?
+        };
+
+        if unchanged && position.is_none() {
+            return Ok(TaskChangeResult { task, section });
+        }
+
+        let section_id = section.as_ref().map(|section| section.id);
+        let tasks = self.tasks_in_section(project.id, section_id).await?;
+        let target_position = match position {
+            Some(position) => position.clamp(0, tasks.len() as i32),
+            None => tasks
+                .iter()
+                .map(|task| task.position)
+                .max()
+                .map_or(0, |position| position + 1),
+        };
+
         let task = self
             .store
-            .update_and_autoposition_task(Task {
-                status_id: status.id,
-                ..task
-            })
+            .move_task(task.id, section_id, target_position)
             .await?;
-        Ok(TaskChangeResult { task, status })
+        Ok(TaskChangeResult { task, section })
+    }
+
+    pub async fn move_task_by_id(
+        &self,
+        task_id: TaskId,
+        section: SectionInput,
+        position: Option<i32>,
+    ) -> Result<TaskChangeResult, ServiceError> {
+        let task = self.task_by_id(task_id).await?;
+        let project = self.project_by_id(task.project_id).await?;
+        self.move_task(&project, task_id, section, position).await
+    }
+
+    pub async fn close_task(
+        &self,
+        project: &Project,
+        id: TaskId,
+        reason: CloseReason,
+    ) -> Result<Task, ServiceError> {
+        let task = self.task_in_project(project, id).await?;
+        if task.lifecycle.reason() == Some(reason) {
+            return Ok(task);
+        }
+        Ok(self
+            .store
+            .set_lifecycle(
+                task.id,
+                Lifecycle::Closed {
+                    closed_at: Utc::now(),
+                    reason,
+                },
+            )
+            .await?)
+    }
+
+    pub async fn close_task_by_id(
+        &self,
+        task_id: TaskId,
+        reason: CloseReason,
+    ) -> Result<Task, ServiceError> {
+        let task = self.task_by_id(task_id).await?;
+        let project = self.project_by_id(task.project_id).await?;
+        self.close_task(&project, task_id, reason).await
+    }
+
+    pub async fn open_task(&self, project: &Project, id: TaskId) -> Result<Task, ServiceError> {
+        let task = self.task_in_project(project, id).await?;
+        if !task.lifecycle.is_closed() {
+            return Ok(task);
+        }
+        Ok(self.store.set_lifecycle(task.id, Lifecycle::Open).await?)
+    }
+
+    pub async fn open_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
+        let task = self.task_by_id(task_id).await?;
+        let project = self.project_by_id(task.project_id).await?;
+        self.open_task(&project, task_id).await
     }
 
     pub async fn delete_task(&self, project: &Project, id: TaskId) -> Result<Task, ServiceError> {
@@ -248,431 +285,6 @@ impl ProjectService {
         let task = self.task_by_id(task_id).await?;
         let project = self.project_by_id(task.project_id).await?;
         self.delete_task(&project, task_id).await
-    }
-
-    pub async fn create_status(
-        &self,
-        project: &Project,
-        name: String,
-    ) -> Result<Status, ServiceError> {
-        let statuses = self
-            .store
-            .get_all_statuses_by_project_id(project.id)
-            .await?;
-        let position = statuses
-            .iter()
-            .map(|status| status.position)
-            .max()
-            .map_or(0, |position| position + 1);
-        self.create_status_at(project, name, position, None, StatusStyle::None)
-            .await
-    }
-
-    pub async fn create_status_at(
-        &self,
-        project: &Project,
-        name: String,
-        position: i32,
-        color: Option<Color>,
-        style: StatusStyle,
-    ) -> Result<Status, ServiceError> {
-        let statuses = self
-            .store
-            .get_all_statuses_by_project_id(project.id)
-            .await?;
-        if statuses.iter().any(|status| status.name == name) {
-            return Err(ServiceError::StatusNameTaken { status: name });
-        }
-        Ok(self
-            .store
-            .create_status(project.id, name, position, color, style)
-            .await?)
-    }
-
-    pub async fn create_status_in_project(
-        &self,
-        project_id: ProjectId,
-        name: String,
-        position: i32,
-        color: Option<Color>,
-        style: StatusStyle,
-    ) -> Result<Status, ServiceError> {
-        let project = self.project_by_id(project_id).await?;
-        self.create_status_at(&project, name, position, color, style)
-            .await
-    }
-
-    /// Look up a status by name within a project.
-    pub async fn get_status_by_name(
-        &self,
-        project: &Project,
-        name: &str,
-    ) -> Result<Status, ServiceError> {
-        self.store
-            .get_status_by_project_id_and_status_name(project.id, name.to_string())
-            .await?
-            .filter(|status| status.project_id == project.id)
-            .ok_or_else(|| ServiceError::StatusNotFound {
-                status: name.to_string(),
-                project: project.name.clone(),
-            })
-    }
-
-    pub async fn find_status(&self, id: StatusId) -> Result<Option<Status>, ServiceError> {
-        Ok(self.store.get_status_by_id(id).await?)
-    }
-
-    pub async fn find_status_by_name(
-        &self,
-        project_id: ProjectId,
-        name: String,
-    ) -> Result<Option<Status>, ServiceError> {
-        Ok(self
-            .store
-            .get_status_by_project_id_and_status_name(project_id, name)
-            .await?)
-    }
-
-    pub async fn list_statuses(&self, project_id: ProjectId) -> Result<Vec<Status>, ServiceError> {
-        Ok(self
-            .store
-            .get_all_statuses_by_project_id(project_id)
-            .await?)
-    }
-
-    pub async fn rename_status(
-        &self,
-        project: &Project,
-        status_id: StatusId,
-        new_name: String,
-    ) -> Result<Status, ServiceError> {
-        let status = self.status_in_project(project, status_id).await?;
-        let statuses = self
-            .store
-            .get_all_statuses_by_project_id(project.id)
-            .await?;
-        if statuses
-            .iter()
-            .any(|other| other.id != status.id && other.name == new_name)
-        {
-            return Err(ServiceError::StatusNameTaken { status: new_name });
-        }
-        Ok(self
-            .store
-            .update_status(Status {
-                name: new_name,
-                ..status
-            })
-            .await?)
-    }
-
-    pub async fn replace_status(
-        &self,
-        project: &Project,
-        status: Status,
-    ) -> Result<Status, ServiceError> {
-        let existing = self.status_in_project(project, status.id).await?;
-        let statuses = self
-            .store
-            .get_all_statuses_by_project_id(project.id)
-            .await?;
-        if statuses
-            .iter()
-            .any(|other| other.id != existing.id && other.name == status.name)
-        {
-            return Err(ServiceError::StatusNameTaken {
-                status: status.name,
-            });
-        }
-        Ok(self
-            .store
-            .update_status(Status {
-                project_id: existing.project_id,
-                ..status
-            })
-            .await?)
-    }
-
-    pub async fn replace_status_by_id(&self, status: Status) -> Result<Status, ServiceError> {
-        let existing = self.status_by_id(status.id).await?;
-        let project = self.project_by_id(existing.project_id).await?;
-        self.replace_status(&project, status).await
-    }
-
-    /// Move a status up one position. `None` when it is already first.
-    pub async fn move_status_up(
-        &self,
-        project: &Project,
-        status_id: StatusId,
-    ) -> Result<Option<Status>, ServiceError> {
-        let status = self.status_in_project(project, status_id).await?;
-        let statuses = self
-            .store
-            .get_all_statuses_by_project_id(project.id)
-            .await?;
-        let min = statuses
-            .iter()
-            .map(|status| status.position)
-            .min()
-            .unwrap_or(status.position);
-        if status.position <= min {
-            return Ok(None);
-        }
-        self.store
-            .reorder_status(project.id, status.id, status.position - 1)
-            .await?;
-        Ok(Some(self.status_in_project(project, status.id).await?))
-    }
-
-    /// Move a status down one position. `None` when it is already last.
-    pub async fn move_status_down(
-        &self,
-        project: &Project,
-        status_id: StatusId,
-    ) -> Result<Option<Status>, ServiceError> {
-        let status = self.status_in_project(project, status_id).await?;
-        let statuses = self
-            .store
-            .get_all_statuses_by_project_id(project.id)
-            .await?;
-        let max = statuses
-            .iter()
-            .map(|status| status.position)
-            .max()
-            .unwrap_or(status.position);
-        if status.position >= max {
-            return Ok(None);
-        }
-        self.store
-            .reorder_status(project.id, status.id, status.position + 1)
-            .await?;
-        Ok(Some(self.status_in_project(project, status.id).await?))
-    }
-
-    pub async fn move_status_to(
-        &self,
-        project: &Project,
-        status_id: StatusId,
-        position: i32,
-    ) -> Result<(), ServiceError> {
-        self.status_in_project(project, status_id).await?;
-        self.store
-            .reorder_status(project.id, status_id, position)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn move_status_by_id(
-        &self,
-        status_id: StatusId,
-        position: i32,
-    ) -> Result<(), ServiceError> {
-        let status = self.status_by_id(status_id).await?;
-        let project = self.project_by_id(status.project_id).await?;
-        self.move_status_to(&project, status_id, position).await
-    }
-
-    pub async fn set_status_color(
-        &self,
-        project: &Project,
-        status_id: StatusId,
-        color: Option<Color>,
-    ) -> Result<Status, ServiceError> {
-        let status = self.status_in_project(project, status_id).await?;
-        Ok(self.store.update_status(Status { color, ..status }).await?)
-    }
-
-    pub async fn set_status_style(
-        &self,
-        project: &Project,
-        status_id: StatusId,
-        style: StatusStyle,
-    ) -> Result<Status, ServiceError> {
-        let status = self.status_in_project(project, status_id).await?;
-        Ok(self.store.update_status(Status { style, ..status }).await?)
-    }
-
-    pub async fn delete_status(
-        &self,
-        project: &Project,
-        status_id: StatusId,
-    ) -> Result<Status, ServiceError> {
-        let status = self.status_in_project(project, status_id).await?;
-        let tasks = self.store.get_all_tasks_by_status_id(status.id).await?;
-        if !tasks.is_empty() {
-            return Err(ServiceError::StatusNotEmpty {
-                status: status.name,
-                count: tasks.len(),
-            });
-        }
-        self.store.delete_status(status.id).await?;
-        Ok(status)
-    }
-
-    pub async fn delete_status_by_id(&self, status_id: StatusId) -> Result<Status, ServiceError> {
-        let status = self.status_by_id(status_id).await?;
-        let project = self.project_by_id(status.project_id).await?;
-        self.delete_status(&project, status_id).await
-    }
-
-    pub async fn create_project(
-        &self,
-        name: String,
-        description: Option<String>,
-        template: Option<ProjectTemplate>,
-    ) -> Result<Project, ServiceError> {
-        let description = description.filter(|description| !description.is_empty());
-        let project = self
-            .store
-            .create_project(name, description, None, TaskSortingMode::default(), false)
-            .await?;
-
-        let Some(template) = template else {
-            return Ok(project);
-        };
-
-        let mut statuses = vec![];
-        for status in template.statuses {
-            statuses.push(
-                self.store
-                    .create_status(
-                        project.id,
-                        status.name.to_string(),
-                        status.position,
-                        status.color,
-                        status.style,
-                    )
-                    .await?,
-            );
-        }
-
-        let entry_status_id = template
-            .entry_status_name
-            .and_then(|name| statuses.iter().find(|s| s.name == name).map(|s| s.id));
-
-        Ok(self
-            .store
-            .update_project(Project {
-                entry_status_id,
-                task_sorting_mode: template.task_sorting_mode,
-                show_priority: template.show_priority,
-                ..project
-            })
-            .await?)
-    }
-
-    pub async fn create_project_with(
-        &self,
-        name: String,
-        description: Option<String>,
-        entry_status_id: Option<StatusId>,
-        task_sorting_mode: TaskSortingMode,
-        show_priority: bool,
-    ) -> Result<Project, ServiceError> {
-        Ok(self
-            .store
-            .create_project(
-                name,
-                description.filter(|description| !description.is_empty()),
-                entry_status_id,
-                task_sorting_mode,
-                show_priority,
-            )
-            .await?)
-    }
-
-    pub async fn list_projects(&self) -> Result<Vec<Project>, ServiceError> {
-        Ok(self.store.get_all_projects().await?)
-    }
-
-    pub async fn find_project(&self, id: ProjectId) -> Result<Option<Project>, ServiceError> {
-        Ok(self.store.get_project_by_id(id).await?)
-    }
-
-    pub async fn find_project_by_name(&self, name: &str) -> Result<Option<Project>, ServiceError> {
-        Ok(self.store.get_project_by_name(name).await?)
-    }
-
-    pub async fn project_snapshot(
-        &self,
-        project_id: ProjectId,
-    ) -> Result<ProjectSnapshot, ServiceError> {
-        Ok(self.store.get_project_snapshot(project_id).await?)
-    }
-
-    pub async fn update_project(
-        &self,
-        project: &Project,
-        update: ProjectUpdate,
-    ) -> Result<Project, ServiceError> {
-        let entry_status_id = match update.entry_status {
-            EntryStatusUpdate::Unchanged => project.entry_status_id,
-            EntryStatusUpdate::Clear => None,
-            EntryStatusUpdate::Set(status_id) => {
-                Some(self.status_in_project(project, status_id).await?.id)
-            }
-        };
-        let description = match update.description {
-            Some(value) => Some(value).filter(|value| !value.is_empty()),
-            None => project.description.clone(),
-        };
-        Ok(self
-            .store
-            .update_project(Project {
-                name: update.name.unwrap_or_else(|| project.name.clone()),
-                description,
-                entry_status_id,
-                task_sorting_mode: update
-                    .task_sorting_mode
-                    .unwrap_or(project.task_sorting_mode),
-                show_priority: update.show_priority.unwrap_or(project.show_priority),
-                ..project.clone()
-            })
-            .await?)
-    }
-
-    pub async fn replace_project(&self, project: Project) -> Result<Project, ServiceError> {
-        let existing = self
-            .store
-            .get_project_by_id(project.id)
-            .await?
-            .ok_or_else(|| {
-                ServiceError::Storage(StorageError::NotFound(format!(
-                    "project '{}' not found",
-                    project.id
-                )))
-            })?;
-        if let Some(entry_status_id) = project.entry_status_id {
-            self.status_in_project(&existing, entry_status_id).await?;
-        }
-        Ok(self
-            .store
-            .update_project(Project {
-                description: project.description.filter(|d| !d.is_empty()),
-                created_at: existing.created_at,
-                ..project
-            })
-            .await?)
-    }
-
-    /// Delete a project, returning the deleted project.
-    pub async fn delete_project(&self, name: &str) -> Result<Project, ServiceError> {
-        let project = self.store.get_project_by_name(name).await?.ok_or_else(|| {
-            ServiceError::Storage(StorageError::NotFound(format!(
-                "project '{}' not found",
-                name
-            )))
-        })?;
-        self.store.delete_project(name.to_string()).await?;
-        Ok(project)
-    }
-
-    pub async fn delete_project_by_id(
-        &self,
-        project_id: ProjectId,
-    ) -> Result<Project, ServiceError> {
-        let project = self.project_by_id(project_id).await?;
-        self.delete_project(&project.name).await
     }
 
     pub async fn add_task_note(
@@ -715,20 +327,478 @@ impl ProjectService {
         Ok(())
     }
 
+    pub async fn create_section(
+        &self,
+        project: &Project,
+        name: String,
+        color: Option<Color>,
+    ) -> Result<Section, ServiceError> {
+        let name = self.validated_section_name(project, None, name).await?;
+        let sections = self
+            .store
+            .get_all_sections_by_project_id(project.id)
+            .await?;
+        let position = sections
+            .iter()
+            .map(|section| section.position)
+            .max()
+            .map_or(0, |position| position + 1);
+        Ok(self
+            .store
+            .create_section(project.id, name, position, color)
+            .await?)
+    }
+
+    pub async fn create_section_in_project(
+        &self,
+        project_id: ProjectId,
+        name: String,
+        color: Option<Color>,
+    ) -> Result<Section, ServiceError> {
+        let project = self.project_by_id(project_id).await?;
+        self.create_section(&project, name, color).await
+    }
+
+    /// Look up a section by name within a project, ignoring case and surrounding
+    /// whitespace. On a miss, suggests the closest existing name when one is
+    /// close enough to be a likely typo.
+    pub async fn get_section_by_name(
+        &self,
+        project: &Project,
+        name: &str,
+    ) -> Result<Section, ServiceError> {
+        let name = name.trim();
+        if let Some(section) = self
+            .store
+            .get_section_by_name(project.id, name)
+            .await?
+            .filter(|section| section.project_id == project.id)
+        {
+            return Ok(section);
+        }
+
+        let sections = self
+            .store
+            .get_all_sections_by_project_id(project.id)
+            .await?;
+        let names = sections
+            .into_iter()
+            .map(|section| section.name)
+            .collect::<Vec<_>>();
+        let suggestion = suggest_name(name, &names);
+        Err(ServiceError::SectionNotFound {
+            section: name.to_string(),
+            project: project.name.clone(),
+            suggestion,
+        })
+    }
+
+    pub async fn find_section(&self, id: SectionId) -> Result<Option<Section>, ServiceError> {
+        Ok(self.store.get_section_by_id(id).await?)
+    }
+
+    pub async fn find_section_by_name(
+        &self,
+        project_id: ProjectId,
+        name: &str,
+    ) -> Result<Option<Section>, ServiceError> {
+        Ok(self.store.get_section_by_name(project_id, name).await?)
+    }
+
+    pub async fn list_sections(&self, project_id: ProjectId) -> Result<Vec<Section>, ServiceError> {
+        Ok(self
+            .store
+            .get_all_sections_by_project_id(project_id)
+            .await?)
+    }
+
+    pub async fn rename_section(
+        &self,
+        project: &Project,
+        section_id: SectionId,
+        new_name: String,
+    ) -> Result<Section, ServiceError> {
+        let section = self.section_in_project(project, section_id).await?;
+        let name = self
+            .validated_section_name(project, Some(section.id), new_name)
+            .await?;
+        Ok(self
+            .store
+            .update_section(Section { name, ..section })
+            .await?)
+    }
+
+    pub async fn set_section_color(
+        &self,
+        project: &Project,
+        section_id: SectionId,
+        color: Option<Color>,
+    ) -> Result<Section, ServiceError> {
+        let section = self.section_in_project(project, section_id).await?;
+        Ok(self
+            .store
+            .update_section(Section { color, ..section })
+            .await?)
+    }
+
+    pub async fn update_section_by_id(
+        &self,
+        section_id: SectionId,
+        name: String,
+        color: Option<Color>,
+    ) -> Result<Section, ServiceError> {
+        let section = self.section_by_id(section_id).await?;
+        let project = self.project_by_id(section.project_id).await?;
+        let name = self
+            .validated_section_name(&project, Some(section.id), name)
+            .await?;
+        Ok(self
+            .store
+            .update_section(Section {
+                name,
+                color,
+                ..section
+            })
+            .await?)
+    }
+
+    /// Move a section up one position. `None` when it is already first.
+    pub async fn move_section_up(
+        &self,
+        project: &Project,
+        section_id: SectionId,
+    ) -> Result<Option<Section>, ServiceError> {
+        let section = self.section_in_project(project, section_id).await?;
+        let sections = self
+            .store
+            .get_all_sections_by_project_id(project.id)
+            .await?;
+        let min = sections
+            .iter()
+            .map(|section| section.position)
+            .min()
+            .unwrap_or(section.position);
+        if section.position <= min {
+            return Ok(None);
+        }
+        self.store
+            .reorder_section(project.id, section.id, section.position - 1)
+            .await?;
+        Ok(Some(self.section_in_project(project, section.id).await?))
+    }
+
+    /// Move a section down one position. `None` when it is already last.
+    pub async fn move_section_down(
+        &self,
+        project: &Project,
+        section_id: SectionId,
+    ) -> Result<Option<Section>, ServiceError> {
+        let section = self.section_in_project(project, section_id).await?;
+        let sections = self
+            .store
+            .get_all_sections_by_project_id(project.id)
+            .await?;
+        let max = sections
+            .iter()
+            .map(|section| section.position)
+            .max()
+            .unwrap_or(section.position);
+        if section.position >= max {
+            return Ok(None);
+        }
+        self.store
+            .reorder_section(project.id, section.id, section.position + 1)
+            .await?;
+        Ok(Some(self.section_in_project(project, section.id).await?))
+    }
+
+    pub async fn move_section_to(
+        &self,
+        project: &Project,
+        section_id: SectionId,
+        position: i32,
+    ) -> Result<(), ServiceError> {
+        self.section_in_project(project, section_id).await?;
+        self.store
+            .reorder_section(project.id, section_id, position)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn move_section_by_id(
+        &self,
+        section_id: SectionId,
+        position: i32,
+    ) -> Result<(), ServiceError> {
+        let section = self.section_by_id(section_id).await?;
+        let project = self.project_by_id(section.project_id).await?;
+        self.move_section_to(&project, section_id, position).await
+    }
+
+    pub async fn delete_section(
+        &self,
+        project: &Project,
+        section_id: SectionId,
+    ) -> Result<Section, ServiceError> {
+        let section = self.section_in_project(project, section_id).await?;
+        self.store.delete_section(section.id).await?;
+        Ok(section)
+    }
+
+    pub async fn delete_section_by_id(
+        &self,
+        section_id: SectionId,
+    ) -> Result<Section, ServiceError> {
+        let section = self.section_by_id(section_id).await?;
+        let project = self.project_by_id(section.project_id).await?;
+        self.delete_section(&project, section_id).await
+    }
+
+    pub async fn merge_sections(
+        &self,
+        project: &Project,
+        source_id: SectionId,
+        target_id: SectionId,
+    ) -> Result<(Section, Section), ServiceError> {
+        let source = self.section_in_project(project, source_id).await?;
+        let target = self.section_in_project(project, target_id).await?;
+        if source.id == target.id {
+            return Err(ServiceError::Storage(StorageError::Conflict(
+                "cannot merge a section into itself".to_string(),
+            )));
+        }
+        self.store.merge_sections(source.id, target.id).await?;
+        Ok((source, target))
+    }
+
+    pub async fn merge_sections_by_id(
+        &self,
+        source_id: SectionId,
+        target_id: SectionId,
+    ) -> Result<(Section, Section), ServiceError> {
+        let source = self.section_by_id(source_id).await?;
+        let target = self.section_by_id(target_id).await?;
+        let source_project = self.project_by_id(source.project_id).await?;
+        self.project_by_id(target.project_id).await?;
+        self.merge_sections(&source_project, source.id, target.id)
+            .await
+    }
+
+    pub async fn create_project(
+        &self,
+        name: String,
+        description: Option<String>,
+        template: Option<ProjectTemplate>,
+    ) -> Result<Project, ServiceError> {
+        let (task_sorting_mode, show_priority) = match template {
+            Some(template) => (template.task_sorting_mode, template.show_priority),
+            None => (TaskSortingMode::default(), false),
+        };
+        let project = self
+            .store
+            .create_project(
+                name,
+                description.filter(|description| !description.is_empty()),
+                task_sorting_mode,
+                show_priority,
+            )
+            .await?;
+
+        let Some(template) = template else {
+            return Ok(project);
+        };
+
+        for section in template.sections {
+            self.store
+                .create_section(
+                    project.id,
+                    section.name.to_string(),
+                    section.position,
+                    section.color,
+                )
+                .await?;
+        }
+
+        Ok(project)
+    }
+
+    pub async fn create_project_with(
+        &self,
+        name: String,
+        description: Option<String>,
+        task_sorting_mode: TaskSortingMode,
+        show_priority: bool,
+    ) -> Result<Project, ServiceError> {
+        Ok(self
+            .store
+            .create_project(
+                name,
+                description.filter(|description| !description.is_empty()),
+                task_sorting_mode,
+                show_priority,
+            )
+            .await?)
+    }
+
+    pub async fn list_projects(&self) -> Result<Vec<Project>, ServiceError> {
+        Ok(self.store.get_all_projects().await?)
+    }
+
+    pub async fn find_project(&self, id: ProjectId) -> Result<Option<Project>, ServiceError> {
+        Ok(self.store.get_project_by_id(id).await?)
+    }
+
+    pub async fn find_project_by_name(&self, name: &str) -> Result<Option<Project>, ServiceError> {
+        Ok(self.store.get_project_by_name(name).await?)
+    }
+
+    pub async fn project_snapshot(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<ProjectSnapshot, ServiceError> {
+        Ok(self.store.get_project_snapshot(project_id).await?)
+    }
+
+    pub async fn update_project(
+        &self,
+        project: &Project,
+        update: ProjectUpdate,
+    ) -> Result<Project, ServiceError> {
+        let description = match update.description {
+            Some(value) => Some(value).filter(|value| !value.is_empty()),
+            None => project.description.clone(),
+        };
+        Ok(self
+            .store
+            .update_project(Project {
+                name: update.name.unwrap_or_else(|| project.name.clone()),
+                description,
+                task_sorting_mode: update
+                    .task_sorting_mode
+                    .unwrap_or(project.task_sorting_mode),
+                show_priority: update.show_priority.unwrap_or(project.show_priority),
+                ..project.clone()
+            })
+            .await?)
+    }
+
+    pub async fn replace_project(&self, project: Project) -> Result<Project, ServiceError> {
+        let existing = self
+            .store
+            .get_project_by_id(project.id)
+            .await?
+            .ok_or_else(|| {
+                ServiceError::Storage(StorageError::NotFound(format!(
+                    "project '{}' not found",
+                    project.id
+                )))
+            })?;
+        Ok(self
+            .store
+            .update_project(Project {
+                description: project.description.filter(|d| !d.is_empty()),
+                created_at: existing.created_at,
+                ..project
+            })
+            .await?)
+    }
+
+    /// Delete a project by id, returning the deleted project. The default
+    /// project cannot be deleted.
+    pub async fn delete_project_by_id(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<Project, ServiceError> {
+        let project = self.project_by_id(project_id).await?;
+        if project.name == "default" {
+            return Err(ServiceError::Storage(StorageError::Invalid(
+                "cannot delete the default project".into(),
+            )));
+        }
+        self.store.delete_project_by_id(project.id).await?;
+        Ok(project)
+    }
+
+    pub async fn export(&self, project: Option<ProjectId>) -> Result<Backup, ServiceError> {
+        Ok(backup::export(self.store.as_ref(), project).await?)
+    }
+
+    pub async fn plan_import(
+        &self,
+        backup: &Backup,
+        mode: ImportMode,
+    ) -> Result<ImportPlan, ServiceError> {
+        Ok(backup::plan_import(self.store.as_ref(), backup, mode).await?)
+    }
+
     pub async fn import(&self, plan: ImportPlan) -> Result<ImportReport, ServiceError> {
         Ok(self.store.import(plan).await?)
     }
 
-    /// The status new tasks default to: the entry status if set and present,
-    /// otherwise the first status by order. `None` when the project has none.
-    fn default_status<'s>(
+    async fn resolve_section(
         &self,
-        statuses: &'s [Status],
-        entry_status_id: Option<StatusId>,
-    ) -> Option<&'s Status> {
-        entry_status_id
-            .and_then(|id| statuses.iter().find(|status| status.id == id))
-            .or_else(|| statuses.first())
+        project: &Project,
+        input: SectionInput,
+    ) -> Result<Option<Section>, ServiceError> {
+        match input {
+            SectionInput::Unchanged | SectionInput::NoSection => Ok(None),
+            SectionInput::Existing(section_id) => {
+                Ok(Some(self.section_in_project(project, section_id).await?))
+            }
+            SectionInput::New(name) => Ok(Some(self.create_section(project, name, None).await?)),
+        }
+    }
+
+    async fn validated_section_name(
+        &self,
+        project: &Project,
+        exclude: Option<SectionId>,
+        name: String,
+    ) -> Result<String, ServiceError> {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return Err(ServiceError::SectionNameRequired);
+        }
+        let sections = self
+            .store
+            .get_all_sections_by_project_id(project.id)
+            .await?;
+        if sections.iter().any(|section| {
+            Some(section.id) != exclude && normalize_name(&section.name) == normalize_name(&name)
+        }) {
+            return Err(ServiceError::SectionNameTaken { section: name });
+        }
+        Ok(name)
+    }
+
+    async fn tasks_in_section(
+        &self,
+        project_id: ProjectId,
+        section_id: Option<SectionId>,
+    ) -> Result<Vec<Task>, ServiceError> {
+        Ok(match section_id {
+            Some(section_id) => self.store.get_all_tasks_by_section_id(section_id).await?,
+            None => self
+                .store
+                .get_all_tasks_by_project_id(project_id)
+                .await?
+                .into_iter()
+                .filter(|task| task.section_id.is_none())
+                .collect(),
+        })
+    }
+
+    async fn next_position(
+        &self,
+        project_id: ProjectId,
+        section_id: Option<SectionId>,
+    ) -> Result<i32, ServiceError> {
+        let tasks = self.tasks_in_section(project_id, section_id).await?;
+        Ok(tasks
+            .iter()
+            .map(|task| task.position)
+            .max()
+            .map_or(0, |position| position + 1))
     }
 
     async fn project_by_id(&self, id: ProjectId) -> Result<Project, ServiceError> {
@@ -743,25 +813,10 @@ impl ProjectService {
         })
     }
 
-    async fn status_by_id(&self, id: StatusId) -> Result<Status, ServiceError> {
-        self.store.get_status_by_id(id).await?.ok_or_else(|| {
-            ServiceError::Storage(StorageError::NotFound(format!("status {id} not found")))
+    async fn section_by_id(&self, id: SectionId) -> Result<Section, ServiceError> {
+        self.store.get_section_by_id(id).await?.ok_or_else(|| {
+            ServiceError::Storage(StorageError::NotFound(format!("section {id} not found")))
         })
-    }
-
-    async fn status_in_project(
-        &self,
-        project: &Project,
-        id: StatusId,
-    ) -> Result<Status, ServiceError> {
-        self.store
-            .get_status_by_id(id)
-            .await?
-            .filter(|status| status.project_id == project.id)
-            .ok_or_else(|| ServiceError::StatusNotFound {
-                status: id.to_string(),
-                project: project.name.clone(),
-            })
     }
 
     async fn task_in_project(&self, project: &Project, id: TaskId) -> Result<Task, ServiceError> {
@@ -773,5 +828,97 @@ impl ProjectService {
                 task_id: id,
                 project: project.name.clone(),
             })
+    }
+
+    async fn section_in_project(
+        &self,
+        project: &Project,
+        id: SectionId,
+    ) -> Result<Section, ServiceError> {
+        self.store
+            .get_section_by_id(id)
+            .await?
+            .filter(|section| section.project_id == project.id)
+            .ok_or_else(|| ServiceError::SectionNotFound {
+                section: id.to_string(),
+                project: project.name.clone(),
+                suggestion: None,
+            })
+    }
+}
+
+/// Normalize a section name for case- and whitespace-insensitive comparison.
+fn normalize_name(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
+/// Levenshtein distance between two strings, measured in characters.
+fn levenshtein_distance(left: &str, right: &str) -> usize {
+    let left = left.chars().collect::<Vec<_>>();
+    let right = right.chars().collect::<Vec<_>>();
+    let mut previous = (0..=right.len()).collect::<Vec<_>>();
+    let mut current = vec![0; right.len() + 1];
+
+    for (row, left_char) in left.iter().enumerate() {
+        current[0] = row + 1;
+        for (column, right_char) in right.iter().enumerate() {
+            let substitution = previous[column] + if left_char == right_char { 0 } else { 1 };
+            current[column + 1] = (previous[column + 1] + 1)
+                .min(current[column] + 1)
+                .min(substitution);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    previous[right.len()]
+}
+
+/// The closest existing section name when it is within a small edit-distance
+/// threshold, so a typo can be reported back with a suggestion.
+fn suggest_name(typed: &str, candidates: &[String]) -> Option<String> {
+    let typed = normalize_name(typed);
+    let threshold = std::cmp::max(2, typed.chars().count() / 3);
+    candidates
+        .iter()
+        .map(|candidate| {
+            let distance = levenshtein_distance(&typed, &normalize_name(candidate));
+            (distance, candidate)
+        })
+        .filter(|(distance, _)| *distance <= threshold)
+        .min_by_key(|(distance, _)| *distance)
+        .map(|(_, candidate)| candidate)
+        .cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::suggest_name;
+
+    fn names(names: &[&str]) -> Vec<String> {
+        names.iter().map(|name| name.to_string()).collect()
+    }
+
+    #[test]
+    fn near_miss_suggests_closest_name() {
+        let candidates = names(&["Backlog", "In Progress", "Review"]);
+        assert_eq!(
+            suggest_name("Backlogg", &candidates),
+            Some("Backlog".to_string())
+        );
+    }
+
+    #[test]
+    fn far_off_name_has_no_suggestion() {
+        let candidates = names(&["Backlog", "In Progress", "Review"]);
+        assert_eq!(suggest_name("Completely Different", &candidates), None);
+    }
+
+    #[test]
+    fn suggestion_normalizes_case_and_whitespace() {
+        let candidates = names(&["In Progress"]);
+        assert_eq!(
+            suggest_name("  in progres ", &candidates),
+            Some("In Progress".to_string())
+        );
     }
 }

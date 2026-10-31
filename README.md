@@ -4,7 +4,7 @@ A task manager for the terminal.
 
 ## Overview
 
-scry organizes work into **projects** with customizable **statuses** (kanban columns). Tasks live within a project and move between statuses. A built-in "default" project with `todo` / `done` statuses provides a simple out-of-box todo list experience — no setup required.
+scry organizes work into **projects**. Every task is either **open** or **closed**; a closed task records why it closed (`completed` or `cancelled`) and when. Tasks may also belong to an optional, ordered **section** within their project, and tasks with no section appear under **No section**. A built-in "default" project with no sections provides a simple out-of-box todo list experience — no setup required.
 
 ## Installation
 
@@ -68,11 +68,19 @@ See [Running a server](#running-a-server) for the host-side REST API setup.
 
 ### Projects
 
-A project is a container for related tasks. Each project has its own set of statuses. The built-in "default" project exists automatically and can be used without creating anything.
+A project is a container for related tasks. Each project has its own optional, ordered sections. The built-in "default" project exists automatically and can be used without creating anything.
 
-### Statuses
+### Lifecycle
 
-Statuses are the columns a task moves through within a project. The "default" project comes with `todo` and `done`. Custom projects can have any number of arbitrarily named statuses (e.g., "backlog", "in progress", "review", "done"). Status names are case-sensitive.
+Every task is open or closed. `scry close <id> --reason completed` closes a task as `completed`, `scry close <id> --reason cancelled` closes it as `cancelled`, and `scry open <id>` returns it to open. Closing records `closed_at`; opening clears both the timestamp and the reason. Close and open do not change a task's section or position, so reopening restores it where it was.
+
+### Sections
+
+Sections are optional, ordered groupings within a project. A task has zero or one section. Tasks without a section are grouped under **No section**.
+
+Sections are created explicitly, either with `scry section add <name>` or with `--new-section <name>` when adding or updating a task. `--section <name>` must name an existing section; an unknown name fails with the closest match suggested. Section names are trimmed and case-insensitively unique per project. There is no default or entry section: new tasks go to No section unless a section is specified, and `--no-section` on `move` or `update` moves a task back to No section.
+
+Sections carry no completion semantics: a section named "Done" does not close anything. Deleting a section moves its tasks to No section; merging two sections moves the source's tasks into the target and deletes the source. Empty sections are allowed.
 
 ### Active Project
 
@@ -84,18 +92,20 @@ scry uses a kubectl-style context model. `scry project use <name>` sets the acti
 # add a task
 scry add "buy groceries"
 
-# list tasks (kanban columns)
+# list tasks grouped by section
 scry list
 
-# move a task to done
-scry move 1 done
+# close a task as completed (or cancel it with --reason cancelled)
+scry close 1 --reason completed
 
-# create a project with custom statuses
+# create a project with sections
 scry project create myapp
-scry -p myapp project status add "in progress"
-scry -p myapp project status add review
-scry -p myapp add "design API"
-scry -p myapp move 1 "in progress"
+scry -p myapp section add "in progress"
+scry -p myapp section add review
+scry -p myapp add "design API" --section "in progress"
+scry -p myapp add "write docs" --new-section docs
+scry -p myapp move 1 review
+scry -p myapp list --section review
 ```
 
 ## CLI Reference
@@ -116,50 +126,58 @@ Running `scry` with no subcommand prints the top-level help and exits.
 
 ### Task Commands
 
-| Command                                                                                                                      | Description                                                                     |
-| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `scry add <title> [--description <text>] [--priority <level>] [--tags <comma,separated>] [--status <name>]`                  | Add a task (defaults to the project's entry status, otherwise the first status) |
-| `scry list [--status <name>] [--search <text>]`                                                                              | List tasks grouped by status; `--search` matches titles and tags                |
-| `scry move <id> <status>`                                                                                                    | Move a task to a new status (alias for `update --status`)                       |
-| `scry update <id> [--title <text>] [--description <text>] [--priority <level>] [--tags <comma,separated>] [--status <name>]` | Update task properties; an empty `--description` or `--tags` clears it          |
-| `scry duplicate <id>`                                                                                                        | Duplicate a task into the same status at the same position                      |
-| `scry show <id>`                                                                                                             | Show full task details, including description, priority, tags, and notes        |
-| `scry delete <id>`                                                                                                           | Delete a task permanently                                                       |
-| `scry note add <task-id> <contents>`                                                                                         | Add a note to a task                                                            |
+| Command                                                                                                                                                             | Description                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `scry add <title> [--description <text>] [--priority <level>] [--tags <comma,separated>] [--section <name>] [--new-section <name>]`                                 | Add a task (defaults to No section)                                                 |
+| `scry list [--section <name>] [--search <text>] [--include-closed]`                                                                                                 | List open tasks grouped by section; `--include-closed` adds a trailing Closed group |
+| `scry move <id> [<section>] [--no-section]`                                                                                                                         | Move a task to a section, or to No section (appends to the end of the group)        |
+| `scry update <id> [--title <text>] [--description <text>] [--priority <level>] [--tags <comma,separated>] [--section <name>] [--new-section <name>] [--no-section]` | Update task properties; an empty `--description` or `--tags` clears it              |
+| `scry close <id> --reason <completed                                                                                                                                | cancelled>`                                                                         | Close a task with a reason |
+| `scry open <id>`                                                                                                                                                    | Reopen a closed task                                                                |
+| `scry duplicate <id>`                                                                                                                                               | Duplicate a task into the same section, immediately after the source                |
+| `scry show <id>`                                                                                                                                                    | Show full task details, including lifecycle, section, priority, tags, and notes     |
+| `scry delete <id>`                                                                                                                                                  | Delete a task permanently                                                           |
+| `scry note add <task-id> <contents>`                                                                                                                                | Add a note to a task                                                                |
 
 `<level>` is one of `minimal`, `low`, `medium`, `high`, `critical` (aliases `p5`–`p1`).
 
+With `--include-closed`, `scry list` renders closed tasks in a trailing **Closed** group, marking completed tasks `[x]` and cancelled tasks `[~]`. Without it, closed tasks are hidden. An unknown `--section` name fails with a suggestion naming the closest existing section.
+
 ### Project Commands
 
-| Command                                                                                                                                                        | Description                                                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `scry project list`                                                                                                                                            | List all projects (`*` marks the active one)                      |
-| `scry project current`                                                                                                                                         | Show the active project                                           |
-| `scry project show [name]`                                                                                                                                     | Show a project's details, including its description               |
-| `scry project use <name>`                                                                                                                                      | Set the active project                                            |
-| `scry project create [-t <template>] [--description <text>] <name>`                                                                                            | Create a project (does not switch to it — run `scry project use`) |
-| `scry project update [--name <new>] [--description <text>] [--entry-status <status>] [--clear-entry-status] [--sort <mode>] [--show-priority/--hide-priority]` | Update project properties; targets `-p` or the active project     |
-| `scry project delete <name> [-f]`                                                                                                                              | Delete a project (prompts unless `--force`)                       |
+| Command                                                                                                       | Description                                                       |
+| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `scry project list`                                                                                           | List all projects (`*` marks the active one)                      |
+| `scry project current`                                                                                        | Show the active project                                           |
+| `scry project show [name]`                                                                                    | Show a project's details, including its description               |
+| `scry project use <name>`                                                                                     | Set the active project                                            |
+| `scry project create [-t <template>] [--description <text>] <name>`                                           | Create a project (does not switch to it — run `scry project use`) |
+| `scry project update [--name <new>] [--description <text>] [--sort <mode>] [--show-priority/--hide-priority]` | Update project properties; targets `-p` or the active project     |
+| `scry project delete <name> [-f]`                                                                             | Resolve name to id, then delete (prompts unless `--force`)        |
 
-`scry project update` applies multiple flags in one call; an empty `--description` clears the description, and `--clear-entry-status` clears the entry status.
+`scry project update` applies multiple flags in one call; an empty `--description` clears the description.
 
 `<mode>` is one of `alphabetical`, `alphabetical-case-insensitive`, `id`, `manual`, `priority`.
 
-### Status Commands
+`scry project create -t <template>` seeds a project's sections and settings. The `todolist` template has zero sections and manual sorting; the `kanban` template has `backlog`, `in-progress`, and `review` sections and priority sorting. Creating a project without a template leaves it with no sections; tasks still work and land in No section.
 
-| Command                                        | Description                               |
-| ---------------------------------------------- | ----------------------------------------- |
-| `scry project status list`                     | List statuses for the active project      |
-| `scry project status add <name>`               | Add a new status                          |
-| `scry project status remove <name>`            | Remove a status (refuses if it has tasks) |
-| `scry project status rename <old> <new>`       | Rename a status                           |
-| `scry project status set-color <name> <color>` | Set a status's color                      |
-| `scry project status reset-color <name>`       | Clear a status's color                    |
-| `scry project status set-style <name> <style>` | Set a status's style                      |
-| `scry project status move-up <name>`           | Move a status up in the ordering          |
-| `scry project status move-down <name>`         | Move a status down in the ordering        |
+### Section Commands
 
-`<color>` is one of `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark-gray`, `light-red`, `light-green`, `light-yellow`, `light-blue`, `light-magenta`, `light-cyan`, `white`. `<style>` is one of `none`, `unchecked`, `checked`, `strikethrough`, `hidden`.
+Sections belong to the active project, or to `-p` when given.
+
+| Command                                     | Description                                                   |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| `scry section list`                         | List sections for the project                                 |
+| `scry section add <name> [--color <color>]` | Add a new section, optionally with a color                    |
+| `scry section remove <name>`                | Delete a section, moving its tasks to No section              |
+| `scry section rename <old> <new>`           | Rename a section                                              |
+| `scry section merge <source> <target>`      | Move the source's tasks into the target and delete the source |
+| `scry section move-up <name>`               | Move a section up in the ordering                             |
+| `scry section move-down <name>`             | Move a section down in the ordering                           |
+| `scry section set-color <name> <color>`     | Set a section's color                                         |
+| `scry section reset-color <name>`           | Clear a section's color                                       |
+
+`<color>` is one of `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark-gray`, `light-red`, `light-green`, `light-yellow`, `light-blue`, `light-magenta`, `light-cyan`, `white`.
 
 ### Export & Import
 
@@ -167,7 +185,7 @@ Back up and restore projects as a single JSON document. `export` always writes t
 
 | Command                                   | Description                                                                                |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `scry export`                             | Write all projects (with statuses, tasks, and notes) as JSON to stdout                     |
+| `scry export`                             | Write all projects (with sections, tasks, and notes) as JSON to stdout                     |
 | `scry -p <name> export`                   | Write a single project as JSON to stdout (`-p` is the global flag, placed before `export`) |
 | `scry import`                             | Read a JSON backup from stdin and add its projects (fails if any name already exists)      |
 | `scry import --replace-existing-projects` | Add new projects, replacing existing projects whose names collide                          |
@@ -182,9 +200,9 @@ scry export > scry-backup.json
 scry import --replace-existing-projects < scry-backup.json
 ```
 
-The document is a single object, `{ "version": 1, "app_version": "0.20.0", "projects": [ ... ] }`. `version` is the format version checked on import and `app_version` is informational, recording the binary that produced the backup. Each project carries its own fields (`id`, `name`, `description`, `entry_status_id`, `task_sorting_mode`, `show_priority`, `created_at`) alongside nested `statuses`, `tasks`, and `notes` arrays. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` and `"style": "checked"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
+The document is a single object, `{ "version": 2, "app_version": "0.24.0", "projects": [ ... ] }`. `version` is the format version checked on import and `app_version` is informational, recording the binary that produced the backup. Each project carries its own fields (`id`, `name`, `description`, `task_sorting_mode`, `show_priority`, `created_at`) alongside nested `sections`, `tasks`, and `notes` arrays. Every task carries a nullable `section_id` and a `lifecycle` object: `{"state": "open"}` for an open task, or `{"state": "closed", "closed_at": "...", "reason": "completed"}` (or `"reason": "cancelled"`) for a closed one. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
 
-Import assigns fresh ids and rewrites the related `project_id`, `status_id`, and `task_id` references while preserving the other fields and timestamps. The `version` field is validated, and a backup from an unsupported version is rejected. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `statuses`, `tasks`, and `notes`.
+Import assigns fresh ids and rewrites the related `project_id`, `section_id`, and `task_id` references while preserving the other fields and timestamps. Only backup format version 2 is accepted: a backup from an older or unknown version is rejected, and older backups must be transformed manually before import. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `sections`, `tasks`, and `notes`.
 
 ### Documentation
 
@@ -282,25 +300,30 @@ server behind a TLS-terminating proxy or a private network if it leaves the host
 
 Endpoints, all under `/api/v1`:
 
-| Method                   | Path                                     | Purpose                             |
-| ------------------------ | ---------------------------------------- | ----------------------------------- |
-| `GET`                    | `/`                                      | Server info                         |
-| `GET` / `POST`           | `/projects`                              | List / create projects              |
-| `GET` / `DELETE`         | `/projects/by-name/{name}`               | Fetch / delete a project by name    |
-| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project   |
-| `GET` / `POST`           | `/projects/{id}/statuses`                | List / create statuses              |
-| `GET`                    | `/projects/{id}/statuses/by-name/{name}` | Fetch a status by name              |
-| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks     |
-| `GET`                    | `/projects/{id}/notes`                   | List a project's notes              |
-| `GET`                    | `/projects/{id}/snapshot`                | Fetch a project snapshot            |
-| `GET` / `PUT` / `DELETE` | `/statuses/{id}`                         | Fetch / update / delete a status    |
-| `POST`                   | `/statuses/{id}/move`                    | Reorder a status within its project |
-| `GET`                    | `/statuses/{id}/tasks`                   | List a status's tasks               |
-| `GET` / `PUT` / `DELETE` | `/tasks/{id}`                            | Fetch / update / delete a task      |
-| `POST`                   | `/tasks/{id}/move`                       | Move a task (auto-positions it)     |
-| `GET` / `POST`           | `/tasks/{id}/notes`                      | List / create a task's notes        |
-| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note      |
-| `POST`                   | `/import`                                | Apply an import plan                |
+| Method                   | Path                                     | Purpose                                |
+| ------------------------ | ---------------------------------------- | -------------------------------------- |
+| `GET`                    | `/`                                      | Server info                            |
+| `GET` / `POST`           | `/projects`                              | List / create projects                 |
+| `GET`                    | `/projects/by-name/{name}`               | Fetch a project by name                |
+| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project      |
+| `GET` / `POST`           | `/projects/{id}/sections`                | List / create sections                 |
+| `GET`                    | `/projects/{id}/sections/by-name/{name}` | Fetch a section by name                |
+| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks        |
+| `GET`                    | `/projects/{id}/notes`                   | List a project's notes                 |
+| `GET`                    | `/projects/{id}/snapshot`                | Fetch a project snapshot               |
+| `GET` / `PUT` / `DELETE` | `/sections/{id}`                         | Fetch / update / delete a section      |
+| `POST`                   | `/sections/{id}/move`                    | Reorder a section within its project   |
+| `POST`                   | `/sections/{id}/merge`                   | Merge a section into another           |
+| `GET`                    | `/sections/{id}/tasks`                   | List a section's tasks                 |
+| `GET` / `PUT` / `DELETE` | `/tasks/{id}`                            | Fetch / update / delete a task         |
+| `POST`                   | `/tasks/{id}/move`                       | Move a task to a section at a position |
+| `POST`                   | `/tasks/{id}/close`                      | Close a task with a reason             |
+| `POST`                   | `/tasks/{id}/open`                       | Reopen a closed task                   |
+| `GET` / `POST`           | `/tasks/{id}/notes`                      | List / create a task's notes           |
+| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note         |
+| `POST`                   | `/import`                                | Apply an import plan                   |
+
+`POST /tasks/{id}/move` takes a body of `{ "section_id": <id-or-null>, "position": <integer> }`, where an omitted `position` appends to the destination and a null `section_id` moves the task to No section. `POST /tasks/{id}/close` requires a body of `{ "reason": "completed" }` or `{ "reason": "cancelled" }`. `POST /sections/{id}/move` takes `{ "position": <integer> }`, and `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`.
 
 ### JSON Output
 
@@ -312,7 +335,7 @@ scry --json show 42
 scry -p myapp --json add "design API"
 ```
 
-Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
+Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Task objects carry a nullable `section_id` and a `lifecycle` object, which is `{"state": "open"}` or `{"state": "closed", "closed_at": "...", "reason": "completed" | "cancelled"}`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
 `--json` applies only to one-shot subcommands; passing it with no subcommand or with `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 
@@ -324,7 +347,7 @@ On failure, a structured error document is written to stderr:
 
 `kind` is one of `not_found`, `conflict`, `invalid`, `internal`, or `config`.
 
-Because the output is the bare data, some context that the human output carries is not repeated: `list` does not include the project or its status definitions, and `project list` does not mark the active project. Consumers that need those can call `scry --json project current` and `scry --json project status list`.
+Because the output is the bare data, some context that the human output carries is not repeated: `list` does not include the project or its section definitions, and `project list` does not mark the active project. Consumers that need those can call `scry --json project current` and `scry --json section list`.
 
 ## Configuration
 
