@@ -4,8 +4,9 @@
 
 ## Tooling prerequisites
 
-- The standard workflow uses `just` and sqlx-cli (`cargo install just sqlx-cli`). The `sqlx-prepare*` and `run-postgres` targets need sqlx-cli; the Postgres targets also need Docker, since they start and stop the dev Postgres defined in `compose.dev.yaml`.
-- `just run-local` starts the dev Postgres, applies migrations, and runs the REST server with `--config scry.dev.toml --secrets scry.dev-secrets.toml`; `just run-postgres` only starts Postgres and applies migrations. `just pg-down` keeps the data volume and `just pg-reset` wipes it.
+- The standard workflow uses `just` and sqlx-cli (`cargo install just sqlx-cli`). The `sqlx-prepare*` and `run-postgres` targets need sqlx-cli; the Postgres targets also need Docker, since they start and stop the Postgres defined in `compose.yaml`, which runs the app together with its own `postgres:18` service.
+- `just run` (the `run-docker` alias) builds and starts the whole Docker stack, app plus database, so no host Postgres is needed; `just view-logs` tails the app container. `just run-local` builds the release binary and runs the REST server on the host against that same Postgres with `--config scry.dev.toml --secrets scry.dev-secrets.toml`, and `just run-postgres` only starts Postgres and applies migrations.
+- `just pg-down` keeps the data volume and `just pg-reset` wipes it; `pg-reset` and `clean` take the whole stack down, and `clean` also runs `cargo clean`.
 - rust-analyzer is configured to run `cargo clippy` as its check command (`.vscode/settings.json`), and `just cargo-clippy` (alias `just clippy`) is `cargo clippy --workspace -- -D warnings`. Keep clippy clean at `-D warnings`; CI runs it through `just validate` (`.github/workflows/ci.yml`), so `just validate` is your local gate: `cargo-test` -> `cargo-check` -> `cargo-clippy`.
 
 ## sqlx compile-time database (the #1 gotcha)

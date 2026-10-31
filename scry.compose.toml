@@ -1,0 +1,5 @@
+# Configuration mounted into the container at /app/scry.toml by compose.yaml.
+# `postgres` is the compose service name, resolvable on the compose network, so
+# the stack needs no database on the host. Use scry.docker.toml instead when
+# running the image on its own against a database you provide.
+database_url = "postgres://postgres:postgres@postgres:5432/scry"

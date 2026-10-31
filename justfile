@@ -3,53 +3,58 @@ set shell := ["bash", "-uc"]
 default:
     @just --list
 
-alias run := run-local
+alias run := run-docker
 
-# start the dev postgres and wait for it to be healthy
+# build and start the app and database stack in Docker
 [group('run')]
-pg-up:
-    docker compose -f compose.dev.yaml up -d --wait
+run-docker:
+    docker compose up -d --build
 
-# stop the dev postgres (keep its data)
+# build the release binary and run the REST server against the dev postgres
 [group('run')]
-pg-down:
-    docker compose -f compose.dev.yaml down
-
-# stop the dev postgres and wipe its data volume
-[group('run')]
-pg-reset:
-    docker compose -f compose.dev.yaml down -v
+run-local: build run-postgres
+    ./target/release/scry --config scry.dev.toml --secrets scry.dev-secrets.toml serve --http 127.0.0.1:8000
 
 # start the dev postgres and apply migrations
 [group('run')]
 run-postgres: pg-up
     sqlx migrate run --source migrations --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
-# run the REST server locally against the dev postgres
+# start only the dev postgres and wait for it to be healthy
 [group('run')]
-run-local: run-postgres
-    cargo run -- --config scry.dev.toml --secrets scry.dev-secrets.toml serve --http 127.0.0.1:8000
+pg-up:
+    docker compose up -d --wait postgres
 
-# start the REST server stack in Docker against the host dev postgres
+# stop the dev postgres (keep its data)
 [group('run')]
-run-docker: run-postgres
-    docker compose up -d --build
+pg-down:
+    docker compose stop postgres
 
-# regenerate the postgres offline query cache against the local postgres
-[group('validate')]
-sqlx-prepare-postgres: run-postgres
-    #!/usr/bin/env bash
-    set -euo pipefail
-    trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
-    SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+# stop the whole stack and wipe the postgres data volume
+[group('run')]
+pg-reset:
+    docker compose down -v
 
-# verify the Postgres offline query cache is up to date (used in CI)
-[group('validate')]
-sqlx-prepare-check: run-postgres
-    #!/usr/bin/env bash
-    set -euo pipefail
-    trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
-    SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+# tail the app container logs
+[group('run')]
+view-logs:
+    docker compose logs -f scry
+
+# regenerate the Postgres offline query cache
+[group('build')]
+sqlx-prepare: sqlx-prepare-postgres
+
+# build an optimized release binary
+[group('build')]
+build:
+    cargo build --release
+
+# build and install to ~/.local/bin
+[group('build')]
+install:
+    cargo build --release
+    mkdir -p {{"${HOME}"}}/.local/bin
+    cp target/release/scry {{"${HOME}"}}/.local/bin/scry
 
 # run all validation checks: test, check, clippy
 [group('validate')]
@@ -72,6 +77,22 @@ alias clippy := cargo-clippy
 [group('validate')]
 cargo-clippy:
     cargo clippy --workspace -- -D warnings
+
+# regenerate the postgres offline query cache against the local postgres
+[group('validate')]
+sqlx-prepare-postgres: run-postgres
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
+    SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+
+# verify the Postgres offline query cache is up to date (used in CI)
+[group('validate')]
+sqlx-prepare-check: run-postgres
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
+    SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]
@@ -132,23 +153,8 @@ _release type do_push="":
         echo "  git push origin main v$next"; \
     fi
 
-# regenerate the Postgres offline query cache
-[group('build')]
-sqlx-prepare: sqlx-prepare-postgres
-
-# build an optimized release binary
-[group('build')]
-build:
-    cargo build --release
-
-# build and install to ~/.local/bin
-[group('build')]
-install:
-    cargo build --release
-    mkdir -p {{"${HOME}"}}/.local/bin
-    cp target/release/scry {{"${HOME}"}}/.local/bin/scry
-
-# wipe build artifacts
+# wipe build artifacts and stop the Docker stack
 [group('misc')]
 clean:
     cargo clean
+    docker compose down

@@ -1,4 +1,4 @@
-# Config for `just run-local`, pointed at the postgres from compose.dev.yaml.
+# Config for `just run-local`, pointed at the postgres service in compose.yaml.
 database_url = "postgres://postgres:postgres@127.0.0.1:5432/scry"
 
 # Keep dev active-project state out of the real XDG state file.

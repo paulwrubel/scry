@@ -1,4 +1,23 @@
+name: scry-dev
+
 services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: scry
+    ports:
+      # Exposed on loopback so host tooling (sqlx-cli, `just run-local`, psql)
+      # can reach the same database the app container uses.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - scry-pg-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d scry"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
   scry:
     build: .
     # Bind all interfaces inside the container so the published port can reach
@@ -10,10 +29,17 @@ services:
     ports:
       # Publish on the host loopback only. Use `8000:8000` to expose it further.
       - "127.0.0.1:8000:8000"
-    extra_hosts:
-      # Lets the container reach a PostgreSQL server running on the host.
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        # Wait for a ready database so the app's startup migrations succeed.
+        condition: service_healthy
     volumes:
       # Config the container reads from its working directory (WORKDIR /app);
-      # it points at an external PostgreSQL server.
-      - ./scry.docker.toml:/app/scry.toml:ro
+      # `postgres` is the compose service above, reachable on the compose network.
+      - ./scry.compose.toml:/app/scry.toml:ro
+
+volumes:
+  # Explicit name so the data survives compose project renames and stays the
+  # same volume the previous `compose.dev.yaml` stack created.
+  scry-pg-data:
+    name: scry-dev_scry-pg-data
