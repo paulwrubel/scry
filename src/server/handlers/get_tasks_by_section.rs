@@ -13,7 +13,7 @@ pub async fn get_tasks_by_section(
     State(state): State<ScryState>,
     Path(section_id): Path<SectionId>,
 ) -> Response {
-    match state.service.list_tasks_by_section(section_id).await {
+    match state.service.list_tasks_by_section_id(section_id).await {
         Ok(tasks) => Json(tasks).into_response(),
         Err(error) => AppError::from(error).into(),
     }

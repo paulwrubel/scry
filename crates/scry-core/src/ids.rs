@@ -4,8 +4,8 @@ use std::str::FromStr;
 
 use uuid::Uuid;
 
-pub const MIN_SHORT_ID_LENGTH: usize = 4;
-pub const MAX_SHORT_ID_LENGTH: usize = 32;
+pub const MIN_HANDLE_LENGTH: usize = 4;
+pub const MAX_HANDLE_LENGTH: usize = 32;
 
 pub type ProjectId = Uuid;
 pub type SectionId = Uuid;
@@ -15,51 +15,43 @@ pub type NoteId = Uuid;
 const CANONICAL_DASH_POSITIONS: [usize; 4] = [8, 12, 16, 20];
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ShortId(String);
+pub struct Handle(String);
 
-impl ShortId {
+impl Handle {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    // a ShortId always contains at least MIN_SHORT_ID_LENGTH hex characters
+    // a Handle always contains at least MIN_HANDLE_LENGTH hex characters
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     pub fn range(&self) -> (Uuid, Uuid) {
-        let low = format!(
-            "{}{}",
-            self.0,
-            "0".repeat(MAX_SHORT_ID_LENGTH - self.0.len())
-        );
-        let high = format!(
-            "{}{}",
-            self.0,
-            "f".repeat(MAX_SHORT_ID_LENGTH - self.0.len())
-        );
+        let low = format!("{}{}", self.0, "0".repeat(MAX_HANDLE_LENGTH - self.0.len()));
+        let high = format!("{}{}", self.0, "f".repeat(MAX_HANDLE_LENGTH - self.0.len()));
 
         (
-            Uuid::parse_str(&low).expect("a normalized short id is a valid low bound"),
-            Uuid::parse_str(&high).expect("a normalized short id is a valid high bound"),
+            Uuid::parse_str(&low).expect("a normalized handle is a valid low bound"),
+            Uuid::parse_str(&high).expect("a normalized handle is a valid high bound"),
         )
     }
 }
 
-impl fmt::Display for ShortId {
+impl fmt::Display for Handle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-impl FromStr for ShortId {
-    type Err = ShortIdError;
+impl FromStr for Handle {
+    type Err = HandleError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let trimmed = value.trim();
         if trimmed.is_empty() {
-            return Err(ShortIdError::Empty);
+            return Err(HandleError::Empty);
         }
 
         let mut hex = String::with_capacity(trimmed.len());
@@ -68,21 +60,21 @@ impl FromStr for ShortId {
             if character == '-' {
                 let trailing = index + 1 == trimmed.len();
                 if trailing || !CANONICAL_DASH_POSITIONS.contains(&hex.len()) {
-                    return Err(ShortIdError::MisplacedDash { index });
+                    return Err(HandleError::MisplacedDash { index });
                 }
             } else if character.is_ascii_hexdigit() {
                 hex.push(character);
             } else {
-                return Err(ShortIdError::InvalidCharacter { character, index });
+                return Err(HandleError::InvalidCharacter { character, index });
             }
         }
 
         let length = hex.len();
-        if length < MIN_SHORT_ID_LENGTH {
-            return Err(ShortIdError::TooShort { length });
+        if length < MIN_HANDLE_LENGTH {
+            return Err(HandleError::TooShort { length });
         }
-        if length > MAX_SHORT_ID_LENGTH {
-            return Err(ShortIdError::TooLong { length });
+        if length > MAX_HANDLE_LENGTH {
+            return Err(HandleError::TooLong { length });
         }
 
         Ok(Self(hex))
@@ -90,7 +82,7 @@ impl FromStr for ShortId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ShortIdError {
+pub enum HandleError {
     Empty,
     TooShort { length: usize },
     TooLong { length: usize },
@@ -98,17 +90,17 @@ pub enum ShortIdError {
     InvalidCharacter { character: char, index: usize },
 }
 
-impl fmt::Display for ShortIdError {
+impl fmt::Display for HandleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Empty => f.write_str("a short id cannot be empty"),
+            Self::Empty => f.write_str("a handle cannot be empty"),
             Self::TooShort { length } => write!(
                 f,
-                "a short id must contain at least {MIN_SHORT_ID_LENGTH} hex characters (found {length})"
+                "a handle must contain at least {MIN_HANDLE_LENGTH} hex characters (found {length})"
             ),
             Self::TooLong { length } => write!(
                 f,
-                "a short id must contain at most {MAX_SHORT_ID_LENGTH} hex characters (found {length})"
+                "a handle must contain at most {MAX_HANDLE_LENGTH} hex characters (found {length})"
             ),
             Self::MisplacedDash { index } => write!(
                 f,
@@ -116,19 +108,19 @@ impl fmt::Display for ShortIdError {
             ),
             Self::InvalidCharacter { character, index } => write!(
                 f,
-                "a short id may only contain hex characters and dashes, but found {character:?} at index {index}"
+                "a handle may only contain hex characters and dashes, but found {character:?} at index {index}"
             ),
         }
     }
 }
 
-impl std::error::Error for ShortIdError {}
+impl std::error::Error for HandleError {}
 
 pub fn shortest_handles(
     ids: impl IntoIterator<Item = Uuid>,
     min_length: usize,
 ) -> HashMap<Uuid, String> {
-    let min_length = min_length.clamp(MIN_SHORT_ID_LENGTH, MAX_SHORT_ID_LENGTH);
+    let min_length = min_length.clamp(MIN_HANDLE_LENGTH, MAX_HANDLE_LENGTH);
 
     let mut entries: Vec<(String, Uuid)> = ids
         .into_iter()
@@ -147,7 +139,7 @@ pub fn shortest_handles(
             .get(index + 1)
             .map(|(next_hex, _)| longest_common_prefix(hex, next_hex));
         let shared = previous.into_iter().chain(next).max().unwrap_or(0);
-        let length = (shared + 1).clamp(min_length, MAX_SHORT_ID_LENGTH);
+        let length = (shared + 1).clamp(min_length, MAX_HANDLE_LENGTH);
 
         handles.insert(*id, hex[..length].to_string());
     }
@@ -210,7 +202,7 @@ mod tests {
     }
 
     fn lenient_handles(ids: &[Uuid], min_length: usize) -> HashMap<Uuid, String> {
-        let min_length = min_length.clamp(MIN_SHORT_ID_LENGTH, MAX_SHORT_ID_LENGTH);
+        let min_length = min_length.clamp(MIN_HANDLE_LENGTH, MAX_HANDLE_LENGTH);
         let unique: BTreeSet<Uuid> = ids.iter().copied().collect();
         let entries: Vec<(Uuid, String)> = unique
             .iter()
@@ -226,7 +218,7 @@ mod tests {
                     .map(|entry| longest_common_prefix(hex, &entry.1))
                     .max()
                     .unwrap_or(0);
-                let length = (shared + 1).clamp(min_length, MAX_SHORT_ID_LENGTH);
+                let length = (shared + 1).clamp(min_length, MAX_HANDLE_LENGTH);
 
                 (*id, hex[..length].to_string())
             })
@@ -247,68 +239,68 @@ mod tests {
     }
 
     #[test]
-    fn short_id_normalizes_all_accepted_forms() {
+    fn handle_normalizes_all_accepted_forms() {
         for input in [
             SAMPLE_HEX,
             "4F3A2B1C9D2E4F5A8B6C1D2E3F4A5B6C",
             SAMPLE_UUID,
             "4F3A2B1C-9D2E-4F5A-8B6C-1D2E3F4A5B6C",
         ] {
-            assert_eq!(ShortId::from_str(input).unwrap().as_str(), SAMPLE_HEX);
+            assert_eq!(Handle::from_str(input).unwrap().as_str(), SAMPLE_HEX);
         }
     }
 
     #[test]
-    fn short_id_rejects_invalid_input() {
+    fn handle_rejects_invalid_input() {
         assert_eq!(
-            ShortId::from_str("abc"),
-            Err(ShortIdError::TooShort { length: 3 })
+            Handle::from_str("abc"),
+            Err(HandleError::TooShort { length: 3 })
         );
         assert_eq!(
-            ShortId::from_str(&"0".repeat(33)),
-            Err(ShortIdError::TooLong { length: 33 })
+            Handle::from_str(&"0".repeat(33)),
+            Err(HandleError::TooLong { length: 33 })
         );
         assert_eq!(
-            ShortId::from_str("zzzz"),
-            Err(ShortIdError::InvalidCharacter {
+            Handle::from_str("zzzz"),
+            Err(HandleError::InvalidCharacter {
                 character: 'z',
                 index: 0
             })
         );
         assert_eq!(
-            ShortId::from_str("4f3a-2b1c"),
-            Err(ShortIdError::MisplacedDash { index: 4 })
+            Handle::from_str("4f3a-2b1c"),
+            Err(HandleError::MisplacedDash { index: 4 })
         );
         assert_eq!(
-            ShortId::from_str("4f3a2b1c-"),
-            Err(ShortIdError::MisplacedDash { index: 8 })
+            Handle::from_str("4f3a2b1c-"),
+            Err(HandleError::MisplacedDash { index: 8 })
         );
     }
 
     #[test]
-    fn short_id_accepts_only_canonical_dash_positions() {
+    fn handle_accepts_only_canonical_dash_positions() {
         for input in [
             "4f3a2b1c-9d2e",
             "4f3a2b1c9d2e-4f5a",
             "4f3a2b1c9d2e4f5a-8b6c",
             "4f3a2b1c9d2e4f5a8b6c-1d2e",
         ] {
-            assert!(ShortId::from_str(input).is_ok(), "{input} should be valid");
+            assert!(Handle::from_str(input).is_ok(), "{input} should be valid");
         }
 
         for input in ["4f3a-2b1c", "4f3a2b1c9-d2e", "-4f3a2b1c", "4f3a2b1c-"] {
             assert!(
-                ShortId::from_str(input).is_err(),
+                Handle::from_str(input).is_err(),
                 "{input} should be invalid"
             );
         }
     }
 
     #[test]
-    fn short_id_range_pads_low_and_high_bounds() {
+    fn handle_range_pads_low_and_high_bounds() {
         for (prefix, padding) in [("4f3a", 28), ("4f3a2", 27), ("4f3a2b", 26)] {
-            let short = ShortId::from_str(prefix).unwrap();
-            let (low, high) = short.range();
+            let handle = Handle::from_str(prefix).unwrap();
+            let (low, high) = handle.range();
 
             assert_eq!(
                 low,
@@ -321,16 +313,16 @@ mod tests {
             assert!(low < high);
         }
 
-        let short = ShortId::from_str("ffff").unwrap();
-        let (low, high) = short.range();
+        let handle = Handle::from_str("ffff").unwrap();
+        let (low, high) = handle.range();
         assert_eq!(
             low,
             Uuid::parse_str(&format!("ffff{}", "0".repeat(28))).unwrap()
         );
         assert_eq!(high, Uuid::parse_str(&"f".repeat(32)).unwrap());
 
-        let short = ShortId::from_str(SAMPLE_HEX).unwrap();
-        let (low, high) = short.range();
+        let handle = Handle::from_str(SAMPLE_HEX).unwrap();
+        let (low, high) = handle.range();
         assert_eq!(low, uuid_from_hex(SAMPLE_HEX));
         assert_eq!(high, uuid_from_hex(SAMPLE_HEX));
     }
@@ -349,7 +341,7 @@ mod tests {
         ];
         let ids: Vec<Uuid> = hexes.iter().map(|hex| uuid_from_hex(hex)).collect();
 
-        for min_length in [0, MIN_SHORT_ID_LENGTH, 8, 16] {
+        for min_length in [0, MIN_HANDLE_LENGTH, 8, 16] {
             assert_eq!(
                 shortest_handles(ids.iter().copied(), min_length),
                 lenient_handles(&ids, min_length),
@@ -359,12 +351,12 @@ mod tests {
 
         let single = [ids[0]];
         assert_eq!(
-            shortest_handles(single.iter().copied(), MIN_SHORT_ID_LENGTH),
-            lenient_handles(&single, MIN_SHORT_ID_LENGTH)
+            shortest_handles(single.iter().copied(), MIN_HANDLE_LENGTH),
+            lenient_handles(&single, MIN_HANDLE_LENGTH)
         );
         assert_eq!(
-            shortest_handles(single.iter().copied(), MIN_SHORT_ID_LENGTH)[&ids[0]].len(),
-            MIN_SHORT_ID_LENGTH
+            shortest_handles(single.iter().copied(), MIN_HANDLE_LENGTH)[&ids[0]].len(),
+            MIN_HANDLE_LENGTH
         );
     }
 
@@ -373,10 +365,10 @@ mod tests {
         let first = uuid_from_hex("4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c");
         let second = uuid_from_hex("4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d");
 
-        let alone = shortest_handle(first, [first], MIN_SHORT_ID_LENGTH);
-        let shared = shortest_handle(first, [first, second], MIN_SHORT_ID_LENGTH);
+        let alone = shortest_handle(first, [first], MIN_HANDLE_LENGTH);
+        let shared = shortest_handle(first, [first, second], MIN_HANDLE_LENGTH);
 
-        assert_eq!(alone.len(), MIN_SHORT_ID_LENGTH);
+        assert_eq!(alone.len(), MIN_HANDLE_LENGTH);
         assert!(shared.len() > alone.len());
     }
 
@@ -385,7 +377,7 @@ mod tests {
         let id = uuid_from_hex("4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c");
         let ids = [id];
 
-        let base = shortest_handles(ids, MIN_SHORT_ID_LENGTH);
+        let base = shortest_handles(ids, MIN_HANDLE_LENGTH);
         let raised = shortest_handles(ids, 8);
         let clamped = shortest_handles(ids, 0);
         let capped = shortest_handles(ids, 1_000);
@@ -393,8 +385,8 @@ mod tests {
         assert!(raised[&id].len() > base[&id].len());
         assert!(raised[&id].len() >= 8);
         assert_eq!(clamped[&id], base[&id]);
-        assert!(clamped[&id].len() >= MIN_SHORT_ID_LENGTH);
-        assert_eq!(capped[&id].len(), MAX_SHORT_ID_LENGTH);
+        assert!(clamped[&id].len() >= MIN_HANDLE_LENGTH);
+        assert_eq!(capped[&id].len(), MAX_HANDLE_LENGTH);
     }
 
     #[test]
@@ -409,7 +401,7 @@ mod tests {
         .map(|hex| uuid_from_hex(hex))
         .collect();
 
-        let prefixes = distinguishing_prefixes(&ids, MIN_SHORT_ID_LENGTH);
+        let prefixes = distinguishing_prefixes(&ids, MIN_HANDLE_LENGTH);
         let unique: BTreeSet<&String> = prefixes.iter().collect();
 
         assert_eq!(prefixes.len(), ids.len());

@@ -3,12 +3,12 @@ use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use scry_core::backup::{ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
-use scry_core::ids::{NoteId, ProjectId, SectionId, ShortId, TaskId};
+use scry_core::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
 use scry_core::models::{
-    CloseReason, Color, Lifecycle, Note, Priority, Project, Section, Tags, Task, TaskSortingMode,
+    CloseReason, Color, Lifecycle, Note, Priority, Project, Section, Tags, Task,
 };
-use scry_core::position::{Position, key_between, n_keys_between};
-use scry_core::store::{ProjectSnapshot, Store, TaskContentUpdate, TaskToCreate};
+use scry_core::position::{Position, n_keys_between};
+use scry_core::store::{ProjectSnapshot, ProjectToCreate, SectionToCreate, Store, TaskToCreate};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
 
@@ -221,14 +221,14 @@ impl Store for PostgresStore {
         }
     }
 
-    async fn find_task_ids_by_short_id(
+    async fn find_task_ids_by_handle(
         &self,
-        short_id: &ShortId,
+        handle: &Handle,
         limit: i64,
     ) -> Result<Vec<TaskId>, StorageError> {
-        let (low, high) = short_id.range();
+        let (low, high) = handle.range();
 
-        // UUID ordering matches the hex-string ordering short ids are built from,
+        // UUID ordering matches the hex-string ordering handles are built from,
         // so the padded inclusive range matches exactly the prefix.
         let ids: Vec<Uuid> = sqlx::query_scalar!(
             r#"
@@ -336,21 +336,26 @@ impl Store for PostgresStore {
         }
     }
 
-    async fn update_task(
-        &self,
-        id: TaskId,
-        task_content_update: TaskContentUpdate,
-    ) -> Result<Task, StorageError> {
+    async fn update_task(&self, task: Task) -> Result<Task, StorageError> {
+        // closed_at and close_reason are written together so the pair never disagrees
+        let (closed_at, close_reason) = match &task.lifecycle {
+            Lifecycle::Open => (None, None),
+            Lifecycle::Closed { closed_at, reason } => (Some(*closed_at), Some(reason.as_str())),
+        };
+
         match sqlx::query_as!(
             TaskRow,
             r#"
                 UPDATE tasks
-                SET
-                    title = $1,
+                SET title = $1,
                     description = $2,
                     priority = $3,
-                    tags = $4
-                WHERE id = $5
+                    section_id = $4,
+                    position = $5,
+                    closed_at = $6,
+                    close_reason = $7,
+                    tags = $8
+                WHERE id = $9
                 RETURNING
                     id,
                     project_id,
@@ -364,11 +369,15 @@ impl Store for PostgresStore {
                     tags,
                     created_at
             "#,
-            &task_content_update.title,
-            task_content_update.description.as_deref(),
-            i64::from(task_content_update.priority),
-            task_content_update.tags.to_string(),
-            id,
+            &task.title,
+            task.description.as_deref(),
+            i64::from(task.priority),
+            task.section_id,
+            task.position.as_str(),
+            closed_at,
+            close_reason,
+            task.tags.to_string(),
+            task.id,
         )
         .fetch_one(&self.pool)
         .await
@@ -376,200 +385,13 @@ impl Store for PostgresStore {
             Ok(row) => Task::try_from(row),
             Err(sqlx::Error::RowNotFound) => Err(StorageError::NotFound(format!(
                 "task with id '{}' not found",
-                id
+                task.id
             ))),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to update task: {}",
                 e
             ))),
         }
-    }
-
-    async fn move_task(
-        &self,
-        id: TaskId,
-        section_id: Option<SectionId>,
-        position: Position,
-    ) -> Result<Task, StorageError> {
-        match sqlx::query_as!(
-            TaskRow,
-            r#"
-                UPDATE tasks
-                SET section_id = $1, position = $2
-                WHERE id = $3
-                RETURNING
-                    id,
-                    project_id,
-                    title,
-                    description,
-                    priority,
-                    section_id,
-                    position,
-                    closed_at,
-                    close_reason,
-                    tags,
-                    created_at
-            "#,
-            section_id,
-            position.as_str(),
-            id,
-        )
-        .fetch_one(&self.pool)
-        .await
-        {
-            Ok(row) => Task::try_from(row),
-            Err(sqlx::Error::RowNotFound) => Err(StorageError::NotFound(format!(
-                "task with id '{}' not found",
-                id
-            ))),
-            Err(e) => Err(StorageError::Database(format!(
-                "failed to move task: {}",
-                e
-            ))),
-        }
-    }
-
-    async fn set_lifecycle(&self, id: TaskId, lifecycle: Lifecycle) -> Result<Task, StorageError> {
-        // closed_at and close_reason are written together so the pair never disagrees
-        let (closed_at, close_reason) = match lifecycle {
-            Lifecycle::Open => (None, None),
-            Lifecycle::Closed { closed_at, reason } => (Some(closed_at), Some(reason.as_str())),
-        };
-
-        match sqlx::query_as!(
-            TaskRow,
-            r#"
-                UPDATE tasks
-                SET closed_at = $1, close_reason = $2
-                WHERE id = $3
-                RETURNING
-                    id,
-                    project_id,
-                    title,
-                    description,
-                    priority,
-                    section_id,
-                    position,
-                    closed_at,
-                    close_reason,
-                    tags,
-                    created_at
-            "#,
-            closed_at,
-            close_reason,
-            id,
-        )
-        .fetch_one(&self.pool)
-        .await
-        {
-            Ok(row) => Task::try_from(row),
-            Err(sqlx::Error::RowNotFound) => Err(StorageError::NotFound(format!(
-                "task with id '{}' not found",
-                id
-            ))),
-            Err(e) => Err(StorageError::Database(format!(
-                "failed to set task lifecycle: {}",
-                e
-            ))),
-        }
-    }
-
-    async fn duplicate_task(&self, id: TaskId, new_id: TaskId) -> Result<Task, StorageError> {
-        let mut tx =
-            self.pool.begin().await.map_err(|e| {
-                StorageError::Database(format!("failed to begin transaction: {}", e))
-            })?;
-
-        let source = sqlx::query!(
-            r#"
-                SELECT
-                    project_id,
-                    title,
-                    description,
-                    priority,
-                    section_id,
-                    position,
-                    tags
-                FROM tasks
-                WHERE id = $1
-                FOR UPDATE
-            "#,
-            id,
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to show task: {}", e)))?
-        .ok_or_else(|| StorageError::NotFound(format!("task with id '{}' not found", id)))?;
-
-        let source_position = Position::parse(source.position.as_str())
-            .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?;
-
-        let next = sqlx::query!(
-            r#"
-                SELECT position
-                FROM tasks
-                WHERE project_id = $1
-                    AND section_id IS NOT DISTINCT FROM $2::UUID
-                    AND (position, id) > ($3, $4)
-                ORDER BY position ASC, id ASC
-                LIMIT 1
-            "#,
-            source.project_id,
-            source.section_id,
-            source.position.as_str(),
-            id,
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to find next task: {}", e)))?;
-
-        let next_position = match next {
-            Some(row) => Some(
-                Position::parse(row.position)
-                    .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
-            ),
-            None => None,
-        };
-
-        let new_position = key_between(Some(&source_position), next_position.as_ref())
-            .map_err(|e| StorageError::Invalid(format!("failed to generate position key: {e}")))?;
-
-        let row = sqlx::query_as!(
-            TaskRow,
-            r#"
-                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, closed_at, close_reason, tags, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, $8, now())
-                RETURNING
-                    id,
-                    project_id,
-                    title,
-                    description,
-                    priority,
-                    section_id,
-                    position,
-                    closed_at,
-                    close_reason,
-                    tags,
-                    created_at
-            "#,
-            new_id,
-            source.project_id,
-            &source.title,
-            source.description.as_deref(),
-            source.priority,
-            source.section_id,
-            new_position.as_str(),
-            &source.tags,
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to duplicate task: {}", e)))?;
-
-        tx.commit()
-            .await
-            .map_err(|e| StorageError::Database(format!("failed to commit transaction: {}", e)))?;
-
-        Task::try_from(row)
     }
 
     async fn delete_task(&self, id: TaskId) -> Result<(), StorageError> {
@@ -760,14 +582,14 @@ impl Store for PostgresStore {
         }
     }
 
-    async fn find_note_ids_by_short_id(
+    async fn find_note_ids_by_handle(
         &self,
-        short_id: &ShortId,
+        handle: &Handle,
         limit: i64,
     ) -> Result<Vec<NoteId>, StorageError> {
-        let (low, high) = short_id.range();
+        let (low, high) = handle.range();
 
-        // See `find_task_ids_by_short_id`: UUID order makes the range exact.
+        // See `find_task_ids_by_handle`: UUID order makes the range exact.
         let ids: Vec<Uuid> = sqlx::query_scalar!(
             r#"
                 SELECT id
@@ -796,14 +618,7 @@ impl Store for PostgresStore {
         Ok(ids)
     }
 
-    async fn create_section(
-        &self,
-        id: SectionId,
-        project_id: ProjectId,
-        name: String,
-        position: Position,
-        color: Option<Color>,
-    ) -> Result<Section, StorageError> {
+    async fn create_section(&self, section: SectionToCreate) -> Result<Section, StorageError> {
         match sqlx::query!(
             r#"
                 INSERT INTO sections (id, project_id, name, position, color)
@@ -816,11 +631,11 @@ impl Store for PostgresStore {
                     color,
                     created_at
             "#,
-            id,
-            project_id,
-            &name,
-            position.as_str(),
-            color.map(|c| c.to_string()),
+            section.id,
+            section.project_id,
+            &section.name,
+            section.position.as_str(),
+            section.color.map(|c| c.to_string()),
         )
         .fetch_one(&self.pool)
         .await
@@ -835,7 +650,7 @@ impl Store for PostgresStore {
             ),
             Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
                 "section '{}' already exists in project {}",
-                name, project_id
+                section.name, section.project_id
             ))),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to create section: {}",
@@ -1112,14 +927,7 @@ impl Store for PostgresStore {
         Ok(())
     }
 
-    async fn create_project(
-        &self,
-        id: ProjectId,
-        name: String,
-        description: Option<String>,
-        task_sorting_mode: TaskSortingMode,
-        show_priority: bool,
-    ) -> Result<Project, StorageError> {
+    async fn create_project(&self, project: ProjectToCreate) -> Result<Project, StorageError> {
         let created_at = Utc::now();
 
         match sqlx::query!(
@@ -1128,11 +936,11 @@ impl Store for PostgresStore {
                 VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING id, name, description, task_sorting_mode, show_priority, created_at
             "#,
-            id,
-            &name,
-            description.as_deref(),
-            task_sorting_mode.to_string(),
-            show_priority,
+            project.id,
+            &project.name,
+            project.description.as_deref(),
+            project.task_sorting_mode.to_string(),
+            project.show_priority,
             created_at,
         )
         .fetch_one(&self.pool)
@@ -1148,7 +956,7 @@ impl Store for PostgresStore {
             ),
             Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
                 "project '{}' already exists",
-                name
+                project.name
             ))),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to create project: {}",

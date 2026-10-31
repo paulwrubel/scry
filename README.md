@@ -142,7 +142,7 @@ Running `scry` with no subcommand prints the top-level help and exits.
 | `scry delete <handle>`                                                                                                                                                  | Delete a task permanently                                                           |
 | `scry note add <task-handle> <contents>`                                                                                                                                | Add a note to a task                                                                |
 
-Task and note arguments accept a full UUID or a unique short prefix of at least 4 lowercase hex characters. Dashes are optional and must sit at canonical UUID positions (after 8, 12, 16, or 20 hex characters). Human output prints the shortest unique prefix, while `--json` always emits full UUIDs; scripts should prefer those, because a handle can lengthen as more entities are created.
+Task and note arguments accept a full UUID or a unique handle of at least 4 lowercase hex characters. Dashes are optional and must sit at canonical UUID positions (after 8, 12, 16, or 20 hex characters). Human output prints the shortest unique handle, while `--json` always emits full UUIDs; scripts should prefer those, because a handle can lengthen as more entities are created.
 
 `<level>` is one of `minimal`, `low`, `medium`, `high`, `critical` (aliases `p5`–`p1`).
 
@@ -327,7 +327,7 @@ Endpoints, all under `/api/v1`:
 | `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note     |
 | `POST`                   | `/import`                                | Apply an import plan               |
 
-Path and body ids are full UUIDs only; short prefixes are a CLI convenience and are rejected by the API.
+Path and body ids are full UUIDs only; handles are a CLI convenience and are rejected by the API.
 
 `POST /tasks/{id}/move` takes a body of `{ "section_id": <id-or-null> }`; a null `section_id` moves the task to No section, and either way the task appends to the destination group. `POST /tasks/{id}/close` requires a body of `{ "reason": "completed" }` or `{ "reason": "cancelled" }`. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`.
 
@@ -348,7 +348,7 @@ Collection commands emit a top-level JSON array; single-resource and mutation co
 On failure, a structured error document is written to stderr:
 
 ```json
-{"error": {"kind": "not_found", "message": "No task matches short id \"4f3a\""}}
+{"error": {"kind": "not_found", "message": "No task matches handle \"4f3a\""}}
 ```
 
 `kind` is one of `not_found`, `conflict`, `invalid`, `internal`, or `config`.

@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::server::ScryState;
-use crate::service::{SectionInput, TaskInput};
+use crate::service::{NewTask, SectionInput};
 
 /// Request body for creating a task; omitted fields fall back to defaults.
 #[derive(Deserialize)]
@@ -37,8 +37,8 @@ pub async fn create_task(
         (None, None) => SectionInput::NoSection,
     };
 
-    let input = TaskInput {
-        title: Some(body.title),
+    let input = NewTask {
+        title: body.title,
         description: body.description,
         priority: body.priority,
         tags: body.tags.map(Tags::from),

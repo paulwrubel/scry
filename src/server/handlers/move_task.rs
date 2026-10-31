@@ -27,7 +27,11 @@ pub async fn move_task(
         None => SectionInput::NoSection,
     };
 
-    match state.service.move_task_by_id(id, section, None).await {
+    match state
+        .service
+        .move_task_to_section_by_id(id, section, None)
+        .await
+    {
         Ok(change) => Json(change.task).into_response(),
         Err(error) => AppError::from(error).into(),
     }

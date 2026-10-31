@@ -13,7 +13,7 @@ pub async fn get_sections(
     State(state): State<ScryState>,
     Path(project_id): Path<ProjectId>,
 ) -> Response {
-    match state.service.list_sections(project_id).await {
+    match state.service.list_sections_by_project_id(project_id).await {
         Ok(sections) => Json(sections).into_response(),
         Err(error) => AppError::from(error).into(),
     }

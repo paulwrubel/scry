@@ -5,7 +5,7 @@ use chrono::Utc;
 use scry_core::backup::{self, Backup, ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
 use scry_core::ids::{
-    MIN_SHORT_ID_LENGTH, NoteId, ProjectId, SectionId, ShortId, TaskId, distinguishing_prefixes,
+    Handle, MIN_HANDLE_LENGTH, NoteId, ProjectId, SectionId, TaskId, distinguishing_prefixes,
     shortest_handle, shortest_handles, template_section_id,
 };
 use scry_core::models::{
@@ -13,7 +13,7 @@ use scry_core::models::{
     TaskSortingMode,
 };
 use scry_core::position::{Position, key_between, n_keys_between};
-use scry_core::store::{ArcStore, ProjectSnapshot, TaskContentUpdate, TaskToCreate};
+use scry_core::store::{ArcStore, ProjectSnapshot, ProjectToCreate, SectionToCreate, TaskToCreate};
 use uuid::Uuid;
 
 /// How an operation selects a task's section: leave it alone, clear it, use an
@@ -33,12 +33,21 @@ fn position_error(error: scry_core::position::PositionError) -> ServiceError {
     )))
 }
 
-/// Partial task input, shared by create and update. `None` leaves a field
-/// unchanged on update; `Some("")` on `description` clears it; `Some(Tags)` on
-/// `tags` sets them (an empty `Tags` clears them). `title` is required when
-/// creating a task. On create, `SectionInput::Unchanged` means no section.
+/// Input for creating a task. `SectionInput::Unchanged` means no section.
 #[derive(Debug, Clone, Default)]
-pub struct TaskInput {
+pub struct NewTask {
+    pub title: String,
+    pub description: Option<String>,
+    pub priority: Option<Priority>,
+    pub tags: Option<Tags>,
+    pub section: SectionInput,
+}
+
+/// Partial task input. `None` leaves a field unchanged, including
+/// `SectionInput::Unchanged` for the section; `Some("")` on `description`
+/// clears it; `Some(Tags)` on `tags` sets them (an empty `Tags` clears them).
+#[derive(Debug, Clone, Default)]
+pub struct TaskPatch {
     pub title: Option<String>,
     pub description: Option<String>,
     pub priority: Option<Priority>,
@@ -112,9 +121,8 @@ impl ProjectService {
     pub async fn create_task(
         &self,
         project: &Project,
-        input: TaskInput,
+        input: NewTask,
     ) -> Result<TaskChangeResult, ServiceError> {
-        let title = input.title.ok_or(ServiceError::TitleRequired)?;
         let section = self.resolve_section(project, input.section).await?;
         let section_id = section.as_ref().map(|section| section.id);
         let position = self.append_position(project.id, section_id).await?;
@@ -124,7 +132,7 @@ impl ProjectService {
             .create_task(TaskToCreate {
                 id: Uuid::new_v4(),
                 project_id: project.id,
-                title,
+                title: input.title,
                 description: input
                     .description
                     .filter(|description| !description.is_empty()),
@@ -141,9 +149,9 @@ impl ProjectService {
     pub async fn create_task_in_project(
         &self,
         project_id: ProjectId,
-        input: TaskInput,
+        input: NewTask,
     ) -> Result<TaskChangeResult, ServiceError> {
-        let project = self.project_by_id(project_id).await?;
+        let project = self.require_project(project_id).await?;
         self.create_task(&project, input).await
     }
 
@@ -152,30 +160,52 @@ impl ProjectService {
         project: &Project,
         id: TaskId,
     ) -> Result<TaskChangeResult, ServiceError> {
-        self.task_in_project(project, id).await?;
-        let task = self.store.duplicate_task(id, Uuid::new_v4()).await?;
+        let source = self.require_task_in_project(project, id).await?;
+        let tasks = self.tasks_in_section(project.id, source.section_id).await?;
+        let next_position = tasks
+            .iter()
+            .position(|task| task.id == source.id)
+            .and_then(|index| tasks.get(index + 1))
+            .map(|task| &task.position);
+        let position =
+            key_between(Some(&source.position), next_position).map_err(position_error)?;
+
+        let task = self
+            .store
+            .create_task(TaskToCreate {
+                id: Uuid::new_v4(),
+                project_id: source.project_id,
+                title: source.title,
+                description: source.description,
+                priority: source.priority,
+                section_id: source.section_id,
+                position,
+                tags: source.tags,
+            })
+            .await?;
+
         let section = match task.section_id {
-            Some(section_id) => Some(self.section_in_project(project, section_id).await?),
+            Some(section_id) => Some(self.require_section_in_project(project, section_id).await?),
             None => None,
         };
         Ok(TaskChangeResult { task, section })
     }
 
-    pub async fn list_tasks_by_project(
+    pub async fn list_tasks_by_project_id(
         &self,
         project_id: ProjectId,
     ) -> Result<Vec<Task>, ServiceError> {
         Ok(self.store.get_all_tasks_by_project_id(project_id).await?)
     }
 
-    pub async fn list_tasks_by_section(
+    pub async fn list_tasks_by_section_id(
         &self,
         section_id: SectionId,
     ) -> Result<Vec<Task>, ServiceError> {
         Ok(self.store.get_all_tasks_by_section_id(section_id).await?)
     }
 
-    pub async fn find_task(&self, id: TaskId) -> Result<Option<Task>, ServiceError> {
+    pub async fn get_task(&self, id: TaskId) -> Result<Option<Task>, ServiceError> {
         Ok(self.store.get_task_by_id(id).await?)
     }
 
@@ -183,60 +213,54 @@ impl ProjectService {
         &self,
         project: &Project,
         id: TaskId,
-        patch: TaskInput,
+        patch: TaskPatch,
     ) -> Result<Task, ServiceError> {
-        let mut task = self.task_in_project(project, id).await?;
+        let mut task = self.require_task_in_project(project, id).await?;
 
         if patch.section != SectionInput::Unchanged {
             let section = self.resolve_section(project, patch.section).await?;
             let section_id = section.as_ref().map(|section| section.id);
             if section_id != task.section_id {
-                let position = self.append_position(project.id, section_id).await?;
-                task = self.store.move_task(task.id, section_id, position).await?;
+                task.position = self.append_position(project.id, section_id).await?;
+                task.section_id = section_id;
             }
         }
 
-        let description = match patch.description {
+        task.title = patch.title.unwrap_or(task.title);
+        task.description = match patch.description {
             Some(description) => Some(description).filter(|description| !description.is_empty()),
             None => task.description,
         };
+        task.priority = patch.priority.unwrap_or(task.priority);
+        task.tags = patch.tags.unwrap_or(task.tags);
 
-        Ok(self
-            .store
-            .update_task(
-                task.id,
-                TaskContentUpdate {
-                    title: patch.title.unwrap_or(task.title),
-                    description,
-                    priority: patch.priority.unwrap_or(task.priority),
-                    tags: patch.tags.unwrap_or(task.tags),
-                },
-            )
-            .await?)
+        Ok(self.store.update_task(task).await?)
     }
 
     pub async fn update_task_by_id(
         &self,
         task_id: TaskId,
-        patch: TaskInput,
+        patch: TaskPatch,
     ) -> Result<Task, ServiceError> {
-        let task = self.task_by_id(task_id).await?;
-        let project = self.project_by_id(task.project_id).await?;
+        let task = self.require_task(task_id).await?;
+        let project = self.require_project(task.project_id).await?;
         self.update_task(&project, task_id, patch).await
     }
 
-    pub async fn move_task(
+    pub async fn move_task_to_section(
         &self,
         project: &Project,
         id: TaskId,
         section: SectionInput,
         position: Option<Position>,
     ) -> Result<TaskChangeResult, ServiceError> {
-        let task = self.task_in_project(project, id).await?;
+        let mut task = self.require_task_in_project(project, id).await?;
         let unchanged = section == SectionInput::Unchanged;
         let section = if unchanged {
             match task.section_id {
-                Some(section_id) => Some(self.section_in_project(project, section_id).await?),
+                Some(section_id) => {
+                    Some(self.require_section_in_project(project, section_id).await?)
+                }
                 None => None,
             }
         } else {
@@ -248,24 +272,26 @@ impl ProjectService {
         }
 
         let section_id = section.as_ref().map(|section| section.id);
-        let position = match position {
+        task.position = match position {
             Some(position) => position,
             None => self.append_position(project.id, section_id).await?,
         };
+        task.section_id = section_id;
 
-        let task = self.store.move_task(task.id, section_id, position).await?;
+        let task = self.store.update_task(task).await?;
         Ok(TaskChangeResult { task, section })
     }
 
-    pub async fn move_task_by_id(
+    pub async fn move_task_to_section_by_id(
         &self,
         task_id: TaskId,
         section: SectionInput,
         position: Option<Position>,
     ) -> Result<TaskChangeResult, ServiceError> {
-        let task = self.task_by_id(task_id).await?;
-        let project = self.project_by_id(task.project_id).await?;
-        self.move_task(&project, task_id, section, position).await
+        let task = self.require_task(task_id).await?;
+        let project = self.require_project(task.project_id).await?;
+        self.move_task_to_section(&project, task_id, section, position)
+            .await
     }
 
     pub async fn close_task(
@@ -274,20 +300,15 @@ impl ProjectService {
         id: TaskId,
         reason: CloseReason,
     ) -> Result<Task, ServiceError> {
-        let task = self.task_in_project(project, id).await?;
+        let mut task = self.require_task_in_project(project, id).await?;
         if task.lifecycle.reason() == Some(reason) {
             return Ok(task);
         }
-        Ok(self
-            .store
-            .set_lifecycle(
-                task.id,
-                Lifecycle::Closed {
-                    closed_at: Utc::now(),
-                    reason,
-                },
-            )
-            .await?)
+        task.lifecycle = Lifecycle::Closed {
+            closed_at: Utc::now(),
+            reason,
+        };
+        Ok(self.store.update_task(task).await?)
     }
 
     pub async fn close_task_by_id(
@@ -295,44 +316,45 @@ impl ProjectService {
         task_id: TaskId,
         reason: CloseReason,
     ) -> Result<Task, ServiceError> {
-        let task = self.task_by_id(task_id).await?;
-        let project = self.project_by_id(task.project_id).await?;
+        let task = self.require_task(task_id).await?;
+        let project = self.require_project(task.project_id).await?;
         self.close_task(&project, task_id, reason).await
     }
 
     pub async fn open_task(&self, project: &Project, id: TaskId) -> Result<Task, ServiceError> {
-        let task = self.task_in_project(project, id).await?;
+        let mut task = self.require_task_in_project(project, id).await?;
         if !task.lifecycle.is_closed() {
             return Ok(task);
         }
-        Ok(self.store.set_lifecycle(task.id, Lifecycle::Open).await?)
+        task.lifecycle = Lifecycle::Open;
+        Ok(self.store.update_task(task).await?)
     }
 
     pub async fn open_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
-        let task = self.task_by_id(task_id).await?;
-        let project = self.project_by_id(task.project_id).await?;
+        let task = self.require_task(task_id).await?;
+        let project = self.require_project(task.project_id).await?;
         self.open_task(&project, task_id).await
     }
 
     pub async fn delete_task(&self, project: &Project, id: TaskId) -> Result<Task, ServiceError> {
-        let task = self.task_in_project(project, id).await?;
+        let task = self.require_task_in_project(project, id).await?;
         self.store.delete_task(id).await?;
         Ok(task)
     }
 
     pub async fn delete_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
-        let task = self.task_by_id(task_id).await?;
-        let project = self.project_by_id(task.project_id).await?;
+        let task = self.require_task(task_id).await?;
+        let project = self.require_project(task.project_id).await?;
         self.delete_task(&project, task_id).await
     }
 
-    pub async fn add_task_note(
+    pub async fn add_note_to_task(
         &self,
         project: &Project,
         task_id: TaskId,
         contents: String,
     ) -> Result<Note, ServiceError> {
-        self.task_in_project(project, task_id).await?;
+        self.require_task_in_project(project, task_id).await?;
         Ok(self
             .store
             .create_note(Uuid::new_v4(), task_id, contents)
@@ -340,23 +362,23 @@ impl ProjectService {
     }
 
     pub async fn add_note(&self, task_id: TaskId, contents: String) -> Result<Note, ServiceError> {
-        let task = self.task_by_id(task_id).await?;
-        let project = self.project_by_id(task.project_id).await?;
-        self.add_task_note(&project, task_id, contents).await
+        let task = self.require_task(task_id).await?;
+        let project = self.require_project(task.project_id).await?;
+        self.add_note_to_task(&project, task_id, contents).await
     }
 
-    pub async fn list_notes_by_project(
+    pub async fn list_notes_by_project_id(
         &self,
         project_id: ProjectId,
     ) -> Result<Vec<Note>, ServiceError> {
         Ok(self.store.get_all_notes_by_project_id(project_id).await?)
     }
 
-    pub async fn list_notes_by_task(&self, task_id: TaskId) -> Result<Vec<Note>, ServiceError> {
+    pub async fn list_notes_by_task_id(&self, task_id: TaskId) -> Result<Vec<Note>, ServiceError> {
         Ok(self.store.get_all_notes_by_task_id(task_id).await?)
     }
 
-    pub async fn find_note(&self, id: NoteId) -> Result<Option<Note>, ServiceError> {
+    pub async fn get_note(&self, id: NoteId) -> Result<Option<Note>, ServiceError> {
         Ok(self.store.get_note_by_id(id).await?)
     }
 
@@ -372,38 +394,35 @@ impl ProjectService {
     // display handles are unique per entity type across the whole database,
     // including closed tasks and every project, so they need the complete id
     // set; display always starts at the 4-character floor
-    pub async fn task_handles(&self) -> Result<HashMap<TaskId, String>, ServiceError> {
+    pub async fn list_task_handles(&self) -> Result<HashMap<TaskId, String>, ServiceError> {
         let ids = self.store.get_all_task_ids().await?;
-        Ok(shortest_handles(ids, MIN_SHORT_ID_LENGTH))
+        Ok(shortest_handles(ids, MIN_HANDLE_LENGTH))
     }
 
     // display starts at the 4-character floor
-    pub async fn task_handle(&self, id: TaskId) -> Result<String, ServiceError> {
+    pub async fn get_task_handle(&self, id: TaskId) -> Result<String, ServiceError> {
         let ids = self.store.get_all_task_ids().await?;
-        Ok(shortest_handle(id, ids, MIN_SHORT_ID_LENGTH))
+        Ok(shortest_handle(id, ids, MIN_HANDLE_LENGTH))
     }
 
     // display starts at the 4-character floor
-    pub async fn note_handle(&self, id: NoteId) -> Result<String, ServiceError> {
+    pub async fn get_note_handle(&self, id: NoteId) -> Result<String, ServiceError> {
         let ids = self.store.get_all_note_ids().await?;
-        Ok(shortest_handle(id, ids, MIN_SHORT_ID_LENGTH))
+        Ok(shortest_handle(id, ids, MIN_HANDLE_LENGTH))
     }
 
-    pub async fn resolve_task_handle(&self, short_id: &ShortId) -> Result<Task, ServiceError> {
-        let matches = self.store.find_task_ids_by_short_id(short_id, 2).await?;
+    pub async fn get_task_by_handle(&self, handle: &Handle) -> Result<Task, ServiceError> {
+        let matches = self.store.find_task_ids_by_handle(handle, 2).await?;
         match matches.len() {
             0 => Err(ServiceError::TaskHandleNotFound {
-                short_id: short_id.to_string(),
+                handle: handle.to_string(),
             }),
-            1 => self.task_by_id(matches[0]).await,
+            1 => self.require_task(matches[0]).await,
             _ => {
-                let all = self
-                    .store
-                    .find_task_ids_by_short_id(short_id, i64::MAX)
-                    .await?;
-                let candidates = distinguishing_prefixes(&all, short_id.len());
+                let all = self.store.find_task_ids_by_handle(handle, i64::MAX).await?;
+                let candidates = distinguishing_prefixes(&all, handle.len());
                 Err(ServiceError::AmbiguousTaskHandle {
-                    short_id: short_id.to_string(),
+                    handle: handle.to_string(),
                     candidates,
                 })
             }
@@ -413,21 +432,18 @@ impl ProjectService {
     // the current API has no note-prefix entry point; this exists so note handles
     // resolve like task handles wherever note ids are later accepted
     #[allow(dead_code)]
-    pub async fn resolve_note_handle(&self, short_id: &ShortId) -> Result<Note, ServiceError> {
-        let matches = self.store.find_note_ids_by_short_id(short_id, 2).await?;
+    pub async fn get_note_by_handle(&self, handle: &Handle) -> Result<Note, ServiceError> {
+        let matches = self.store.find_note_ids_by_handle(handle, 2).await?;
         match matches.len() {
             0 => Err(ServiceError::NoteHandleNotFound {
-                short_id: short_id.to_string(),
+                handle: handle.to_string(),
             }),
-            1 => self.note_by_id(matches[0]).await,
+            1 => self.require_note(matches[0]).await,
             _ => {
-                let all = self
-                    .store
-                    .find_note_ids_by_short_id(short_id, i64::MAX)
-                    .await?;
-                let candidates = distinguishing_prefixes(&all, short_id.len());
+                let all = self.store.find_note_ids_by_handle(handle, i64::MAX).await?;
+                let candidates = distinguishing_prefixes(&all, handle.len());
                 Err(ServiceError::AmbiguousNoteHandle {
-                    short_id: short_id.to_string(),
+                    handle: handle.to_string(),
                     candidates,
                 })
             }
@@ -454,7 +470,13 @@ impl ProjectService {
         let id = Uuid::new_v4();
         Ok(self
             .store
-            .create_section(id, project.id, name, position, color)
+            .create_section(SectionToCreate {
+                id,
+                project_id: project.id,
+                name,
+                position,
+                color,
+            })
             .await?)
     }
 
@@ -464,7 +486,7 @@ impl ProjectService {
         name: String,
         color: Option<Color>,
     ) -> Result<Section, ServiceError> {
-        let project = self.project_by_id(project_id).await?;
+        let project = self.require_project(project_id).await?;
         self.create_section(&project, name, color).await
     }
 
@@ -477,7 +499,7 @@ impl ProjectService {
         match self.store.get_section_by_name(project_id, name).await? {
             Some(section) => Ok(section),
             None => {
-                let project = self.project_by_id(project_id).await?;
+                let project = self.require_project(project_id).await?;
                 Err(ServiceError::SectionNotFound {
                     section: name.to_string(),
                     project: project.name,
@@ -490,7 +512,10 @@ impl ProjectService {
         Ok(self.store.get_section_by_id(id).await?)
     }
 
-    pub async fn list_sections(&self, project_id: ProjectId) -> Result<Vec<Section>, ServiceError> {
+    pub async fn list_sections_by_project_id(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<Vec<Section>, ServiceError> {
         Ok(self
             .store
             .get_all_sections_by_project_id(project_id)
@@ -503,10 +528,10 @@ impl ProjectService {
         section_id: SectionId,
         update: UpdateSection,
     ) -> Result<Section, ServiceError> {
-        let section = self.section_by_id(section_id).await?;
+        let section = self.require_section(section_id).await?;
         let name = match update.name {
             Some(name) => {
-                let project = self.project_by_id(section.project_id).await?;
+                let project = self.require_project(section.project_id).await?;
                 self.validated_section_name(&project, Some(section.id), name)
                     .await?
             }
@@ -532,7 +557,7 @@ impl ProjectService {
         project: &Project,
         section_id: SectionId,
     ) -> Result<Section, ServiceError> {
-        let section = self.section_in_project(project, section_id).await?;
+        let section = self.require_section_in_project(project, section_id).await?;
         self.store.delete_section(section.id).await?;
         Ok(section)
     }
@@ -541,8 +566,8 @@ impl ProjectService {
         &self,
         section_id: SectionId,
     ) -> Result<Section, ServiceError> {
-        let section = self.section_by_id(section_id).await?;
-        let project = self.project_by_id(section.project_id).await?;
+        let section = self.require_section(section_id).await?;
+        let project = self.require_project(section.project_id).await?;
         self.delete_section(&project, section_id).await
     }
 
@@ -552,22 +577,22 @@ impl ProjectService {
         source_id: SectionId,
         target_id: SectionId,
     ) -> Result<(Section, Section), ServiceError> {
-        let source = self.section_in_project(project, source_id).await?;
-        let target = self.section_in_project(project, target_id).await?;
+        let source = self.require_section_in_project(project, source_id).await?;
+        let target = self.require_section_in_project(project, target_id).await?;
         if source.id == target.id {
-            return Err(ServiceError::Storage(StorageError::Conflict(
-                "cannot merge a section into itself".to_string(),
-            )));
+            return Err(ServiceError::SectionMergeIntoItself {
+                section: source.name.clone(),
+            });
         }
 
         let source_tasks = self.tasks_in_section(project.id, Some(source.id)).await?;
         let last_target = self.last_task_position(project.id, Some(target.id)).await?;
         let positions = n_keys_between(last_target.as_ref(), None, source_tasks.len())
             .map_err(position_error)?;
-        for (task, position) in source_tasks.iter().zip(positions) {
-            self.store
-                .move_task(task.id, Some(target.id), position)
-                .await?;
+        for (mut task, position) in source_tasks.into_iter().zip(positions) {
+            task.section_id = Some(target.id);
+            task.position = position;
+            self.store.update_task(task).await?;
         }
         self.store.delete_section(source.id).await?;
 
@@ -579,10 +604,10 @@ impl ProjectService {
         source_id: SectionId,
         target_id: SectionId,
     ) -> Result<(Section, Section), ServiceError> {
-        let source = self.section_by_id(source_id).await?;
-        let target = self.section_by_id(target_id).await?;
-        let source_project = self.project_by_id(source.project_id).await?;
-        self.project_by_id(target.project_id).await?;
+        let source = self.require_section(source_id).await?;
+        let target = self.require_section(target_id).await?;
+        let source_project = self.require_project(source.project_id).await?;
+        self.require_project(target.project_id).await?;
         self.merge_sections(&source_project, source.id, target.id)
             .await
     }
@@ -610,13 +635,13 @@ impl ProjectService {
         let id = Uuid::new_v4();
         let project = self
             .store
-            .create_project(
+            .create_project(ProjectToCreate {
                 id,
                 name,
-                description.filter(|description| !description.is_empty()),
+                description: description.filter(|description| !description.is_empty()),
                 task_sorting_mode,
                 show_priority,
-            )
+            })
             .await?;
 
         let Some(sections) = template_sections else {
@@ -627,13 +652,13 @@ impl ProjectService {
             let position = Position::parse(section.position).map_err(position_error)?;
             let id = template_section_id(project.id, section.name);
             self.store
-                .create_section(
+                .create_section(SectionToCreate {
                     id,
-                    project.id,
-                    section.name.to_string(),
+                    project_id: project.id,
+                    name: section.name.to_string(),
                     position,
-                    section.color,
-                )
+                    color: section.color,
+                })
                 .await?;
         }
 
@@ -687,7 +712,7 @@ impl ProjectService {
         &self,
         project_id: ProjectId,
     ) -> Result<Project, ServiceError> {
-        let project = self.project_by_id(project_id).await?;
+        let project = self.require_project(project_id).await?;
         self.store.delete_project_by_id(project.id).await?;
         Ok(project)
     }
@@ -715,9 +740,9 @@ impl ProjectService {
     ) -> Result<Option<Section>, ServiceError> {
         match input {
             SectionInput::Unchanged | SectionInput::NoSection => Ok(None),
-            SectionInput::Existing(section_id) => {
-                Ok(Some(self.section_in_project(project, section_id).await?))
-            }
+            SectionInput::Existing(section_id) => Ok(Some(
+                self.require_section_in_project(project, section_id).await?,
+            )),
             SectionInput::New(name) => Ok(Some(self.create_section(project, name, None).await?)),
         }
     }
@@ -780,31 +805,35 @@ impl ProjectService {
         key_between(last.as_ref(), None).map_err(position_error)
     }
 
-    async fn project_by_id(&self, id: ProjectId) -> Result<Project, ServiceError> {
+    async fn require_project(&self, id: ProjectId) -> Result<Project, ServiceError> {
         self.store.get_project_by_id(id).await?.ok_or_else(|| {
             ServiceError::Storage(StorageError::NotFound(format!("project {id} not found")))
         })
     }
 
-    async fn task_by_id(&self, id: TaskId) -> Result<Task, ServiceError> {
+    async fn require_task(&self, id: TaskId) -> Result<Task, ServiceError> {
         self.store.get_task_by_id(id).await?.ok_or_else(|| {
             ServiceError::Storage(StorageError::NotFound(format!("task {id} not found")))
         })
     }
 
-    async fn note_by_id(&self, id: NoteId) -> Result<Note, ServiceError> {
+    async fn require_note(&self, id: NoteId) -> Result<Note, ServiceError> {
         self.store.get_note_by_id(id).await?.ok_or_else(|| {
             ServiceError::Storage(StorageError::NotFound(format!("note {id} not found")))
         })
     }
 
-    async fn section_by_id(&self, id: SectionId) -> Result<Section, ServiceError> {
+    async fn require_section(&self, id: SectionId) -> Result<Section, ServiceError> {
         self.store.get_section_by_id(id).await?.ok_or_else(|| {
             ServiceError::Storage(StorageError::NotFound(format!("section {id} not found")))
         })
     }
 
-    async fn task_in_project(&self, project: &Project, id: TaskId) -> Result<Task, ServiceError> {
+    async fn require_task_in_project(
+        &self,
+        project: &Project,
+        id: TaskId,
+    ) -> Result<Task, ServiceError> {
         self.store
             .get_task_by_id(id)
             .await?
@@ -815,7 +844,7 @@ impl ProjectService {
             })
     }
 
-    async fn section_in_project(
+    async fn require_section_in_project(
         &self,
         project: &Project,
         id: SectionId,

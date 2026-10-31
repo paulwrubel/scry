@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                UPDATE tasks\n                SET closed_at = $1, close_reason = $2\n                WHERE id = $3\n                RETURNING\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    closed_at,\n                    close_reason,\n                    tags,\n                    created_at\n            ",
+  "query": "\n                UPDATE tasks\n                SET title = $1,\n                    description = $2,\n                    priority = $3,\n                    section_id = $4,\n                    position = $5,\n                    closed_at = $6,\n                    close_reason = $7,\n                    tags = $8\n                WHERE id = $9\n                RETURNING\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    closed_at,\n                    close_reason,\n                    tags,\n                    created_at\n            ",
   "describe": {
     "columns": [
       {
@@ -127,7 +127,13 @@
     ],
     "parameters": {
       "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Uuid",
+        "Text",
         "Timestamptz",
+        "Text",
         "Text",
         "Uuid"
       ]
@@ -146,5 +152,5 @@
       false
     ]
   },
-  "hash": "91b6838214ba506ef6f907dd7fe627567e0eec95ca67ba00f2c7910ea05e73f3"
+  "hash": "50914698127a7ecd7874f6de3e6f2b69a3076ed4ee12cf1510ef4e0a2f3e4361"
 }
