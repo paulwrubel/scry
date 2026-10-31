@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE tasks\n                    SET section_id = $1, position = data.position\n                    FROM unnest($2::UUID[], $3::TEXT[]) AS data(id, position)\n                    WHERE tasks.id = data.id\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7e1e8f838a7eb59d45ff8c4ce126069e173f1db5d6f0fde51df467bbbc26c83c"
+}

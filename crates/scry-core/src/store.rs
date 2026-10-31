@@ -4,6 +4,7 @@ use crate::ids::{NoteId, ProjectId, SectionId, ShortId, TaskId};
 use crate::models::{
     Color, Lifecycle, Note, Priority, Project, Section, Tags, Task, TaskSortingMode,
 };
+use crate::position::Position;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -15,7 +16,7 @@ pub struct TaskToCreate {
     pub description: Option<String>,
     pub priority: Priority,
     pub section_id: Option<SectionId>,
-    pub position: i32,
+    pub position: Position,
     pub tags: Tags,
 }
 
@@ -101,7 +102,7 @@ pub trait Store: Send + Sync {
         &self,
         id: TaskId,
         section_id: Option<SectionId>,
-        position: i32,
+        position: Position,
     ) -> Result<Task, StorageError>;
 
     /// Set a task's lifecycle, writing `closed_at` and `close_reason` together in
@@ -109,10 +110,10 @@ pub trait Store: Send + Sync {
     async fn set_lifecycle(&self, id: TaskId, lifecycle: Lifecycle) -> Result<Task, StorageError>;
 
     /// Duplicate a task as an open copy in the same section, inserting it
-    /// immediately after the source by shifting later tasks in that group up by one.
+    /// immediately after the source with a generated position key.
     ///
-    /// The duplicate is inserted with `new_id`, which the caller supplies.
-    /// Performed in a single transaction.
+    /// No other tasks are shifted. The duplicate is inserted with `new_id`, which
+    /// the caller supplies. Performed in a single transaction.
     async fn duplicate_task(&self, id: TaskId, new_id: TaskId) -> Result<Task, StorageError>;
 
     /// Delete a task
@@ -175,7 +176,7 @@ pub trait Store: Send + Sync {
         id: SectionId,
         project_id: ProjectId,
         name: String,
-        position: i32,
+        position: Position,
         color: Option<Color>,
     ) -> Result<Section, StorageError>;
 
@@ -199,17 +200,6 @@ pub trait Store: Send + Sync {
 
     /// Edit an existing section, writing its name and color.
     async fn update_section(&self, section: Section) -> Result<Section, StorageError>;
-
-    /// Move a section to a new position (0-based) within its project.
-    /// Other sections are shifted to accommodate the new position.
-    /// The new position is clamped to the existing section count, and sections
-    /// are assigned consecutive positions in list order.
-    async fn reorder_section(
-        &self,
-        project_id: ProjectId,
-        section_id: SectionId,
-        new_position: i32,
-    ) -> Result<(), StorageError>;
 
     /// Delete a section, moving its tasks to the end of the No section group in
     /// their current relative order.

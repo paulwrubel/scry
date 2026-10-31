@@ -1,4 +1,4 @@
-//! Handler for moving a task to a section and/or position.
+//! Handler for moving a task to a section.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -14,10 +14,9 @@ use crate::service::SectionInput;
 #[derive(Deserialize)]
 pub struct MoveTaskRequest {
     pub section_id: Option<SectionId>,
-    pub position: Option<i32>,
 }
 
-/// Move a task into a section (or no section) at an optional position.
+/// Move a task into a section (or no section).
 pub async fn move_task(
     State(state): State<ScryState>,
     Path(id): Path<TaskId>,
@@ -28,11 +27,7 @@ pub async fn move_task(
         None => SectionInput::NoSection,
     };
 
-    match state
-        .service
-        .move_task_by_id(id, section, body.position)
-        .await
-    {
+    match state.service.move_task_by_id(id, section, None).await {
         Ok(change) => Json(change.task).into_response(),
         Err(error) => AppError::from(error).into(),
     }

@@ -1,11 +1,12 @@
 use crate::error::StorageError;
 use crate::models::{Note, Project, ProjectId, Section, Task};
+use crate::position::{Position, n_keys_between};
 use crate::store::Store;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 
-pub const BACKUP_VERSION: u32 = 3;
+pub const BACKUP_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Backup {
@@ -75,9 +76,11 @@ impl std::error::Error for BackupError {}
 
 /// Parse a backup document.
 ///
-/// Only the current format version (3, which carries UUID identity) is accepted.
-/// Version 2 backups, written before UUID identity, are rejected rather than
-/// upgraded, so they must be transformed manually before import.
+/// Version 4 is the current format and is deserialized directly. Version 3
+/// backups carry UUID identity but store section and task positions as integers;
+/// they are upgraded in place to fractional position keys. Versions 1 and 2,
+/// written before UUID identity, are rejected rather than upgraded, so they must
+/// be transformed manually before import.
 pub fn parse(input: &str) -> Result<Backup, BackupError> {
     let value: serde_json::Value =
         serde_json::from_str(input).map_err(|error| BackupError::InvalidJson(error.to_string()))?;
@@ -95,14 +98,123 @@ pub fn parse(input: &str) -> Result<Backup, BackupError> {
         BackupError::InvalidJson(format!("backup version {version} is out of range"))
     })?;
 
-    if version != BACKUP_VERSION {
-        return Err(BackupError::UnsupportedVersion {
+    match version {
+        BACKUP_VERSION => serde_json::from_value(value)
+            .map_err(|error| BackupError::InvalidJson(error.to_string())),
+        3 => upgrade_v3(value),
+        _ => Err(BackupError::UnsupportedVersion {
             found: version,
             supported: BACKUP_VERSION,
-        });
+        }),
+    }
+}
+
+fn upgrade_v3(mut value: serde_json::Value) -> Result<Backup, BackupError> {
+    let projects = value
+        .get_mut("projects")
+        .and_then(serde_json::Value::as_array_mut)
+        .ok_or_else(|| {
+            BackupError::InvalidJson("backup is missing a projects array".to_string())
+        })?;
+
+    for project in projects {
+        upgrade_v3_section_positions(project)?;
+        upgrade_v3_task_positions(project)?;
     }
 
+    value["version"] = serde_json::Value::from(4);
     serde_json::from_value(value).map_err(|error| BackupError::InvalidJson(error.to_string()))
+}
+
+fn upgrade_v3_section_positions(project: &mut serde_json::Value) -> Result<(), BackupError> {
+    let Some(sections) = project
+        .get_mut("sections")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return Ok(());
+    };
+
+    let ordered = order_v3_entities(sections, 0..sections.len())?;
+    let keys = n_keys_between(None, None, ordered.len())
+        .map_err(|error| BackupError::InvalidJson(error.to_string()))?;
+
+    for (key, index) in keys.into_iter().zip(ordered) {
+        set_position(&mut sections[index], key);
+    }
+    Ok(())
+}
+
+fn upgrade_v3_task_positions(project: &mut serde_json::Value) -> Result<(), BackupError> {
+    let Some(tasks) = project
+        .get_mut("tasks")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return Ok(());
+    };
+
+    let mut groups: BTreeMap<Option<String>, Vec<usize>> = BTreeMap::new();
+    for (index, task) in tasks.iter().enumerate() {
+        let group = match task.get("section_id") {
+            Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(id)) => Some(id.clone()),
+            _ => {
+                return Err(BackupError::InvalidJson(
+                    "version 3 task is missing a section_id".to_string(),
+                ));
+            }
+        };
+        groups.entry(group).or_default().push(index);
+    }
+
+    for indices in groups.into_values() {
+        let ordered = order_v3_entities(tasks, indices)?;
+        let keys = n_keys_between(None, None, ordered.len())
+            .map_err(|error| BackupError::InvalidJson(error.to_string()))?;
+
+        for (key, index) in keys.into_iter().zip(ordered) {
+            set_position(&mut tasks[index], key);
+        }
+    }
+    Ok(())
+}
+
+fn order_v3_entities(
+    entities: &[serde_json::Value],
+    indices: impl IntoIterator<Item = usize>,
+) -> Result<Vec<usize>, BackupError> {
+    let mut ordered = indices
+        .into_iter()
+        .map(|index| {
+            let entity = &entities[index];
+            let position = entity
+                .get("position")
+                .and_then(serde_json::Value::as_i64)
+                .ok_or_else(|| {
+                    BackupError::InvalidJson(
+                        "version 3 entity is missing an integer position".to_string(),
+                    )
+                })?;
+            let id = entity
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| {
+                    BackupError::InvalidJson("version 3 entity is missing a string id".to_string())
+                })?;
+            Ok((position, id.to_string(), index))
+        })
+        .collect::<Result<Vec<_>, BackupError>>()?;
+
+    ordered.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+    Ok(ordered.into_iter().map(|(_, _, index)| index).collect())
+}
+
+fn set_position(entity: &mut serde_json::Value, position: Position) {
+    if let Some(object) = entity.as_object_mut() {
+        object.insert(
+            "position".to_string(),
+            serde_json::Value::String(position.to_string()),
+        );
+    }
 }
 
 pub async fn export(store: &dyn Store, project: Option<ProjectId>) -> Result<Backup, StorageError> {
@@ -240,6 +352,10 @@ mod tests {
         Uuid::parse_str(value).expect("test uuid should parse")
     }
 
+    fn position(value: &str) -> Position {
+        Position::parse(value).expect("test position should parse")
+    }
+
     fn project(id: &str, name: &str) -> Project {
         Project {
             id: uuid(id),
@@ -256,7 +372,7 @@ mod tests {
             id: uuid(id),
             project_id,
             name: "section".to_string(),
-            position: 0,
+            position: position("a0"),
             color: None,
             created_at: Utc::now(),
         }
@@ -270,7 +386,7 @@ mod tests {
             description: None,
             priority: Priority::Medium,
             section_id,
-            position: 0,
+            position: position("a0"),
             lifecycle: Lifecycle::Open,
             tags: Tags::default(),
             created_at: Utc::now(),
@@ -382,7 +498,7 @@ mod tests {
             &self,
             _: TaskId,
             _: Option<SectionId>,
-            _: i32,
+            _: Position,
         ) -> Result<Task, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
@@ -443,7 +559,7 @@ mod tests {
             _: SectionId,
             _: ProjectId,
             _: String,
-            _: i32,
+            _: Position,
             _: Option<Color>,
         ) -> Result<Section, StorageError> {
             unimplemented!("plan_import only reads projects")
@@ -469,15 +585,6 @@ mod tests {
         }
 
         async fn update_section(&self, _: Section) -> Result<Section, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn reorder_section(
-            &self,
-            _: ProjectId,
-            _: SectionId,
-            _: i32,
-        ) -> Result<(), StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
@@ -660,5 +767,164 @@ mod tests {
             parse(v2),
             Err(BackupError::UnsupportedVersion { found: 2, .. })
         ));
+    }
+
+    #[test]
+    fn v3_backup_upgrades_positions_in_recorded_order() {
+        const SECTION_ONE: &str = "b1b2c3d4-0000-4000-8000-000000000001";
+        const SECTION_TWO: &str = "b1b2c3d4-0000-4000-8000-000000000002";
+
+        let v3 = r#"{
+            "version": 3,
+            "app_version": "0.0.0",
+            "projects": [
+                {
+                    "id": "a1b2c3d4-0000-4000-8000-000000000001",
+                    "name": "legacy",
+                    "description": null,
+                    "task_sorting_mode": "manual",
+                    "show_priority": false,
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "sections": [
+                        {
+                            "id": "b1b2c3d4-0000-4000-8000-000000000005",
+                            "project_id": "a1b2c3d4-0000-4000-8000-000000000001",
+                            "name": "five",
+                            "position": 5,
+                            "color": null,
+                            "created_at": "2026-01-01T00:00:00Z"
+                        },
+                        {
+                            "id": "b1b2c3d4-0000-4000-8000-000000000002",
+                            "project_id": "a1b2c3d4-0000-4000-8000-000000000001",
+                            "name": "one-b",
+                            "position": 1,
+                            "color": null,
+                            "created_at": "2026-01-01T00:00:00Z"
+                        },
+                        {
+                            "id": "b1b2c3d4-0000-4000-8000-000000000001",
+                            "project_id": "a1b2c3d4-0000-4000-8000-000000000001",
+                            "name": "one-a",
+                            "position": 1,
+                            "color": null,
+                            "created_at": "2026-01-01T00:00:00Z"
+                        }
+                    ],
+                    "tasks": [
+                        {
+                            "id": "c1b2c3d4-0000-4000-8000-00000000000a",
+                            "project_id": "a1b2c3d4-0000-4000-8000-000000000001",
+                            "title": "ten",
+                            "description": null,
+                            "priority": "medium",
+                            "section_id": "b1b2c3d4-0000-4000-8000-000000000001",
+                            "position": 10,
+                            "lifecycle": { "state": "open" },
+                            "tags": [],
+                            "created_at": "2026-01-01T00:00:00Z"
+                        },
+                        {
+                            "id": "c1b2c3d4-0000-4000-8000-00000000000c",
+                            "project_id": "a1b2c3d4-0000-4000-8000-000000000001",
+                            "title": "tie-c",
+                            "description": null,
+                            "priority": "medium",
+                            "section_id": "b1b2c3d4-0000-4000-8000-000000000001",
+                            "position": 2,
+                            "lifecycle": { "state": "open" },
+                            "tags": [],
+                            "created_at": "2026-01-01T00:00:00Z"
+                        },
+                        {
+                            "id": "c1b2c3d4-0000-4000-8000-00000000000b",
+                            "project_id": "a1b2c3d4-0000-4000-8000-000000000001",
+                            "title": "tie-b",
+                            "description": null,
+                            "priority": "medium",
+                            "section_id": "b1b2c3d4-0000-4000-8000-000000000001",
+                            "position": 2,
+                            "lifecycle": { "state": "open" },
+                            "tags": [],
+                            "created_at": "2026-01-01T00:00:00Z"
+                        },
+                        {
+                            "id": "c1b2c3d4-0000-4000-8000-00000000000d",
+                            "project_id": "a1b2c3d4-0000-4000-8000-000000000001",
+                            "title": "null-zero",
+                            "description": null,
+                            "priority": "medium",
+                            "section_id": null,
+                            "position": 0,
+                            "lifecycle": { "state": "open" },
+                            "tags": [],
+                            "created_at": "2026-01-01T00:00:00Z"
+                        }
+                    ],
+                    "notes": []
+                }
+            ]
+        }"#;
+
+        let backup = parse(v3).expect("version 3 should upgrade");
+        assert_eq!(backup.version, 4);
+
+        let mut sections = backup.projects[0].sections.clone();
+        sections.sort_by_key(|entry| entry.position.clone());
+        let section_names: Vec<&str> = sections.iter().map(|entry| entry.name.as_str()).collect();
+        assert_eq!(section_names, ["one-a", "one-b", "five"]);
+        assert_eq!(sections[0].id, uuid(SECTION_ONE));
+        assert_eq!(sections[1].id, uuid(SECTION_TWO));
+        assert!(
+            sections
+                .windows(2)
+                .all(|pair| pair[0].position < pair[1].position)
+        );
+        for entry in &sections {
+            assert!(Position::parse(entry.position.as_str()).is_ok());
+        }
+
+        let mut section_tasks: Vec<&Task> = backup.projects[0]
+            .tasks
+            .iter()
+            .filter(|task| task.section_id == Some(uuid(SECTION_ONE)))
+            .collect();
+        section_tasks.sort_by_key(|task| task.position.clone());
+        let task_titles: Vec<&str> = section_tasks
+            .iter()
+            .map(|task| task.title.as_str())
+            .collect();
+        assert_eq!(task_titles, ["tie-b", "tie-c", "ten"]);
+        assert!(
+            section_tasks
+                .windows(2)
+                .all(|pair| pair[0].position < pair[1].position)
+        );
+        for task in &section_tasks {
+            assert!(Position::parse(task.position.as_str()).is_ok());
+        }
+
+        let unsectioned: Vec<&Task> = backup.projects[0]
+            .tasks
+            .iter()
+            .filter(|task| task.section_id.is_none())
+            .collect();
+        assert_eq!(unsectioned.len(), 1);
+        assert_eq!(unsectioned[0].title, "null-zero");
+        assert!(Position::parse(unsectioned[0].position.as_str()).is_ok());
+    }
+
+    #[test]
+    fn v4_backup_round_trips_string_positions() {
+        let mut original = backup(vec![full_backup_project(PROJECT_ID, "alpha")]);
+        original.projects[0].sections[0].position = position("a2");
+        original.projects[0].tasks[0].position = position("a5");
+
+        let serialized = serde_json::to_string(&original).expect("backup should serialize");
+        let parsed = parse(&serialized).expect("version 4 should parse");
+
+        assert_eq!(parsed.version, BACKUP_VERSION);
+        assert_eq!(parsed.projects[0].sections[0].position, position("a2"));
+        assert_eq!(parsed.projects[0].tasks[0].position, position("a5"));
     }
 }
