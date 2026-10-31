@@ -391,10 +391,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Cli::command()
             .print_help()
             .map_err(|error| AppError::Internal(format!("failed to print help: {error}")))?;
-        println!();
-        println!(
-            "The interactive TUI has been removed. Run `scry serve` for the REST API, or `scry --help` for available commands."
-        );
         return Ok(());
     }
 
