@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 pub use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
+use crate::position::Position;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
@@ -279,7 +280,7 @@ pub struct ProjectTemplate {
 #[derive(Debug, Clone, Copy)]
 pub struct ProjectTemplateSection {
     pub name: &'static str,
-    pub position: i32,
+    pub position: &'static str,
     pub color: Option<Color>,
 }
 
@@ -297,17 +298,17 @@ pub const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
         sections: &[
             ProjectTemplateSection {
                 name: "backlog",
-                position: 0,
+                position: "a0",
                 color: None,
             },
             ProjectTemplateSection {
                 name: "in-progress",
-                position: 1,
+                position: "a1",
                 color: Some(Color::Blue),
             },
             ProjectTemplateSection {
                 name: "review",
-                position: 2,
+                position: "a2",
                 color: Some(Color::Yellow),
             },
         ],
@@ -329,7 +330,7 @@ pub struct Section {
     pub id: SectionId,
     pub project_id: ProjectId,
     pub name: String,
-    pub position: i32,
+    pub position: Position,
     pub color: Option<Color>,
     pub created_at: DateTime<Utc>,
 }
@@ -342,7 +343,7 @@ pub struct Task {
     pub description: Option<String>,
     pub priority: Priority,
     pub section_id: Option<SectionId>,
-    pub position: i32,
+    pub position: Position,
     pub lifecycle: Lifecycle,
     pub tags: Tags,
     pub created_at: DateTime<Utc>,

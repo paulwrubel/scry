@@ -79,6 +79,8 @@ Every task is open or closed. `scry close <handle> --reason completed` closes a 
 
 Sections are optional, ordered groupings within a project. A task has zero or one section. Tasks without a section are grouped under **No section**.
 
+New sections append to the end of the project's section order. There is currently no way to reorder sections.
+
 Sections are created explicitly, either with `scry section add <name>` or with `--new-section <name>` when adding or updating a task. `--section <name>` must name an existing section; an unknown name fails with the closest match suggested. Section names are trimmed and case-insensitively unique per project. There is no default or entry section: new tasks go to No section unless a section is specified, and `--no-section` on `move` or `update` moves a task back to No section.
 
 Sections carry no completion semantics: a section named "Done" does not close anything. Deleting a section moves its tasks to No section; merging two sections moves the source's tasks into the target and deletes the source. Empty sections are allowed.
@@ -146,6 +148,8 @@ Task and note arguments accept a full UUID or a unique short prefix of at least 
 
 With `--include-closed`, `scry list` renders closed tasks in a trailing **Closed** group, marking completed tasks `[x]` and cancelled tasks `[~]`. Without it, closed tasks are hidden. An unknown `--section` name fails with a suggestion naming the closest existing section.
 
+Tasks append when they are created or moved into a section. There is currently no command or REST field for placing a task at a particular position within its section.
+
 ### Project Commands
 
 | Command                                                                                                       | Description                                                       |
@@ -175,8 +179,6 @@ Sections belong to the active project, or to `-p` when given.
 | `scry section remove <name>`                | Delete a section, moving its tasks to No section              |
 | `scry section rename <old> <new>`           | Rename a section                                              |
 | `scry section merge <source> <target>`      | Move the source's tasks into the target and delete the source |
-| `scry section move-up <name>`               | Move a section up in the ordering                             |
-| `scry section move-down <name>`             | Move a section down in the ordering                           |
 | `scry section set-color <name> <color>`     | Set a section's color                                         |
 | `scry section reset-color <name>`           | Clear a section's color                                       |
 
@@ -203,9 +205,9 @@ scry export > scry-backup.json
 scry import --replace-existing-projects < scry-backup.json
 ```
 
-The document is a single object, `{ "version": 3, "app_version": "0.24.0", "projects": [ ... ] }`. `version` is the format version checked on import and `app_version` is informational, recording the binary that produced the backup. Each project carries its own fields (`id`, `name`, `description`, `task_sorting_mode`, `show_priority`, `created_at`) alongside nested `sections`, `tasks`, and `notes` arrays. Every id (`id`, `project_id`, `section_id`, `task_id`) is a UUID string. Every task carries a nullable `section_id` and a `lifecycle` object: `{"state": "open"}` for an open task, or `{"state": "closed", "closed_at": "...", "reason": "completed"}` (or `"reason": "cancelled"`) for a closed one. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
+The document is a single object, `{ "version": 4, "app_version": "0.24.0", "projects": [ ... ] }`. `version` is the format version checked on import and `app_version` is informational, recording the binary that produced the backup. Each project carries its own fields (`id`, `name`, `description`, `task_sorting_mode`, `show_priority`, `created_at`) alongside nested `sections`, `tasks`, and `notes` arrays. Every id (`id`, `project_id`, `section_id`, `task_id`) is a UUID string. Every task and section carries a `position` string key: ordering is lexicographic, unresolved ties break by id, and the key itself is opaque. Every task carries a nullable `section_id` and a `lifecycle` object: `{"state": "open"}` for an open task, or `{"state": "closed", "closed_at": "...", "reason": "completed"}` (or `"reason": "cancelled"`) for a closed one. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
 
-Import preserves the UUIDs carried by the backup and inserts or updates by id, keeping the other fields and timestamps. Only backup format version 3 is accepted: version 2 and earlier backups (written before UUID identity) are rejected and must be migrated separately; upgrading them is tracked in #88. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `sections`, `tasks`, and `notes`.
+Import preserves the UUIDs carried by the backup and inserts or updates by id, keeping the other fields and timestamps. Version 4 is current. Version 3 backups (UUID ids with integer positions) are upgraded on import by assigning position keys in the recorded `(position, id)` order. Version 2 and earlier backups (written before UUID identity) are rejected and must be migrated separately; upgrading them is tracked in #88. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `sections`, `tasks`, and `notes`.
 
 ### Documentation
 
@@ -303,32 +305,31 @@ server behind a TLS-terminating proxy or a private network if it leaves the host
 
 Endpoints, all under `/api/v1`:
 
-| Method                   | Path                                     | Purpose                                |
-| ------------------------ | ---------------------------------------- | -------------------------------------- |
-| `GET`                    | `/`                                      | Server info                            |
-| `GET` / `POST`           | `/projects`                              | List / create projects                 |
-| `GET`                    | `/projects/by-name/{name}`               | Fetch a project by name                |
-| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project      |
-| `GET` / `POST`           | `/projects/{id}/sections`                | List / create sections                 |
-| `GET`                    | `/projects/{id}/sections/by-name/{name}` | Fetch a section by name                |
-| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks        |
-| `GET`                    | `/projects/{id}/notes`                   | List a project's notes                 |
-| `GET`                    | `/projects/{id}/snapshot`                | Fetch a project snapshot               |
-| `GET` / `PUT` / `DELETE` | `/sections/{id}`                         | Fetch / update / delete a section      |
-| `POST`                   | `/sections/{id}/move`                    | Reorder a section within its project   |
-| `POST`                   | `/sections/{id}/merge`                   | Merge a section into another           |
-| `GET`                    | `/sections/{id}/tasks`                   | List a section's tasks                 |
-| `GET` / `PUT` / `DELETE` | `/tasks/{id}`                            | Fetch / update / delete a task         |
-| `POST`                   | `/tasks/{id}/move`                       | Move a task to a section at a position |
-| `POST`                   | `/tasks/{id}/close`                      | Close a task with a reason             |
-| `POST`                   | `/tasks/{id}/open`                       | Reopen a closed task                   |
-| `GET` / `POST`           | `/tasks/{id}/notes`                      | List / create a task's notes           |
-| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note         |
-| `POST`                   | `/import`                                | Apply an import plan                   |
+| Method                   | Path                                     | Purpose                            |
+| ------------------------ | ---------------------------------------- | ---------------------------------- |
+| `GET`                    | `/`                                      | Server info                        |
+| `GET` / `POST`           | `/projects`                              | List / create projects             |
+| `GET`                    | `/projects/by-name/{name}`               | Fetch a project by name            |
+| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project  |
+| `GET` / `POST`           | `/projects/{id}/sections`                | List / create sections             |
+| `GET`                    | `/projects/{id}/sections/by-name/{name}` | Fetch a section by name            |
+| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks    |
+| `GET`                    | `/projects/{id}/notes`                   | List a project's notes             |
+| `GET`                    | `/projects/{id}/snapshot`                | Fetch a project snapshot           |
+| `GET` / `PUT` / `DELETE` | `/sections/{id}`                         | Fetch / update / delete a section  |
+| `POST`                   | `/sections/{id}/merge`                   | Merge a section into another       |
+| `GET`                    | `/sections/{id}/tasks`                   | List a section's tasks             |
+| `GET` / `PUT` / `DELETE` | `/tasks/{id}`                            | Fetch / update / delete a task     |
+| `POST`                   | `/tasks/{id}/move`                       | Move a task to a section (appends) |
+| `POST`                   | `/tasks/{id}/close`                      | Close a task with a reason         |
+| `POST`                   | `/tasks/{id}/open`                       | Reopen a closed task               |
+| `GET` / `POST`           | `/tasks/{id}/notes`                      | List / create a task's notes       |
+| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note     |
+| `POST`                   | `/import`                                | Apply an import plan               |
 
 Path and body ids are full UUIDs only; short prefixes are a CLI convenience and are rejected by the API.
 
-`POST /tasks/{id}/move` takes a body of `{ "section_id": <id-or-null>, "position": <integer> }`, where an omitted `position` appends to the destination and a null `section_id` moves the task to No section. `POST /tasks/{id}/close` requires a body of `{ "reason": "completed" }` or `{ "reason": "cancelled" }`. `POST /sections/{id}/move` takes `{ "position": <integer> }`, and `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`.
+`POST /tasks/{id}/move` takes a body of `{ "section_id": <id-or-null> }`; a null `section_id` moves the task to No section, and either way the task appends to the destination group. `POST /tasks/{id}/close` requires a body of `{ "reason": "completed" }` or `{ "reason": "cancelled" }`. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`.
 
 ### JSON Output
 
@@ -340,7 +341,7 @@ scry --json show 4f3a
 scry -p myapp --json add "design API"
 ```
 
-Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Task objects carry a nullable `section_id` and a `lifecycle` object, which is `{"state": "open"}` or `{"state": "closed", "closed_at": "...", "reason": "completed" | "cancelled"}`. Every `id` field is a full lowercase hyphenated UUID string, never a handle. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
+Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Task and section objects carry `position`, an opaque lexicographic string key; treat it as read-only, because nothing exposes a way to set it directly. Task objects carry a nullable `section_id` and a `lifecycle` object, which is `{"state": "open"}` or `{"state": "closed", "closed_at": "...", "reason": "completed" | "cancelled"}`. Every `id` field is a full lowercase hyphenated UUID string, never a handle. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
 `--json` applies only to one-shot subcommands; passing it with no subcommand or with `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 

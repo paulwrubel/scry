@@ -284,16 +284,6 @@ enum SectionCommand {
         /// The section to merge into
         target: String,
     },
-    /// Move a section up in the ordering for the project
-    MoveUp {
-        /// The section name
-        name: String,
-    },
-    /// Move a section down in the ordering for the project
-    MoveDown {
-        /// The section name
-        name: String,
-    },
     /// Set the color for a section
     SetColor {
         /// The section name
@@ -1061,42 +1051,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         "Merged section \"{}\" into \"{}\"",
                         source_section.name, target_section.name
                     );
-                }
-            }
-            SectionCommand::MoveUp { name } => {
-                let section = service.get_section_by_name(&project, &name).await?;
-                let moved = service.move_section_up(&project, section.id).await?;
-                if output_json {
-                    print_json(moved.as_ref().unwrap_or(&section))?;
-                } else {
-                    match moved {
-                        Some(_) => println!(
-                            "Moved section \"{}\" up in project \"{}\"",
-                            name, project.name
-                        ),
-                        None => eprintln!(
-                            "Section \"{}\" is already at the top of \"{}\"",
-                            name, project.name
-                        ),
-                    }
-                }
-            }
-            SectionCommand::MoveDown { name } => {
-                let section = service.get_section_by_name(&project, &name).await?;
-                let moved = service.move_section_down(&project, section.id).await?;
-                if output_json {
-                    print_json(moved.as_ref().unwrap_or(&section))?;
-                } else {
-                    match moved {
-                        Some(_) => println!(
-                            "Moved section \"{}\" down in project \"{}\"",
-                            name, project.name
-                        ),
-                        None => eprintln!(
-                            "Section \"{}\" is already at the bottom of \"{}\"",
-                            name, project.name
-                        ),
-                    }
                 }
             }
             SectionCommand::SetColor { name, color } => {

@@ -12,6 +12,7 @@ use scry_core::models::{
     CloseReason, Color, Lifecycle, Note, Priority, Project, ProjectTemplate, Section, Tags, Task,
     TaskSortingMode,
 };
+use scry_core::position::{Position, key_between};
 use scry_core::store::{ArcStore, ProjectSnapshot, TaskContentUpdate, TaskToCreate};
 use uuid::Uuid;
 
@@ -24,6 +25,12 @@ pub enum SectionInput {
     NoSection,
     Existing(SectionId),
     New(String),
+}
+
+fn position_error(error: scry_core::position::PositionError) -> ServiceError {
+    ServiceError::Storage(StorageError::Invalid(format!(
+        "failed to generate position: {error}"
+    )))
 }
 
 /// Partial task input, shared by create and update. `None` leaves a field
@@ -78,7 +85,7 @@ impl ProjectService {
         let title = input.title.ok_or(ServiceError::TitleRequired)?;
         let section = self.resolve_section(project, input.section).await?;
         let section_id = section.as_ref().map(|section| section.id);
-        let position = self.next_position(project.id, section_id).await?;
+        let position = self.append_position(project.id, section_id).await?;
 
         let task = self
             .store
@@ -152,7 +159,7 @@ impl ProjectService {
             let section = self.resolve_section(project, patch.section).await?;
             let section_id = section.as_ref().map(|section| section.id);
             if section_id != task.section_id {
-                let position = self.next_position(project.id, section_id).await?;
+                let position = self.append_position(project.id, section_id).await?;
                 task = self.store.move_task(task.id, section_id, position).await?;
             }
         }
@@ -191,7 +198,7 @@ impl ProjectService {
         project: &Project,
         id: TaskId,
         section: SectionInput,
-        position: Option<i32>,
+        position: Option<Position>,
     ) -> Result<TaskChangeResult, ServiceError> {
         let task = self.task_in_project(project, id).await?;
         let unchanged = section == SectionInput::Unchanged;
@@ -209,20 +216,12 @@ impl ProjectService {
         }
 
         let section_id = section.as_ref().map(|section| section.id);
-        let tasks = self.tasks_in_section(project.id, section_id).await?;
-        let target_position = match position {
-            Some(position) => position.clamp(0, tasks.len() as i32),
-            None => tasks
-                .iter()
-                .map(|task| task.position)
-                .max()
-                .map_or(0, |position| position + 1),
+        let position = match position {
+            Some(position) => position,
+            None => self.append_position(project.id, section_id).await?,
         };
 
-        let task = self
-            .store
-            .move_task(task.id, section_id, target_position)
-            .await?;
+        let task = self.store.move_task(task.id, section_id, position).await?;
         Ok(TaskChangeResult { task, section })
     }
 
@@ -230,7 +229,7 @@ impl ProjectService {
         &self,
         task_id: TaskId,
         section: SectionInput,
-        position: Option<i32>,
+        position: Option<Position>,
     ) -> Result<TaskChangeResult, ServiceError> {
         let task = self.task_by_id(task_id).await?;
         let project = self.project_by_id(task.project_id).await?;
@@ -414,11 +413,12 @@ impl ProjectService {
             .store
             .get_all_sections_by_project_id(project.id)
             .await?;
-        let position = sections
+        let last = sections
             .iter()
-            .map(|section| section.position)
+            .map(|section| &section.position)
             .max()
-            .map_or(0, |position| position + 1);
+            .cloned();
+        let position = key_between(last.as_ref(), None).map_err(position_error)?;
         let id = Uuid::new_v4();
         Ok(self
             .store
@@ -539,79 +539,6 @@ impl ProjectService {
             .await?)
     }
 
-    /// Move a section up one position. `None` when it is already first.
-    pub async fn move_section_up(
-        &self,
-        project: &Project,
-        section_id: SectionId,
-    ) -> Result<Option<Section>, ServiceError> {
-        let section = self.section_in_project(project, section_id).await?;
-        let sections = self
-            .store
-            .get_all_sections_by_project_id(project.id)
-            .await?;
-        let min = sections
-            .iter()
-            .map(|section| section.position)
-            .min()
-            .unwrap_or(section.position);
-        if section.position <= min {
-            return Ok(None);
-        }
-        self.store
-            .reorder_section(project.id, section.id, section.position - 1)
-            .await?;
-        Ok(Some(self.section_in_project(project, section.id).await?))
-    }
-
-    /// Move a section down one position. `None` when it is already last.
-    pub async fn move_section_down(
-        &self,
-        project: &Project,
-        section_id: SectionId,
-    ) -> Result<Option<Section>, ServiceError> {
-        let section = self.section_in_project(project, section_id).await?;
-        let sections = self
-            .store
-            .get_all_sections_by_project_id(project.id)
-            .await?;
-        let max = sections
-            .iter()
-            .map(|section| section.position)
-            .max()
-            .unwrap_or(section.position);
-        if section.position >= max {
-            return Ok(None);
-        }
-        self.store
-            .reorder_section(project.id, section.id, section.position + 1)
-            .await?;
-        Ok(Some(self.section_in_project(project, section.id).await?))
-    }
-
-    pub async fn move_section_to(
-        &self,
-        project: &Project,
-        section_id: SectionId,
-        position: i32,
-    ) -> Result<(), ServiceError> {
-        self.section_in_project(project, section_id).await?;
-        self.store
-            .reorder_section(project.id, section_id, position)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn move_section_by_id(
-        &self,
-        section_id: SectionId,
-        position: i32,
-    ) -> Result<(), ServiceError> {
-        let section = self.section_by_id(section_id).await?;
-        let project = self.project_by_id(section.project_id).await?;
-        self.move_section_to(&project, section_id, position).await
-    }
-
     pub async fn delete_section(
         &self,
         project: &Project,
@@ -688,13 +615,14 @@ impl ProjectService {
         };
 
         for section in template.sections {
+            let position = Position::parse(section.position).map_err(position_error)?;
             let id = template_section_id(project.id, section.name);
             self.store
                 .create_section(
                     id,
                     project.id,
                     section.name.to_string(),
-                    section.position,
+                    position,
                     section.color,
                 )
                 .await?;
@@ -871,17 +799,22 @@ impl ProjectService {
         })
     }
 
-    async fn next_position(
+    async fn last_task_position(
         &self,
         project_id: ProjectId,
         section_id: Option<SectionId>,
-    ) -> Result<i32, ServiceError> {
+    ) -> Result<Option<Position>, ServiceError> {
         let tasks = self.tasks_in_section(project_id, section_id).await?;
-        Ok(tasks
-            .iter()
-            .map(|task| task.position)
-            .max()
-            .map_or(0, |position| position + 1))
+        Ok(tasks.iter().map(|task| &task.position).max().cloned())
+    }
+
+    async fn append_position(
+        &self,
+        project_id: ProjectId,
+        section_id: Option<SectionId>,
+    ) -> Result<Position, ServiceError> {
+        let last = self.last_task_position(project_id, section_id).await?;
+        key_between(last.as_ref(), None).map_err(position_error)
     }
 
     async fn project_by_id(&self, id: ProjectId) -> Result<Project, ServiceError> {

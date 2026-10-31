@@ -13,7 +13,7 @@ CREATE TABLE sections (
     id         UUID PRIMARY KEY,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name       TEXT NOT NULL,
-    position   INTEGER NOT NULL DEFAULT 0,
+    position   TEXT COLLATE "C" NOT NULL,
     color      TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -26,7 +26,7 @@ CREATE TABLE tasks (
     description  TEXT,
     priority     BIGINT NOT NULL DEFAULT 3,
     section_id   UUID REFERENCES sections(id) ON DELETE SET NULL,
-    position     INTEGER NOT NULL DEFAULT 0,
+    position     TEXT COLLATE "C" NOT NULL,
     closed_at    TIMESTAMPTZ,
     close_reason TEXT,
     tags         TEXT NOT NULL DEFAULT '',

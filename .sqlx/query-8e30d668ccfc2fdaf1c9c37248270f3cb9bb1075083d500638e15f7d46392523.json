@@ -61,7 +61,7 @@
       {
         "ordinal": 5,
         "name": "position",
-        "type_info": "Int4",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "tasks",

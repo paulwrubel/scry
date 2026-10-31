@@ -7,6 +7,7 @@ use scry_core::ids::{NoteId, ProjectId, SectionId, ShortId, TaskId};
 use scry_core::models::{
     CloseReason, Color, Lifecycle, Note, Priority, Project, Section, Tags, Task, TaskSortingMode,
 };
+use scry_core::position::{Position, key_between, n_keys_between};
 use scry_core::store::{ProjectSnapshot, Store, TaskContentUpdate, TaskToCreate};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
@@ -46,7 +47,7 @@ struct TaskRow {
     description: Option<String>,
     priority: i64,
     section_id: Option<Uuid>,
-    position: i32,
+    position: String,
     closed_at: Option<DateTime<Utc>>,
     close_reason: Option<String>,
     tags: String,
@@ -86,7 +87,8 @@ impl TryFrom<TaskRow> for Task {
             priority: Priority::try_from(row.priority)
                 .map_err(|e| StorageError::Database(format!("invalid priority i64 value: {e}")))?,
             section_id: row.section_id,
-            position: row.position,
+            position: Position::parse(row.position)
+                .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
             lifecycle,
             tags: Tags::from(row.tags.as_str()),
             created_at: row.created_at,
@@ -130,18 +132,19 @@ fn section_from_fields(
     id: SectionId,
     project_id: ProjectId,
     name: String,
-    position: i32,
+    position: String,
     color: Option<String>,
     created_at: DateTime<Utc>,
-) -> Section {
-    Section {
+) -> Result<Section, StorageError> {
+    Ok(Section {
         id,
         project_id,
         name,
-        position,
+        position: Position::parse(position)
+            .map_err(|e| StorageError::Database(format!("invalid section position: {e}")))?,
         color: color.and_then(|c| Color::from_str(&c, false).ok()),
         created_at,
-    }
+    })
 }
 
 #[async_trait]
@@ -173,7 +176,7 @@ impl Store for PostgresStore {
             task.description.as_deref(),
             i64::from(task.priority),
             task.section_id,
-            &task.position,
+            task.position.as_str(),
             task.tags.to_string(),
             created_at,
         )
@@ -386,7 +389,7 @@ impl Store for PostgresStore {
         &self,
         id: TaskId,
         section_id: Option<SectionId>,
-        position: i32,
+        position: Position,
     ) -> Result<Task, StorageError> {
         match sqlx::query_as!(
             TaskRow,
@@ -408,7 +411,7 @@ impl Store for PostgresStore {
                     created_at
             "#,
             section_id,
-            position,
+            position.as_str(),
             id,
         )
         .fetch_one(&self.pool)
@@ -498,21 +501,38 @@ impl Store for PostgresStore {
         .map_err(|e| StorageError::Database(format!("failed to show task: {}", e)))?
         .ok_or_else(|| StorageError::NotFound(format!("task with id '{}' not found", id)))?;
 
-        sqlx::query!(
+        let source_position = Position::parse(source.position.as_str())
+            .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?;
+
+        let next = sqlx::query!(
             r#"
-                UPDATE tasks
-                SET position = position + 1
+                SELECT position
+                FROM tasks
                 WHERE project_id = $1
                     AND section_id IS NOT DISTINCT FROM $2::UUID
-                    AND position > $3
+                    AND (position, id) > ($3, $4)
+                ORDER BY position ASC, id ASC
+                LIMIT 1
             "#,
             source.project_id,
             source.section_id,
-            source.position,
+            source.position.as_str(),
+            id,
         )
-        .execute(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to shift tasks: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to find next task: {}", e)))?;
+
+        let next_position = match next {
+            Some(row) => Some(
+                Position::parse(row.position)
+                    .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
+            ),
+            None => None,
+        };
+
+        let new_position = key_between(Some(&source_position), next_position.as_ref())
+            .map_err(|e| StorageError::Invalid(format!("failed to generate position key: {e}")))?;
 
         let row = sqlx::query_as!(
             TaskRow,
@@ -538,7 +558,7 @@ impl Store for PostgresStore {
             source.description.as_deref(),
             source.priority,
             source.section_id,
-            source.position + 1,
+            new_position.as_str(),
             &source.tags,
         )
         .fetch_one(&mut *tx)
@@ -781,7 +801,7 @@ impl Store for PostgresStore {
         id: SectionId,
         project_id: ProjectId,
         name: String,
-        position: i32,
+        position: Position,
         color: Option<Color>,
     ) -> Result<Section, StorageError> {
         match sqlx::query!(
@@ -799,20 +819,20 @@ impl Store for PostgresStore {
             id,
             project_id,
             &name,
-            position,
+            position.as_str(),
             color.map(|c| c.to_string()),
         )
         .fetch_one(&self.pool)
         .await
         {
-            Ok(row) => Ok(section_from_fields(
+            Ok(row) => section_from_fields(
                 row.id,
                 row.project_id,
                 row.name,
                 row.position,
                 row.color,
                 row.created_at,
-            )),
+            ),
             Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
                 "section '{}' already exists in project {}",
                 name, project_id
@@ -849,7 +869,7 @@ impl Store for PostgresStore {
                 r.position,
                 r.color,
                 r.created_at,
-            ))),
+            )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to look up section: {}",
@@ -890,7 +910,7 @@ impl Store for PostgresStore {
                 r.position,
                 r.color,
                 r.created_at,
-            ))),
+            )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to look up section: {}",
@@ -921,7 +941,7 @@ impl Store for PostgresStore {
         .fetch_all(&self.pool)
         .await
         {
-            Ok(rows) => Ok(rows
+            Ok(rows) => rows
                 .into_iter()
                 .map(|r| {
                     section_from_fields(
@@ -933,7 +953,7 @@ impl Store for PostgresStore {
                         r.created_at,
                     )
                 })
-                .collect()),
+                .collect::<Result<Vec<Section>, StorageError>>(),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to list sections: {}",
                 e
@@ -962,14 +982,14 @@ impl Store for PostgresStore {
         .fetch_one(&self.pool)
         .await
         {
-            Ok(row) => Ok(section_from_fields(
+            Ok(row) => section_from_fields(
                 row.id,
                 row.project_id,
                 row.name,
                 row.position,
                 row.color,
                 row.created_at,
-            )),
+            ),
             Err(e) if is_unique_violation(&e) => Err(StorageError::Conflict(format!(
                 "section '{}' already exists in project {}",
                 section.name, section.project_id
@@ -983,81 +1003,6 @@ impl Store for PostgresStore {
                 e
             ))),
         }
-    }
-
-    async fn reorder_section(
-        &self,
-        project_id: ProjectId,
-        section_id: SectionId,
-        new_position: i32,
-    ) -> Result<(), StorageError> {
-        let mut tx =
-            self.pool.begin().await.map_err(|e| {
-                StorageError::Database(format!("failed to begin transaction: {}", e))
-            })?;
-
-        // Lock the project's sections so concurrent reorders cannot compute
-        // their new orders from the same snapshot.
-        let rows = sqlx::query!(
-            r#"
-                SELECT id
-                FROM sections
-                WHERE project_id = $1
-                ORDER BY position ASC, id ASC
-                FOR UPDATE
-            "#,
-            project_id,
-        )
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to list sections: {}", e)))?;
-
-        let current: Vec<SectionId> = rows.into_iter().map(|r| r.id).collect();
-
-        let index = current
-            .iter()
-            .position(|&id| id == section_id)
-            .ok_or_else(|| {
-                StorageError::NotFound(format!(
-                    "section with id '{}' not found in project {}",
-                    section_id, project_id
-                ))
-            })?;
-
-        let clamped = new_position.clamp(0, current.len() as i32 - 1);
-
-        let mut reordered = current.clone();
-        let moved = reordered.remove(index);
-        reordered.insert(clamped as usize, moved);
-
-        if reordered == current {
-            tx.commit().await.map_err(|e| {
-                StorageError::Database(format!("failed to commit transaction: {}", e))
-            })?;
-            return Ok(());
-        }
-
-        let positions: Vec<i32> = (0..reordered.len() as i32).collect();
-
-        sqlx::query!(
-            r#"
-                UPDATE sections
-                SET position = data.position
-                FROM unnest($1::UUID[], $2::INTEGER[]) AS data(id, position)
-                WHERE sections.id = data.id
-            "#,
-            &reordered,
-            &positions,
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| StorageError::Database(format!("failed to reorder sections: {}", e)))?;
-
-        tx.commit()
-            .await
-            .map_err(|e| StorageError::Database(format!("failed to commit transaction: {}", e)))?;
-
-        Ok(())
     }
 
     async fn delete_section(&self, id: SectionId) -> Result<(), StorageError> {
@@ -1082,29 +1027,66 @@ impl Store for PostgresStore {
 
         // Tasks move to the No section group, preserving their relative order and
         // landing after any tasks already there.
-        sqlx::query!(
+        let destination = sqlx::query!(
             r#"
-                WITH base AS (
-                    SELECT COALESCE(MAX(position), -1) + 1 AS start
-                    FROM tasks
-                    WHERE project_id = $1 AND section_id IS NULL
-                ),
-                ranked AS (
-                    SELECT id, ROW_NUMBER() OVER (ORDER BY position ASC, id ASC) AS rn
-                    FROM tasks
-                    WHERE section_id = $2
-                )
-                UPDATE tasks
-                SET section_id = NULL, position = base.start + ranked.rn - 1
-                FROM base, ranked
-                WHERE tasks.id = ranked.id
+                SELECT id, position
+                FROM tasks
+                WHERE project_id = $1 AND section_id IS NULL
+                ORDER BY position ASC, id ASC
+                FOR UPDATE
             "#,
             section.project_id,
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))?;
+
+        let source_tasks = sqlx::query!(
+            r#"
+                SELECT id, position
+                FROM tasks
+                WHERE section_id = $1
+                ORDER BY position ASC, id ASC
+                FOR UPDATE
+            "#,
             id,
         )
-        .execute(&mut *tx)
+        .fetch_all(&mut *tx)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to move section tasks: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))?;
+
+        let last_destination = match destination.last() {
+            Some(task) => Some(
+                Position::parse(task.position.as_str())
+                    .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
+            ),
+            None => None,
+        };
+
+        let positions = n_keys_between(last_destination.as_ref(), None, source_tasks.len())
+            .map_err(|e| StorageError::Invalid(format!("failed to generate position keys: {e}")))?;
+
+        if !source_tasks.is_empty() {
+            let ids: Vec<Uuid> = source_tasks.iter().map(|task| task.id).collect();
+            let keys: Vec<String> = positions
+                .iter()
+                .map(|position| position.as_str().to_string())
+                .collect();
+
+            sqlx::query!(
+                r#"
+                    UPDATE tasks
+                    SET section_id = NULL, position = data.position
+                    FROM unnest($1::UUID[], $2::TEXT[]) AS data(id, position)
+                    WHERE tasks.id = data.id
+                "#,
+                &ids,
+                &keys,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to move section tasks: {}", e)))?;
+        }
 
         let result = sqlx::query!(
             r#"
@@ -1188,29 +1170,67 @@ impl Store for PostgresStore {
 
         // Source tasks append after the target's existing tasks in their current
         // relative order.
-        sqlx::query!(
+        let target_tasks = sqlx::query!(
             r#"
-                WITH base AS (
-                    SELECT COALESCE(MAX(position), -1) + 1 AS start
-                    FROM tasks
-                    WHERE section_id = $1
-                ),
-                ranked AS (
-                    SELECT id, ROW_NUMBER() OVER (ORDER BY position ASC, id ASC) AS rn
-                    FROM tasks
-                    WHERE section_id = $2
-                )
-                UPDATE tasks
-                SET section_id = $1, position = base.start + ranked.rn - 1
-                FROM base, ranked
-                WHERE tasks.id = ranked.id
+                SELECT id, position
+                FROM tasks
+                WHERE section_id = $1
+                ORDER BY position ASC, id ASC
+                FOR UPDATE
             "#,
             target_id,
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))?;
+
+        let source_tasks = sqlx::query!(
+            r#"
+                SELECT id, position
+                FROM tasks
+                WHERE section_id = $1
+                ORDER BY position ASC, id ASC
+                FOR UPDATE
+            "#,
             source_id,
         )
-        .execute(&mut *tx)
+        .fetch_all(&mut *tx)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to merge section tasks: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to list tasks: {}", e)))?;
+
+        let last_target = match target_tasks.last() {
+            Some(task) => Some(
+                Position::parse(task.position.as_str())
+                    .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
+            ),
+            None => None,
+        };
+
+        let positions = n_keys_between(last_target.as_ref(), None, source_tasks.len())
+            .map_err(|e| StorageError::Invalid(format!("failed to generate position keys: {e}")))?;
+
+        if !source_tasks.is_empty() {
+            let ids: Vec<Uuid> = source_tasks.iter().map(|task| task.id).collect();
+            let keys: Vec<String> = positions
+                .iter()
+                .map(|position| position.as_str().to_string())
+                .collect();
+
+            sqlx::query!(
+                r#"
+                    UPDATE tasks
+                    SET section_id = $1, position = data.position
+                    FROM unnest($2::UUID[], $3::TEXT[]) AS data(id, position)
+                    WHERE tasks.id = data.id
+                "#,
+                target_id,
+                &ids,
+                &keys,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to merge section tasks: {}", e)))?;
+        }
 
         sqlx::query!(
             r#"
@@ -1548,7 +1568,7 @@ impl Store for PostgresStore {
                     section.id,
                     section.project_id,
                     &section.name,
-                    section.position,
+                    section.position.as_str(),
                     color.as_deref(),
                     section.created_at,
                 )
@@ -1586,7 +1606,7 @@ impl Store for PostgresStore {
                     task.description.as_deref(),
                     i64::from(task.priority),
                     task.section_id,
-                    task.position,
+                    task.position.as_str(),
                     closed_at,
                     close_reason,
                     task.tags.to_string(),

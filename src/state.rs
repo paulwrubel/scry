@@ -4,6 +4,7 @@ use scry_core::models::{
     Lifecycle, Note, Priority, Project, ProjectId, Section, SectionId, Tags, Task, TaskId,
     TaskSortingMode,
 };
+use scry_core::position::Position;
 use scry_core::store::ProjectSnapshot;
 use serde::Serialize;
 
@@ -33,7 +34,7 @@ pub struct TaskWithNotes {
     pub(crate) priority: Priority,
     pub(crate) section_id: Option<SectionId>,
     pub(crate) lifecycle: Lifecycle,
-    pub(crate) position: i32,
+    pub(crate) position: Position,
     pub(crate) tags: Tags,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) notes: Vec<Note>,
@@ -49,7 +50,7 @@ impl TaskWithNotes {
             priority: task.priority,
             section_id: task.section_id,
             lifecycle: task.lifecycle.clone(),
-            position: task.position,
+            position: task.position.clone(),
             tags: task.tags.clone(),
             created_at: task.created_at,
             notes: notes.into_iter().collect(),
@@ -72,7 +73,7 @@ impl From<&TaskWithNotes> for Task {
             description: value.description.clone(),
             priority: value.priority,
             section_id: value.section_id,
-            position: value.position,
+            position: value.position.clone(),
             lifecycle: value.lifecycle.clone(),
             tags: value.tags.clone(),
             created_at: value.created_at,
@@ -277,12 +278,12 @@ mod tests {
         }
     }
 
-    fn section(id: SectionId, position: i32) -> Section {
+    fn section(id: SectionId, position: &str) -> Section {
         Section {
             id,
             project_id: project_id(1),
             name: format!("Section {id}"),
-            position,
+            position: Position::parse(position).expect("valid test position"),
             color: None,
             created_at: ts("2026-01-01T00:00:00Z"),
         }
@@ -292,7 +293,7 @@ mod tests {
         id: TaskId,
         title: &str,
         section_id: Option<SectionId>,
-        position: i32,
+        position: &str,
         priority: Priority,
         lifecycle: Lifecycle,
     ) -> Task {
@@ -303,7 +304,7 @@ mod tests {
             description: None,
             priority,
             section_id,
-            position,
+            position: Position::parse(position).expect("valid test position"),
             lifecycle,
             tags: Tags::default(),
             created_at: ts("2026-01-01T00:00:00Z"),
@@ -314,7 +315,7 @@ mod tests {
         id: TaskId,
         title: &str,
         section_id: Option<SectionId>,
-        position: i32,
+        position: &str,
         priority: Priority,
     ) -> Task {
         task(id, title, section_id, position, priority, Lifecycle::Open)
@@ -331,7 +332,7 @@ mod tests {
             id,
             title,
             section_id,
-            0,
+            "a0",
             Priority::Medium,
             Lifecycle::Closed {
                 closed_at: ts(closed_at),
@@ -363,24 +364,24 @@ mod tests {
     fn groups_open_tasks_by_section_and_keeps_empty_sections() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(section_id(10), 0), section(section_id(11), 1)],
+            sections: vec![section(section_id(10), "a0"), section(section_id(11), "a1")],
             tasks: vec![
                 open_task(
                     task_id(1),
                     "second",
                     Some(section_id(10)),
-                    1,
+                    "a1",
                     Priority::Medium,
                 ),
                 open_task(
                     task_id(2),
                     "first",
                     Some(section_id(10)),
-                    0,
+                    "a0",
                     Priority::Medium,
                 ),
-                open_task(task_id(3), "unsectioned", None, 0, Priority::Medium),
-                open_task(task_id(4), "also unsectioned", None, 1, Priority::Medium),
+                open_task(task_id(3), "unsectioned", None, "a0", Priority::Medium),
+                open_task(task_id(4), "also unsectioned", None, "a1", Priority::Medium),
             ],
             notes: vec![Note {
                 id: note_id(100),
@@ -417,13 +418,13 @@ mod tests {
     fn no_section_group_is_only_present_for_open_unsectioned_tasks() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(section_id(10), 0)],
+            sections: vec![section(section_id(10), "a0")],
             tasks: vec![
                 open_task(
                     task_id(1),
                     "sectioned",
                     Some(section_id(10)),
-                    0,
+                    "a0",
                     Priority::Medium,
                 ),
                 closed_task(
@@ -450,13 +451,13 @@ mod tests {
     fn closed_tasks_are_kept_out_of_sections_and_sorted_by_closed_at_then_id() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(section_id(10), 0)],
+            sections: vec![section(section_id(10), "a0")],
             tasks: vec![
                 open_task(
                     task_id(1),
                     "open",
                     Some(section_id(10)),
-                    0,
+                    "a0",
                     Priority::Medium,
                 ),
                 closed_task(
@@ -503,17 +504,29 @@ mod tests {
     fn sorting_snapshot(mode: TaskSortingMode) -> ProjectSnapshot {
         ProjectSnapshot {
             project: project(mode),
-            sections: vec![section(section_id(10), 0)],
+            sections: vec![section(section_id(10), "a0")],
             tasks: vec![
-                open_task(task_id(1), "beta", Some(section_id(10)), 2, Priority::High),
+                open_task(
+                    task_id(1),
+                    "beta",
+                    Some(section_id(10)),
+                    "a2",
+                    Priority::High,
+                ),
                 open_task(
                     task_id(2),
                     "Alpha",
                     Some(section_id(10)),
-                    1,
+                    "a1",
                     Priority::Critical,
                 ),
-                open_task(task_id(3), "alpha", Some(section_id(10)), 1, Priority::High),
+                open_task(
+                    task_id(3),
+                    "alpha",
+                    Some(section_id(10)),
+                    "a1",
+                    Priority::High,
+                ),
             ],
             notes: vec![],
         }
@@ -557,7 +570,7 @@ mod tests {
             task_id(1),
             "newest",
             Some(section_id(10)),
-            0,
+            "a0",
             Priority::Medium,
         );
         newest.created_at = ts("2026-01-03T00:00:00Z");
@@ -565,7 +578,7 @@ mod tests {
             task_id(3),
             "oldest second",
             Some(section_id(10)),
-            0,
+            "a0",
             Priority::Medium,
         );
         oldest_second.created_at = ts("2026-01-01T00:00:00Z");
@@ -573,14 +586,14 @@ mod tests {
             task_id(2),
             "oldest first",
             Some(section_id(10)),
-            0,
+            "a0",
             Priority::Medium,
         );
         oldest_first.created_at = ts("2026-01-01T00:00:00Z");
 
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Created),
-            sections: vec![section(section_id(10), 0)],
+            sections: vec![section(section_id(10), "a0")],
             tasks: vec![newest, oldest_second, oldest_first],
             notes: vec![],
         };
@@ -599,24 +612,24 @@ mod tests {
             task_id(2),
             "other",
             Some(section_id(10)),
-            1,
+            "a1",
             Priority::Medium,
         );
         tagged.tags = Tags::from("Urgent,backend");
 
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(section_id(10), 0), section(section_id(11), 1)],
+            sections: vec![section(section_id(10), "a0"), section(section_id(11), "a1")],
             tasks: vec![
                 open_task(
                     task_id(1),
                     "Fix LOGIN",
                     Some(section_id(10)),
-                    0,
+                    "a0",
                     Priority::Medium,
                 ),
                 tagged,
-                open_task(task_id(3), "read docs", None, 0, Priority::Medium),
+                open_task(task_id(3), "read docs", None, "a0", Priority::Medium),
             ],
             notes: vec![],
         };
@@ -646,13 +659,13 @@ mod tests {
     fn get_task_by_id_finds_open_and_closed_tasks() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(section_id(10), 0)],
+            sections: vec![section(section_id(10), "a0")],
             tasks: vec![
                 open_task(
                     task_id(1),
                     "open task",
                     Some(section_id(10)),
-                    0,
+                    "a0",
                     Priority::Medium,
                 ),
                 closed_task(

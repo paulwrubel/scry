@@ -39,7 +39,7 @@
       {
         "ordinal": 3,
         "name": "position",
-        "type_info": "Int4",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "sections",
@@ -75,7 +75,7 @@
         "Uuid",
         "Uuid",
         "Text",
-        "Int4",
+        "Text",
         "Text"
       ]
     },
