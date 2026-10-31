@@ -61,7 +61,8 @@ See [Running a server](#running-a-server) for the host-side REST API setup.
 
 ### Notes
 
-- A reachable PostgreSQL server configured via `scry.toml` is required.
+- A reachable PostgreSQL server configured via `scry.toml` is required when you run the published image, or an image you built yourself, against a database of your choosing.
+- `just run` builds the image and starts it together with its own Postgres container, so no host database is needed; see [Database](#database) for that workflow and the other local helpers.
 - The REST API has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
 
 ## Core Concepts
@@ -379,4 +380,8 @@ Migrations run automatically on startup, so no manual setup is needed.
 
 The CLI connects to PostgreSQL directly and does not proxy through the REST server.
 
-For local development against Postgres, the repo ships `compose.dev.yaml`, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and justfile helpers. `just run-local` starts a dev Postgres (`postgres:18`), applies the migrations, and runs the REST server with `--config scry.dev.toml --secrets scry.dev-secrets.toml`; `just run-postgres` only starts Postgres and applies migrations. `just pg-down` stops Postgres while keeping its data, and `just pg-reset` also wipes the data volume. `just run-docker` starts the REST server stack in Docker against the host dev Postgres. After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query cache with `just sqlx-prepare`, which rebuilds only the Postgres cache.
+For local development against Postgres, the repo ships a single `compose.yaml` that brings up the app and a `postgres:18` database together, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and `scry.compose.toml`, the config the container mounts as `/app/scry.toml`.
+
+`just run` builds the image and starts the whole stack in Docker with no host Postgres required, and `just view-logs` tails the app container. `just run-local` builds the release binary and runs the REST server on the host against the same Postgres, while `just run-postgres` starts only Postgres and applies the migrations. `just pg-down` stops Postgres while keeping its data, `just pg-reset` tears the stack down and wipes the data volume, and `just clean` runs `cargo clean` and `docker compose down`.
+
+`scry.docker.toml` stays the config for running the published image against a database of your choosing. After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query cache with `just sqlx-prepare`, which rebuilds only the Postgres cache.
