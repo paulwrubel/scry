@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                INSERT INTO tasks (project_id, title, description, priority, section_id, position, closed_at, close_reason, tags, created_at)\n                VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7, now())\n                RETURNING\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    closed_at,\n                    close_reason,\n                    tags,\n                    created_at\n            ",
+  "query": "\n                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, closed_at, close_reason, tags, created_at)\n                VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, $8, now())\n                RETURNING\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    closed_at,\n                    close_reason,\n                    tags,\n                    created_at\n            ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int8",
+        "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "tasks",
@@ -17,7 +17,7 @@
       {
         "ordinal": 1,
         "name": "project_id",
-        "type_info": "Int8",
+        "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "tasks",
@@ -61,7 +61,7 @@
       {
         "ordinal": 5,
         "name": "section_id",
-        "type_info": "Int8",
+        "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "tasks",
@@ -127,11 +127,12 @@
     ],
     "parameters": {
       "Left": [
-        "Int8",
+        "Uuid",
+        "Uuid",
         "Text",
         "Text",
         "Int8",
-        "Int8",
+        "Uuid",
         "Int4",
         "Text"
       ]
@@ -150,5 +151,5 @@
       false
     ]
   },
-  "hash": "f993d7775bd7ca413990506a3a8bec020bda2f1321470fc07f948fe51a9b5218"
+  "hash": "5aa84885267ecfb487eb69368cdd60327db9cef944a3930aaf7d279696a69b67"
 }

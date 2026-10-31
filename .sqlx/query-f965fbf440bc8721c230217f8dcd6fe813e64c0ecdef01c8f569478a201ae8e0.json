@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        INSERT INTO sections (id, project_id, name, position, color, created_at)\n                        VALUES ($1, $2, $3, $4, $5, $6)\n                        ON CONFLICT (id) DO UPDATE SET\n                            project_id = EXCLUDED.project_id,\n                            name = EXCLUDED.name,\n                            position = EXCLUDED.position,\n                            color = EXCLUDED.color\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int4",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f965fbf440bc8721c230217f8dcd6fe813e64c0ecdef01c8f569478a201ae8e0"
+}

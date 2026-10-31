@@ -3,12 +3,13 @@ use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use scry_core::backup::{ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
+use scry_core::ids::{NoteId, ProjectId, SectionId, ShortId, TaskId};
 use scry_core::models::{
-    CloseReason, Color, Lifecycle, Note, NoteId, Priority, Project, ProjectId, Section, SectionId,
-    Tags, Task, TaskId, TaskSortingMode,
+    CloseReason, Color, Lifecycle, Note, Priority, Project, Section, Tags, Task, TaskSortingMode,
 };
 use scry_core::store::{ProjectSnapshot, Store, TaskContentUpdate, TaskToCreate};
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct PostgresStore {
@@ -39,12 +40,12 @@ fn is_unique_violation(e: &sqlx::Error) -> bool {
 
 #[derive(sqlx::FromRow)]
 struct TaskRow {
-    id: i64,
+    id: TaskId,
     project_id: ProjectId,
     title: String,
     description: Option<String>,
     priority: i64,
-    section_id: Option<SectionId>,
+    section_id: Option<Uuid>,
     position: i32,
     closed_at: Option<DateTime<Utc>>,
     close_reason: Option<String>,
@@ -78,7 +79,7 @@ impl TryFrom<TaskRow> for Task {
         };
 
         Ok(Task {
-            id,
+            id: row.id,
             project_id: row.project_id,
             title: row.title,
             description: row.description,
@@ -94,7 +95,7 @@ impl TryFrom<TaskRow> for Task {
 }
 
 fn project_from_fields(
-    id: i64,
+    id: ProjectId,
     name: String,
     description: Option<String>,
     task_sorting_mode: String,
@@ -112,8 +113,8 @@ fn project_from_fields(
 }
 
 fn note_from_fields(
-    id: i64,
-    task_id: i64,
+    id: NoteId,
+    task_id: TaskId,
     contents: String,
     created_at: DateTime<Utc>,
 ) -> Result<Note, StorageError> {
@@ -126,7 +127,7 @@ fn note_from_fields(
 }
 
 fn section_from_fields(
-    id: i64,
+    id: SectionId,
     project_id: ProjectId,
     name: String,
     position: i32,
@@ -151,8 +152,8 @@ impl Store for PostgresStore {
         match sqlx::query_as!(
             TaskRow,
             r#"
-                INSERT INTO tasks (project_id, title, description, priority, section_id, position, tags, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, tags, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING
                     id,
                     project_id,
@@ -166,7 +167,8 @@ impl Store for PostgresStore {
                     tags,
                     created_at
             "#,
-            &task.project_id,
+            task.id,
+            task.project_id,
             &task.title,
             task.description.as_deref(),
             i64::from(task.priority),
@@ -214,6 +216,43 @@ impl Store for PostgresStore {
                 e
             ))),
         }
+    }
+
+    async fn find_task_ids_by_short_id(
+        &self,
+        short_id: &ShortId,
+        limit: i64,
+    ) -> Result<Vec<TaskId>, StorageError> {
+        let (low, high) = short_id.range();
+
+        // UUID ordering matches the hex-string ordering short ids are built from,
+        // so the padded inclusive range matches exactly the prefix.
+        let ids: Vec<Uuid> = sqlx::query_scalar!(
+            r#"
+                SELECT id
+                FROM tasks
+                WHERE id BETWEEN $1 AND $2
+                ORDER BY id ASC
+                LIMIT $3
+            "#,
+            low,
+            high,
+            limit,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to find tasks: {}", e)))?;
+
+        Ok(ids)
+    }
+
+    async fn get_all_task_ids(&self) -> Result<Vec<TaskId>, StorageError> {
+        let ids: Vec<Uuid> = sqlx::query_scalar!("SELECT id FROM tasks")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to list task ids: {}", e)))?;
+
+        Ok(ids)
     }
 
     async fn get_all_tasks_by_project_id(
@@ -432,7 +471,7 @@ impl Store for PostgresStore {
         }
     }
 
-    async fn duplicate_task(&self, id: TaskId) -> Result<Task, StorageError> {
+    async fn duplicate_task(&self, id: TaskId, new_id: TaskId) -> Result<Task, StorageError> {
         let mut tx =
             self.pool.begin().await.map_err(|e| {
                 StorageError::Database(format!("failed to begin transaction: {}", e))
@@ -464,7 +503,7 @@ impl Store for PostgresStore {
                 UPDATE tasks
                 SET position = position + 1
                 WHERE project_id = $1
-                    AND section_id IS NOT DISTINCT FROM $2::BIGINT
+                    AND section_id IS NOT DISTINCT FROM $2::UUID
                     AND position > $3
             "#,
             source.project_id,
@@ -478,8 +517,8 @@ impl Store for PostgresStore {
         let row = sqlx::query_as!(
             TaskRow,
             r#"
-                INSERT INTO tasks (project_id, title, description, priority, section_id, position, closed_at, close_reason, tags, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7, now())
+                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, closed_at, close_reason, tags, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, $8, now())
                 RETURNING
                     id,
                     project_id,
@@ -493,6 +532,7 @@ impl Store for PostgresStore {
                     tags,
                     created_at
             "#,
+            new_id,
             source.project_id,
             &source.title,
             source.description.as_deref(),
@@ -537,28 +577,29 @@ impl Store for PostgresStore {
         }
     }
 
-    async fn create_note(&self, task_id: TaskId, contents: String) -> Result<Note, StorageError> {
+    async fn create_note(
+        &self,
+        id: NoteId,
+        task_id: TaskId,
+        contents: String,
+    ) -> Result<Note, StorageError> {
         let created_at = Utc::now();
 
         match sqlx::query!(
             r#"
-                INSERT INTO notes (task_id, contents, created_at)
-                VALUES ($1, $2, $3)
-                RETURNING id
+                INSERT INTO notes (id, task_id, contents, created_at)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id, task_id, contents, created_at
             "#,
-            &task_id,
+            id,
+            task_id,
             &contents,
             created_at,
         )
         .fetch_one(&self.pool)
         .await
         {
-            Ok(row) => Ok(Note {
-                id: row.id,
-                task_id,
-                contents,
-                created_at,
-            }),
+            Ok(row) => note_from_fields(row.id, row.task_id, row.contents, row.created_at),
             Err(e) => Err(StorageError::Database(format!("failed to add note: {}", e))),
         }
     }
@@ -661,7 +702,7 @@ impl Store for PostgresStore {
                 WHERE id = $2
             "#,
             &note.contents,
-            &note.id,
+            note.id,
         )
         .execute(&self.pool)
         .await
@@ -699,8 +740,45 @@ impl Store for PostgresStore {
         }
     }
 
+    async fn find_note_ids_by_short_id(
+        &self,
+        short_id: &ShortId,
+        limit: i64,
+    ) -> Result<Vec<NoteId>, StorageError> {
+        let (low, high) = short_id.range();
+
+        // See `find_task_ids_by_short_id`: UUID order makes the range exact.
+        let ids: Vec<Uuid> = sqlx::query_scalar!(
+            r#"
+                SELECT id
+                FROM notes
+                WHERE id BETWEEN $1 AND $2
+                ORDER BY id ASC
+                LIMIT $3
+            "#,
+            low,
+            high,
+            limit,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to find notes: {}", e)))?;
+
+        Ok(ids)
+    }
+
+    async fn get_all_note_ids(&self) -> Result<Vec<NoteId>, StorageError> {
+        let ids: Vec<Uuid> = sqlx::query_scalar!("SELECT id FROM notes")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to list note ids: {}", e)))?;
+
+        Ok(ids)
+    }
+
     async fn create_section(
         &self,
+        id: SectionId,
         project_id: ProjectId,
         name: String,
         position: i32,
@@ -708,8 +786,8 @@ impl Store for PostgresStore {
     ) -> Result<Section, StorageError> {
         match sqlx::query!(
             r#"
-                INSERT INTO sections (project_id, name, position, color)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO sections (id, project_id, name, position, color)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING
                     id,
                     project_id,
@@ -718,6 +796,7 @@ impl Store for PostgresStore {
                     color,
                     created_at
             "#,
+            id,
             project_id,
             &name,
             position,
@@ -964,7 +1043,7 @@ impl Store for PostgresStore {
             r#"
                 UPDATE sections
                 SET position = data.position
-                FROM unnest($1::BIGINT[], $2::INTEGER[]) AS data(id, position)
+                FROM unnest($1::UUID[], $2::INTEGER[]) AS data(id, position)
                 WHERE sections.id = data.id
             "#,
             &reordered,
@@ -1153,6 +1232,7 @@ impl Store for PostgresStore {
 
     async fn create_project(
         &self,
+        id: ProjectId,
         name: String,
         description: Option<String>,
         task_sorting_mode: TaskSortingMode,
@@ -1162,10 +1242,11 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                INSERT INTO projects (name, description, task_sorting_mode, show_priority, created_at)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO projects (id, name, description, task_sorting_mode, show_priority, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING id, name, description, task_sorting_mode, show_priority, created_at
             "#,
+            id,
             &name,
             description.as_deref(),
             task_sorting_mode.to_string(),
@@ -1434,6 +1515,11 @@ impl Store for PostgresStore {
                 r#"
                     INSERT INTO projects (id, name, description, task_sorting_mode, show_priority, created_at)
                     VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        description = EXCLUDED.description,
+                        task_sorting_mode = EXCLUDED.task_sorting_mode,
+                        show_priority = EXCLUDED.show_priority
                 "#,
                 project.id,
                 &project.name,
@@ -1453,6 +1539,11 @@ impl Store for PostgresStore {
                     r#"
                         INSERT INTO sections (id, project_id, name, position, color, created_at)
                         VALUES ($1, $2, $3, $4, $5, $6)
+                        ON CONFLICT (id) DO UPDATE SET
+                            project_id = EXCLUDED.project_id,
+                            name = EXCLUDED.name,
+                            position = EXCLUDED.position,
+                            color = EXCLUDED.color
                     "#,
                     section.id,
                     section.project_id,
@@ -1478,6 +1569,16 @@ impl Store for PostgresStore {
                     r#"
                         INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, closed_at, close_reason, tags, created_at)
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        ON CONFLICT (id) DO UPDATE SET
+                            project_id = EXCLUDED.project_id,
+                            title = EXCLUDED.title,
+                            description = EXCLUDED.description,
+                            priority = EXCLUDED.priority,
+                            section_id = EXCLUDED.section_id,
+                            position = EXCLUDED.position,
+                            closed_at = EXCLUDED.closed_at,
+                            close_reason = EXCLUDED.close_reason,
+                            tags = EXCLUDED.tags
                     "#,
                     task.id,
                     task.project_id,
@@ -1502,6 +1603,9 @@ impl Store for PostgresStore {
                     r#"
                         INSERT INTO notes (id, task_id, contents, created_at)
                         VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (id) DO UPDATE SET
+                            task_id = EXCLUDED.task_id,
+                            contents = EXCLUDED.contents
                     "#,
                     note.id,
                     note.task_id,
@@ -1514,43 +1618,6 @@ impl Store for PostgresStore {
                 report.notes += 1;
             }
         }
-
-        // inserting explicit ids bypasses the identity sequences, so advance each one past MAX(id)
-        sqlx::query!(
-            "SELECT setval(pg_get_serial_sequence('projects', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM projects), 1), 1), (SELECT COUNT(*) > 0 FROM projects))"
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| {
-            StorageError::Database(format!("failed to reset projects id sequence: {}", e))
-        })?;
-
-        sqlx::query!(
-            "SELECT setval(pg_get_serial_sequence('sections', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM sections), 1), 1), (SELECT COUNT(*) > 0 FROM sections))"
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| {
-            StorageError::Database(format!("failed to reset sections id sequence: {}", e))
-        })?;
-
-        sqlx::query!(
-            "SELECT setval(pg_get_serial_sequence('tasks', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM tasks), 1), 1), (SELECT COUNT(*) > 0 FROM tasks))"
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| {
-            StorageError::Database(format!("failed to reset tasks id sequence: {}", e))
-        })?;
-
-        sqlx::query!(
-            "SELECT setval(pg_get_serial_sequence('notes', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM notes), 1), 1), (SELECT COUNT(*) > 0 FROM notes))"
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| {
-            StorageError::Database(format!("failed to reset notes id sequence: {}", e))
-        })?;
 
         tx.commit()
             .await

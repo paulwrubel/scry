@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        INSERT INTO notes (id, task_id, contents, created_at)\n                        VALUES ($1, $2, $3, $4)\n                        ON CONFLICT (id) DO UPDATE SET\n                            task_id = EXCLUDED.task_id,\n                            contents = EXCLUDED.contents\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d5ec5ddb767348ea2847755fe3521c44796d564d0ad9fc591ec9ca6703a18235"
+}

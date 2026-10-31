@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                INSERT INTO notes (task_id, contents, created_at)\n                VALUES ($1, $2, $3)\n                RETURNING id\n            ",
+  "query": "\n                SELECT id\n                FROM notes\n                WHERE id BETWEEN $1 AND $2\n                ORDER BY id ASC\n                LIMIT $3\n            ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int8",
+        "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "notes",
@@ -17,14 +17,14 @@
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Text",
-        "Timestamptz"
+        "Uuid",
+        "Uuid",
+        "Int8"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "68a153e8d92c1af455652d9820b43df20e1517e08ca6b89fd74e033a60e1f0c4"
+  "hash": "56af2c3e4bf7b0cc7d49b1da2e34ba46b81dbfa44749035e5242343899500735"
 }

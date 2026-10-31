@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-pub const BACKUP_VERSION: u32 = 2;
+pub const BACKUP_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Backup {
@@ -39,7 +39,7 @@ pub enum ImportMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportPlan {
     pub mode: ImportMode,
-    /// Rows to insert, with ids/foreign keys already resolved.
+    /// Projects to insert, keeping the UUID ids and foreign keys held by the backup.
     pub projects: Vec<BackupProject>,
     /// Ids of existing projects to delete before inserting (Replace mode only; empty otherwise).
     pub project_ids_to_delete: Vec<ProjectId>,
@@ -51,14 +51,6 @@ pub struct ImportReport {
     pub sections: usize,
     pub tasks: usize,
     pub notes: usize,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct IdMaxima {
-    pub project: i64,
-    pub section: i64,
-    pub task: i64,
-    pub note: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,8 +75,9 @@ impl std::error::Error for BackupError {}
 
 /// Parse a backup document.
 ///
-/// Only the current format version is accepted; older backups must be transformed
-/// manually before import.
+/// Only the current format version (3, which carries UUID identity) is accepted.
+/// Version 2 backups, written before UUID identity, are rejected rather than
+/// upgraded, so they must be transformed manually before import.
 pub fn parse(input: &str) -> Result<Backup, BackupError> {
     let value: serde_json::Value =
         serde_json::from_str(input).map_err(|error| BackupError::InvalidJson(error.to_string()))?;
@@ -156,36 +149,16 @@ pub async fn plan_import(
         .collect();
     let existing_names: HashSet<String> = existing_ids_by_name.keys().cloned().collect();
 
-    let mut maxima = IdMaxima {
-        project: 0,
-        section: 0,
-        task: 0,
-        note: 0,
-    };
-    for project in &existing {
-        maxima.project = maxima.project.max(project.id);
-        for section in store.get_all_sections_by_project_id(project.id).await? {
-            maxima.section = maxima.section.max(section.id);
-        }
-        for task in store.get_all_tasks_by_project_id(project.id).await? {
-            maxima.task = maxima.task.max(task.id);
-        }
-        for note in store.get_all_notes_by_project_id(project.id).await? {
-            maxima.note = maxima.note.max(note.id);
-        }
-    }
-
     match mode {
-        ImportMode::Fail => plan_fail(backup, &existing_names, maxima),
-        ImportMode::Skip => plan_skip(backup, &existing_names, maxima),
-        ImportMode::Replace => plan_replace(backup, &existing_ids_by_name, maxima),
+        ImportMode::Fail => plan_fail(backup, &existing_names),
+        ImportMode::Skip => plan_skip(backup, &existing_names),
+        ImportMode::Replace => plan_replace(backup, &existing_ids_by_name),
     }
 }
 
 fn plan_fail(
     backup: &Backup,
     existing_names: &HashSet<String>,
-    maxima: IdMaxima,
 ) -> Result<ImportPlan, StorageError> {
     let mut collisions: Vec<&str> = backup
         .projects
@@ -204,7 +177,7 @@ fn plan_fail(
 
     Ok(ImportPlan {
         mode: ImportMode::Fail,
-        projects: remap_projects(&backup.projects, maxima)?,
+        projects: backup.projects.clone(),
         project_ids_to_delete: Vec::new(),
     })
 }
@@ -212,7 +185,6 @@ fn plan_fail(
 fn plan_skip(
     backup: &Backup,
     existing_names: &HashSet<String>,
-    maxima: IdMaxima,
 ) -> Result<ImportPlan, StorageError> {
     let projects: Vec<BackupProject> = backup
         .projects
@@ -223,7 +195,7 @@ fn plan_skip(
 
     Ok(ImportPlan {
         mode: ImportMode::Skip,
-        projects: remap_projects(&projects, maxima)?,
+        projects,
         project_ids_to_delete: Vec::new(),
     })
 }
@@ -231,10 +203,7 @@ fn plan_skip(
 fn plan_replace(
     backup: &Backup,
     existing_ids_by_name: &HashMap<String, ProjectId>,
-    maxima: IdMaxima,
 ) -> Result<ImportPlan, StorageError> {
-    let projects = remap_projects(&backup.projects, maxima)?;
-
     let project_ids_to_delete = backup
         .projects
         .iter()
@@ -243,113 +212,37 @@ fn plan_replace(
 
     Ok(ImportPlan {
         mode: ImportMode::Replace,
-        projects,
+        projects: backup.projects.clone(),
         project_ids_to_delete,
     })
-}
-
-fn remap_projects(
-    projects: &[BackupProject],
-    maxima: IdMaxima,
-) -> Result<Vec<BackupProject>, StorageError> {
-    let mut next_section = maxima.section;
-    let mut next_task = maxima.task;
-    let mut next_note = maxima.note;
-
-    let mut remapped = Vec::with_capacity(projects.len());
-
-    for (index, backup_project) in projects.iter().enumerate() {
-        let new_project_id = maxima.project + 1 + index as i64;
-
-        let mut section_ids = HashMap::new();
-        let mut sections = Vec::with_capacity(backup_project.sections.len());
-        for section in &backup_project.sections {
-            next_section += 1;
-            section_ids.insert(section.id, next_section);
-            sections.push(Section {
-                id: next_section,
-                project_id: new_project_id,
-                name: section.name.clone(),
-                position: section.position,
-                color: section.color,
-                created_at: section.created_at,
-            });
-        }
-
-        let mut task_ids = HashMap::new();
-        let mut tasks = Vec::with_capacity(backup_project.tasks.len());
-        for task in &backup_project.tasks {
-            let new_section_id = match task.section_id {
-                None => None,
-                Some(section_id) => {
-                    Some(section_ids.get(&section_id).copied().ok_or_else(|| {
-                        StorageError::Invalid(format!(
-                            "task {} references unknown section {}",
-                            task.id, section_id
-                        ))
-                    })?)
-                }
-            };
-            next_task += 1;
-            task_ids.insert(task.id, next_task);
-            tasks.push(Task {
-                id: next_task,
-                project_id: new_project_id,
-                title: task.title.clone(),
-                description: task.description.clone(),
-                priority: task.priority,
-                section_id: new_section_id,
-                position: task.position,
-                lifecycle: task.lifecycle.clone(),
-                tags: task.tags.clone(),
-                created_at: task.created_at,
-            });
-        }
-
-        let mut notes = Vec::with_capacity(backup_project.notes.len());
-        for note in &backup_project.notes {
-            let new_task_id = task_ids.get(&note.task_id).copied().ok_or_else(|| {
-                StorageError::Invalid(format!(
-                    "note {} references unknown task {}",
-                    note.id, note.task_id
-                ))
-            })?;
-            next_note += 1;
-            notes.push(Note {
-                id: next_note,
-                task_id: new_task_id,
-                contents: note.contents.clone(),
-                created_at: note.created_at,
-            });
-        }
-
-        remapped.push(BackupProject {
-            project: Project {
-                id: new_project_id,
-                name: backup_project.project.name.clone(),
-                description: backup_project.project.description.clone(),
-                task_sorting_mode: backup_project.project.task_sorting_mode,
-                show_priority: backup_project.project.show_priority,
-                created_at: backup_project.project.created_at,
-            },
-            sections,
-            tasks,
-            notes,
-        });
-    }
-
-    Ok(remapped)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Lifecycle, Priority, SectionId, Tags, TaskSortingMode};
+    use crate::ids::{NoteId, SectionId, TaskId};
+    use crate::models::{Color, Lifecycle, Priority, Tags, TaskSortingMode};
+    use crate::store::{ProjectSnapshot, TaskContentUpdate, TaskToCreate};
     use chrono::Utc;
+    use std::future::Future;
+    use std::pin::pin;
+    use std::task::{Context, Poll, Waker};
+    use uuid::Uuid;
 
-    fn project(id: ProjectId, name: &str) -> Project {
+    const PROJECT_ID: &str = "a1b2c3d4-0000-4000-8000-000000000001";
+    const OTHER_PROJECT_ID: &str = "a1b2c3d4-0000-4000-8000-000000000002";
+    const SECTION_ID: &str = "b1b2c3d4-0000-4000-8000-000000000003";
+    const TASK_ID: &str = "c1b2c3d4-0000-4000-8000-000000000004";
+    const NOTE_ID: &str = "d1b2c3d4-0000-4000-8000-000000000005";
+    const EXISTING_PROJECT_ID: &str = "e1b2c3d4-0000-4000-8000-000000000006";
+
+    fn uuid(value: &str) -> Uuid {
+        Uuid::parse_str(value).expect("test uuid should parse")
+    }
+
+    fn project(id: &str, name: &str) -> Project {
         Project {
-            id,
+            id: uuid(id),
             name: name.to_string(),
             description: None,
             task_sorting_mode: TaskSortingMode::Manual,
@@ -358,52 +251,61 @@ mod tests {
         }
     }
 
-    fn section(id: i64, project_id: ProjectId) -> Section {
+    fn section(id: &str, project_id: ProjectId) -> Section {
         Section {
-            id,
+            id: uuid(id),
             project_id,
-            name: format!("section-{id}"),
+            name: "section".to_string(),
             position: 0,
             color: None,
             created_at: Utc::now(),
         }
     }
 
-    fn task(
-        id: i64,
-        project_id: ProjectId,
-        section_id: Option<SectionId>,
-        lifecycle: Lifecycle,
-    ) -> Task {
+    fn task(id: &str, project_id: ProjectId, section_id: Option<SectionId>) -> Task {
         Task {
-            id,
+            id: uuid(id),
             project_id,
-            title: format!("task-{id}"),
+            title: "task".to_string(),
             description: None,
             priority: Priority::Medium,
             section_id,
             position: 0,
-            lifecycle,
+            lifecycle: Lifecycle::Open,
             tags: Tags::default(),
             created_at: Utc::now(),
         }
     }
 
-    fn note(id: i64, task_id: i64) -> Note {
+    fn note(id: &str, task_id: TaskId) -> Note {
         Note {
-            id,
+            id: uuid(id),
             task_id,
-            contents: format!("note-{id}"),
+            contents: "note".to_string(),
             created_at: Utc::now(),
         }
     }
 
-    fn backup_project(id: ProjectId, name: &str) -> BackupProject {
+    fn backup_project(id: &str, name: &str) -> BackupProject {
         BackupProject {
             project: project(id, name),
             sections: vec![],
             tasks: vec![],
             notes: vec![],
+        }
+    }
+
+    fn full_backup_project(id: &str, name: &str) -> BackupProject {
+        let project = project(id, name);
+        let section = section(SECTION_ID, project.id);
+        let task = task(TASK_ID, project.id, Some(section.id));
+        let note = note(NOTE_ID, task.id);
+
+        BackupProject {
+            project,
+            sections: vec![section],
+            tasks: vec![task],
+            notes: vec![note],
         }
     }
 
@@ -415,202 +317,348 @@ mod tests {
         }
     }
 
-    fn no_maxima() -> IdMaxima {
-        IdMaxima {
-            project: 0,
-            section: 0,
-            task: 0,
-            note: 0,
+    // scry-core has no async runtime dependency, and the fake store's futures
+    // resolve immediately, so polling once in a loop is enough.
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let mut future = pin!(future);
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(output) => return output,
+                Poll::Pending => std::thread::yield_now(),
+            }
         }
     }
 
-    #[test]
-    fn remap_projects_rewrites_ids_and_foreign_keys() {
-        let projects = vec![BackupProject {
-            project: project(5, "imported"),
-            sections: vec![section(70, 5)],
-            tasks: vec![
-                task(30, 5, Some(70), Lifecycle::Open),
-                task(31, 5, None, Lifecycle::Open),
-            ],
-            notes: vec![note(90, 30)],
-        }];
-        let maxima = IdMaxima {
-            project: 100,
-            section: 200,
-            task: 300,
-            note: 400,
-        };
+    struct EmptyStore;
 
-        let remapped = remap_projects(&projects, maxima).expect("remap should succeed");
-
-        let imported = &remapped[0];
-        assert_eq!(imported.project.id, 101);
-        assert_eq!(imported.sections[0].id, 201);
-        assert_eq!(imported.sections[0].project_id, 101);
-        assert_eq!(imported.tasks[0].id, 301);
-        assert_eq!(imported.tasks[0].project_id, 101);
-        assert_eq!(imported.tasks[0].section_id, Some(201));
-        assert_eq!(imported.tasks[1].id, 302);
-        assert_eq!(imported.tasks[1].section_id, None);
-        assert_eq!(imported.notes[0].id, 401);
-        assert_eq!(imported.notes[0].task_id, 301);
-    }
-
-    #[test]
-    fn remap_projects_preserves_description() {
-        let mut source = backup_project(1, "alpha");
-        source.project.description = Some("freeform project notes".to_string());
-
-        let remapped = remap_projects(&[source], no_maxima()).expect("remap should succeed");
-
-        assert_eq!(
-            remapped[0].project.description.as_deref(),
-            Some("freeform project notes")
-        );
-    }
-
-    #[test]
-    fn remap_projects_allocates_fresh_unique_ids_across_projects() {
-        let projects = vec![
-            BackupProject {
-                project: project(1, "first"),
-                sections: vec![section(10, 1)],
-                tasks: vec![task(20, 1, Some(10), Lifecycle::Open)],
-                notes: vec![note(30, 20)],
-            },
-            BackupProject {
-                project: project(2, "second"),
-                sections: vec![section(11, 2)],
-                tasks: vec![task(21, 2, Some(11), Lifecycle::Open)],
-                notes: vec![note(31, 21)],
-            },
-        ];
-        let maxima = IdMaxima {
-            project: 5,
-            section: 6,
-            task: 7,
-            note: 8,
-        };
-
-        let remapped = remap_projects(&projects, maxima).expect("remap should succeed");
-
-        let project_ids: Vec<_> = remapped.iter().map(|p| p.project.id).collect();
-        let section_ids: Vec<_> = remapped
-            .iter()
-            .flat_map(|p| p.sections.iter().map(|s| s.id))
-            .collect();
-        let task_ids: Vec<_> = remapped
-            .iter()
-            .flat_map(|p| p.tasks.iter().map(|t| t.id))
-            .collect();
-        let note_ids: Vec<_> = remapped
-            .iter()
-            .flat_map(|p| p.notes.iter().map(|n| n.id))
-            .collect();
-
-        assert!(project_ids.iter().all(|id| *id > maxima.project));
-        assert!(section_ids.iter().all(|id| *id > maxima.section));
-        assert!(task_ids.iter().all(|id| *id > maxima.task));
-        assert!(note_ids.iter().all(|id| *id > maxima.note));
-
-        for ids in [&project_ids, &section_ids, &task_ids, &note_ids] {
-            let unique: HashSet<_> = ids.iter().collect();
-            assert_eq!(unique.len(), ids.len(), "ids must not collide: {ids:?}");
+    #[async_trait::async_trait]
+    impl Store for EmptyStore {
+        async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError> {
+            Ok(Vec::new())
         }
-    }
 
-    #[test]
-    fn remap_projects_rejects_task_with_unknown_section() {
-        let projects = vec![BackupProject {
-            project: project(1, "imported"),
-            sections: vec![section(10, 1)],
-            tasks: vec![task(20, 1, Some(999), Lifecycle::Open)],
-            notes: vec![],
-        }];
+        async fn create_task(&self, _: TaskToCreate) -> Result<Task, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
 
-        assert!(matches!(
-            remap_projects(&projects, no_maxima()),
-            Err(StorageError::Invalid(_))
-        ));
-    }
+        async fn get_task_by_id(&self, _: TaskId) -> Result<Option<Task>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
 
-    #[test]
-    fn remap_projects_rejects_note_with_unknown_task() {
-        let projects = vec![BackupProject {
-            project: project(1, "imported"),
-            sections: vec![section(10, 1)],
-            tasks: vec![task(20, 1, Some(10), Lifecycle::Open)],
-            notes: vec![note(30, 999)],
-        }];
+        async fn find_task_ids_by_short_id(
+            &self,
+            _: &crate::ids::ShortId,
+            _: i64,
+        ) -> Result<Vec<TaskId>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
 
-        assert!(matches!(
-            remap_projects(&projects, no_maxima()),
-            Err(StorageError::Invalid(_))
-        ));
+        async fn get_all_task_ids(&self) -> Result<Vec<TaskId>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_all_tasks_by_project_id(
+            &self,
+            _: ProjectId,
+        ) -> Result<Vec<Task>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_all_tasks_by_section_id(
+            &self,
+            _: SectionId,
+        ) -> Result<Vec<Task>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn update_task(&self, _: TaskId, _: TaskContentUpdate) -> Result<Task, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn move_task(
+            &self,
+            _: TaskId,
+            _: Option<SectionId>,
+            _: i32,
+        ) -> Result<Task, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn set_lifecycle(&self, _: TaskId, _: Lifecycle) -> Result<Task, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn duplicate_task(&self, _: TaskId, _: TaskId) -> Result<Task, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn delete_task(&self, _: TaskId) -> Result<(), StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn create_note(&self, _: NoteId, _: TaskId, _: String) -> Result<Note, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_note_by_id(&self, _: NoteId) -> Result<Option<Note>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_all_notes_by_task_id(&self, _: TaskId) -> Result<Vec<Note>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_all_notes_by_project_id(
+            &self,
+            _: ProjectId,
+        ) -> Result<Vec<Note>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn update_note(&self, _: Note) -> Result<Note, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn delete_note(&self, _: NoteId) -> Result<(), StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn find_note_ids_by_short_id(
+            &self,
+            _: &crate::ids::ShortId,
+            _: i64,
+        ) -> Result<Vec<NoteId>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_all_note_ids(&self) -> Result<Vec<NoteId>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn create_section(
+            &self,
+            _: SectionId,
+            _: ProjectId,
+            _: String,
+            _: i32,
+            _: Option<Color>,
+        ) -> Result<Section, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_section_by_id(&self, _: SectionId) -> Result<Option<Section>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_section_by_name(
+            &self,
+            _: ProjectId,
+            _: &str,
+        ) -> Result<Option<Section>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_all_sections_by_project_id(
+            &self,
+            _: ProjectId,
+        ) -> Result<Vec<Section>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn update_section(&self, _: Section) -> Result<Section, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn reorder_section(
+            &self,
+            _: ProjectId,
+            _: SectionId,
+            _: i32,
+        ) -> Result<(), StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn delete_section(&self, _: SectionId) -> Result<(), StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn merge_sections(&self, _: SectionId, _: SectionId) -> Result<(), StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn create_project(
+            &self,
+            _: ProjectId,
+            _: String,
+            _: Option<String>,
+            _: TaskSortingMode,
+            _: bool,
+        ) -> Result<Project, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_project_by_id(&self, _: ProjectId) -> Result<Option<Project>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_project_snapshot(
+            &self,
+            _: ProjectId,
+        ) -> Result<ProjectSnapshot, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn get_project_by_name(&self, _: &str) -> Result<Option<Project>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn update_project(&self, _: Project) -> Result<Project, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn delete_project_by_id(&self, _: ProjectId) -> Result<(), StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn import(&self, _: ImportPlan) -> Result<ImportReport, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
     }
 
     #[test]
     fn plan_fail_rejects_colliding_names() {
         let backup = backup(vec![
-            backup_project(1, "keep"),
-            backup_project(2, "collide"),
+            backup_project(PROJECT_ID, "keep"),
+            backup_project(OTHER_PROJECT_ID, "collide"),
         ]);
         let existing = HashSet::from(["collide".to_string()]);
 
         assert!(matches!(
-            plan_fail(&backup, &existing, no_maxima()),
+            plan_fail(&backup, &existing),
             Err(StorageError::Conflict(_))
         ));
     }
 
     #[test]
-    fn plan_fail_remaps_all_projects_when_no_collision() {
-        let backup = backup(vec![backup_project(1, "alpha"), backup_project(2, "beta")]);
+    fn plan_fail_preserves_every_id() {
+        let backup = backup(vec![full_backup_project(PROJECT_ID, "alpha")]);
 
-        let plan = plan_fail(&backup, &HashSet::new(), no_maxima())
-            .expect("fail should succeed when clear");
+        let plan =
+            plan_fail(&backup, &HashSet::new()).expect("fail should succeed when no name collides");
 
         assert_eq!(plan.mode, ImportMode::Fail);
-        assert_eq!(plan.projects.len(), 2);
+        assert_eq!(plan.projects.len(), 1);
         assert!(plan.project_ids_to_delete.is_empty());
+
+        let imported = &plan.projects[0];
+        assert_eq!(imported.project.id, uuid(PROJECT_ID));
+        assert_eq!(imported.sections[0].id, uuid(SECTION_ID));
+        assert_eq!(imported.sections[0].project_id, imported.project.id);
+        assert_eq!(imported.tasks[0].id, uuid(TASK_ID));
+        assert_eq!(imported.tasks[0].project_id, imported.project.id);
+        assert_eq!(imported.tasks[0].section_id, Some(imported.sections[0].id));
+        assert_eq!(imported.notes[0].id, uuid(NOTE_ID));
+        assert_eq!(imported.notes[0].task_id, imported.tasks[0].id);
     }
 
     #[test]
-    fn plan_skip_drops_colliding_projects() {
-        let backup = backup(vec![backup_project(1, "keep"), backup_project(2, "skip")]);
+    fn plan_skip_drops_colliding_projects_and_preserves_other_ids() {
+        let backup = backup(vec![
+            backup_project(PROJECT_ID, "keep"),
+            full_backup_project(OTHER_PROJECT_ID, "skip"),
+        ]);
         let existing = HashSet::from(["skip".to_string()]);
 
-        let plan = plan_skip(&backup, &existing, no_maxima()).expect("skip should succeed");
+        let plan = plan_skip(&backup, &existing).expect("skip should succeed");
 
         assert_eq!(plan.mode, ImportMode::Skip);
         assert_eq!(plan.projects.len(), 1);
         assert_eq!(plan.projects[0].project.name, "keep");
+        assert_eq!(plan.projects[0].project.id, uuid(PROJECT_ID));
         assert!(plan.project_ids_to_delete.is_empty());
     }
 
     #[test]
-    fn plan_replace_lists_collisions() {
-        let backup = backup(vec![backup_project(1, "alpha"), backup_project(2, "beta")]);
-        let existing = HashMap::from([("alpha".to_string(), 10), ("other".to_string(), 11)]);
+    fn plan_replace_lists_collisions_and_preserves_incoming_ids() {
+        let backup = backup(vec![
+            full_backup_project(PROJECT_ID, "alpha"),
+            backup_project(OTHER_PROJECT_ID, "beta"),
+        ]);
+        let existing_id = uuid(EXISTING_PROJECT_ID);
+        let existing = HashMap::from([("alpha".to_string(), existing_id)]);
 
-        let plan = plan_replace(&backup, &existing, no_maxima()).expect("replace should succeed");
+        let plan = plan_replace(&backup, &existing).expect("replace should succeed");
 
         assert_eq!(plan.mode, ImportMode::Replace);
         assert_eq!(plan.projects.len(), 2);
-        assert_eq!(plan.project_ids_to_delete, vec![10]);
+        assert_eq!(plan.projects[0].project.id, uuid(PROJECT_ID));
+        assert_eq!(plan.projects[1].project.id, uuid(OTHER_PROJECT_ID));
+        assert_eq!(plan.project_ids_to_delete, vec![existing_id]);
+    }
+
+    #[test]
+    fn plan_import_keeps_a_full_backup_unchanged() {
+        let backup = backup(vec![full_backup_project(PROJECT_ID, "alpha")]);
+
+        let plan = block_on(plan_import(&EmptyStore, &backup, ImportMode::Fail))
+            .expect("import planning should succeed");
+
+        assert_eq!(plan.mode, ImportMode::Fail);
+        assert!(plan.project_ids_to_delete.is_empty());
+        assert_eq!(plan.projects.len(), backup.projects.len());
+
+        let imported = &plan.projects[0];
+        assert_eq!(imported.project.id, uuid(PROJECT_ID));
+        assert_eq!(imported.sections[0].id, uuid(SECTION_ID));
+        assert_eq!(imported.sections[0].project_id, imported.project.id);
+        assert_eq!(imported.tasks[0].id, uuid(TASK_ID));
+        assert_eq!(imported.tasks[0].project_id, imported.project.id);
+        assert_eq!(imported.tasks[0].section_id, Some(imported.sections[0].id));
+        assert_eq!(imported.notes[0].id, uuid(NOTE_ID));
+        assert_eq!(imported.notes[0].task_id, imported.tasks[0].id);
+
+        assert_eq!(
+            serde_json::to_value(&plan.projects).unwrap(),
+            serde_json::to_value(&backup.projects).unwrap(),
+            "planning must not rewrite ids, foreign keys, or timestamps"
+        );
     }
 
     #[test]
     fn parse_rejects_unsupported_version() {
-        let json = r#"{ "version": 1, "projects": [] }"#;
+        let v1 = r#"{ "version": 1, "projects": [] }"#;
 
         assert!(matches!(
-            parse(json),
+            parse(v1),
             Err(BackupError::UnsupportedVersion {
                 found: 1,
                 supported: BACKUP_VERSION
             })
+        ));
+
+        let v2 = r#"{
+            "version": 2,
+            "projects": [
+                {
+                    "id": 1,
+                    "name": "legacy",
+                    "description": null,
+                    "task_sorting_mode": "manual",
+                    "show_priority": false,
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "sections": [],
+                    "tasks": [],
+                    "notes": []
+                }
+            ]
+        }"#;
+
+        assert!(matches!(
+            parse(v2),
+            Err(BackupError::UnsupportedVersion { found: 2, .. })
         ));
     }
 }

@@ -228,7 +228,7 @@ fn sort_open_tasks(tasks: &mut [TaskWithNotes], mode: TaskSortingMode) {
             TaskSortingMode::AlphabeticalCaseInsensitive => {
                 a.title.to_lowercase().cmp(&b.title.to_lowercase())
             }
-            TaskSortingMode::Id => a.id.cmp(&b.id),
+            TaskSortingMode::Created => a.created_at.cmp(&b.created_at),
             TaskSortingMode::Manual => a.position.cmp(&b.position),
             TaskSortingMode::Priority => a.priority.cmp(&b.priority),
         };
@@ -240,7 +240,25 @@ fn sort_open_tasks(tasks: &mut [TaskWithNotes], mode: TaskSortingMode) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scry_core::ids::{NoteId, ProjectId, SectionId, TaskId};
     use scry_core::models::CloseReason;
+    use uuid::Uuid;
+
+    fn project_id(value: u128) -> ProjectId {
+        Uuid::from_u128(value)
+    }
+
+    fn section_id(value: u128) -> SectionId {
+        Uuid::from_u128(value)
+    }
+
+    fn task_id(value: u128) -> TaskId {
+        Uuid::from_u128(value)
+    }
+
+    fn note_id(value: u128) -> NoteId {
+        Uuid::from_u128(value)
+    }
 
     fn ts(rfc3339: &str) -> DateTime<Utc> {
         DateTime::parse_from_rfc3339(rfc3339)
@@ -250,7 +268,7 @@ mod tests {
 
     fn project(mode: TaskSortingMode) -> Project {
         Project {
-            id: 1,
+            id: project_id(1),
             name: "Test Project".to_string(),
             description: None,
             task_sorting_mode: mode,
@@ -262,7 +280,7 @@ mod tests {
     fn section(id: SectionId, position: i32) -> Section {
         Section {
             id,
-            project_id: 1,
+            project_id: project_id(1),
             name: format!("Section {id}"),
             position,
             color: None,
@@ -280,7 +298,7 @@ mod tests {
     ) -> Task {
         Task {
             id,
-            project_id: 1,
+            project_id: project_id(1),
             title: title.to_string(),
             description: None,
             priority,
@@ -345,16 +363,28 @@ mod tests {
     fn groups_open_tasks_by_section_and_keeps_empty_sections() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(10, 0), section(11, 1)],
+            sections: vec![section(section_id(10), 0), section(section_id(11), 1)],
             tasks: vec![
-                open_task(1, "second", Some(10), 1, Priority::Medium),
-                open_task(2, "first", Some(10), 0, Priority::Medium),
-                open_task(3, "unsectioned", None, 0, Priority::Medium),
-                open_task(4, "also unsectioned", None, 1, Priority::Medium),
+                open_task(
+                    task_id(1),
+                    "second",
+                    Some(section_id(10)),
+                    1,
+                    Priority::Medium,
+                ),
+                open_task(
+                    task_id(2),
+                    "first",
+                    Some(section_id(10)),
+                    0,
+                    Priority::Medium,
+                ),
+                open_task(task_id(3), "unsectioned", None, 0, Priority::Medium),
+                open_task(task_id(4), "also unsectioned", None, 1, Priority::Medium),
             ],
             notes: vec![Note {
-                id: 100,
-                task_id: 2,
+                id: note_id(100),
+                task_id: task_id(2),
                 contents: "belongs to first".to_string(),
                 created_at: ts("2026-01-02T00:00:00Z"),
             }],
@@ -365,18 +395,18 @@ mod tests {
         assert_eq!(
             group_ids(&state),
             vec![
-                (Some(10), vec![2, 1]),
-                (Some(11), vec![]),
-                (None, vec![3, 4]),
+                (Some(section_id(10)), vec![task_id(2), task_id(1)]),
+                (Some(section_id(11)), vec![]),
+                (None, vec![task_id(3), task_id(4)]),
             ]
         );
 
-        let first = state.get_task_by_id(2).expect("task 2 exists");
+        let first = state.get_task_by_id(task_id(2)).expect("task 2 exists");
         assert_eq!(first.notes.len(), 1);
         assert_eq!(first.notes[0].contents, "belongs to first");
         assert!(
             state
-                .get_task_by_id(1)
+                .get_task_by_id(task_id(1))
                 .expect("task 1 exists")
                 .notes
                 .is_empty()
@@ -387,11 +417,17 @@ mod tests {
     fn no_section_group_is_only_present_for_open_unsectioned_tasks() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(10, 0)],
+            sections: vec![section(section_id(10), 0)],
             tasks: vec![
-                open_task(1, "sectioned", Some(10), 0, Priority::Medium),
+                open_task(
+                    task_id(1),
+                    "sectioned",
+                    Some(section_id(10)),
+                    0,
+                    Priority::Medium,
+                ),
                 closed_task(
-                    2,
+                    task_id(2),
                     "closed unsectioned",
                     None,
                     "2026-01-02T00:00:00Z",
@@ -403,7 +439,10 @@ mod tests {
 
         let state = ProjectState::from_snapshot(snapshot);
 
-        assert_eq!(group_ids(&state), vec![(Some(10), vec![1])]);
+        assert_eq!(
+            group_ids(&state),
+            vec![(Some(section_id(10)), vec![task_id(1)])]
+        );
         assert!(state.section_groups().all(|group| group.section.is_some()));
     }
 
@@ -411,25 +450,31 @@ mod tests {
     fn closed_tasks_are_kept_out_of_sections_and_sorted_by_closed_at_then_id() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(10, 0)],
+            sections: vec![section(section_id(10), 0)],
             tasks: vec![
-                open_task(1, "open", Some(10), 0, Priority::Medium),
+                open_task(
+                    task_id(1),
+                    "open",
+                    Some(section_id(10)),
+                    0,
+                    Priority::Medium,
+                ),
                 closed_task(
-                    3,
+                    task_id(3),
                     "closed early",
-                    Some(10),
+                    Some(section_id(10)),
                     "2026-01-01T00:00:00Z",
                     CloseReason::Completed,
                 ),
                 closed_task(
-                    4,
+                    task_id(4),
                     "closed late a",
-                    Some(10),
+                    Some(section_id(10)),
                     "2026-01-02T00:00:00Z",
                     CloseReason::Cancelled,
                 ),
                 closed_task(
-                    5,
+                    task_id(5),
                     "closed late b",
                     None,
                     "2026-01-02T00:00:00Z",
@@ -441,25 +486,34 @@ mod tests {
 
         let state = ProjectState::from_snapshot(snapshot);
 
-        assert_eq!(group_ids(&state), vec![(Some(10), vec![1])]);
+        assert_eq!(
+            group_ids(&state),
+            vec![(Some(section_id(10)), vec![task_id(1)])]
+        );
         assert_eq!(
             state
                 .closed_tasks()
                 .iter()
                 .map(|task| task.id)
                 .collect::<Vec<_>>(),
-            vec![5, 4, 3]
+            vec![task_id(5), task_id(4), task_id(3)]
         );
     }
 
     fn sorting_snapshot(mode: TaskSortingMode) -> ProjectSnapshot {
         ProjectSnapshot {
             project: project(mode),
-            sections: vec![section(10, 0)],
+            sections: vec![section(section_id(10), 0)],
             tasks: vec![
-                open_task(1, "beta", Some(10), 2, Priority::High),
-                open_task(2, "Alpha", Some(10), 1, Priority::Critical),
-                open_task(3, "alpha", Some(10), 1, Priority::High),
+                open_task(task_id(1), "beta", Some(section_id(10)), 2, Priority::High),
+                open_task(
+                    task_id(2),
+                    "Alpha",
+                    Some(section_id(10)),
+                    1,
+                    Priority::Critical,
+                ),
+                open_task(task_id(3), "alpha", Some(section_id(10)), 1, Priority::High),
             ],
             notes: vec![],
         }
@@ -469,14 +523,20 @@ mod tests {
     fn manual_sorting_orders_by_position_then_id() {
         let state = ProjectState::from_snapshot(sorting_snapshot(TaskSortingMode::Manual));
 
-        assert_eq!(section_open_ids(&state, Some(10)), vec![2, 3, 1]);
+        assert_eq!(
+            section_open_ids(&state, Some(section_id(10))),
+            vec![task_id(2), task_id(3), task_id(1)]
+        );
     }
 
     #[test]
     fn priority_sorting_orders_by_priority_then_id() {
         let state = ProjectState::from_snapshot(sorting_snapshot(TaskSortingMode::Priority));
 
-        assert_eq!(section_open_ids(&state, Some(10)), vec![2, 1, 3]);
+        assert_eq!(
+            section_open_ids(&state, Some(section_id(10))),
+            vec![task_id(2), task_id(1), task_id(3)]
+        );
     }
 
     #[test]
@@ -485,21 +545,78 @@ mod tests {
             TaskSortingMode::AlphabeticalCaseInsensitive,
         ));
 
-        assert_eq!(section_open_ids(&state, Some(10)), vec![2, 3, 1]);
+        assert_eq!(
+            section_open_ids(&state, Some(section_id(10))),
+            vec![task_id(2), task_id(3), task_id(1)]
+        );
+    }
+
+    #[test]
+    fn created_sorting_orders_by_created_at_then_id() {
+        let mut newest = open_task(
+            task_id(1),
+            "newest",
+            Some(section_id(10)),
+            0,
+            Priority::Medium,
+        );
+        newest.created_at = ts("2026-01-03T00:00:00Z");
+        let mut oldest_second = open_task(
+            task_id(3),
+            "oldest second",
+            Some(section_id(10)),
+            0,
+            Priority::Medium,
+        );
+        oldest_second.created_at = ts("2026-01-01T00:00:00Z");
+        let mut oldest_first = open_task(
+            task_id(2),
+            "oldest first",
+            Some(section_id(10)),
+            0,
+            Priority::Medium,
+        );
+        oldest_first.created_at = ts("2026-01-01T00:00:00Z");
+
+        let snapshot = ProjectSnapshot {
+            project: project(TaskSortingMode::Created),
+            sections: vec![section(section_id(10), 0)],
+            tasks: vec![newest, oldest_second, oldest_first],
+            notes: vec![],
+        };
+
+        let state = ProjectState::from_snapshot(snapshot);
+
+        assert_eq!(
+            section_open_ids(&state, Some(section_id(10))),
+            vec![task_id(2), task_id(3), task_id(1)]
+        );
     }
 
     #[test]
     fn substring_filter_matches_titles_and_tags_case_insensitively() {
-        let mut tagged = open_task(2, "other", Some(10), 1, Priority::Medium);
+        let mut tagged = open_task(
+            task_id(2),
+            "other",
+            Some(section_id(10)),
+            1,
+            Priority::Medium,
+        );
         tagged.tags = Tags::from("Urgent,backend");
 
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(10, 0), section(11, 1)],
+            sections: vec![section(section_id(10), 0), section(section_id(11), 1)],
             tasks: vec![
-                open_task(1, "Fix LOGIN", Some(10), 0, Priority::Medium),
+                open_task(
+                    task_id(1),
+                    "Fix LOGIN",
+                    Some(section_id(10)),
+                    0,
+                    Priority::Medium,
+                ),
                 tagged,
-                open_task(3, "read docs", None, 0, Priority::Medium),
+                open_task(task_id(3), "read docs", None, 0, Priority::Medium),
             ],
             notes: vec![],
         };
@@ -508,14 +625,20 @@ mod tests {
             .with_substring_filter("login".to_string());
         assert_eq!(
             group_ids(&by_title),
-            vec![(Some(10), vec![1]), (Some(11), vec![])]
+            vec![
+                (Some(section_id(10)), vec![task_id(1)]),
+                (Some(section_id(11)), vec![]),
+            ]
         );
 
         let by_tag =
             ProjectState::from_snapshot(snapshot).with_substring_filter("Urgent".to_string());
         assert_eq!(
             group_ids(&by_tag),
-            vec![(Some(10), vec![2]), (Some(11), vec![])]
+            vec![
+                (Some(section_id(10)), vec![task_id(2)]),
+                (Some(section_id(11)), vec![]),
+            ]
         );
     }
 
@@ -523,13 +646,19 @@ mod tests {
     fn get_task_by_id_finds_open_and_closed_tasks() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
-            sections: vec![section(10, 0)],
+            sections: vec![section(section_id(10), 0)],
             tasks: vec![
-                open_task(1, "open task", Some(10), 0, Priority::Medium),
+                open_task(
+                    task_id(1),
+                    "open task",
+                    Some(section_id(10)),
+                    0,
+                    Priority::Medium,
+                ),
                 closed_task(
-                    2,
+                    task_id(2),
                     "closed task",
-                    Some(10),
+                    Some(section_id(10)),
                     "2026-01-02T00:00:00Z",
                     CloseReason::Completed,
                 ),
@@ -540,13 +669,17 @@ mod tests {
         let state = ProjectState::from_snapshot(snapshot);
 
         assert_eq!(
-            state.get_task_by_id(1).map(|task| task.title.as_str()),
+            state
+                .get_task_by_id(task_id(1))
+                .map(|task| task.title.as_str()),
             Some("open task")
         );
         assert_eq!(
-            state.get_task_by_id(2).map(|task| task.title.as_str()),
+            state
+                .get_task_by_id(task_id(2))
+                .map(|task| task.title.as_str()),
             Some("closed task")
         );
-        assert!(state.get_task_by_id(3).is_none());
+        assert!(state.get_task_by_id(task_id(3)).is_none());
     }
 }
