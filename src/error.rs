@@ -67,20 +67,22 @@ pub enum ServiceError {
     SectionNameTaken {
         section: String,
     },
+    SectionMergeIntoItself {
+        section: String,
+    },
     SectionNameRequired,
-    TitleRequired,
     TaskHandleNotFound {
-        short_id: String,
+        handle: String,
     },
     NoteHandleNotFound {
-        short_id: String,
+        handle: String,
     },
     AmbiguousTaskHandle {
-        short_id: String,
+        handle: String,
         candidates: Vec<String>,
     },
     AmbiguousNoteHandle {
-        short_id: String,
+        handle: String,
         candidates: Vec<String>,
     },
 
@@ -105,28 +107,24 @@ impl fmt::Display for ServiceError {
             Self::SectionNameTaken { section } => {
                 write!(f, "Section \"{section}\" already exists in this project.")
             }
+            Self::SectionMergeIntoItself { section } => {
+                write!(f, "Section \"{section}\" cannot be merged into itself")
+            }
             Self::SectionNameRequired => write!(f, "A section name is required"),
-            Self::TitleRequired => write!(f, "A task title is required"),
-            Self::TaskHandleNotFound { short_id } => {
-                write!(f, "No task matches short id \"{short_id}\"")
+            Self::TaskHandleNotFound { handle } => {
+                write!(f, "No task matches handle \"{handle}\"")
             }
-            Self::NoteHandleNotFound { short_id } => {
-                write!(f, "No note matches short id \"{short_id}\"")
+            Self::NoteHandleNotFound { handle } => {
+                write!(f, "No note matches handle \"{handle}\"")
             }
-            Self::AmbiguousTaskHandle {
-                short_id,
-                candidates,
-            } => write!(
+            Self::AmbiguousTaskHandle { handle, candidates } => write!(
                 f,
-                "Short id \"{short_id}\" matches multiple tasks: {}. Use a longer prefix.",
+                "Handle \"{handle}\" matches multiple tasks: {}. Use a longer prefix.",
                 candidates.join(", ")
             ),
-            Self::AmbiguousNoteHandle {
-                short_id,
-                candidates,
-            } => write!(
+            Self::AmbiguousNoteHandle { handle, candidates } => write!(
                 f,
-                "Short id \"{short_id}\" matches multiple notes: {}. Use a longer prefix.",
+                "Handle \"{handle}\" matches multiple notes: {}. Use a longer prefix.",
                 candidates.join(", ")
             ),
             Self::Storage(error) => write!(f, "{error}"),
@@ -141,8 +139,8 @@ impl ServiceError {
         match self {
             Self::SectionNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
             Self::TaskHandleNotFound { .. } | Self::NoteHandleNotFound { .. } => "not_found",
-            Self::SectionNameTaken { .. } => "conflict",
-            Self::SectionNameRequired | Self::TitleRequired => "invalid",
+            Self::SectionNameTaken { .. } | Self::SectionMergeIntoItself { .. } => "conflict",
+            Self::SectionNameRequired => "invalid",
             Self::AmbiguousTaskHandle { .. } | Self::AmbiguousNoteHandle { .. } => "invalid",
             Self::Storage(error) => error.kind(),
         }

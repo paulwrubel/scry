@@ -13,7 +13,7 @@ pub async fn get_notes_by_task(
     State(state): State<ScryState>,
     Path(task_id): Path<TaskId>,
 ) -> Response {
-    match state.service.list_notes_by_task(task_id).await {
+    match state.service.list_notes_by_task_id(task_id).await {
         Ok(notes) => Json(notes).into_response(),
         Err(error) => AppError::from(error).into(),
     }

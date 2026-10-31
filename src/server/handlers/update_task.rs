@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::server::ScryState;
-use crate::service::{SectionInput, TaskInput};
+use crate::service::{SectionInput, TaskPatch};
 
 /// Request body for updating a task; omitted fields are left unchanged.
 #[derive(Deserialize)]
@@ -51,7 +51,7 @@ pub async fn update_task(
         SectionInput::Unchanged
     };
 
-    let input = TaskInput {
+    let input = TaskPatch {
         title: body.title,
         description: body.description,
         priority: body.priority,

@@ -1,9 +1,7 @@
 use crate::backup::{ImportPlan, ImportReport};
 use crate::error::StorageError;
-use crate::ids::{NoteId, ProjectId, SectionId, ShortId, TaskId};
-use crate::models::{
-    Color, Lifecycle, Note, Priority, Project, Section, Tags, Task, TaskSortingMode,
-};
+use crate::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
+use crate::models::{Color, Note, Priority, Project, Section, Tags, Task, TaskSortingMode};
 use crate::position::Position;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -20,15 +18,22 @@ pub struct TaskToCreate {
     pub tags: Tags,
 }
 
-/// The content fields of a task that can be edited in place.
-///
-/// Section, position, and lifecycle each have their own dedicated operations and
-/// are intentionally excluded from this payload.
-pub struct TaskContentUpdate {
-    pub title: String,
+/// The fields needed to insert a section.
+pub struct SectionToCreate {
+    pub id: SectionId,
+    pub project_id: ProjectId,
+    pub name: String,
+    pub position: Position,
+    pub color: Option<Color>,
+}
+
+/// The fields needed to insert a project.
+pub struct ProjectToCreate {
+    pub id: ProjectId,
+    pub name: String,
     pub description: Option<String>,
-    pub priority: Priority,
-    pub tags: Tags,
+    pub task_sorting_mode: TaskSortingMode,
+    pub show_priority: bool,
 }
 
 /// A project together with all of its sections, tasks, and notes.
@@ -53,14 +58,14 @@ pub trait Store: Send + Sync {
     /// Get a task by its id
     async fn get_task_by_id(&self, id: TaskId) -> Result<Option<Task>, StorageError>;
 
-    /// Find task ids whose UUID begins with a short-id prefix.
+    /// Find task ids whose UUID begins with a handle prefix.
     ///
     /// The prefix is compared against the normalized dashless form, at most
     /// `limit` ids are returned in ascending UUID order, and callers pass a small
     /// limit to detect an ambiguous prefix.
-    async fn find_task_ids_by_short_id(
+    async fn find_task_ids_by_handle(
         &self,
-        short_id: &ShortId,
+        handle: &Handle,
         limit: i64,
     ) -> Result<Vec<TaskId>, StorageError>;
 
@@ -87,34 +92,11 @@ pub trait Store: Send + Sync {
         section_id: SectionId,
     ) -> Result<Vec<Task>, StorageError>;
 
-    /// Edit an existing task's content fields only.
+    /// Write a task's mutable columns (everything but its id and creation time).
     ///
-    /// Returns the updated task, or `StorageError::NotFound` when the task does
-    /// not exist.
-    async fn update_task(
-        &self,
-        id: TaskId,
-        task_content_update: TaskContentUpdate,
-    ) -> Result<Task, StorageError>;
-
-    /// Move a task to a section and position, writing both in a single statement.
-    async fn move_task(
-        &self,
-        id: TaskId,
-        section_id: Option<SectionId>,
-        position: Position,
-    ) -> Result<Task, StorageError>;
-
-    /// Set a task's lifecycle, writing `closed_at` and `close_reason` together in
-    /// a single statement.
-    async fn set_lifecycle(&self, id: TaskId, lifecycle: Lifecycle) -> Result<Task, StorageError>;
-
-    /// Duplicate a task as an open copy in the same section, inserting it
-    /// immediately after the source with a generated position key.
-    ///
-    /// No other tasks are shifted. The duplicate is inserted with `new_id`, which
-    /// the caller supplies. Performed in a single transaction.
-    async fn duplicate_task(&self, id: TaskId, new_id: TaskId) -> Result<Task, StorageError>;
+    /// Callers read the task, change the fields they mean to change, and write
+    /// the whole row back.
+    async fn update_task(&self, task: Task) -> Result<Task, StorageError>;
 
     /// Delete a task
     async fn delete_task(&self, id: TaskId) -> Result<(), StorageError>;
@@ -154,14 +136,14 @@ pub trait Store: Send + Sync {
     #[allow(dead_code)]
     async fn delete_note(&self, id: NoteId) -> Result<(), StorageError>;
 
-    /// Find note ids whose UUID begins with a short-id prefix.
+    /// Find note ids whose UUID begins with a handle prefix.
     ///
     /// The prefix is compared against the normalized dashless form, at most
     /// `limit` ids are returned in ascending UUID order, and callers pass a small
     /// limit to detect an ambiguous prefix.
-    async fn find_note_ids_by_short_id(
+    async fn find_note_ids_by_handle(
         &self,
-        short_id: &ShortId,
+        handle: &Handle,
         limit: i64,
     ) -> Result<Vec<NoteId>, StorageError>;
 
@@ -171,14 +153,7 @@ pub trait Store: Send + Sync {
     /// computing them requires the complete id set.
     async fn get_all_note_ids(&self) -> Result<Vec<NoteId>, StorageError>;
 
-    async fn create_section(
-        &self,
-        id: SectionId,
-        project_id: ProjectId,
-        name: String,
-        position: Position,
-        color: Option<Color>,
-    ) -> Result<Section, StorageError>;
+    async fn create_section(&self, section: SectionToCreate) -> Result<Section, StorageError>;
 
     async fn get_section_by_id(&self, id: SectionId) -> Result<Option<Section>, StorageError>;
 
@@ -208,14 +183,7 @@ pub trait Store: Send + Sync {
     async fn delete_section(&self, id: SectionId) -> Result<(), StorageError>;
 
     /// Create a new project. The description is optional freeform text.
-    async fn create_project(
-        &self,
-        id: ProjectId,
-        name: String,
-        description: Option<String>,
-        task_sorting_mode: TaskSortingMode,
-        show_priority: bool,
-    ) -> Result<Project, StorageError>;
+    async fn create_project(&self, project: ProjectToCreate) -> Result<Project, StorageError>;
 
     async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, StorageError>;
 

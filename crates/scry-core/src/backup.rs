@@ -333,8 +333,8 @@ fn plan_replace(
 mod tests {
     use super::*;
     use crate::ids::{NoteId, SectionId, TaskId};
-    use crate::models::{Color, Lifecycle, Priority, Tags, TaskSortingMode};
-    use crate::store::{ProjectSnapshot, TaskContentUpdate, TaskToCreate};
+    use crate::models::{Lifecycle, Priority, Tags, TaskSortingMode};
+    use crate::store::{ProjectSnapshot, ProjectToCreate, SectionToCreate, TaskToCreate};
     use chrono::Utc;
     use std::future::Future;
     use std::pin::pin;
@@ -464,9 +464,9 @@ mod tests {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn find_task_ids_by_short_id(
+        async fn find_task_ids_by_handle(
             &self,
-            _: &crate::ids::ShortId,
+            _: &crate::ids::Handle,
             _: i64,
         ) -> Result<Vec<TaskId>, StorageError> {
             unimplemented!("plan_import only reads projects")
@@ -490,24 +490,7 @@ mod tests {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn update_task(&self, _: TaskId, _: TaskContentUpdate) -> Result<Task, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn move_task(
-            &self,
-            _: TaskId,
-            _: Option<SectionId>,
-            _: Position,
-        ) -> Result<Task, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn set_lifecycle(&self, _: TaskId, _: Lifecycle) -> Result<Task, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn duplicate_task(&self, _: TaskId, _: TaskId) -> Result<Task, StorageError> {
+        async fn update_task(&self, _: Task) -> Result<Task, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
@@ -542,9 +525,9 @@ mod tests {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn find_note_ids_by_short_id(
+        async fn find_note_ids_by_handle(
             &self,
-            _: &crate::ids::ShortId,
+            _: &crate::ids::Handle,
             _: i64,
         ) -> Result<Vec<NoteId>, StorageError> {
             unimplemented!("plan_import only reads projects")
@@ -554,14 +537,7 @@ mod tests {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn create_section(
-            &self,
-            _: SectionId,
-            _: ProjectId,
-            _: String,
-            _: Position,
-            _: Option<Color>,
-        ) -> Result<Section, StorageError> {
+        async fn create_section(&self, _: SectionToCreate) -> Result<Section, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
@@ -592,14 +568,7 @@ mod tests {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn create_project(
-            &self,
-            _: ProjectId,
-            _: String,
-            _: Option<String>,
-            _: TaskSortingMode,
-            _: bool,
-        ) -> Result<Project, StorageError> {
+        async fn create_project(&self, _: ProjectToCreate) -> Result<Project, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
