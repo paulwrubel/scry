@@ -11,7 +11,7 @@ mod state;
 mod store;
 
 use crate::color::ColorChoice;
-use crate::service::{ProjectService, ProjectUpdate, SectionInput, TaskInput};
+use crate::service::{ProjectService, ProjectSetup, SectionInput, TaskInput, UpdateProject};
 use crate::skill::Harness;
 use crate::state::{DATETIME_FORMAT_STR, ProjectState, TaskWithNotes};
 use crate::store::{ArcStore, PostgresStore};
@@ -499,8 +499,12 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     None => None,
                 };
 
+                let setup = match template {
+                    Some(template) => ProjectSetup::Template(*template),
+                    None => ProjectSetup::Defaults,
+                };
                 let project = service
-                    .create_project(name.clone(), description.clone(), template.copied())
+                    .create_project(name.clone(), description.clone(), setup)
                     .await?;
 
                 if output_json {
@@ -530,7 +534,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             }
             ProjectCommand::Delete { name, force } => {
                 let project = service
-                    .find_project_by_name(name)
+                    .get_project_by_name(name)
                     .await?
                     .ok_or_else(|| AppError::Usage(format!("project '{name}' not found")))?;
                 if !force && !output_json {
@@ -565,7 +569,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         let export_project_id = match cli.project.as_deref() {
             Some(name) => Some(
                 service
-                    .find_project_by_name(name)
+                    .get_project_by_name(name)
                     .await?
                     .ok_or_else(|| AppError::Usage(format!("project '{name}' not found")))?
                     .id,
@@ -974,7 +978,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 let updated = service
                     .update_project(
                         &project,
-                        ProjectUpdate {
+                        UpdateProject {
                             name,
                             description,
                             task_sorting_mode: sort,
@@ -1152,7 +1156,7 @@ async fn resolve_project(
 ) -> Result<Project, AppError> {
     if let Some(name) = flag {
         let project = service
-            .find_project_by_name(name)
+            .get_project_by_name(name)
             .await?
             .ok_or_else(|| AppError::Usage(format!("project '{}' not found", name)))?;
         Ok(project)

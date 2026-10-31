@@ -57,11 +57,25 @@ pub struct TaskChangeResult {
 /// Partial project input. `None` leaves a field unchanged; `Some("")` on
 /// `description` clears it.
 #[derive(Debug, Clone, Default)]
-pub struct ProjectUpdate {
+pub struct UpdateProject {
     pub name: Option<String>,
     pub description: Option<String>,
     pub task_sorting_mode: Option<TaskSortingMode>,
     pub show_priority: Option<bool>,
+}
+
+/// How a new project's sorting mode, priority flag, and sections are chosen.
+#[derive(Debug, Clone, Copy)]
+pub enum ProjectSetup {
+    /// Adopt the template's sorting mode, priority flag, and sections.
+    Template(ProjectTemplate),
+    /// Use these settings and seed no sections.
+    Explicit {
+        task_sorting_mode: TaskSortingMode,
+        show_priority: bool,
+    },
+    /// Take the default sorting mode and seed no sections.
+    Defaults,
 }
 
 /// Frontend-agnostic, high-level operations over one project. Resolves names to
@@ -588,16 +602,26 @@ impl ProjectService {
             .await
     }
 
+    /// Create a project, optionally seeding sections from a template.
     pub async fn create_project(
         &self,
         name: String,
         description: Option<String>,
-        template: Option<ProjectTemplate>,
+        setup: ProjectSetup,
     ) -> Result<Project, ServiceError> {
-        let (task_sorting_mode, show_priority) = match template {
-            Some(template) => (template.task_sorting_mode, template.show_priority),
-            None => (TaskSortingMode::default(), false),
+        let (task_sorting_mode, show_priority, template_sections) = match setup {
+            ProjectSetup::Template(template) => (
+                template.task_sorting_mode,
+                template.show_priority,
+                Some(template.sections),
+            ),
+            ProjectSetup::Explicit {
+                task_sorting_mode,
+                show_priority,
+            } => (task_sorting_mode, show_priority, None),
+            ProjectSetup::Defaults => (TaskSortingMode::default(), false, None),
         };
+
         let id = Uuid::new_v4();
         let project = self
             .store
@@ -610,11 +634,11 @@ impl ProjectService {
             )
             .await?;
 
-        let Some(template) = template else {
+        let Some(sections) = template_sections else {
             return Ok(project);
         };
 
-        for section in template.sections {
+        for section in sections {
             let position = Position::parse(section.position).map_err(position_error)?;
             let id = template_section_id(project.id, section.name);
             self.store
@@ -631,35 +655,15 @@ impl ProjectService {
         Ok(project)
     }
 
-    pub async fn create_project_with(
-        &self,
-        name: String,
-        description: Option<String>,
-        task_sorting_mode: TaskSortingMode,
-        show_priority: bool,
-    ) -> Result<Project, ServiceError> {
-        let id = Uuid::new_v4();
-        Ok(self
-            .store
-            .create_project(
-                id,
-                name,
-                description.filter(|description| !description.is_empty()),
-                task_sorting_mode,
-                show_priority,
-            )
-            .await?)
-    }
-
     pub async fn list_projects(&self) -> Result<Vec<Project>, ServiceError> {
         Ok(self.store.get_all_projects().await?)
     }
 
-    pub async fn find_project(&self, id: ProjectId) -> Result<Option<Project>, ServiceError> {
+    pub async fn get_project_by_id(&self, id: ProjectId) -> Result<Option<Project>, ServiceError> {
         Ok(self.store.get_project_by_id(id).await?)
     }
 
-    pub async fn find_project_by_name(&self, name: &str) -> Result<Option<Project>, ServiceError> {
+    pub async fn get_project_by_name(&self, name: &str) -> Result<Option<Project>, ServiceError> {
         Ok(self.store.get_project_by_name(name).await?)
     }
 
@@ -673,7 +677,7 @@ impl ProjectService {
     pub async fn update_project(
         &self,
         project: &Project,
-        update: ProjectUpdate,
+        update: UpdateProject,
     ) -> Result<Project, ServiceError> {
         let description = match update.description {
             Some(value) => Some(value).filter(|value| !value.is_empty()),
@@ -693,39 +697,12 @@ impl ProjectService {
             .await?)
     }
 
-    pub async fn replace_project(&self, project: Project) -> Result<Project, ServiceError> {
-        let existing = self
-            .store
-            .get_project_by_id(project.id)
-            .await?
-            .ok_or_else(|| {
-                ServiceError::Storage(StorageError::NotFound(format!(
-                    "project '{}' not found",
-                    project.id
-                )))
-            })?;
-        Ok(self
-            .store
-            .update_project(Project {
-                description: project.description.filter(|d| !d.is_empty()),
-                created_at: existing.created_at,
-                ..project
-            })
-            .await?)
-    }
-
-    /// Delete a project by id, returning the deleted project. The default
-    /// project cannot be deleted.
+    /// Delete a project by id, returning the deleted project.
     pub async fn delete_project_by_id(
         &self,
         project_id: ProjectId,
     ) -> Result<Project, ServiceError> {
         let project = self.project_by_id(project_id).await?;
-        if project.name == "default" {
-            return Err(ServiceError::Storage(StorageError::Invalid(
-                "cannot delete the default project".into(),
-            )));
-        }
         self.store.delete_project_by_id(project.id).await?;
         Ok(project)
     }
