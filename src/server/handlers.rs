@@ -103,6 +103,8 @@ pub struct ApiErrorJson {
     pub code: u16,
     pub kind: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
 }
 
 impl From<AppError> for Response {
@@ -117,6 +119,7 @@ impl From<AppError> for Response {
             code: status.as_u16(),
             kind: error.kind().to_string(),
             message: error.to_string(),
+            details: error.details(),
         };
         (status, Json(body)).into_response()
     }

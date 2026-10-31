@@ -37,6 +37,20 @@ impl AppError {
             AppError::Service(error) => error.kind(),
         }
     }
+
+    /// Structured details for errors that carry more than a message.
+    ///
+    /// Kept separate from `Display` so machine-readable output can expose the
+    /// candidate list without callers parsing prose.
+    pub fn details(&self) -> Option<serde_json::Value> {
+        match self {
+            AppError::Service(ServiceError::AmbiguousTaskHandle { candidates, .. })
+            | AppError::Service(ServiceError::AmbiguousNoteHandle { candidates, .. }) => {
+                Some(serde_json::json!({ "candidates": candidates }))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl From<StorageError> for AppError {
