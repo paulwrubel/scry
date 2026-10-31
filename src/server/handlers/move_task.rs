@@ -3,7 +3,8 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use scry_core::models::{SectionId, TaskId};
+use scry_core::ids::Handle;
+use scry_core::models::SectionId;
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -19,9 +20,14 @@ pub struct MoveTaskRequest {
 /// Move a task into a section (or no section).
 pub async fn move_task(
     State(state): State<ScryState>,
-    Path(id): Path<TaskId>,
+    Path(handle): Path<Handle>,
     Json(body): Json<MoveTaskRequest>,
 ) -> Response {
+    let task = match state.service.get_task_by_handle(&handle).await {
+        Ok(task) => task,
+        Err(error) => return AppError::from(error).into(),
+    };
+
     let section = match body.section_id {
         Some(section_id) => SectionInput::Existing(section_id),
         None => SectionInput::NoSection,
@@ -29,7 +35,7 @@ pub async fn move_task(
 
     match state
         .service
-        .move_task_to_section_by_id(id, section, None)
+        .move_task_to_section_by_id(task.id, section, None)
         .await
     {
         Ok(change) => Json(change.task).into_response(),

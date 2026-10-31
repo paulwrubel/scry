@@ -205,10 +205,6 @@ impl ProjectService {
         Ok(self.store.get_all_tasks_by_section_id(section_id).await?)
     }
 
-    pub async fn get_task(&self, id: TaskId) -> Result<Option<Task>, ServiceError> {
-        Ok(self.store.get_task_by_id(id).await?)
-    }
-
     pub async fn update_task(
         &self,
         project: &Project,
