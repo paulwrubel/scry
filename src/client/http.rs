@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use reqwest::{Client as HttpClient, Method, Response, Url};
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{ScryConfig, ScrySecrets};
 use crate::error::AppError;
@@ -50,6 +50,24 @@ impl Client {
         let url = self.build_url(segments, query)?;
         let response = self
             .request(Method::GET, url)
+            .send()
+            .await
+            .map_err(|error| self.transport_error(error))?;
+
+        decode(response).await
+    }
+
+    /// POST a JSON body and decode the JSON response.
+    pub async fn post_json<B: Serialize, T: DeserializeOwned>(
+        &self,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T, AppError> {
+        let url = self.build_url(segments, query)?;
+        let response = self
+            .request(Method::POST, url)
+            .json(body)
             .send()
             .await
             .map_err(|error| self.transport_error(error))?;

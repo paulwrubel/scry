@@ -14,11 +14,11 @@ mod store;
 
 use crate::color::ColorChoice;
 use crate::service::{
-    ColorChange, NewTask, ProjectService, ProjectSetup, SectionInput, TaskPatch, UpdateProject,
+    ColorChange, ProjectService, ProjectSetup, SectionInput, TaskPatch, UpdateProject,
     UpdateSection,
 };
 use crate::skill::Harness;
-use crate::state::{DATETIME_FORMAT_STR, ProjectState};
+use crate::state::DATETIME_FORMAT_STR;
 use crate::store::{ArcStore, PostgresStore};
 use chrono::Local;
 use clap::{CommandFactory, Parser, Subcommand};
@@ -27,8 +27,8 @@ use error::{AppError, ServiceError};
 use scry_core::backup::{self, ImportMode};
 use scry_core::ids::Handle;
 use scry_core::models::{
-    CloseReason, Color, Lifecycle, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Tags,
-    Task, TaskSortingMode,
+    CloseReason, Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Tags, Task,
+    TaskSortingMode,
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -413,37 +413,59 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let config = ScryConfig::load(cli.config.as_deref())?;
     let secrets = ScrySecrets::load(cli.secrets.as_deref())?;
 
-    // Project listing is the first command on the HTTP path; it needs no database.
-    if matches!(
-        cli.command.as_ref(),
-        Some(Command::Project(ProjectCommand::List))
-    ) {
-        let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-        return client::project_list(&client, &config, output_json).await;
-    }
-
-    if let Some(Command::List {
-        section,
-        search,
-        include_closed,
-    }) = cli.command.as_ref()
-    {
-        let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-        return client::list(
-            &client,
-            &config,
-            cli.project.as_deref(),
-            section.as_deref(),
-            search.as_deref(),
-            *include_closed,
-            output_json,
-        )
-        .await;
-    }
-
-    if let Some(Command::Show { id }) = cli.command.as_ref() {
-        let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-        return client::show(&client, id.as_str(), output_json).await;
+    // Commands that run entirely over HTTP, before any database connection.
+    match cli.command.as_ref() {
+        Some(Command::Project(ProjectCommand::List)) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::project_list(&client, &config, output_json).await;
+        }
+        Some(Command::List {
+            section,
+            search,
+            include_closed,
+        }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::list(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                section.as_deref(),
+                search.as_deref(),
+                *include_closed,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Show { id }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::show(&client, id.as_str(), output_json).await;
+        }
+        Some(Command::Add {
+            title,
+            description,
+            priority,
+            tags,
+            section,
+            new_section,
+        }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::add(
+                &client,
+                &config,
+                client::AddTask {
+                    project: cli.project.as_deref(),
+                    title,
+                    description: description.as_deref(),
+                    priority: *priority,
+                    tags: tags.as_deref(),
+                    section: section.as_deref(),
+                    new_section: new_section.as_deref(),
+                },
+                output_json,
+            )
+            .await;
+        }
+        _ => {}
     }
 
     let database_url = secrets.resolved_database_url(&config)?;
@@ -459,24 +481,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     // active project cannot be resolved.
     if let Some(Command::Project(subcommand)) = cli.command.as_ref() {
         match subcommand {
-            ProjectCommand::List => {
-                let projects = service.list_projects().await?;
-                if output_json {
-                    output::print_json(&projects)?;
-                } else if projects.is_empty() {
-                    eprintln!("No projects. Run 'scry project create <name>' to create one.");
-                } else {
-                    let active_id = client_state::active_project(&service, &config)
-                        .await
-                        .ok()
-                        .map(|project| project.id);
-                    for p in &projects {
-                        let marker = if Some(p.id) == active_id { "* " } else { "  " };
-                        println!("  {}{}", marker, p.name);
-                    }
-                }
-                return Ok(());
-            }
             ProjectCommand::Show { name } => {
                 let project = resolve_project(
                     &service,
@@ -666,37 +670,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let command = cli.command.expect("no subcommand is handled above");
 
     match command {
-        Command::Add {
-            title,
-            description,
-            priority,
-            tags,
-            section,
-            new_section,
-        } => {
-            let section =
-                resolve_section_input(&service, &project, section, new_section, false).await?;
-            let new_task = NewTask {
-                title,
-                description,
-                priority,
-                tags: tags.map(|tags| Tags::from(tags.as_str())),
-                section,
-            };
-            let change = service.create_task(&project, new_task).await?;
-            if output_json {
-                output::print_json(&change.task)?;
-            } else {
-                let handle = service.get_task_handle(change.task.id).await?;
-                println!(
-                    "Created task {} in \"{}\" [{}]: {}",
-                    handle,
-                    project.name,
-                    output::section_label(&change.section),
-                    change.task.title
-                );
-            }
-        }
         Command::Move {
             id,
             section,
@@ -810,152 +783,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             } else {
                 let handle = service.get_task_handle(task.id).await?;
                 println!("Opened task {}", handle);
-            }
-        }
-        Command::Show { id } => {
-            let resolved = resolve_task(&service, &project, &id).await?;
-            let state = ProjectState::from_snapshot(service.project_snapshot(project.id).await?);
-
-            let Some(task) = state.get_task_by_id(resolved.id) else {
-                return Err(AppError::Service(ServiceError::TaskNotFound {
-                    task_id: resolved.id,
-                    project: project.name.clone(),
-                }));
-            };
-
-            if output_json {
-                output::print_json(task)?;
-                return Ok(());
-            }
-
-            let section = task
-                .section_id
-                .and_then(|section_id| state.get_section_by_id(section_id))
-                .cloned();
-            let section_color = section.as_ref().and_then(|section| section.color);
-            let state_label = match &task.lifecycle {
-                Lifecycle::Open => "open".to_string(),
-                Lifecycle::Closed { closed_at, reason } => format!(
-                    "{} {}",
-                    reason.as_str(),
-                    closed_at.with_timezone(&Local).format(DATETIME_FORMAT_STR)
-                ),
-            };
-            let created_at = task
-                .created_at
-                .with_timezone(&Local)
-                .format(DATETIME_FORMAT_STR);
-
-            let handle = service.get_task_handle(task.id).await?;
-            println!("{} #{}", task.title, handle);
-            println!();
-
-            if let Some(description) = &task.description {
-                for line in description.lines() {
-                    println!("    {}", line);
-                }
-            }
-            println!();
-
-            anstream::println!("Priority:    {}", color::priority_long(task.priority));
-            anstream::println!(
-                "Section:     {}",
-                color::status(section_color, output::section_label(&section))
-            );
-            anstream::println!("State:       {}", state_label);
-            let tags = task
-                .tags
-                .iter()
-                .map(|tag| color::tag(tag))
-                .collect::<Vec<_>>()
-                .join(" ");
-            anstream::println!("Tags:        {}", tags);
-            println!("Created at:  {}", created_at);
-            println!();
-
-            for note in &task.notes {
-                let note_created_at = note
-                    .created_at
-                    .with_timezone(&Local)
-                    .format(DATETIME_FORMAT_STR);
-                println!("{}", note_created_at);
-                println!("{}", note.contents);
-                println!();
-            }
-        }
-        Command::List {
-            section,
-            search,
-            include_closed,
-        } => {
-            let mut state =
-                ProjectState::from_snapshot(service.project_snapshot(project.id).await?);
-            if let Some(search) = search.filter(|s| !s.is_empty()) {
-                state = state.with_substring_filter(search);
-            }
-
-            let selected_section_id = match &section {
-                Some(name) => Some(service.get_section_by_name(project.id, name).await?.id),
-                None => None,
-            };
-            let groups: Vec<_> = state
-                .section_groups()
-                .filter(|group| match selected_section_id {
-                    Some(section_id) => group
-                        .section
-                        .as_ref()
-                        .is_some_and(|section| section.id == section_id),
-                    None => true,
-                })
-                .collect();
-
-            if output_json {
-                let mut tasks: Vec<Task> = groups
-                    .iter()
-                    .flat_map(|group| group.tasks_with_notes.iter().map(Task::from))
-                    .collect();
-                if include_closed {
-                    tasks.extend(state.closed_tasks().iter().map(Task::from));
-                }
-                output::print_json(&tasks)?;
-                return Ok(());
-            }
-
-            let handles = service.list_task_handles().await?;
-
-            println!("project \"{}\"\n", state.project().name);
-
-            let show_priority = state.project().show_priority;
-
-            if groups.is_empty() && (!include_closed || state.closed_tasks().is_empty()) {
-                println!("No tasks.");
-                return Ok(());
-            }
-
-            for group in &groups {
-                let header = format!(
-                    "{} ({}):",
-                    output::section_label(&group.section),
-                    group.tasks_with_notes.len()
-                );
-                anstream::println!(
-                    "{}",
-                    color::status(
-                        group.section.as_ref().and_then(|section| section.color),
-                        &header
-                    )
-                );
-
-                for task in &group.tasks_with_notes {
-                    anstream::println!("{}", output::task_line(task, show_priority, &handles));
-                }
-            }
-
-            if include_closed {
-                println!("Closed ({}):", state.closed_tasks().len());
-                for task in state.closed_tasks() {
-                    anstream::println!("{}", output::task_line(task, show_priority, &handles));
-                }
             }
         }
         Command::Note(note_cmd) => match note_cmd {
@@ -1142,6 +969,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
         },
+        Command::Add { .. } | Command::Show { .. } | Command::List { .. } => {
+            unreachable!("handled on the HTTP path")
+        }
         Command::Export => unreachable!("handled before the active project is resolved"),
         Command::Import { .. } => unreachable!("handled before the active project is resolved"),
         Command::Docs => unreachable!("docs is handled before database setup"),
