@@ -1,3 +1,4 @@
+use crate::position::Position;
 use anstyle::AnsiColor;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
@@ -7,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 pub use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
-use crate::position::Position;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
@@ -361,4 +361,20 @@ pub struct Note {
     pub task_id: TaskId,
     pub contents: String,
     pub created_at: DateTime<Utc>,
+}
+
+/// A project together with all of its sections, tasks, and notes.
+///
+/// This is scry's canonical project document: `GET /projects/{id}/snapshot`
+/// returns it directly, and each entry in an export/backup is the same
+/// object. The project's own fields are flattened into the object's top
+/// level, and all ids and positions are carried verbatim so the document can
+/// be serialized and deserialized without loss.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectSnapshot {
+    #[serde(flatten)]
+    pub project: Project,
+    pub sections: Vec<Section>,
+    pub tasks: Vec<Task>,
+    pub notes: Vec<Note>,
 }

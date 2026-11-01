@@ -1,10 +1,11 @@
 use crate::backup::{ImportPlan, ImportReport};
 use crate::error::StorageError;
 use crate::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
-use crate::models::{Color, Note, Priority, Project, Section, Tags, Task, TaskSortingMode};
+use crate::models::{
+    Color, Note, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskSortingMode,
+};
 use crate::position::Position;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub struct TaskToCreate {
@@ -34,18 +35,6 @@ pub struct ProjectToCreate {
     pub description: Option<String>,
     pub task_sorting_mode: TaskSortingMode,
     pub show_priority: bool,
-}
-
-/// A project together with all of its sections, tasks, and notes.
-///
-/// Backs the single-round-trip `GET /projects/{id}/snapshot` endpoint, and must
-/// serialize both ways so the server response can be deserialized into it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectSnapshot {
-    pub project: Project,
-    pub sections: Vec<Section>,
-    pub tasks: Vec<Task>,
-    pub notes: Vec<Note>,
 }
 
 pub type ArcStore = Arc<dyn Store>;

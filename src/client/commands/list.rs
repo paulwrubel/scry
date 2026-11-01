@@ -1,19 +1,14 @@
 //! `list`.
-
-use std::collections::HashMap;
-
-use scry_core::ids::TaskId;
-use scry_core::models::Task;
-
+use super::project_by_name;
 use crate::client::{Client, ProjectDetail};
 use crate::color;
 use crate::config::ScryConfig;
 use crate::error::AppError;
 use crate::output::{print_json, section_label, task_line};
 use crate::state::ProjectState;
-use crate::store::ProjectSnapshot;
-
-use super::project_by_name;
+use scry_core::ids::TaskId;
+use scry_core::models::{ProjectSnapshot, Task};
+use std::collections::HashMap;
 
 /// List a project's tasks.
 pub async fn list(

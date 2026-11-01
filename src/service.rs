@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::error::ServiceError;
 use chrono::Utc;
 use scry_core::backup::{self, Backup, ImportMode, ImportPlan, ImportReport};
@@ -9,11 +7,12 @@ use scry_core::ids::{
     shortest_handle, shortest_handles, template_section_id,
 };
 use scry_core::models::{
-    CloseReason, Color, Lifecycle, Note, Priority, Project, ProjectTemplate, Section, Tags, Task,
-    TaskSortingMode,
+    CloseReason, Color, Lifecycle, Note, Priority, Project, ProjectSnapshot, ProjectTemplate,
+    Section, Tags, Task, TaskSortingMode,
 };
 use scry_core::position::{Position, key_between, n_keys_between};
-use scry_core::store::{ArcStore, ProjectSnapshot, ProjectToCreate, SectionToCreate, TaskToCreate};
+use scry_core::store::{ArcStore, ProjectToCreate, SectionToCreate, TaskToCreate};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// How an operation selects a task's section: leave it alone, clear it, use an
