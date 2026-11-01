@@ -15,9 +15,7 @@ mod store;
 use crate::color::ColorChoice;
 use crate::service::{ColorChange, ProjectService, ProjectSetup, UpdateProject, UpdateSection};
 use crate::skill::Harness;
-use crate::state::DATETIME_FORMAT_STR;
 use crate::store::{ArcStore, PostgresStore};
-use chrono::Local;
 use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::AppError;
@@ -527,6 +525,25 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::note_add(&client, task_id.as_str(), contents, output_json).await;
         }
+        Some(Command::Project(ProjectCommand::Show { name })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::project_show(
+                &client,
+                &config,
+                name.as_deref(),
+                cli.project.as_deref(),
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Project(ProjectCommand::Current)) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::project_current(&client, &config, output_json).await;
+        }
+        Some(Command::Project(ProjectCommand::Use { name })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::project_use(&client, &config, name, output_json).await;
+        }
         _ => {}
     }
 
@@ -543,42 +560,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     // active project cannot be resolved.
     if let Some(Command::Project(subcommand)) = cli.command.as_ref() {
         match subcommand {
-            ProjectCommand::Show { name } => {
-                let project = resolve_project(
-                    &service,
-                    &config,
-                    name.as_deref().or(cli.project.as_deref()),
-                )
-                .await?;
-                if output_json {
-                    output::print_json(&project)?;
-                } else {
-                    println!("{}", project.name);
-                    if let Some(description) = &project.description {
-                        for line in description.lines() {
-                            println!("    {}", line);
-                        }
-                    }
-                    println!();
-                    println!("Sort mode:    {}", project.task_sorting_mode);
-                    println!(
-                        "Priority:     {}",
-                        if project.show_priority {
-                            "shown"
-                        } else {
-                            "hidden"
-                        }
-                    );
-                    println!(
-                        "Created at:   {}",
-                        project
-                            .created_at
-                            .with_timezone(&Local)
-                            .format(DATETIME_FORMAT_STR)
-                    );
-                }
-                return Ok(());
-            }
             ProjectCommand::Create {
                 name,
                 template_name,
@@ -620,15 +601,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                         "Make it active with 'scry project use \"{}\"'.",
                         project.name
                     );
-                }
-                return Ok(());
-            }
-            ProjectCommand::Use { name } => {
-                let active = client_state::set_active_project(&service, &config, name).await?;
-                if output_json {
-                    output::print_json(&active)?;
-                } else {
-                    println!("Using project \"{}\"", name);
                 }
                 return Ok(());
             }
@@ -737,15 +709,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             | ProjectCommand::Create { .. }
             | ProjectCommand::Show { .. }
             | ProjectCommand::Use { .. }
-            | ProjectCommand::Delete { .. } => {
+            | ProjectCommand::Delete { .. }
+            | ProjectCommand::Current => {
                 unreachable!("handled before the active project is resolved")
-            }
-            ProjectCommand::Current => {
-                if output_json {
-                    output::print_json(&project)?;
-                } else {
-                    println!("{}", project.name);
-                }
             }
             ProjectCommand::Update {
                 name,

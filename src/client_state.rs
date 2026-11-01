@@ -4,7 +4,6 @@
 //! backend, so each machine that talks to a shared server keeps its own active
 //! project.
 
-use scry_core::error::StorageError;
 use scry_core::models::Project;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -53,6 +52,14 @@ impl ClientState {
     /// directory first.
     pub fn save(&self, config: &ScryConfig) -> Result<(), AppError> {
         self.save_to(&resolve_state_path(config.state_file.as_deref()))
+    }
+
+    /// Make `name` the active project and persist it.
+    pub fn set_active(config: &ScryConfig, name: &str) -> Result<(), AppError> {
+        ClientState {
+            active_project: Some(name.to_string()),
+        }
+        .save(config)
     }
 
     /// Write the client state to `path`, creating the parent directory first.
@@ -135,27 +142,6 @@ pub async fn active_project(
                     .to_string(),
             )
         })
-}
-
-/// Make `name` the active project, verifying it exists first.
-pub async fn set_active_project(
-    service: &ProjectService,
-    config: &ScryConfig,
-    name: &str,
-) -> Result<Project, AppError> {
-    let project = service.get_project_by_name(name).await?.ok_or_else(|| {
-        AppError::Storage(StorageError::NotFound(format!(
-            "project '{}' not found",
-            name
-        )))
-    })?;
-
-    ClientState {
-        active_project: Some(name.to_string()),
-    }
-    .save(config)?;
-
-    Ok(project)
 }
 
 #[cfg(test)]

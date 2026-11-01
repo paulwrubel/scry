@@ -24,8 +24,17 @@ pub use note_add::note_add;
 mod open_tasks;
 pub use open_tasks::open_tasks;
 
+mod project_current;
+pub use project_current::project_current;
+
 mod project_list;
 pub use project_list::project_list;
+
+mod project_show;
+pub use project_show::project_show;
+
+mod project_use;
+pub use project_use::project_use;
 
 mod show;
 pub use show::show;
