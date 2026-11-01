@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use reqwest::{Client as HttpClient, Method, Response};
+use reqwest::{Client as HttpClient, Method, Response, Url};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
@@ -42,9 +42,14 @@ impl Client {
     }
 
     /// GET a JSON resource from the API.
-    pub async fn get_json<T: DeserializeOwned>(&self, path: &str) -> Result<T, AppError> {
+    pub async fn get_json<T: DeserializeOwned>(
+        &self,
+        segments: &[&str],
+        query: &[(&str, &str)],
+    ) -> Result<T, AppError> {
+        let url = self.build_url(segments, query)?;
         let response = self
-            .request(Method::GET, path)
+            .request(Method::GET, url)
             .send()
             .await
             .map_err(|error| self.transport_error(error))?;
@@ -52,10 +57,34 @@ impl Client {
         decode(response).await
     }
 
-    fn request(&self, method: Method, path: &str) -> reqwest::RequestBuilder {
+    fn build_url(&self, segments: &[&str], query: &[(&str, &str)]) -> Result<Url, AppError> {
+        let mut url = Url::parse(&format!("{}/api/v1", self.base_url)).map_err(|error| {
+            AppError::Config(format!("invalid server URL '{}': {error}", self.base_url))
+        })?;
+
+        {
+            let mut path = url.path_segments_mut().map_err(|_| {
+                AppError::Config(format!(
+                    "server URL '{}' cannot be used as a base",
+                    self.base_url
+                ))
+            })?;
+            for segment in segments {
+                path.push(segment);
+            }
+        }
+
+        if !query.is_empty() {
+            url.query_pairs_mut().extend_pairs(query.iter().copied());
+        }
+
+        Ok(url)
+    }
+
+    fn request(&self, method: Method, url: Url) -> reqwest::RequestBuilder {
         let mut request = self
             .http
-            .request(method, format!("{}/api/v1{path}", self.base_url))
+            .request(method, url)
             .header(TIMEZONE_HEADER, &self.timezone);
 
         if let Some(token) = &self.token {

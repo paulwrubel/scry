@@ -5,6 +5,7 @@ mod config;
 mod docs;
 mod error;
 mod http_auth;
+mod output;
 mod server;
 mod service;
 mod skill;
@@ -17,19 +18,18 @@ use crate::service::{
     UpdateSection,
 };
 use crate::skill::Harness;
-use crate::state::{DATETIME_FORMAT_STR, ProjectState, TaskWithNotes};
+use crate::state::{DATETIME_FORMAT_STR, ProjectState};
 use crate::store::{ArcStore, PostgresStore};
 use chrono::Local;
 use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::{AppError, ServiceError};
 use scry_core::backup::{self, ImportMode};
-use scry_core::ids::{Handle, TaskId};
+use scry_core::ids::Handle;
 use scry_core::models::{
-    CloseReason, Color, Lifecycle, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Section,
-    Tags, Task, TaskSortingMode,
+    CloseReason, Color, Lifecycle, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Tags,
+    Task, TaskSortingMode,
 };
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -372,14 +372,6 @@ fn error_document(error: &AppError) -> String {
     .to_string()
 }
 
-/// Print a value as compact JSON on stdout, for the `--json` success path.
-fn print_json<T: serde::Serialize>(value: &T) -> Result<(), AppError> {
-    let json = serde_json::to_string(value)
-        .map_err(|error| AppError::Internal(format!("failed to serialize JSON: {error}")))?;
-    println!("{json}");
-    Ok(())
-}
-
 async fn run(cli: Cli) -> Result<(), AppError> {
     let output_json = cli.json;
     if output_json
@@ -427,7 +419,26 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Some(Command::Project(ProjectCommand::List))
     ) {
         let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-        return run_project_list(&client, &config, output_json).await;
+        return client::project_list(&client, &config, output_json).await;
+    }
+
+    if let Some(Command::List {
+        section,
+        search,
+        include_closed,
+    }) = cli.command.as_ref()
+    {
+        let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+        return client::list(
+            &client,
+            &config,
+            cli.project.as_deref(),
+            section.as_deref(),
+            search.as_deref(),
+            *include_closed,
+            output_json,
+        )
+        .await;
     }
 
     let database_url = secrets.resolved_database_url(&config)?;
@@ -446,7 +457,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             ProjectCommand::List => {
                 let projects = service.list_projects().await?;
                 if output_json {
-                    print_json(&projects)?;
+                    output::print_json(&projects)?;
                 } else if projects.is_empty() {
                     eprintln!("No projects. Run 'scry project create <name>' to create one.");
                 } else {
@@ -469,7 +480,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 )
                 .await?;
                 if output_json {
-                    print_json(&project)?;
+                    output::print_json(&project)?;
                 } else {
                     println!("{}", project.name);
                     if let Some(description) = &project.description {
@@ -526,7 +537,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     .await?;
 
                 if output_json {
-                    print_json(&project)?;
+                    output::print_json(&project)?;
                 } else {
                     println!("Created project \"{}\"", project.name);
                     if template.is_none() {
@@ -544,7 +555,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             ProjectCommand::Use { name } => {
                 let active = client_state::set_active_project(&service, &config, name).await?;
                 if output_json {
-                    print_json(&active)?;
+                    output::print_json(&active)?;
                 } else {
                     println!("Using project \"{}\"", name);
                 }
@@ -568,7 +579,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
                 let removed = service.delete_project_by_id(project.id).await?;
                 if output_json {
-                    print_json(&removed)?;
+                    output::print_json(&removed)?;
                 } else {
                     println!("Deleted project \"{}\"", name);
                     if let Ok(new_active) = client_state::active_project(&service, &config).await
@@ -635,7 +646,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 "tasks": report.tasks,
                 "notes": report.notes,
             });
-            print_json(&document)?;
+            output::print_json(&document)?;
         } else {
             println!(
                 "Imported {} project(s), {} section(s), {} task(s), {} note(s)",
@@ -669,14 +680,14 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             };
             let change = service.create_task(&project, new_task).await?;
             if output_json {
-                print_json(&change.task)?;
+                output::print_json(&change.task)?;
             } else {
                 let handle = service.get_task_handle(change.task.id).await?;
                 println!(
                     "Created task {} in \"{}\" [{}]: {}",
                     handle,
                     project.name,
-                    section_label(&change.section),
+                    output::section_label(&change.section),
                     change.task.title
                 );
             }
@@ -698,13 +709,13 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 .move_task_to_section(&project, task.id, section, None)
                 .await?;
             if output_json {
-                print_json(&change.task)?;
+                output::print_json(&change.task)?;
             } else {
                 let handle = service.get_task_handle(change.task.id).await?;
                 println!(
                     "Moved task {} --> \"{}\"",
                     handle,
-                    section_label(&change.section)
+                    output::section_label(&change.section)
                 );
             }
         }
@@ -743,7 +754,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let task = resolve_task(&service, &project, &id).await?;
             let updated = service.update_task(&project, task.id, patch).await?;
             if output_json {
-                print_json(&updated)?;
+                output::print_json(&updated)?;
             } else {
                 let handle = service.get_task_handle(updated.id).await?;
                 println!("Updated task {}.", handle);
@@ -754,7 +765,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let source_handle = service.get_task_handle(source.id).await?;
             let change = service.duplicate_task(&project, source.id).await?;
             if output_json {
-                print_json(&change.task)?;
+                output::print_json(&change.task)?;
             } else {
                 let new_handle = service.get_task_handle(change.task.id).await?;
                 println!(
@@ -762,7 +773,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     source_handle,
                     new_handle,
                     project.name,
-                    section_label(&change.section)
+                    output::section_label(&change.section)
                 );
             }
         }
@@ -771,7 +782,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let handle = service.get_task_handle(task.id).await?;
             let removed = service.delete_task(&project, task.id).await?;
             if output_json {
-                print_json(&removed)?;
+                output::print_json(&removed)?;
             } else {
                 println!("Deleted task {} from \"{}\"", handle, project.name);
             }
@@ -780,7 +791,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let resolved = resolve_task(&service, &project, &id).await?;
             let task = service.close_task(&project, resolved.id, reason).await?;
             if output_json {
-                print_json(&task)?;
+                output::print_json(&task)?;
             } else {
                 let handle = service.get_task_handle(task.id).await?;
                 println!("Closed task {} as {}", handle, reason);
@@ -790,7 +801,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let resolved = resolve_task(&service, &project, &id).await?;
             let task = service.open_task(&project, resolved.id).await?;
             if output_json {
-                print_json(&task)?;
+                output::print_json(&task)?;
             } else {
                 let handle = service.get_task_handle(task.id).await?;
                 println!("Opened task {}", handle);
@@ -808,7 +819,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             };
 
             if output_json {
-                print_json(task)?;
+                output::print_json(task)?;
                 return Ok(());
             }
 
@@ -844,7 +855,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             anstream::println!("Priority:    {}", color::priority_long(task.priority));
             anstream::println!(
                 "Section:     {}",
-                color::status(section_color, section_label(&section))
+                color::status(section_color, output::section_label(&section))
             );
             anstream::println!("State:       {}", state_label);
             let tags = task
@@ -901,7 +912,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 if include_closed {
                     tasks.extend(state.closed_tasks().iter().map(Task::from));
                 }
-                print_json(&tasks)?;
+                output::print_json(&tasks)?;
                 return Ok(());
             }
 
@@ -919,7 +930,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             for group in &groups {
                 let header = format!(
                     "{} ({}):",
-                    section_label(&group.section),
+                    output::section_label(&group.section),
                     group.tasks_with_notes.len()
                 );
                 anstream::println!(
@@ -931,14 +942,14 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 );
 
                 for task in &group.tasks_with_notes {
-                    anstream::println!("{}", task_line(task, show_priority, &handles));
+                    anstream::println!("{}", output::task_line(task, show_priority, &handles));
                 }
             }
 
             if include_closed {
                 println!("Closed ({}):", state.closed_tasks().len());
                 for task in state.closed_tasks() {
-                    anstream::println!("{}", task_line(task, show_priority, &handles));
+                    anstream::println!("{}", output::task_line(task, show_priority, &handles));
                 }
             }
         }
@@ -949,7 +960,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     .add_note_to_task(&project, task.id, contents)
                     .await?;
                 if output_json {
-                    print_json(&note)?;
+                    output::print_json(&note)?;
                 } else {
                     let note_handle = service.get_note_handle(note.id).await?;
                     let task_handle = service.get_task_handle(task.id).await?;
@@ -967,7 +978,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             }
             ProjectCommand::Current => {
                 if output_json {
-                    print_json(&project)?;
+                    output::print_json(&project)?;
                 } else {
                     println!("{}", project.name);
                 }
@@ -1009,7 +1020,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     )
                     .await?;
                 if output_json {
-                    print_json(&updated)?;
+                    output::print_json(&updated)?;
                 } else {
                     println!("Updated project \"{}\".", updated.name);
                 }
@@ -1019,7 +1030,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             SectionCommand::List => {
                 let sections = service.list_sections_by_project_id(project.id).await?;
                 if output_json {
-                    print_json(&sections)?;
+                    output::print_json(&sections)?;
                 } else {
                     println!("Sections for \"{}\":", project.name);
                     for section in &sections {
@@ -1030,7 +1041,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             SectionCommand::Add { name, color } => {
                 let section = service.create_section(&project, name, color).await?;
                 if output_json {
-                    print_json(&section)?;
+                    output::print_json(&section)?;
                 } else {
                     println!(
                         "Added section \"{}\" to project \"{}\"",
@@ -1042,7 +1053,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 let section = service.get_section_by_name(project.id, &name).await?;
                 let removed = service.delete_section(&project, section.id).await?;
                 if output_json {
-                    print_json(&removed)?;
+                    output::print_json(&removed)?;
                 } else {
                     println!(
                         "Removed section \"{}\" from project \"{}\"; its tasks moved to No section",
@@ -1062,7 +1073,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     )
                     .await?;
                 if output_json {
-                    print_json(&renamed)?;
+                    output::print_json(&renamed)?;
                 } else {
                     println!(
                         "Renamed section \"{}\" --> \"{}\" in project \"{}\"",
@@ -1077,7 +1088,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     .merge_sections(&project, source_section.id, target_section.id)
                     .await?;
                 if output_json {
-                    print_json(&target_section)?;
+                    output::print_json(&target_section)?;
                 } else {
                     println!(
                         "Merged section \"{}\" into \"{}\"",
@@ -1097,7 +1108,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     )
                     .await?;
                 if output_json {
-                    print_json(&updated)?;
+                    output::print_json(&updated)?;
                 } else {
                     println!(
                         "Set color of section \"{}\" to \"{}\" in project \"{}\"",
@@ -1117,7 +1128,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     )
                     .await?;
                 if output_json {
-                    print_json(&updated)?;
+                    output::print_json(&updated)?;
                 } else {
                     println!(
                         "Reset color of section \"{}\" in project \"{}\"",
@@ -1132,32 +1143,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
         Command::Serve { .. } => {
             unreachable!("the REST server is handled before database-backed commands")
-        }
-    }
-
-    Ok(())
-}
-
-/// List projects over HTTP.
-async fn run_project_list(
-    client: &client::Client,
-    config: &ScryConfig,
-    output_json: bool,
-) -> Result<(), AppError> {
-    let projects: Vec<Project> = client.get_json("/projects").await?;
-
-    if output_json {
-        print_json(&projects)?;
-    } else if projects.is_empty() {
-        eprintln!("No projects. Run 'scry project create <name>' to create one.");
-    } else {
-        let active = client_state::ClientState::load(config)?
-            .active_project
-            .unwrap_or_else(|| "default".to_string());
-
-        for project in &projects {
-            let marker = if project.name == active { "* " } else { "  " };
-            println!("  {}{}", marker, project.name);
         }
     }
 
@@ -1270,49 +1255,4 @@ async fn resolve_section_input(
     } else {
         Ok(SectionInput::Unchanged)
     }
-}
-
-fn section_label(section: &Option<Section>) -> &str {
-    section
-        .as_ref()
-        .map_or("No section", |section| section.name.as_str())
-}
-
-/// Render one task line for the human `list` output, including the lifecycle
-/// marker so open and closed tasks share the same format.
-fn task_line(
-    task: &TaskWithNotes,
-    show_priority: bool,
-    handles: &HashMap<TaskId, String>,
-) -> String {
-    let checkbox = match &task.lifecycle {
-        Lifecycle::Open => "[ ]",
-        Lifecycle::Closed { reason, .. } => match reason {
-            CloseReason::Completed => "[x]",
-            CloseReason::Cancelled => "[~]",
-        },
-    };
-
-    // fall back to the full hex id if the handle map is missing this task
-    let id = handles
-        .get(&task.id)
-        .cloned()
-        .unwrap_or_else(|| task.id.simple().to_string());
-    let mut line = format!("  {}  {}", id, checkbox);
-    if show_priority {
-        line.push_str(&format!("  {}", color::priority(task.priority)));
-    }
-    line.push_str(&format!("  {}", task.title));
-
-    let tags = task
-        .tags
-        .iter()
-        .map(|tag| color::tag(tag))
-        .collect::<Vec<_>>()
-        .join(" ");
-    if !tags.is_empty() {
-        line.push_str(&format!("  {}", tags));
-    }
-
-    line
 }
