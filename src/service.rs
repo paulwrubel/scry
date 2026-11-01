@@ -55,12 +55,10 @@ pub struct TaskPatch {
     pub section: SectionInput,
 }
 
-/// A task plus the section it now lives in, so callers can name it without a
-/// second lookup. `None` means the task has no section.
+/// A task after a create, duplicate, or move.
 #[derive(Debug, Clone)]
 pub struct TaskChangeResult {
     pub task: Task,
-    pub section: Option<Section>,
 }
 
 /// Partial project input. `None` leaves a field unchanged; `Some("")` on
@@ -143,7 +141,7 @@ impl ProjectService {
             })
             .await?;
 
-        Ok(TaskChangeResult { task, section })
+        Ok(TaskChangeResult { task })
     }
 
     pub async fn create_task_in_project(
@@ -184,11 +182,7 @@ impl ProjectService {
             })
             .await?;
 
-        let section = match task.section_id {
-            Some(section_id) => Some(self.require_section_in_project(project, section_id).await?),
-            None => None,
-        };
-        Ok(TaskChangeResult { task, section })
+        Ok(TaskChangeResult { task })
     }
 
     pub async fn list_tasks_by_project_id(
@@ -264,7 +258,7 @@ impl ProjectService {
         };
 
         if unchanged && position.is_none() {
-            return Ok(TaskChangeResult { task, section });
+            return Ok(TaskChangeResult { task });
         }
 
         let section_id = section.as_ref().map(|section| section.id);
@@ -275,7 +269,7 @@ impl ProjectService {
         task.section_id = section_id;
 
         let task = self.store.update_task(task).await?;
-        Ok(TaskChangeResult { task, section })
+        Ok(TaskChangeResult { task })
     }
 
     pub async fn move_task_to_section_by_id(
@@ -398,12 +392,6 @@ impl ProjectService {
     // display starts at the 4-character floor
     pub async fn get_task_handle(&self, id: TaskId) -> Result<String, ServiceError> {
         let ids = self.store.get_all_task_ids().await?;
-        Ok(shortest_handle(id, ids, MIN_HANDLE_LENGTH))
-    }
-
-    // display starts at the 4-character floor
-    pub async fn get_note_handle(&self, id: NoteId) -> Result<String, ServiceError> {
-        let ids = self.store.get_all_note_ids().await?;
         Ok(shortest_handle(id, ids, MIN_HANDLE_LENGTH))
     }
 

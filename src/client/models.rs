@@ -22,3 +22,18 @@ pub struct TaskDetails {
     #[serde(default)]
     pub handle: Option<String>,
 }
+
+/// One outcome in a batch lifecycle response.
+#[derive(Deserialize, Serialize)]
+pub struct BatchTaskResult {
+    pub handle: String,
+    pub task: Option<Task>,
+    pub error: Option<BatchTaskError>,
+}
+
+/// A failed item in a batch lifecycle response.
+#[derive(Deserialize, Serialize)]
+pub struct BatchTaskError {
+    pub kind: String,
+    pub message: String,
+}

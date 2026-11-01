@@ -20,12 +20,11 @@ use crate::store::{ArcStore, PostgresStore};
 use chrono::Local;
 use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
-use error::{AppError, ServiceError};
+use error::AppError;
 use scry_core::backup::{self, ImportMode};
 use scry_core::ids::Handle;
 use scry_core::models::{
-    CloseReason, Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Task,
-    TaskSortingMode,
+    CloseReason, Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, TaskSortingMode,
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -129,18 +128,20 @@ enum Command {
         /// The task ID or a unique handle prefix
         id: Handle,
     },
-    /// Close a task with a reason
+    /// Close tasks with a reason
     Close {
-        /// The task ID or a unique handle prefix
-        id: Handle,
+        /// The task IDs or unique handle prefixes
+        #[arg(required = true, num_args = 1..)]
+        ids: Vec<Handle>,
         /// The reason for closing
         #[arg(long)]
         reason: CloseReason,
     },
-    /// Open a closed task
+    /// Open closed tasks
     Open {
-        /// The task ID or a unique handle prefix
-        id: Handle,
+        /// The task IDs or unique handle prefixes
+        #[arg(required = true, num_args = 1..)]
+        ids: Vec<Handle>,
     },
     /// Show full details for a task
     Show {
@@ -506,6 +507,26 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             )
             .await;
         }
+        Some(Command::Duplicate { id }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::duplicate(&client, id.as_str(), output_json).await;
+        }
+        Some(Command::Delete { id }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::delete(&client, id.as_str(), output_json).await;
+        }
+        Some(Command::Close { ids, reason }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::close_tasks(&client, ids, *reason, output_json).await;
+        }
+        Some(Command::Open { ids }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::open_tasks(&client, ids, output_json).await;
+        }
+        Some(Command::Note(NoteCommand::Add { task_id, contents })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::note_add(&client, task_id.as_str(), contents, output_json).await;
+        }
         _ => {}
     }
 
@@ -711,68 +732,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let command = cli.command.expect("no subcommand is handled above");
 
     match command {
-        Command::Duplicate { id } => {
-            let source = resolve_task(&service, &project, &id).await?;
-            let source_handle = service.get_task_handle(source.id).await?;
-            let change = service.duplicate_task(&project, source.id).await?;
-            if output_json {
-                output::print_json(&change.task)?;
-            } else {
-                let new_handle = service.get_task_handle(change.task.id).await?;
-                println!(
-                    "Duplicated task {} as task {} in \"{}\" [{}]",
-                    source_handle,
-                    new_handle,
-                    project.name,
-                    output::section_label(&change.section)
-                );
-            }
-        }
-        Command::Delete { id } => {
-            let task = resolve_task(&service, &project, &id).await?;
-            let handle = service.get_task_handle(task.id).await?;
-            let removed = service.delete_task(&project, task.id).await?;
-            if output_json {
-                output::print_json(&removed)?;
-            } else {
-                println!("Deleted task {} from \"{}\"", handle, project.name);
-            }
-        }
-        Command::Close { id, reason } => {
-            let resolved = resolve_task(&service, &project, &id).await?;
-            let task = service.close_task(&project, resolved.id, reason).await?;
-            if output_json {
-                output::print_json(&task)?;
-            } else {
-                let handle = service.get_task_handle(task.id).await?;
-                println!("Closed task {} as {}", handle, reason);
-            }
-        }
-        Command::Open { id } => {
-            let resolved = resolve_task(&service, &project, &id).await?;
-            let task = service.open_task(&project, resolved.id).await?;
-            if output_json {
-                output::print_json(&task)?;
-            } else {
-                let handle = service.get_task_handle(task.id).await?;
-                println!("Opened task {}", handle);
-            }
-        }
-        Command::Note(note_cmd) => match note_cmd {
-            NoteCommand::Add { task_id, contents } => {
-                let task = resolve_task(&service, &project, &task_id).await?;
-                let note = service
-                    .add_note_to_task(&project, task.id, contents)
-                    .await?;
-                if output_json {
-                    output::print_json(&note)?;
-                } else {
-                    let note_handle = service.get_note_handle(note.id).await?;
-                    let task_handle = service.get_task_handle(task.id).await?;
-                    println!("Added note {} to task {}.", note_handle, task_handle);
-                }
-            }
-        },
         Command::Project(project_cmd) => match project_cmd {
             ProjectCommand::List
             | ProjectCommand::Create { .. }
@@ -945,6 +904,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Command::Add { .. }
         | Command::Update { .. }
         | Command::Move { .. }
+        | Command::Duplicate { .. }
+        | Command::Delete { .. }
+        | Command::Close { .. }
+        | Command::Open { .. }
+        | Command::Note(_)
         | Command::Show { .. }
         | Command::List { .. } => {
             unreachable!("handled on the HTTP path")
@@ -1027,22 +991,4 @@ async fn resolve_project(
         let project = client_state::active_project(service, config).await?;
         Ok(project)
     }
-}
-
-/// Resolve a handle to a task and reject a handle that names a task in another
-/// project, so a typo cannot operate cross-project.
-async fn resolve_task(
-    service: &ProjectService,
-    project: &Project,
-    handle: &Handle,
-) -> Result<Task, AppError> {
-    let task = service.get_task_by_handle(handle).await?;
-    if task.project_id != project.id {
-        return Err(ServiceError::TaskNotFound {
-            task_id: task.id,
-            project: project.name.clone(),
-        }
-        .into());
-    }
-    Ok(task)
 }

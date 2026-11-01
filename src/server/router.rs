@@ -101,6 +101,7 @@ fn build_tasks_router() -> Router<ScryState> {
                 .delete(handlers::delete_task),
         )
         .route("/{id}/move", post(handlers::move_task))
+        .route("/{id}/duplicate", post(handlers::duplicate_task))
         .route("/{id}/close", post(handlers::close_task))
         .route("/{id}/open", post(handlers::open_task))
         .route(

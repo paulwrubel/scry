@@ -43,6 +43,9 @@ pub use delete_section::delete_section;
 mod delete_task;
 pub use delete_task::delete_task;
 
+mod duplicate_task;
+pub use duplicate_task::duplicate_task;
+
 mod get_note;
 pub use get_note::get_note;
 

@@ -10,7 +10,7 @@ use crate::error::AppError;
 use crate::state::TaskWithNotes;
 
 /// Print a value as compact JSON on stdout.
-pub fn print_json<T: serde::Serialize>(value: &T) -> Result<(), AppError> {
+pub fn print_json<T: serde::Serialize + ?Sized>(value: &T) -> Result<(), AppError> {
     let json = serde_json::to_string(value)
         .map_err(|error| AppError::Internal(format!("failed to serialize JSON: {error}")))?;
     println!("{json}");

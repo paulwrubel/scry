@@ -77,6 +77,22 @@ impl Client {
         self.send_json(Method::PUT, segments, query, body).await
     }
 
+    /// DELETE a resource and decode the JSON response.
+    pub async fn delete_json<T: DeserializeOwned>(
+        &self,
+        segments: &[&str],
+        query: &[(&str, &str)],
+    ) -> Result<T, AppError> {
+        let url = self.build_url(segments, query)?;
+        let response = self
+            .request(Method::DELETE, url)
+            .send()
+            .await
+            .map_err(|error| self.transport_error(error))?;
+
+        decode(response).await
+    }
+
     async fn send_json<B: Serialize, T: DeserializeOwned>(
         &self,
         method: Method,
