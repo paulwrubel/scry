@@ -17,10 +17,14 @@ const SECRET_FILE: &str = "scry.secret.toml";
 /// Environment variable holding the REST API bearer token.
 const API_TOKEN_ENV: &str = "SCRY_API_TOKEN";
 
+/// Environment variable overriding the client's server URL.
+const SERVER_URL_ENV: &str = "SCRY_SERVER_URL";
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ScryConfig {
     pub database_url: Option<String>,
+    pub server_url: Option<String>,
     pub state_file: Option<String>,
 }
 
@@ -63,6 +67,20 @@ impl ScryConfig {
 
         toml::from_str(&content)
             .map_err(|e| AppError::Config(format!("failed to parse {:?}: {}", path, e)))
+    }
+
+    /// Resolve the client's server URL: `--server`, then `SCRY_SERVER_URL`, then
+    /// `scry.toml`.
+    pub fn resolved_server_url(&self, flag: Option<&str>) -> Result<String, AppError> {
+        flag.map(str::to_string)
+            .or_else(|| non_empty_env(SERVER_URL_ENV))
+            .or_else(|| self.server_url.clone())
+            .ok_or_else(|| {
+                AppError::Config(
+                    "no server configured: set `server_url` in scry.toml, SCRY_SERVER_URL, or --server"
+                        .to_string(),
+                )
+            })
     }
 
     fn xdg_dir() -> PathBuf {

@@ -1,3 +1,4 @@
+mod client;
 mod client_state;
 mod color;
 mod config;
@@ -38,6 +39,10 @@ struct Cli {
     /// Target a specific project (overrides the active project)
     #[arg(short = 'p', long = "project")]
     project: Option<String>,
+
+    /// Talk to this server URL instead of the configured server_url
+    #[arg(long, value_name = "URL")]
+    server: Option<String>,
 
     /// When to colorize output
     #[arg(long, value_enum, default_value = "auto")]
@@ -415,6 +420,16 @@ async fn run(cli: Cli) -> Result<(), AppError> {
 
     let config = ScryConfig::load(cli.config.as_deref())?;
     let secrets = ScrySecrets::load(cli.secrets.as_deref())?;
+
+    // Project listing is the first command on the HTTP path; it needs no database.
+    if matches!(
+        cli.command.as_ref(),
+        Some(Command::Project(ProjectCommand::List))
+    ) {
+        let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+        return run_project_list(&client, &config, output_json).await;
+    }
+
     let database_url = secrets.resolved_database_url(&config)?;
     let store = connect_store(&database_url).await?;
     let service = ProjectService::new(store);
@@ -1117,6 +1132,32 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
         Command::Serve { .. } => {
             unreachable!("the REST server is handled before database-backed commands")
+        }
+    }
+
+    Ok(())
+}
+
+/// List projects over HTTP.
+async fn run_project_list(
+    client: &client::Client,
+    config: &ScryConfig,
+    output_json: bool,
+) -> Result<(), AppError> {
+    let projects: Vec<Project> = client.get_json("/projects").await?;
+
+    if output_json {
+        print_json(&projects)?;
+    } else if projects.is_empty() {
+        eprintln!("No projects. Run 'scry project create <name>' to create one.");
+    } else {
+        let active = client_state::ClientState::load(config)?
+            .active_project
+            .unwrap_or_else(|| "default".to_string());
+
+        for project in &projects {
+            let marker = if project.name == active { "* " } else { "  " };
+            println!("  {}{}", marker, project.name);
         }
     }
 
