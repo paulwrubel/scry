@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                INSERT INTO sections (id, project_id, name, position, color)\n                VALUES ($1, $2, $3, $4, $5)\n                RETURNING\n                    id,\n                    project_id,\n                    name,\n                    position,\n                    color,\n                    created_at\n            ",
+  "query": "\n                INSERT INTO sections (id, project_id, name, position, color, created_at)\n                VALUES ($1, $2, $3, $4, $5, $6)\n                RETURNING\n                    id,\n                    project_id,\n                    name,\n                    position,\n                    color,\n                    created_at\n            ",
   "describe": {
     "columns": [
       {
@@ -76,7 +76,8 @@
         "Uuid",
         "Text",
         "Text",
-        "Text"
+        "Text",
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -88,5 +89,5 @@
       false
     ]
   },
-  "hash": "36cf80eebd29e6a541b05eafb8a2a2e82831a4bcd08a1d2eb06035f55eb17a8e"
+  "hash": "7f12ee14da7f8832a0eb4417df467c3a480b0052ea27e03cf5803144012c831d"
 }
