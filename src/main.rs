@@ -19,7 +19,7 @@ use crate::store::{ArcStore, PostgresStore};
 use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::AppError;
-use scry_core::backup::{self, ImportMode};
+use scry_core::backup::ImportMode;
 use scry_core::ids::Handle;
 use scry_core::models::{CloseReason, Color, Priority, TaskSortingMode};
 use std::path::{Path, PathBuf};
@@ -668,6 +668,25 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             )
             .await;
         }
+        Some(Command::Export) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::export(&client, &config, cli.project.as_deref()).await;
+        }
+        Some(Command::Import {
+            replace_existing_projects,
+            skip_existing_projects,
+        }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            let mode = if *replace_existing_projects {
+                ImportMode::Replace
+            } else if *skip_existing_projects {
+                ImportMode::Skip
+            } else {
+                ImportMode::Fail
+            };
+
+            return client::import(&client, mode, output_json).await;
+        }
         _ => {}
     }
 
@@ -679,93 +698,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         return server::serve_http(service, http, secrets.api_token()).await;
     }
 
-    if let Some(Command::Export) = cli.command.as_ref() {
-        let export_project_id = match cli.project.as_deref() {
-            Some(name) => Some(
-                service
-                    .get_project_by_name(name)
-                    .await?
-                    .ok_or_else(|| AppError::Usage(format!("project '{name}' not found")))?
-                    .id,
-            ),
-            None => None,
-        };
-
-        let mut backup = service.export(export_project_id).await?;
-        backup.app_version = env!("CARGO_PKG_VERSION").to_string();
-        let json = serde_json::to_string_pretty(&backup)
-            .map_err(|e| AppError::Internal(format!("failed to serialize JSON: {e}")))?;
-        println!("{json}");
-        return Ok(());
-    }
-
-    if let Some(Command::Import {
-        replace_existing_projects,
-        skip_existing_projects,
-    }) = cli.command.as_ref()
-    {
-        use std::io::Read;
-
-        let mut input = String::new();
-        std::io::stdin()
-            .read_to_string(&mut input)
-            .map_err(|e| AppError::Internal(format!("failed to read stdin: {e}")))?;
-
-        let backup = backup::parse(&input).map_err(|error| AppError::Usage(error.to_string()))?;
-
-        let mode = if *replace_existing_projects {
-            ImportMode::Replace
-        } else if *skip_existing_projects {
-            ImportMode::Skip
-        } else {
-            ImportMode::Fail
-        };
-
-        let plan = service.plan_import(&backup, mode).await?;
-        let report = service.import(plan).await?;
-
-        if output_json {
-            let document = serde_json::json!({
-                "projects": report.projects,
-                "sections": report.sections,
-                "tasks": report.tasks,
-                "notes": report.notes,
-            });
-            output::print_json(&document)?;
-        } else {
-            println!(
-                "Imported {} project(s), {} section(s), {} task(s), {} note(s)",
-                report.projects, report.sections, report.tasks, report.notes
-            );
-        }
-        return Ok(());
-    }
-
-    let command = cli.command.expect("no subcommand is handled above");
-
-    match command {
-        Command::Add { .. }
-        | Command::Update { .. }
-        | Command::Move { .. }
-        | Command::Duplicate { .. }
-        | Command::Delete { .. }
-        | Command::Close { .. }
-        | Command::Open { .. }
-        | Command::Note(_)
-        | Command::Project(_)
-        | Command::Section(_)
-        | Command::Show { .. }
-        | Command::List { .. } => {
-            unreachable!("handled on the HTTP path")
-        }
-        Command::Export => unreachable!("handled before the active project is resolved"),
-        Command::Import { .. } => unreachable!("handled before the active project is resolved"),
-        Command::Docs => unreachable!("docs is handled before database setup"),
-        Command::Skill(_) => unreachable!("skill commands are handled before database setup"),
-        Command::Serve { .. } => {
-            unreachable!("the REST server is handled before database-backed commands")
-        }
-    }
+    Ok(())
 }
 
 /// Handle `scry skill` commands. These operate on the filesystem only and never
@@ -817,4 +750,3 @@ async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
         )))
     }
 }
-

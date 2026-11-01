@@ -46,6 +46,12 @@ pub use delete_task::delete_task;
 mod duplicate_task;
 pub use duplicate_task::duplicate_task;
 
+mod export;
+pub use export::export;
+
+mod export_project;
+pub use export_project::export_project;
+
 mod get_note;
 pub use get_note::get_note;
 

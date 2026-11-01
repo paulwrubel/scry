@@ -31,6 +31,7 @@ fn get_cors_layer() -> CorsLayer {
 fn build_api_router() -> Router<ScryState> {
     Router::new()
         .route("/", get(handlers::index))
+        .route("/export", get(handlers::export))
         .route("/import", post(handlers::import))
         .nest("/projects", build_projects_router())
         .nest("/sections", build_sections_router())
@@ -57,6 +58,7 @@ fn build_projects_router() -> Router<ScryState> {
                 .put(handlers::update_project)
                 .delete(handlers::delete_project_by_id),
         )
+        .route("/{id}/export", get(handlers::export_project))
         .route(
             "/{project_id}/sections",
             get(handlers::get_sections).post(handlers::create_section),
