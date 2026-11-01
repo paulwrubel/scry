@@ -23,6 +23,7 @@ pub async fn project_list(
     } else {
         let active = ClientState::load(config)?
             .active_project
+            .filter(|name| projects.iter().any(|project| &project.name == name))
             .unwrap_or_else(|| "default".to_string());
 
         for project in &projects {

@@ -1,5 +1,8 @@
 # Config for `just run-local`, pointed at the postgres service in compose.yaml.
 database_url = "postgres://postgres:postgres@127.0.0.1:5432/scry"
 
+# Client commands in this dev config talk to `just run-local`'s server.
+server_url = "http://127.0.0.1:8000"
+
 # Keep dev active-project state out of the real XDG state file.
 state_file = "target/scry-dev-state.toml"
