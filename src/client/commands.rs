@@ -1,21 +1,25 @@
 //! Client command implementations.
 
 mod add;
-mod list;
-mod project_list;
-mod show;
-
 pub use add::{AddTask, add};
+
+mod list;
 pub use list::list;
+
+mod project_list;
 pub use project_list::project_list;
+
+mod show;
 pub use show::show;
 
-use scry_core::models::Project;
+mod update;
+pub use update::{UpdateTask, update};
 
 use crate::client::Client;
 use crate::client_state::ClientState;
 use crate::config::ScryConfig;
 use crate::error::AppError;
+use scry_core::models::Project;
 
 /// Resolve a project from `-p` or the local active project.
 async fn project_by_name(

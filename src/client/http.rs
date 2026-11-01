@@ -64,9 +64,29 @@ impl Client {
         query: &[(&str, &str)],
         body: &B,
     ) -> Result<T, AppError> {
+        self.send_json(Method::POST, segments, query, body).await
+    }
+
+    /// PUT a JSON body and decode the JSON response.
+    pub async fn put_json<B: Serialize, T: DeserializeOwned>(
+        &self,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T, AppError> {
+        self.send_json(Method::PUT, segments, query, body).await
+    }
+
+    async fn send_json<B: Serialize, T: DeserializeOwned>(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T, AppError> {
         let url = self.build_url(segments, query)?;
         let response = self
-            .request(Method::POST, url)
+            .request(method, url)
             .json(body)
             .send()
             .await

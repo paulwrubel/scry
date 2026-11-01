@@ -14,8 +14,7 @@ mod store;
 
 use crate::color::ColorChoice;
 use crate::service::{
-    ColorChange, ProjectService, ProjectSetup, SectionInput, TaskPatch, UpdateProject,
-    UpdateSection,
+    ColorChange, ProjectService, ProjectSetup, SectionInput, UpdateProject, UpdateSection,
 };
 use crate::skill::Harness;
 use crate::state::DATETIME_FORMAT_STR;
@@ -27,7 +26,7 @@ use error::{AppError, ServiceError};
 use scry_core::backup::{self, ImportMode};
 use scry_core::ids::Handle;
 use scry_core::models::{
-    CloseReason, Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Tags, Task,
+    CloseReason, Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, Task,
     TaskSortingMode,
 };
 use std::path::{Path, PathBuf};
@@ -465,6 +464,33 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             )
             .await;
         }
+        Some(Command::Update {
+            id,
+            title,
+            description,
+            priority,
+            tags,
+            section,
+            new_section,
+            no_section,
+        }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::update(
+                &client,
+                client::UpdateTask {
+                    handle: id.as_str(),
+                    title: title.as_deref(),
+                    description: description.as_deref(),
+                    priority: *priority,
+                    tags: tags.as_deref(),
+                    section: section.as_deref(),
+                    new_section: new_section.as_deref(),
+                    no_section: *no_section,
+                },
+                output_json,
+            )
+            .await;
+        }
         _ => {}
     }
 
@@ -695,47 +721,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     handle,
                     output::section_label(&change.section)
                 );
-            }
-        }
-        Command::Update {
-            id,
-            title,
-            description,
-            priority,
-            tags,
-            section,
-            new_section,
-            no_section,
-        } => {
-            if title.is_none()
-                && description.is_none()
-                && priority.is_none()
-                && tags.is_none()
-                && section.is_none()
-                && new_section.is_none()
-                && !no_section
-            {
-                return Err(AppError::Usage(
-                    "No flags provided. Use 'scry update --help' for available options."
-                        .to_string(),
-                ));
-            }
-            let section =
-                resolve_section_input(&service, &project, section, new_section, no_section).await?;
-            let patch = TaskPatch {
-                title,
-                description,
-                priority,
-                tags: tags.map(|tags| Tags::from(tags.as_str())),
-                section,
-            };
-            let task = resolve_task(&service, &project, &id).await?;
-            let updated = service.update_task(&project, task.id, patch).await?;
-            if output_json {
-                output::print_json(&updated)?;
-            } else {
-                let handle = service.get_task_handle(updated.id).await?;
-                println!("Updated task {}.", handle);
             }
         }
         Command::Duplicate { id } => {
@@ -969,7 +954,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 }
             }
         },
-        Command::Add { .. } | Command::Show { .. } | Command::List { .. } => {
+        Command::Add { .. }
+        | Command::Update { .. }
+        | Command::Show { .. }
+        | Command::List { .. } => {
             unreachable!("handled on the HTTP path")
         }
         Command::Export => unreachable!("handled before the active project is resolved"),
