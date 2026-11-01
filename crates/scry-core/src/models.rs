@@ -9,6 +9,7 @@ use std::fmt::Display;
 
 pub use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Color {
@@ -63,6 +64,7 @@ impl From<Color> for AnsiColor {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum CloseReason {
@@ -85,6 +87,7 @@ impl Display for CloseReason {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "kebab-case")]
 pub enum Lifecycle {
@@ -116,6 +119,7 @@ impl Lifecycle {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Tags(pub(crate) Vec<String>);
 
@@ -182,6 +186,7 @@ impl<'a> IntoIterator for &'a Tags {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(
     Debug,
     Clone,
@@ -226,6 +231,7 @@ impl Priority {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum TaskSortingMode {

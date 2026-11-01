@@ -387,6 +387,7 @@ fn generate_n_keys_between(
 }
 
 /// A validated fractional-index position key. It serializes as a plain string.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Position(String);
