@@ -5,17 +5,9 @@ use crate::error::AppError;
 use crate::output::print_json;
 
 /// Duplicate a task.
-pub async fn duplicate(
-    client: &Client,
-    handle: &str,
-    output_json: bool,
-) -> Result<(), AppError> {
+pub async fn duplicate(client: &Client, handle: &str, output_json: bool) -> Result<(), AppError> {
     let detail: TaskDetails = client
-        .post_json(
-            &["tasks", handle, "duplicate"],
-            &[],
-            &serde_json::json!({}),
-        )
+        .post_json(&["tasks", handle, "duplicate"], &[], &serde_json::json!({}))
         .await?;
 
     if output_json {

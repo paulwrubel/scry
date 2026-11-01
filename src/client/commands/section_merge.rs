@@ -33,7 +33,9 @@ pub async fn section_merge(
         .post_json(
             &["sections", source_id.as_str(), "merge"],
             &[],
-            &MergeSectionRequest { target_id: target.id },
+            &MergeSectionRequest {
+                target_id: target.id,
+            },
         )
         .await?;
 

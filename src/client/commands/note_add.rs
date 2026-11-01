@@ -20,11 +20,7 @@ pub async fn note_add(
     }
 
     let note: Note = client
-        .post_json(
-            &["tasks", handle, "notes"],
-            &[],
-            &NoteRequest { contents },
-        )
+        .post_json(&["tasks", handle, "notes"], &[], &NoteRequest { contents })
         .await?;
 
     if output_json {

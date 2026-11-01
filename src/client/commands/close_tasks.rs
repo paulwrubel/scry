@@ -27,9 +27,7 @@ pub async fn close_tasks(
         reason,
     };
 
-    let results: Vec<BatchTaskResult> = client
-        .post_json(&["tasks", "close"], &[], &body)
-        .await?;
+    let results: Vec<BatchTaskResult> = client.post_json(&["tasks", "close"], &[], &body).await?;
 
     render_batch_results(&results, "Closed", "close", output_json)
 }

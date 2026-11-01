@@ -33,9 +33,7 @@ pub async fn open_tasks(
                 },
                 Err(error) => BatchTaskResult::failure(raw.clone(), AppError::from(error)),
             },
-            Err(error) => {
-                BatchTaskResult::failure(raw.clone(), AppError::Usage(error.to_string()))
-            }
+            Err(error) => BatchTaskResult::failure(raw.clone(), AppError::Usage(error.to_string())),
         };
 
         results.push(result);

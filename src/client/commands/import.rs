@@ -10,11 +10,7 @@ use crate::error::AppError;
 use crate::output::print_json;
 
 /// Read a backup from stdin and import it.
-pub async fn import(
-    client: &Client,
-    mode: ImportMode,
-    output_json: bool,
-) -> Result<(), AppError> {
+pub async fn import(client: &Client, mode: ImportMode, output_json: bool) -> Result<(), AppError> {
     let mut input = String::new();
     std::io::stdin()
         .read_to_string(&mut input)

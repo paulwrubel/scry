@@ -23,9 +23,7 @@ pub async fn open_tasks(
         handles: handles.iter().map(Handle::as_str).collect(),
     };
 
-    let results: Vec<BatchTaskResult> = client
-        .post_json(&["tasks", "open"], &[], &body)
-        .await?;
+    let results: Vec<BatchTaskResult> = client.post_json(&["tasks", "open"], &[], &body).await?;
 
     render_batch_results(&results, "Opened", "open", output_json)
 }
