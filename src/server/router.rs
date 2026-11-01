@@ -4,7 +4,7 @@ use crate::error::AppError;
 use crate::http_auth::require_token;
 use crate::service::ProjectService;
 use axum::Router;
-use axum::http::{Method, header};
+use axum::http::{HeaderName, Method, header};
 use axum::routing::{get, post};
 use axum::serve;
 use std::net::SocketAddr;
@@ -23,7 +23,11 @@ fn get_cors_layer() -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            HeaderName::from_static("time-zone"),
+        ])
         .allow_origin(Any)
 }
 

@@ -10,7 +10,7 @@ use crate::config::{ScryConfig, ScrySecrets};
 use crate::error::AppError;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
-const TIMEZONE_HEADER: &str = "X-Scry-Timezone";
+const TIMEZONE_HEADER: &str = "Time-Zone";
 
 /// A thin client for `scry serve`.
 pub struct Client {
