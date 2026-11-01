@@ -417,11 +417,13 @@ flowchart LR
 
 ## 6. Backup and import
 
-`export` and `plan_import` delegate into `scry_core::backup`, which reads through `&dyn Store`; `import` applies a plan directly. Only `import` has a handler — export and plan creation are CLI-only, since the plan is produced by the client before it is posted.
+`export` and `plan_import` delegate into `scry_core::backup`, which reads through `&dyn Store`; `import` applies a plan directly. The export handlers (`GET /export` and `GET /projects/{id}/export`) call `export`, and `POST /import` parses the document, plans the import, and applies it server-side.
 
 ```mermaid
 flowchart LR
   subgraph http["HTTP handlers"]
+    h_export["export  GET /export"]
+    h_export_project["export_project  GET /projects/{id}/export"]
     h_import["import  POST /import"]
   end
 
@@ -437,28 +439,24 @@ flowchart LR
   end
 
   subgraph store["Store"]
-    st_get_project_by_id[get_project_by_id]
     st_get_all_projects[get_all_projects]
-    st_get_all_sections_by_project_id[get_all_sections_by_project_id]
-    st_get_all_tasks_by_project_id[get_all_tasks_by_project_id]
-    st_get_all_notes_by_project_id[get_all_notes_by_project_id]
+    st_get_project_snapshot[get_project_snapshot]
     st_import[import]
   end
 
+  h_export ==> export
+  h_export_project ==> export
   h_import ==> import
 
   export -.-> bk_export
   plan_import -.-> bk_plan_import
   import --> st_import
-  bk_export --> st_get_project_by_id
   bk_export --> st_get_all_projects
-  bk_export --> st_get_all_sections_by_project_id
-  bk_export --> st_get_all_tasks_by_project_id
-  bk_export --> st_get_all_notes_by_project_id
+  bk_export --> st_get_project_snapshot
   bk_plan_import --> st_get_all_projects
 
   classDef storeNode fill:#eef3fb,stroke:#5b7fae,stroke-width:1px
-  class st_get_project_by_id,st_get_all_projects,st_get_all_sections_by_project_id,st_get_all_tasks_by_project_id,st_get_all_notes_by_project_id,st_import storeNode
+  class st_get_all_projects,st_get_project_snapshot,st_import storeNode
 ```
 
 ## Coverage
@@ -469,4 +467,5 @@ flowchart LR
 ## Notes
 
 - `export` and `plan_import` live in `scry_core::backup` and take `&dyn Store`, so the service reaches the store through them rather than calling it directly.
+- `ProjectSnapshot` lives in `scry_core::models` and is the one project document used by the snapshot endpoint, export, and import.
 - Reads may use `Store` directly in principle, but in this codebase every store call goes through `ProjectService`.
