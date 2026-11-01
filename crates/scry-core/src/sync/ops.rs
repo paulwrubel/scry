@@ -1,4 +1,3 @@
-use super::hlc::Hlc;
 use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
 use crate::models::{Color, Lifecycle, Priority, Tags, TaskSortingMode};
 use crate::position::Position;
@@ -62,17 +61,18 @@ impl std::error::Error for OpError {}
 
 /// One sync operation as it travels over the wire.
 ///
-/// `hlc` is present on client-produced ops and absent on ops the server stamps
-/// for REST/import. `op_version` is validated by [`Op::validate`] rather than
-/// during deserialization so one unsupported op can still be acknowledged on
-/// its own instead of failing the whole batch.
+/// `timestamp` is an optional client-supplied wall-clock time that the server
+/// records but never compares; REST and import ops leave it unset. `op_version`
+/// is validated by [`Op::validate`] rather than during deserialization so one
+/// unsupported op can still be acknowledged on its own instead of failing the
+/// whole batch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Op {
     pub op_id: Uuid,
     pub op_version: u16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub hlc: Option<Hlc>,
+    pub timestamp: Option<DateTime<Utc>>,
     #[serde(flatten)]
     pub kind: OpKind,
 }

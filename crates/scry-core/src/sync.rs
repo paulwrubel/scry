@@ -1,5 +1,4 @@
 //! The sync wire contract shared by every peer: the op vocabulary and the
-//! hybrid logical clock value type that timestamps them.
+//! optional client timestamp attached to ops.
 
-pub mod hlc;
 pub mod ops;
