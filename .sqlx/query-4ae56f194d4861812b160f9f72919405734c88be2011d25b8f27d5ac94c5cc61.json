@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    closed_at,\n                    close_reason,\n                    tags,\n                    created_at\n                FROM tasks\n                WHERE section_id = $1\n                ORDER BY position ASC, id ASC\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    tags,\n                    created_at\n                FROM tasks\n                WHERE section_id = $1\n                ORDER BY position ASC, id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -82,28 +82,17 @@
       },
       {
         "ordinal": 7,
-        "name": "closed_at",
-        "type_info": "Timestamptz",
+        "name": "state",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "tasks",
-            "name": "closed_at"
+            "name": "state"
           }
         }
       },
       {
         "ordinal": 8,
-        "name": "close_reason",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "tasks",
-            "name": "close_reason"
-          }
-        }
-      },
-      {
-        "ordinal": 9,
         "name": "tags",
         "type_info": "Text",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -138,11 +127,10 @@
       false,
       true,
       false,
-      true,
-      true,
+      false,
       false,
       false
     ]
   },
-  "hash": "dd9f4f119100372870cef93dcd4b5270177455b165744e5ccf35e47dac02d636"
+  "hash": "4ae56f194d4861812b160f9f72919405734c88be2011d25b8f27d5ac94c5cc61"
 }

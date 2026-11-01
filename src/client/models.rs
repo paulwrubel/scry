@@ -23,7 +23,7 @@ pub struct TaskDetails {
     pub handle: Option<String>,
 }
 
-/// One outcome in a batch lifecycle response.
+/// One outcome in a batch close response.
 #[derive(Deserialize, Serialize)]
 pub struct BatchTaskResult {
     pub handle: String,
@@ -31,7 +31,7 @@ pub struct BatchTaskResult {
     pub error: Option<BatchTaskError>,
 }
 
-/// A failed item in a batch lifecycle response.
+/// A failed item in a batch close response.
 #[derive(Deserialize, Serialize)]
 pub struct BatchTaskError {
     pub kind: String,

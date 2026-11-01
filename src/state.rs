@@ -1,8 +1,8 @@
 use chrono::DateTime;
 use chrono::Utc;
 use scry_core::models::{
-    Lifecycle, Note, Priority, Project, ProjectId, ProjectSnapshot, Section, SectionId, Tags, Task,
-    TaskId, TaskSortingMode,
+    Note, Priority, Project, ProjectId, ProjectSnapshot, Section, SectionId, Tags, Task, TaskId,
+    TaskSortingMode, TaskState,
 };
 use scry_core::position::Position;
 use serde::Serialize;
@@ -32,7 +32,7 @@ pub struct TaskWithNotes {
     pub(crate) description: Option<String>,
     pub(crate) priority: Priority,
     pub(crate) section_id: Option<SectionId>,
-    pub(crate) lifecycle: Lifecycle,
+    pub(crate) state: TaskState,
     pub(crate) position: Position,
     pub(crate) tags: Tags,
     pub(crate) created_at: DateTime<Utc>,
@@ -48,7 +48,7 @@ impl TaskWithNotes {
             description: task.description.clone(),
             priority: task.priority,
             section_id: task.section_id,
-            lifecycle: task.lifecycle.clone(),
+            state: task.state,
             position: task.position.clone(),
             tags: task.tags.clone(),
             created_at: task.created_at,
@@ -73,7 +73,7 @@ impl From<&TaskWithNotes> for Task {
             priority: value.priority,
             section_id: value.section_id,
             position: value.position.clone(),
-            lifecycle: value.lifecycle.clone(),
+            state: value.state,
             tags: value.tags.clone(),
             created_at: value.created_at,
         }
@@ -102,7 +102,7 @@ impl ProjectState {
                 let mut tasks_with_notes: Vec<_> = tasks
                     .iter()
                     .filter(|task| {
-                        !task.lifecycle.is_closed() && task.section_id == Some(section.id)
+                        task.state == TaskState::Open && task.section_id == Some(section.id)
                     })
                     .map(task_with_notes)
                     .collect();
@@ -116,7 +116,7 @@ impl ProjectState {
 
         let mut unsectioned: Vec<_> = tasks
             .iter()
-            .filter(|task| !task.lifecycle.is_closed() && task.section_id.is_none())
+            .filter(|task| task.state == TaskState::Open && task.section_id.is_none())
             .map(task_with_notes)
             .collect();
         sort_open_tasks(&mut unsectioned, project.task_sorting_mode);
@@ -129,13 +129,12 @@ impl ProjectState {
 
         let mut closed_tasks: Vec<_> = tasks
             .iter()
-            .filter(|task| task.lifecycle.is_closed())
+            .filter(|task| task.state == TaskState::Closed)
             .map(task_with_notes)
             .collect();
         closed_tasks.sort_by(|a, b| {
-            b.lifecycle
-                .closed_at()
-                .cmp(&a.lifecycle.closed_at())
+            b.created_at
+                .cmp(&a.created_at)
                 .then_with(|| b.id.cmp(&a.id))
         });
 
@@ -219,7 +218,6 @@ fn sort_open_tasks(tasks: &mut [TaskWithNotes], mode: TaskSortingMode) {
 mod tests {
     use super::*;
     use scry_core::ids::{NoteId, ProjectId, SectionId, TaskId};
-    use scry_core::models::CloseReason;
     use uuid::Uuid;
 
     fn project_id(value: u128) -> ProjectId {
@@ -272,7 +270,7 @@ mod tests {
         section_id: Option<SectionId>,
         position: &str,
         priority: Priority,
-        lifecycle: Lifecycle,
+        state: TaskState,
     ) -> Task {
         Task {
             id,
@@ -282,7 +280,7 @@ mod tests {
             priority,
             section_id,
             position: Position::parse(position).expect("valid test position"),
-            lifecycle,
+            state,
             tags: Tags::default(),
             created_at: ts("2026-01-01T00:00:00Z"),
         }
@@ -295,26 +293,17 @@ mod tests {
         position: &str,
         priority: Priority,
     ) -> Task {
-        task(id, title, section_id, position, priority, Lifecycle::Open)
+        task(id, title, section_id, position, priority, TaskState::Open)
     }
 
-    fn closed_task(
-        id: TaskId,
-        title: &str,
-        section_id: Option<SectionId>,
-        closed_at: &str,
-        reason: CloseReason,
-    ) -> Task {
+    fn closed_task(id: TaskId, title: &str, section_id: Option<SectionId>) -> Task {
         task(
             id,
             title,
             section_id,
             "a0",
             Priority::Medium,
-            Lifecycle::Closed {
-                closed_at: ts(closed_at),
-                reason,
-            },
+            TaskState::Closed,
         )
     }
 
@@ -408,13 +397,7 @@ mod tests {
                     "a0",
                     Priority::Medium,
                 ),
-                closed_task(
-                    task_id(2),
-                    "closed unsectioned",
-                    None,
-                    "2026-01-02T00:00:00Z",
-                    CloseReason::Completed,
-                ),
+                closed_task(task_id(2), "closed unsectioned", None),
             ],
             notes: vec![],
         };
@@ -429,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn closed_tasks_are_kept_out_of_sections_and_sorted_by_closed_at_then_id() {
+    fn closed_tasks_are_kept_out_of_sections_and_sorted_by_created_at_then_id() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
             sections: vec![section(section_id(10), "a0")],
@@ -441,27 +424,9 @@ mod tests {
                     "a0",
                     Priority::Medium,
                 ),
-                closed_task(
-                    task_id(3),
-                    "closed early",
-                    Some(section_id(10)),
-                    "2026-01-01T00:00:00Z",
-                    CloseReason::Completed,
-                ),
-                closed_task(
-                    task_id(4),
-                    "closed late a",
-                    Some(section_id(10)),
-                    "2026-01-02T00:00:00Z",
-                    CloseReason::Cancelled,
-                ),
-                closed_task(
-                    task_id(5),
-                    "closed late b",
-                    None,
-                    "2026-01-02T00:00:00Z",
-                    CloseReason::Completed,
-                ),
+                closed_task(task_id(3), "closed early", Some(section_id(10))),
+                closed_task(task_id(4), "closed late a", Some(section_id(10))),
+                closed_task(task_id(5), "closed late b", None),
             ],
             notes: vec![],
         };

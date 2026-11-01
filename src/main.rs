@@ -21,7 +21,7 @@ use config::{ScryConfig, ScrySecrets};
 use error::AppError;
 use scry_core::backup::ImportMode;
 use scry_core::ids::Handle;
-use scry_core::models::{CloseReason, Color, Priority, TaskSortingMode};
+use scry_core::models::{Color, Priority, TaskSortingMode};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -124,14 +124,11 @@ enum Command {
         /// The task ID or a unique handle prefix
         id: Handle,
     },
-    /// Close tasks with a reason
+    /// Close tasks
     Close {
         /// The task IDs or unique handle prefixes
         #[arg(required = true, num_args = 1..)]
         ids: Vec<Handle>,
-        /// The reason for closing
-        #[arg(long)]
-        reason: CloseReason,
     },
     /// Open closed tasks
     Open {
@@ -511,9 +508,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::delete(&client, id.as_str(), output_json).await;
         }
-        Some(Command::Close { ids, reason }) => {
+        Some(Command::Close { ids }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-            return client::close_tasks(&client, ids, *reason, output_json).await;
+            return client::close_tasks(&client, ids, output_json).await;
         }
         Some(Command::Open { ids }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;

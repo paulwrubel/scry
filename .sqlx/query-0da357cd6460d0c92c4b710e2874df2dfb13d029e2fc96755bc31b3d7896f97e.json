@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE tasks\n                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7\n                WHERE id = $8\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0da357cd6460d0c92c4b710e2874df2dfb13d029e2fc96755bc31b3d7896f97e"
+}
