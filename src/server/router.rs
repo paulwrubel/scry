@@ -45,7 +45,12 @@ fn build_projects_router() -> Router<ScryState> {
             "/",
             get(handlers::get_projects).post(handlers::create_project),
         )
-        .route("/by-name/{name}", get(handlers::get_project_by_name))
+        .route(
+            "/by-name/{name}",
+            get(handlers::get_project_by_name)
+                .put(handlers::update_project_by_name)
+                .delete(handlers::delete_project_by_name),
+        )
         .route(
             "/{id}",
             get(handlers::get_project)

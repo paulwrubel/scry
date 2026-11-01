@@ -1,4 +1,4 @@
-//! Handler for updating a project.
+//! Handler for updating a project by id.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -33,7 +33,7 @@ impl From<UpdateProjectRequest> for UpdateProject {
     }
 }
 
-/// Replace a project's mutable fields, preserving its id and creation time.
+/// Replace a project's mutable fields by id.
 pub async fn update_project(
     State(state): State<ScryState>,
     Path(id): Path<ProjectId>,
@@ -42,7 +42,7 @@ pub async fn update_project(
     let existing = match state.service.get_project(id).await {
         Ok(Some(project)) => project,
         Ok(None) => {
-            return AppError::Storage(StorageError::NotFound(format!("project {id} not found")))
+            return AppError::Storage(StorageError::NotFound(format!("project '{id}' not found")))
                 .into();
         }
         Err(error) => return AppError::from(error).into(),

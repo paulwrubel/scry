@@ -28,6 +28,9 @@ pub use delete_note::delete_note;
 mod delete_project_by_id;
 pub use delete_project_by_id::delete_project_by_id;
 
+mod delete_project_by_name;
+pub use delete_project_by_name::delete_project_by_name;
+
 mod delete_section;
 pub use delete_section::delete_section;
 
@@ -90,6 +93,9 @@ pub use update_note::update_note;
 
 mod update_project;
 pub use update_project::update_project;
+
+mod update_project_by_name;
+pub use update_project_by_name::update_project_by_name;
 
 mod update_section;
 pub use update_section::update_section;
