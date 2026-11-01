@@ -4,7 +4,7 @@ use crate::error::AppError;
 use crate::http_auth::require_token;
 use crate::service::ProjectService;
 use axum::Router;
-use axum::http::{Method, header};
+use axum::http::{HeaderName, Method, header};
 use axum::routing::{get, post};
 use axum::serve;
 use std::net::SocketAddr;
@@ -23,7 +23,11 @@ fn get_cors_layer() -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            HeaderName::from_static("time-zone"),
+        ])
         .allow_origin(Any)
 }
 
@@ -31,6 +35,7 @@ fn get_cors_layer() -> CorsLayer {
 fn build_api_router() -> Router<ScryState> {
     Router::new()
         .route("/", get(handlers::index))
+        .route("/export", get(handlers::export))
         .route("/import", post(handlers::import))
         .nest("/projects", build_projects_router())
         .nest("/sections", build_sections_router())
@@ -45,13 +50,19 @@ fn build_projects_router() -> Router<ScryState> {
             "/",
             get(handlers::get_projects).post(handlers::create_project),
         )
-        .route("/by-name/{name}", get(handlers::get_project_by_name))
+        .route(
+            "/by-name/{name}",
+            get(handlers::get_project_by_name)
+                .put(handlers::update_project_by_name)
+                .delete(handlers::delete_project_by_name),
+        )
         .route(
             "/{id}",
             get(handlers::get_project)
                 .put(handlers::update_project)
                 .delete(handlers::delete_project_by_id),
         )
+        .route("/{id}/export", get(handlers::export_project))
         .route(
             "/{project_id}/sections",
             get(handlers::get_sections).post(handlers::create_section),
@@ -87,6 +98,8 @@ fn build_sections_router() -> Router<ScryState> {
 /// Routes nested under `/tasks`.
 fn build_tasks_router() -> Router<ScryState> {
     Router::new()
+        .route("/close", post(handlers::close_tasks))
+        .route("/open", post(handlers::open_tasks))
         .route(
             "/{id}",
             get(handlers::get_task)
@@ -94,6 +107,7 @@ fn build_tasks_router() -> Router<ScryState> {
                 .delete(handlers::delete_task),
         )
         .route("/{id}/move", post(handlers::move_task))
+        .route("/{id}/duplicate", post(handlers::duplicate_task))
         .route("/{id}/close", post(handlers::close_task))
         .route("/{id}/open", post(handlers::open_task))
         .route(

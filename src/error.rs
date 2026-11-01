@@ -9,6 +9,12 @@ pub enum AppError {
     Service(ServiceError),
     Storage(StorageError),
 
+    Remote {
+        kind: &'static str,
+        message: String,
+        details: Option<serde_json::Value>,
+    },
+
     Internal(String),
 }
 
@@ -19,6 +25,8 @@ impl fmt::Display for AppError {
             AppError::Config(msg) => write!(f, "config error: {msg}"),
             AppError::Service(e) => write!(f, "{e}"),
             AppError::Storage(e) => write!(f, "storage error: {e}"),
+            AppError::Remote { message, .. } => f.write_str(message),
+
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
@@ -35,6 +43,22 @@ impl AppError {
             AppError::Internal(_) => "internal",
             AppError::Storage(error) => error.kind(),
             AppError::Service(error) => error.kind(),
+            AppError::Remote { kind, .. } => kind,
+        }
+    }
+
+    /// Structured details for errors that carry more than a message.
+    ///
+    /// Kept separate from `Display` so machine-readable output can expose the
+    /// candidate list without callers parsing prose.
+    pub fn details(&self) -> Option<serde_json::Value> {
+        match self {
+            AppError::Service(ServiceError::AmbiguousTaskHandle { candidates, .. })
+            | AppError::Service(ServiceError::AmbiguousNoteHandle { candidates, .. }) => {
+                Some(serde_json::json!({ "candidates": candidates }))
+            }
+            AppError::Remote { details, .. } => details.clone(),
+            _ => None,
         }
     }
 }

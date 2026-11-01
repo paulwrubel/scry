@@ -1,9 +1,10 @@
-//! Handler for updating a task.
+//! Handler for updating a task by handle.
 
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use scry_core::models::{Priority, SectionId, Tags, TaskId};
+use scry_core::ids::Handle;
+use scry_core::models::{Priority, SectionId, Tags};
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -23,12 +24,17 @@ pub struct UpdateTaskRequest {
     pub clear_section: bool,
 }
 
-/// Update a task from the request body, keyed by the path id.
+/// Update a task from the request body.
 pub async fn update_task(
     State(state): State<ScryState>,
-    Path(id): Path<TaskId>,
+    Path(handle): Path<Handle>,
     Json(body): Json<UpdateTaskRequest>,
 ) -> Response {
+    let task = match state.service.get_task_by_handle(&handle).await {
+        Ok(task) => task,
+        Err(error) => return AppError::from(error).into(),
+    };
+
     let section_choices = [
         body.section_id.is_some(),
         body.new_section.is_some(),
@@ -59,7 +65,7 @@ pub async fn update_task(
         section,
     };
 
-    match state.service.update_task_by_id(id, input).await {
+    match state.service.update_task_by_id(task.id, input).await {
         Ok(task) => Json(task).into_response(),
         Err(error) => AppError::from(error).into(),
     }

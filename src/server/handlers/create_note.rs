@@ -3,7 +3,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use scry_core::models::TaskId;
+use scry_core::ids::Handle;
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -18,10 +18,15 @@ pub struct CreateNoteRequest {
 /// Create a note on a task and return it.
 pub async fn create_note(
     State(state): State<ScryState>,
-    Path(task_id): Path<TaskId>,
+    Path(handle): Path<Handle>,
     Json(body): Json<CreateNoteRequest>,
 ) -> Response {
-    match state.service.add_note(task_id, body.contents).await {
+    let task = match state.service.get_task_by_handle(&handle).await {
+        Ok(task) => task,
+        Err(error) => return AppError::from(error).into(),
+    };
+
+    match state.service.add_note(task.id, body.contents).await {
         Ok(note) => Json(note).into_response(),
         Err(error) => AppError::from(error).into(),
     }

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
+use serde::Deserialize;
 use uuid::Uuid;
 
 pub const MIN_HANDLE_LENGTH: usize = 4;
@@ -78,6 +79,16 @@ impl FromStr for Handle {
         }
 
         Ok(Self(hex))
+    }
+}
+
+impl<'de> Deserialize<'de> for Handle {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        value.parse().map_err(serde::de::Error::custom)
     }
 }
 

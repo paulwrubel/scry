@@ -4,6 +4,8 @@ A task manager for the terminal.
 
 ## Overview
 
+scry has two sides. `scry serve` owns the PostgreSQL database and exposes a REST API; the `scry` CLI is an HTTP client for that API and keeps no local copy of the data. Point the client at a server with `server_url`, `SCRY_SERVER_URL`, or `--server`.
+
 scry organizes work into **projects**. Every task is either **open** or **closed**; a closed task records why it closed (`completed` or `cancelled`) and when. Tasks may also belong to an optional, ordered **section** within their project, and tasks with no section appear under **No section**. A built-in "default" project with no sections provides a simple out-of-box todo list experience — no setup required.
 
 ## Installation
@@ -62,6 +64,7 @@ See [Running a server](#running-a-server) for the host-side REST API setup.
 ### Notes
 
 - A reachable PostgreSQL server configured via `scry.toml` is required when you run the published image, or an image you built yourself, against a database of your choosing.
+- Point the CLI at the container with `server_url = "http://127.0.0.1:8000"` or `--server http://127.0.0.1:8000`.
 - `just run` builds the image and starts it together with its own Postgres container, so no host database is needed; see [Database](#database) for that workflow and the other local helpers.
 - The REST API has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
 
@@ -73,7 +76,7 @@ A project is a container for related tasks. Each project has its own optional, o
 
 ### Lifecycle
 
-Every task is open or closed. `scry close <handle> --reason completed` closes a task as `completed`, `scry close <handle> --reason cancelled` closes it as `cancelled`, and `scry open <handle>` returns it to open. Closing records `closed_at`; opening clears both the timestamp and the reason. Close and open do not change a task's section or position, so reopening restores it where it was.
+Every task is open or closed. `scry close <handle...> --reason completed` closes one or more tasks as `completed`, `scry close <handle...> --reason cancelled` closes them as `cancelled`, and `scry open <handle...>` returns them to open. Closing records `closed_at`; opening clears both the timestamp and the reason. Close and open do not change a task's section or position, so reopening restores it where it was.
 
 ### Sections
 
@@ -87,9 +90,11 @@ Sections carry no completion semantics: a section named "Done" does not close an
 
 ### Active Project
 
-scry uses a kubectl-style context model. `scry project use <name>` sets the active project, which persists across sessions. The active project is stored locally per machine, in `$XDG_STATE_HOME/scry/state.toml` (falling back to `~/.local/state/scry/state.toml`), overridable with the `state_file` config option, rather than in the backend, so each device that talks to a shared server keeps its own. All task commands operate on the active project unless overridden with `--project` / `-p`.
+scry uses a kubectl-style context model. `scry project use <name>` verifies the project with the server, then sets it as the active project, which persists across sessions. The active project is stored locally per machine, in `$XDG_STATE_HOME/scry/state.toml` (falling back to `~/.local/state/scry/state.toml`), overridable with the `state_file` config option, rather than in the backend, so each device that talks to a shared server keeps its own. All task commands operate on the active project unless overridden with `--project` / `-p`.
 
 ## Quick Start
+
+Point the client at a running `scry serve` (see [Running a server](#running-a-server)) with `server_url` in `scry.toml` or `--server <url>`. The examples below assume that is configured.
 
 ```sh
 # add a task
@@ -117,6 +122,8 @@ scry -p myapp list --section review
 
 `-p, --project <name>` — target a specific project, overriding the active project.
 
+`--server <url>` — talk to this server for the command, overriding `SCRY_SERVER_URL` and `server_url`.
+
 `--color <auto|always|never>` — when to colorize output. `auto` (the default) colorizes only when stdout is a terminal and `NO_COLOR` is unset.
 
 `--json` — emit machine-readable JSON instead of human-formatted text. Applies only to one-shot subcommands; passing `--json` with no subcommand or with `serve`, `docs`, or `skill` is an error. See [JSON Output](#json-output).
@@ -135,14 +142,14 @@ Running `scry` with no subcommand prints the top-level help and exits.
 | `scry list [--section <name>] [--search <text>] [--include-closed]`                                                                                                     | List open tasks grouped by section; `--include-closed` adds a trailing Closed group |
 | `scry move <handle> [<section>] [--no-section]`                                                                                                                         | Move a task to a section, or to No section (appends to the end of the group)        |
 | `scry update <handle> [--title <text>] [--description <text>] [--priority <level>] [--tags <comma,separated>] [--section <name>] [--new-section <name>] [--no-section]` | Update task properties; an empty `--description` or `--tags` clears it              |
-| `scry close <handle> --reason <completed \| cancelled>`                                                                                                                 | Close a task with a reason                                                          |
-| `scry open <handle>`                                                                                                                                                    | Reopen a closed task                                                                |
+| `scry close <handle...> --reason <completed \| cancelled>`                                                                                                              | Close one or more tasks with a reason                                               |
+| `scry open <handle...>`                                                                                                                                                 | Reopen one or more closed tasks                                                     |
 | `scry duplicate <handle>`                                                                                                                                               | Duplicate a task into the same section, immediately after the source                |
 | `scry show <handle>`                                                                                                                                                    | Show full task details, including lifecycle, section, priority, tags, and notes     |
 | `scry delete <handle>`                                                                                                                                                  | Delete a task permanently                                                           |
 | `scry note add <task-handle> <contents>`                                                                                                                                | Add a note to a task                                                                |
 
-Task and note arguments accept a full UUID or a unique handle of at least 4 lowercase hex characters. Dashes are optional and must sit at canonical UUID positions (after 8, 12, 16, or 20 hex characters). Human output prints the shortest unique handle, while `--json` always emits full UUIDs; scripts should prefer those, because a handle can lengthen as more entities are created.
+Task and note arguments accept a full UUID or a unique handle of at least 4 lowercase hex characters. Dashes are optional and must sit at canonical UUID positions (after 8, 12, 16, or 20 hex characters). Human output prints the shortest unique handle, while `--json` always emits full UUIDs in `id` fields; scripts should prefer those, because a handle can lengthen as more entities are created.
 
 `<level>` is one of `minimal`, `low`, `medium`, `high`, `critical` (aliases `p5`–`p1`).
 
@@ -160,7 +167,7 @@ Tasks append when they are created or moved into a section. There is currently n
 | `scry project use <name>`                                                                                     | Set the active project                                            |
 | `scry project create [-t <template>] [--description <text>] <name>`                                           | Create a project (does not switch to it — run `scry project use`) |
 | `scry project update [--name <new>] [--description <text>] [--sort <mode>] [--show-priority/--hide-priority]` | Update project properties; targets `-p` or the active project     |
-| `scry project delete <name> [-f]`                                                                             | Resolve name to id, then delete (prompts unless `--force`)        |
+| `scry project delete <name> [-f]`                                                                             | Delete a project by name (prompts unless `--force`)               |
 
 `scry project update` applies multiple flags in one call; an empty `--description` clears the description.
 
@@ -253,8 +260,7 @@ covers opencode too. Do not install twice: skill names must be unique across dis
 
 ### REST API
 
-Serve scry's operations as a versioned JSON REST API. This is a server surface: the CLI
-still talks to its configured database directly (see [Database](#database)).
+Serve scry's operations as a versioned JSON REST API. `scry serve` is the only process that talks to PostgreSQL; the `scry` CLI and other clients talk to this API over HTTP.
 
 | Command                    | Description                                  |
 | -------------------------- | -------------------------------------------- |
@@ -287,8 +293,10 @@ Confirm the server is up:
 
 ```sh
 curl http://127.0.0.1:8000/api/v1
-# {"name":"scry","version":"0.21.2"}
+# {"name":"scry","version":"0.24.0"}
 ```
+
+Point the client at it with `server_url = "http://127.0.0.1:8000"` in `scry.toml`, `SCRY_SERVER_URL`, or `--server`.
 
 The container image runs it the same way:
 
@@ -305,31 +313,37 @@ server behind a TLS-terminating proxy or a private network if it leaves the host
 
 Endpoints, all under `/api/v1`:
 
-| Method                   | Path                                     | Purpose                            |
-| ------------------------ | ---------------------------------------- | ---------------------------------- |
-| `GET`                    | `/`                                      | Server info                        |
-| `GET` / `POST`           | `/projects`                              | List / create projects             |
-| `GET`                    | `/projects/by-name/{name}`               | Fetch a project by name            |
-| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project  |
-| `GET` / `POST`           | `/projects/{id}/sections`                | List / create sections             |
-| `GET`                    | `/projects/{id}/sections/by-name/{name}` | Fetch a section by name            |
-| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks    |
-| `GET`                    | `/projects/{id}/notes`                   | List a project's notes             |
-| `GET`                    | `/projects/{id}/snapshot`                | Fetch a project snapshot           |
-| `GET` / `PUT` / `DELETE` | `/sections/{id}`                         | Fetch / update / delete a section  |
-| `POST`                   | `/sections/{id}/merge`                   | Merge a section into another       |
-| `GET`                    | `/sections/{id}/tasks`                   | List a section's tasks             |
-| `GET` / `PUT` / `DELETE` | `/tasks/{id}`                            | Fetch / update / delete a task     |
-| `POST`                   | `/tasks/{id}/move`                       | Move a task to a section (appends) |
-| `POST`                   | `/tasks/{id}/close`                      | Close a task with a reason         |
-| `POST`                   | `/tasks/{id}/open`                       | Reopen a closed task               |
-| `GET` / `POST`           | `/tasks/{id}/notes`                      | List / create a task's notes       |
-| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note     |
-| `POST`                   | `/import`                                | Apply an import plan               |
+| Method                   | Path                                     | Purpose                                            |
+| ------------------------ | ---------------------------------------- | -------------------------------------------------- |
+| `GET`                    | `/`                                      | Server info                                        |
+| `GET` / `POST`           | `/projects`                              | List / create projects (create accepts `template`) |
+| `GET`                    | `/projects/by-name/{name}`               | Fetch a project by name                            |
+| `PUT` / `DELETE`         | `/projects/by-name/{name}`               | Update / delete a project by name                  |
+| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project by id            |
+| `GET`                    | `/projects/{id}/export`                  | Export one project                                 |
+| `GET`                    | `/export`                                | Export all projects                                |
+| `GET` / `POST`           | `/projects/{id}/sections`                | List / create sections                             |
+| `GET`                    | `/projects/{id}/sections/by-name/{name}` | Fetch a section by name                            |
+| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks                    |
+| `GET`                    | `/projects/{id}/notes`                   | List a project's notes                             |
+| `GET`                    | `/projects/{id}/snapshot`                | Fetch a raw project snapshot                       |
+| `GET` / `PUT` / `DELETE` | `/sections/{id}`                         | Fetch / update / delete a section                  |
+| `POST`                   | `/sections/{id}/merge`                   | Merge a section into another                       |
+| `GET`                    | `/sections/{id}/tasks`                   | List a section's tasks                             |
+| `GET` / `PUT` / `DELETE` | `/tasks/{handle}`                        | Fetch / update / delete a task by UUID or handle   |
+| `POST`                   | `/tasks/{handle}/move`                   | Move a task to a section (appends)                 |
+| `POST`                   | `/tasks/{handle}/duplicate`              | Duplicate a task                                   |
+| `POST`                   | `/tasks/{handle}/close`                  | Close one task                                     |
+| `POST`                   | `/tasks/{handle}/open`                   | Reopen one task                                    |
+| `POST`                   | `/tasks/close`                           | Close several tasks in one request                 |
+| `POST`                   | `/tasks/open`                            | Reopen several tasks in one request                |
+| `GET` / `POST`           | `/tasks/{handle}/notes`                  | List / create a task's notes                       |
+| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note                     |
+| `POST`                   | `/import`                                | Import a backup (`{ backup, mode }`)               |
 
-Path and body ids are full UUIDs only; handles are a CLI convenience and are rejected by the API.
+Task paths accept a full UUID or a short handle. `/projects/{id}?detailed=true` adds `sections`, `tasks`, and per-task `notes`; `include_handles=true` adds a `handle` to each task. `/tasks/{handle}?detailed=true` adds `notes`, and `include_handle=true` adds the display `handle`.
 
-`POST /tasks/{id}/move` takes a body of `{ "section_id": <id-or-null> }`; a null `section_id` moves the task to No section, and either way the task appends to the destination group. `POST /tasks/{id}/close` requires a body of `{ "reason": "completed" }` or `{ "reason": "cancelled" }`. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`.
+`POST /tasks/{handle}/move` takes `{ "section_id": <id-or-null> }`; null moves the task to No section, and either way the task appends to the destination group. `POST /tasks/close` takes `{ "handles": [...], "reason": "completed" | "cancelled" }`; `POST /tasks/open` takes `{ "handles": [...] }`. Both return one result per handle, with failures reported per item. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`. Deletions return the removed object. `POST /import` takes `{ "backup": <backup JSON>, "mode": "Fail" | "Replace" | "Skip" }` and plans the import on the server.
 
 ### JSON Output
 
@@ -341,7 +355,7 @@ scry --json show 4f3a
 scry -p myapp --json add "design API"
 ```
 
-Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Task and section objects carry `position`, an opaque lexicographic string key; treat it as read-only, because nothing exposes a way to set it directly. Task objects carry a nullable `section_id` and a `lifecycle` object, which is `{"state": "open"}` or `{"state": "closed", "closed_at": "...", "reason": "completed" | "cancelled"}`. Every `id` field is a full lowercase hyphenated UUID string, never a handle. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
+Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. `close` and `open` are the exception: they emit an array of per-handle results, each `{ "handle": "...", "task": { ... } }` or `{ "handle": "...", "error": { "kind": "...", "message": "..." } }`. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Task and section objects carry `position`, an opaque lexicographic string key; treat it as read-only, because nothing exposes a way to set it directly. Task objects carry a nullable `section_id` and a `lifecycle` object, which is `{"state": "open"}` or `{"state": "closed", "closed_at": "...", "reason": "completed" | "cancelled"}`. Every `id` field is a full lowercase hyphenated UUID string, never a handle. Detailed task responses — `show` and `add` — may also include a `handle` string, and `show` includes `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
 `--json` applies only to one-shot subcommands; passing it with no subcommand or with `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 
@@ -361,19 +375,22 @@ scry looks for `scry.toml` in the current directory first, then `$XDG_CONFIG_HOM
 
 Available options:
 
-- `database_url` — the PostgreSQL connection URL, required: `database_url = "postgres://user:pass@localhost/scry"` (see [Database](#database)).
+- `server_url` — the REST server the client talks to, for example `server_url = "http://127.0.0.1:8000"`. Client commands need this unless `--server` or `SCRY_SERVER_URL` is set.
+- `database_url` — the PostgreSQL connection URL used by `scry serve`, for example `database_url = "postgres://user:pass@localhost/scry"` (see [Database](#database)). Client commands do not use it.
 - `state_file` — override the location of the client-local state file that records the active project. A leading `~` expands to `$HOME`; a relative path resolves against the current directory. If unset, scry uses `$XDG_STATE_HOME/scry/state.toml`, falling back to `~/.local/state/scry/state.toml` (see [Active Project](#active-project)).
+
+The server URL is resolved from `--server`, then `SCRY_SERVER_URL`, then `server_url`.
 
 The active project is **not** stored here or in the database — it lives in the XDG state directory, per machine (see [Active Project](#active-project)).
 
 Credentials belong in a separate `scry.secret.toml`, discovered the same way (`./scry.secret.toml`, then `$XDG_CONFIG_HOME/scry/scry.secret.toml`), or loaded explicitly with `--secrets <path>`. It is never created automatically and is listed in `.gitignore`, so keep it out of version control. Its values take precedence over both `scry.toml` and the environment variables:
 
-- `database_url` — override `scry.toml`'s `database_url`.
-- `api_token` — the REST API bearer token, overriding `SCRY_API_TOKEN`.
+- `database_url` — override `scry.toml`'s `database_url` for `scry serve`.
+- `api_token` — the REST API bearer token used by both the client and the server, overriding `SCRY_API_TOKEN`.
 
 ## Database
 
-scry stores its data in PostgreSQL. `database_url` must be set in `scry.toml` or `scry.secret.toml`; if neither sets it, startup fails with a configuration error:
+`scry serve` stores data in PostgreSQL. `database_url` must be set in `scry.toml` or `scry.secret.toml`; if neither sets it, the server fails to start with a configuration error:
 
 ```toml
 database_url = "postgres://user:pass@localhost/scry"
@@ -383,7 +400,7 @@ The URL syntax is `postgres://user:pass@host/db` (or `postgresql://…`). TLS is
 
 Migrations run automatically on startup, so no manual setup is needed.
 
-The CLI connects to PostgreSQL directly and does not proxy through the REST server.
+The CLI does not connect to PostgreSQL. It sends every command to `server_url` over HTTP; only `scry serve` opens the database.
 
 For local development against Postgres, the repo ships a single `compose.yaml` that brings up the app and a `postgres:18` database together, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and `scry.compose.toml`, the config the container mounts as `/app/scry.toml`.
 

@@ -55,12 +55,10 @@ pub struct TaskPatch {
     pub section: SectionInput,
 }
 
-/// A task plus the section it now lives in, so callers can name it without a
-/// second lookup. `None` means the task has no section.
+/// A task after a create, duplicate, or move.
 #[derive(Debug, Clone)]
 pub struct TaskChangeResult {
     pub task: Task,
-    pub section: Option<Section>,
 }
 
 /// Partial project input. `None` leaves a field unchanged; `Some("")` on
@@ -76,8 +74,6 @@ pub struct UpdateProject {
 /// How an update changes a section's color.
 #[derive(Debug, Clone, Copy)]
 pub enum ColorChange {
-    /// Leave the current color unchanged.
-    Keep,
     /// Remove the section's color.
     Clear,
     /// Set the section's color.
@@ -101,8 +97,6 @@ pub enum ProjectSetup {
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
     },
-    /// Take the default sorting mode and seed no sections.
-    Defaults,
 }
 
 /// Frontend-agnostic, high-level operations over one project. Resolves names to
@@ -143,7 +137,7 @@ impl ProjectService {
             })
             .await?;
 
-        Ok(TaskChangeResult { task, section })
+        Ok(TaskChangeResult { task })
     }
 
     pub async fn create_task_in_project(
@@ -184,11 +178,7 @@ impl ProjectService {
             })
             .await?;
 
-        let section = match task.section_id {
-            Some(section_id) => Some(self.require_section_in_project(project, section_id).await?),
-            None => None,
-        };
-        Ok(TaskChangeResult { task, section })
+        Ok(TaskChangeResult { task })
     }
 
     pub async fn list_tasks_by_project_id(
@@ -203,10 +193,6 @@ impl ProjectService {
         section_id: SectionId,
     ) -> Result<Vec<Task>, ServiceError> {
         Ok(self.store.get_all_tasks_by_section_id(section_id).await?)
-    }
-
-    pub async fn get_task(&self, id: TaskId) -> Result<Option<Task>, ServiceError> {
-        Ok(self.store.get_task_by_id(id).await?)
     }
 
     pub async fn update_task(
@@ -268,7 +254,7 @@ impl ProjectService {
         };
 
         if unchanged && position.is_none() {
-            return Ok(TaskChangeResult { task, section });
+            return Ok(TaskChangeResult { task });
         }
 
         let section_id = section.as_ref().map(|section| section.id);
@@ -279,7 +265,7 @@ impl ProjectService {
         task.section_id = section_id;
 
         let task = self.store.update_task(task).await?;
-        Ok(TaskChangeResult { task, section })
+        Ok(TaskChangeResult { task })
     }
 
     pub async fn move_task_to_section_by_id(
@@ -402,12 +388,6 @@ impl ProjectService {
     // display starts at the 4-character floor
     pub async fn get_task_handle(&self, id: TaskId) -> Result<String, ServiceError> {
         let ids = self.store.get_all_task_ids().await?;
-        Ok(shortest_handle(id, ids, MIN_HANDLE_LENGTH))
-    }
-
-    // display starts at the 4-character floor
-    pub async fn get_note_handle(&self, id: NoteId) -> Result<String, ServiceError> {
-        let ids = self.store.get_all_note_ids().await?;
         Ok(shortest_handle(id, ids, MIN_HANDLE_LENGTH))
     }
 
@@ -538,7 +518,6 @@ impl ProjectService {
             None => section.name.clone(),
         };
         let color = match update.color {
-            ColorChange::Keep => section.color,
             ColorChange::Clear => None,
             ColorChange::Set(color) => Some(color),
         };
@@ -629,7 +608,6 @@ impl ProjectService {
                 task_sorting_mode,
                 show_priority,
             } => (task_sorting_mode, show_priority, None),
-            ProjectSetup::Defaults => (TaskSortingMode::default(), false, None),
         };
 
         let id = Uuid::new_v4();

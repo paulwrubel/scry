@@ -191,28 +191,6 @@ impl ProjectState {
         &self.project
     }
 
-    pub fn get_task_by_id(&self, task_id: TaskId) -> Option<&TaskWithNotes> {
-        self.tasks().find(|t| t.id == task_id)
-    }
-
-    pub fn get_section_by_id(&self, section_id: SectionId) -> Option<&Section> {
-        self.sections().find(|s| s.id == section_id)
-    }
-
-    pub fn tasks(&self) -> impl DoubleEndedIterator<Item = &TaskWithNotes> + '_ {
-        // flatten into a single ordered stream of open tasks, then closed tasks
-        self.sections_with_tasks
-            .iter()
-            .flat_map(|swt| swt.tasks_with_notes.iter())
-            .chain(self.closed_tasks.iter())
-    }
-
-    pub fn sections(&self) -> impl DoubleEndedIterator<Item = &Section> + '_ {
-        self.sections_with_tasks
-            .iter()
-            .filter_map(|swt| swt.section.as_ref())
-    }
-
     pub fn section_groups(&self) -> impl DoubleEndedIterator<Item = &SectionWithTasks> + '_ {
         self.sections_with_tasks.iter()
     }
@@ -402,16 +380,20 @@ mod tests {
             ]
         );
 
-        let first = state.get_task_by_id(task_id(2)).expect("task 2 exists");
+        let first = state
+            .section_groups()
+            .flat_map(|group| group.tasks_with_notes.iter())
+            .find(|task| task.id == task_id(2))
+            .expect("task 2 exists");
         assert_eq!(first.notes.len(), 1);
         assert_eq!(first.notes[0].contents, "belongs to first");
-        assert!(
-            state
-                .get_task_by_id(task_id(1))
-                .expect("task 1 exists")
-                .notes
-                .is_empty()
-        );
+
+        let second = state
+            .section_groups()
+            .flat_map(|group| group.tasks_with_notes.iter())
+            .find(|task| task.id == task_id(1))
+            .expect("task 1 exists");
+        assert!(second.notes.is_empty());
     }
 
     #[test]
@@ -653,46 +635,5 @@ mod tests {
                 (Some(section_id(11)), vec![]),
             ]
         );
-    }
-
-    #[test]
-    fn get_task_by_id_finds_open_and_closed_tasks() {
-        let snapshot = ProjectSnapshot {
-            project: project(TaskSortingMode::Manual),
-            sections: vec![section(section_id(10), "a0")],
-            tasks: vec![
-                open_task(
-                    task_id(1),
-                    "open task",
-                    Some(section_id(10)),
-                    "a0",
-                    Priority::Medium,
-                ),
-                closed_task(
-                    task_id(2),
-                    "closed task",
-                    Some(section_id(10)),
-                    "2026-01-02T00:00:00Z",
-                    CloseReason::Completed,
-                ),
-            ],
-            notes: vec![],
-        };
-
-        let state = ProjectState::from_snapshot(snapshot);
-
-        assert_eq!(
-            state
-                .get_task_by_id(task_id(1))
-                .map(|task| task.title.as_str()),
-            Some("open task")
-        );
-        assert_eq!(
-            state
-                .get_task_by_id(task_id(2))
-                .map(|task| task.title.as_str()),
-            Some("closed task")
-        );
-        assert!(state.get_task_by_id(task_id(3)).is_none());
     }
 }

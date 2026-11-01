@@ -10,6 +10,8 @@ use crate::error::AppError;
 use crate::server::ScryState;
 use crate::service::{NewTask, SectionInput};
 
+use super::TaskDetails;
+
 /// Request body for creating a task; omitted fields fall back to defaults.
 #[derive(Deserialize)]
 pub struct CreateTaskRequest {
@@ -50,7 +52,19 @@ pub async fn create_task(
         .create_task_in_project(project_id, input)
         .await
     {
-        Ok(change) => Json(change.task).into_response(),
+        Ok(change) => {
+            let handle = match state.service.get_task_handle(change.task.id).await {
+                Ok(handle) => handle,
+                Err(error) => return AppError::from(error).into(),
+            };
+
+            Json(TaskDetails {
+                task: change.task,
+                notes: None,
+                handle: Some(handle),
+            })
+            .into_response()
+        }
         Err(error) => AppError::from(error).into(),
     }
 }

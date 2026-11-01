@@ -5,10 +5,16 @@ use crate::error::AppError;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use scry_core::models::{Note, Task};
 use serde::Serialize;
+
+mod batch;
 
 mod close_task;
 pub use close_task::close_task;
+
+mod close_tasks;
+pub use close_tasks::close_tasks;
 
 mod create_note;
 pub use create_note::create_note;
@@ -28,11 +34,23 @@ pub use delete_note::delete_note;
 mod delete_project_by_id;
 pub use delete_project_by_id::delete_project_by_id;
 
+mod delete_project_by_name;
+pub use delete_project_by_name::delete_project_by_name;
+
 mod delete_section;
 pub use delete_section::delete_section;
 
 mod delete_task;
 pub use delete_task::delete_task;
+
+mod duplicate_task;
+pub use duplicate_task::duplicate_task;
+
+mod export;
+pub use export::export;
+
+mod export_project;
+pub use export_project::export_project;
 
 mod get_note;
 pub use get_note::get_note;
@@ -85,11 +103,17 @@ pub use move_task::move_task;
 mod open_task;
 pub use open_task::open_task;
 
+mod open_tasks;
+pub use open_tasks::open_tasks;
+
 mod update_note;
 pub use update_note::update_note;
 
 mod update_project;
 pub use update_project::update_project;
+
+mod update_project_by_name;
+pub use update_project_by_name::update_project_by_name;
 
 mod update_section;
 pub use update_section::update_section;
@@ -103,6 +127,8 @@ pub struct ApiErrorJson {
     pub code: u16,
     pub kind: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
 }
 
 impl From<AppError> for Response {
@@ -117,9 +143,21 @@ impl From<AppError> for Response {
             code: status.as_u16(),
             kind: error.kind().to_string(),
             message: error.to_string(),
+            details: error.details(),
         };
         (status, Json(body)).into_response()
     }
+}
+
+/// A task with optional notes and display handle.
+#[derive(Serialize)]
+pub struct TaskDetails {
+    #[serde(flatten)]
+    pub task: Task,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<Vec<Note>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handle: Option<String>,
 }
 
 /// Server metadata returned by the index endpoint.
