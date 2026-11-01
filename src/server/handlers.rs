@@ -5,6 +5,7 @@ use crate::error::AppError;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use scry_core::models::{Note, Task};
 use serde::Serialize;
 
 mod batch;
@@ -137,6 +138,17 @@ impl From<AppError> for Response {
         };
         (status, Json(body)).into_response()
     }
+}
+
+/// A task with optional notes and display handle.
+#[derive(Serialize)]
+pub struct TaskDetails {
+    #[serde(flatten)]
+    pub task: Task,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<Vec<Note>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handle: Option<String>,
 }
 
 /// Server metadata returned by the index endpoint.
