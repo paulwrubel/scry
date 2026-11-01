@@ -6,6 +6,7 @@ use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use uuid::Uuid;
 
 pub use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
 
@@ -65,56 +66,19 @@ impl From<Color> for AnsiColor {
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
-#[serde(rename_all = "kebab-case")]
-pub enum CloseReason {
-    Completed,
-    Cancelled,
-}
-
-impl CloseReason {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Completed => "completed",
-            Self::Cancelled => "cancelled",
-        }
-    }
-}
-
-impl Display for CloseReason {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "state", rename_all = "kebab-case")]
-pub enum Lifecycle {
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskState {
     #[default]
     Open,
-    Closed {
-        closed_at: DateTime<Utc>,
-        reason: CloseReason,
-    },
+    Closed,
 }
 
-impl Lifecycle {
-    pub fn is_closed(&self) -> bool {
-        matches!(self, Self::Closed { .. })
-    }
-
-    pub fn closed_at(&self) -> Option<DateTime<Utc>> {
+impl TaskState {
+    pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Open => None,
-            Self::Closed { closed_at, .. } => Some(*closed_at),
-        }
-    }
-
-    pub fn reason(&self) -> Option<CloseReason> {
-        match self {
-            Self::Open => None,
-            Self::Closed { reason, .. } => Some(*reason),
+            Self::Open => "open",
+            Self::Closed => "closed",
         }
     }
 }
@@ -350,15 +314,9 @@ pub struct Task {
     pub priority: Priority,
     pub section_id: Option<SectionId>,
     pub position: Position,
-    pub lifecycle: Lifecycle,
+    pub state: TaskState,
     pub tags: Tags,
     pub created_at: DateTime<Utc>,
-}
-
-impl Task {
-    pub fn is_closed(&self) -> bool {
-        self.lifecycle.is_closed()
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -366,6 +324,89 @@ pub struct Note {
     pub id: NoteId,
     pub task_id: TaskId,
     pub contents: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A JSON object holding the model field names and the values they take after
+/// the operation, as recorded in the changes log.
+pub type FieldValues = serde_json::Value;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EntityType {
+    Project,
+    Section,
+    Task,
+    Note,
+}
+
+impl EntityType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::Section => "section",
+            Self::Task => "task",
+            Self::Note => "note",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Entity {
+    Project(ProjectId),
+    Section(SectionId),
+    Task(TaskId),
+    Note(NoteId),
+}
+
+impl Entity {
+    pub fn entity_type(&self) -> EntityType {
+        match self {
+            Self::Project(_) => EntityType::Project,
+            Self::Section(_) => EntityType::Section,
+            Self::Task(_) => EntityType::Task,
+            Self::Note(_) => EntityType::Note,
+        }
+    }
+
+    pub fn id(&self) -> Uuid {
+        match self {
+            Self::Project(id) | Self::Section(id) | Self::Task(id) | Self::Note(id) => *id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChangeKind {
+    Create,
+    Update,
+    Delete,
+}
+
+impl ChangeKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+            Self::Delete => "delete",
+        }
+    }
+}
+
+/// One row of the changes log, as written by the server.
+///
+/// `created_at` is when the server wrote the row and is supplied by the
+/// service. `client_timestamp` is recorded as the client reported it and never
+/// compared; the row's own `seq`, assigned by the database, defines the order.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Change {
+    pub entity_type: EntityType,
+    pub entity_id: Uuid,
+    pub kind: ChangeKind,
+    pub operation_id: Uuid,
+    pub client_timestamp: Option<DateTime<Utc>>,
+    pub field_values: FieldValues,
     pub created_at: DateTime<Utc>,
 }
 

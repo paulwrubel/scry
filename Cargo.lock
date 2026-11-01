@@ -1633,6 +1633,7 @@ dependencies = [
  "num_enum",
  "serde",
  "serde_json",
+ "sqlx",
  "strum",
  "ts-rs",
  "uuid",

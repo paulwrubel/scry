@@ -137,7 +137,7 @@ async fn section_by_name(
         .await
 }
 
-/// Render the per-handle outcomes of a batch lifecycle command.
+/// Render the per-handle outcomes of a batch close command.
 fn render_batch_results(
     results: &[BatchTaskResult],
     past: &str,

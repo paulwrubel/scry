@@ -1,13 +1,12 @@
 //! `show`.
 
-use chrono::Local;
-use scry_core::models::{Lifecycle, Section};
-
 use crate::client::{Client, TaskDetails};
 use crate::color;
 use crate::error::AppError;
 use crate::output::{print_json, section_label};
 use crate::state::DATETIME_FORMAT_STR;
+use chrono::Local;
+use scry_core::models::Section;
 
 /// Show one task with its notes.
 pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<(), AppError> {
@@ -36,14 +35,7 @@ pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<()
     let task = &detail.task;
     let display_handle = detail.handle.as_deref().unwrap_or(handle);
 
-    let state_label = match &task.lifecycle {
-        Lifecycle::Open => "open".to_string(),
-        Lifecycle::Closed { closed_at, reason } => format!(
-            "{} {}",
-            reason.as_str(),
-            closed_at.with_timezone(&Local).format(DATETIME_FORMAT_STR)
-        ),
-    };
+    let state_label = task.state.as_str().to_string();
 
     println!("{} #{}", task.title, display_handle);
     println!();

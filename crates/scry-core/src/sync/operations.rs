@@ -1,5 +1,5 @@
 use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
-use crate::models::{Color, Lifecycle, Priority, Tags, TaskSortingMode};
+use crate::models::{Color, Priority, Tags, TaskSortingMode, TaskState};
 use crate::position::Position;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -103,9 +103,8 @@ pub enum ColorChange {
 
 /// The operation vocabulary: one variant per `ProjectService` mutation, entity at a
 /// time. Section merge is deliberately absent because it is a server-side rule
-/// that emits ordinary operations. Moves and lifecycle changes stay separate so moving
-/// a task never changes its lifecycle and closing or reopening it never changes
-/// its section or position.
+/// that emits ordinary operations. Moves stay separate so moving a task never
+/// rewrites its other fields.
 ///
 /// Create variants carry the client-generated id and `created_at` so
 /// offline-created entities keep stable identity and Created ordering;
@@ -122,11 +121,19 @@ pub enum OperationKind {
         show_priority: bool,
         created_at: DateTime<Utc>,
     },
-    /// `None` leaves a field unchanged; `Some("")` clears `description`.
+    /// `None` leaves a field unchanged. `description` distinguishes all three
+    /// states: `None` leaves it, `Some(None)` clears it, `Some(Some(text))`
+    /// sets it.
     UpdateProject {
         id: ProjectId,
         name: Option<String>,
-        description: Option<String>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        description: Option<Option<String>>,
         task_sorting_mode: Option<TaskSortingMode>,
         show_priority: Option<bool>,
     },
@@ -149,7 +156,6 @@ pub enum OperationKind {
     DeleteSection {
         id: SectionId,
     },
-    /// `lifecycle` defaults to `Open` when absent.
     CreateTask {
         id: TaskId,
         project_id: ProjectId,
@@ -159,20 +165,28 @@ pub enum OperationKind {
         section_id: Option<SectionId>,
         position: Position,
         #[serde(default)]
-        lifecycle: Lifecycle,
+        state: TaskState,
         tags: Tags,
         created_at: DateTime<Utc>,
     },
-    /// Covers title, description, priority, and tags only: section and position
-    /// belong to [`OperationKind::MoveTask`], lifecycle to [`OperationKind::SetLifecycle`].
-    /// `None` leaves `description` unchanged and `Some("")` clears it.
+    /// Covers title, description, priority, tags, and state: section and position
+    /// belong to [`OperationKind::MoveTask`].
+    /// `description` distinguishes all three states: `None` leaves it,
+    /// `Some(None)` clears it, `Some(Some(text))` sets it.
     /// `Some(tags)` sets them, empty `Tags` clears them, `None` leaves them.
     UpdateTask {
         id: TaskId,
         title: Option<String>,
-        description: Option<String>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        description: Option<Option<String>>,
         priority: Option<Priority>,
         tags: Option<Tags>,
+        state: Option<TaskState>,
     },
     /// `section_id` and `position` are always set together; `None` means the
     /// task moves to No section.
@@ -180,10 +194,6 @@ pub enum OperationKind {
         id: TaskId,
         section_id: Option<SectionId>,
         position: Position,
-    },
-    SetLifecycle {
-        id: TaskId,
-        lifecycle: Lifecycle,
     },
     DeleteTask {
         id: TaskId,
@@ -201,4 +211,76 @@ pub enum OperationKind {
     DeleteNote {
         id: NoteId,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn update_task_op(description: Option<&str>, include: bool) -> serde_json::Value {
+        let mut value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "kind": "update_task",
+            "id": Uuid::new_v4(),
+        });
+        if include {
+            value["description"] = match description {
+                Some(text) => json!(text),
+                None => json!(null),
+            };
+        }
+        value
+    }
+
+    fn description_of(operation: &Operation) -> &Option<Option<String>> {
+        match &operation.kind {
+            OperationKind::UpdateTask { description, .. } => description,
+            other => panic!("expected UpdateTask, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn absent_description_is_unchanged() {
+        let operation: Operation = serde_json::from_value(update_task_op(None, false)).unwrap();
+        assert_eq!(description_of(&operation), &None);
+    }
+
+    #[test]
+    fn null_description_clears() {
+        let operation: Operation = serde_json::from_value(update_task_op(None, true)).unwrap();
+        assert_eq!(description_of(&operation), &Some(None));
+    }
+
+    #[test]
+    fn string_description_sets() {
+        let operation: Operation =
+            serde_json::from_value(update_task_op(Some("hello"), true)).unwrap();
+        assert_eq!(description_of(&operation), &Some(Some("hello".to_string())));
+    }
+
+    #[test]
+    fn description_serializes_in_three_states() {
+        let mut operation: Operation = serde_json::from_value(update_task_op(None, false)).unwrap();
+
+        let absent = serde_json::to_value(&operation).unwrap();
+        assert!(absent.get("description").is_none());
+
+        if let OperationKind::UpdateTask { description, .. } = &mut operation.kind {
+            *description = Some(None);
+        }
+        assert_eq!(
+            serde_json::to_value(&operation).unwrap().get("description"),
+            Some(&json!(null))
+        );
+
+        if let OperationKind::UpdateTask { description, .. } = &mut operation.kind {
+            *description = Some(Some("hello".to_string()));
+        }
+        assert_eq!(
+            serde_json::to_value(&operation).unwrap().get("description"),
+            Some(&json!("hello"))
+        );
+    }
 }

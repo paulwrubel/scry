@@ -74,9 +74,9 @@ See [Running a server](#running-a-server) for the host-side REST API setup.
 
 A project is a container for related tasks. Each project has its own optional, ordered sections. The built-in "default" project exists automatically and can be used without creating anything.
 
-### Lifecycle
+### State
 
-Every task is open or closed. `scry close <handle...> --reason completed` closes one or more tasks as `completed`, `scry close <handle...> --reason cancelled` closes them as `cancelled`, and `scry open <handle...>` returns them to open. Closing records `closed_at`; opening clears both the timestamp and the reason. Close and open do not change a task's section or position, so reopening restores it where it was.
+Every task is `open` or `closed`. `scry close <handle...>` closes one or more tasks, and `scry open <handle...>` returns them to open. Close and open do not change a task's section or position, so reopening restores it where it was.
 
 ### Sections
 
@@ -103,8 +103,8 @@ scry add "buy groceries"
 # list tasks grouped by section
 scry list
 
-# close a task as completed (or cancel it with --reason cancelled)
-scry close 4f3a --reason completed
+# close a task
+scry close 4f3a
 
 # create a project with sections
 scry project create myapp
@@ -142,10 +142,10 @@ Running `scry` with no subcommand prints the top-level help and exits.
 | `scry list [--section <name>] [--search <text>] [--include-closed]`                                                                                                     | List open tasks grouped by section; `--include-closed` adds a trailing Closed group |
 | `scry move <handle> [<section>] [--no-section]`                                                                                                                         | Move a task to a section, or to No section (appends to the end of the group)        |
 | `scry update <handle> [--title <text>] [--description <text>] [--priority <level>] [--tags <comma,separated>] [--section <name>] [--new-section <name>] [--no-section]` | Update task properties; an empty `--description` or `--tags` clears it              |
-| `scry close <handle...> --reason <completed \| cancelled>`                                                                                                              | Close one or more tasks with a reason                                               |
+| `scry close <handle...>`                                                                                                                                                | Close one or more tasks                                                             |
 | `scry open <handle...>`                                                                                                                                                 | Reopen one or more closed tasks                                                     |
 | `scry duplicate <handle>`                                                                                                                                               | Duplicate a task into the same section, immediately after the source                |
-| `scry show <handle>`                                                                                                                                                    | Show full task details, including lifecycle, section, priority, tags, and notes     |
+| `scry show <handle>`                                                                                                                                                    | Show full task details, including state, section, priority, tags, and notes         |
 | `scry delete <handle>`                                                                                                                                                  | Delete a task permanently                                                           |
 | `scry note add <task-handle> <contents>`                                                                                                                                | Add a note to a task                                                                |
 
@@ -212,7 +212,7 @@ scry export > scry-backup.json
 scry import --replace-existing-projects < scry-backup.json
 ```
 
-The document is a single object, `{ "version": 1, "app_version": "0.24.0", "projects": [ ... ] }`. `version` is the format version checked on import, and `app_version` is informational, recording the binary that produced the backup. Each element of `projects` is a project document: the project's own fields (`id`, `name`, `description`, `task_sorting_mode`, `show_priority`, `created_at`) sit at the top level alongside its `sections`, `tasks`, and `notes` arrays. That object is exactly what `GET /projects/{id}/snapshot` returns, so a snapshot response and a backup entry are the same document, and `scry -p <name> export` is that same object wrapped in a one-project envelope. Every id (`id`, `project_id`, `section_id`, `task_id`) is a UUID string. Every task and section carries a `position` string key: ordering is lexicographic, unresolved ties break by id, and the key itself is opaque. Every task carries a nullable `section_id` and a `lifecycle` object: `{"state": "open"}` for an open task, or `{"state": "closed", "closed_at": "...", "reason": "completed"}` (or `"reason": "cancelled"`) for a closed one. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
+The document is a single object, `{ "version": 1, "app_version": "0.24.0", "projects": [ ... ] }`. `version` is the format version checked on import, and `app_version` is informational, recording the binary that produced the backup. Each element of `projects` is a project document: the project's own fields (`id`, `name`, `description`, `task_sorting_mode`, `show_priority`, `created_at`) sit at the top level alongside its `sections`, `tasks`, and `notes` arrays. That object is exactly what `GET /projects/{id}/snapshot` returns, so a snapshot response and a backup entry are the same document, and `scry -p <name> export` is that same object wrapped in a one-project envelope. Every id (`id`, `project_id`, `section_id`, `task_id`) is a UUID string. Every task and section carries a `position` string key: ordering is lexicographic, unresolved ties break by id, and the key itself is opaque. Every task carries a nullable `section_id` and a `state` string, either `"open"` or `"closed"`. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
 
 Import preserves the UUIDs carried by the backup and inserts or updates by id, keeping the other fields and timestamps. Only version 1 is accepted: a document carrying any other `version` is rejected rather than upgraded. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `sections`, `tasks`, and `notes`.
 
@@ -343,7 +343,7 @@ Endpoints, all under `/api/v1`:
 
 Task paths accept a full UUID or a short handle. `/projects/{id}?detailed=true` adds `sections`, `tasks`, and per-task `notes`; `include_handles=true` adds a `handle` to each task. `/tasks/{handle}?detailed=true` adds `notes`, and `include_handle=true` adds the display `handle`.
 
-`POST /tasks/{handle}/move` takes `{ "section_id": <id-or-null> }`; null moves the task to No section, and either way the task appends to the destination group. `POST /tasks/close` takes `{ "handles": [...], "reason": "completed" | "cancelled" }`; `POST /tasks/open` takes `{ "handles": [...] }`. Both return one result per handle, with failures reported per item. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`. Deletions return the removed object. `POST /import` takes `{ "backup": <backup JSON>, "mode": "Fail" | "Replace" | "Skip" }` and plans the import on the server.
+`POST /tasks/{handle}/move` takes `{ "section_id": <id-or-null> }`; null moves the task to No section, and either way the task appends to the destination group. `POST /tasks/close` takes `{ "handles": [...] }`; `POST /tasks/open` takes `{ "handles": [...] }`. Both return one result per handle, with failures reported per item. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`. Deletions return the removed object. `POST /import` takes `{ "backup": <backup JSON>, "mode": "Fail" | "Replace" | "Skip" }` and plans the import on the server.
 
 ### JSON Output
 
@@ -355,7 +355,7 @@ scry --json show 4f3a
 scry -p myapp --json add "design API"
 ```
 
-Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. `close` and `open` are the exception: they emit an array of per-handle results, each `{ "handle": "...", "task": { ... } }` or `{ "handle": "...", "error": { "kind": "...", "message": "..." } }`. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Task and section objects carry `position`, an opaque lexicographic string key; treat it as read-only, because nothing exposes a way to set it directly. Task objects carry a nullable `section_id` and a `lifecycle` object, which is `{"state": "open"}` or `{"state": "closed", "closed_at": "...", "reason": "completed" | "cancelled"}`. Every `id` field is a full lowercase hyphenated UUID string, never a handle. Detailed task responses — `show` and `add` — may also include a `handle` string, and `show` includes `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
+Collection commands emit a top-level JSON array; single-resource and mutation commands emit a bare model object, with no wrapping key. `close` and `open` are the exception: they emit an array of per-handle results, each `{ "handle": "...", "task": { ... } }` or `{ "handle": "...", "error": { "kind": "...", "message": "..." } }`. Every mutation returns the affected model — including deletions, which return the object that was removed — and `show` additionally includes the task's `notes`. Task and section objects carry `position`, an opaque lexicographic string key; treat it as read-only, because nothing exposes a way to set it directly. Task objects carry a nullable `section_id` and a `state` string, either `"open"` or `"closed"`. Every `id` field is a full lowercase hyphenated UUID string, never a handle. Detailed task responses — `show` and `add` — may also include a `handle` string, and `show` includes `notes`. Field names are snake_case, while enum values are kebab-case and match the CLI's accepted arguments, so a value read from JSON can be passed straight back to the CLI.
 
 `--json` applies only to one-shot subcommands; passing it with no subcommand or with `serve`, `docs`, or `skill` is an error. Color is always disabled under `--json`, stdout carries only the JSON document, and every failing command exits non-zero.
 

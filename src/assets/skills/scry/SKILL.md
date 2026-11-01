@@ -38,7 +38,7 @@ Prefer this over guessing command names, flags, or values.
   reliability: use the `id` field returned by `scry --json add` rather than a handle,
   because handles can lengthen as more tasks and notes are created.
 - `scry --json show <handle>` includes full detail (description, priority, tags, timestamps,
-  section, lifecycle, and notes), while `scry --json list` omits descriptions, notes, and
+  section, state, and notes), while `scry --json list` omits descriptions, notes, and
   timestamps. Use `scry --json show` when full detail is needed.
 - `scry --json list` output is the stable machine format; never parse the human-readable
   text output without the `--json` flag. Closed tasks are hidden unless you pass
@@ -70,7 +70,7 @@ Every example below includes the global `--json` flag, which must come before th
 | `scry --json show <handle>`                                                                                                                      | Show full task details and notes |
 | `scry --json move <handle> [<section>] [--no-section]`                                                                                           | Move a task to a section         |
 | `scry --json update <handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section]` | Update task properties           |
-| `scry --json close <handle> --reason <completed \| cancelled>`                                                                                   | Close a task with a reason       |
+| `scry --json close <handle>`                                                                                                                     | Close a task                     |
 | `scry --json open <handle>`                                                                                                                      | Reopen a closed task             |
 | `scry --json duplicate <handle>`                                                                                                                 | Duplicate a task                 |
 | `scry --json note add <task-handle> <contents>`                                                                                                  | Add a note to a task             |
@@ -84,7 +84,7 @@ Sections are created explicitly: `--section <name>` must name an existing sectio
 with the closest match suggested, while `--new-section <name>` (or `scry section add`)
 creates one. New tasks go to No section unless one of those flags is given, and `--no-section`
 on `move` or `update` moves a task back to No section. `close` and `open` change
-only the lifecycle; they never change a task's section or position.
+only the state; they never change a task's section or position.
 
 ## Project and section commands
 

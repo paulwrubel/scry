@@ -84,7 +84,7 @@ pub async fn export(store: &dyn Store, project: Option<ProjectId>) -> Result<Bac
     let project_ids = match project {
         Some(id) => vec![id],
         None => store
-            .get_all_projects()
+            .get_all_projects(None)
             .await?
             .into_iter()
             .map(|project| project.id)
@@ -93,7 +93,7 @@ pub async fn export(store: &dyn Store, project: Option<ProjectId>) -> Result<Bac
 
     let mut projects = Vec::with_capacity(project_ids.len());
     for project_id in project_ids {
-        projects.push(store.get_project_snapshot(project_id).await?);
+        projects.push(store.get_project_snapshot(project_id, None).await?);
     }
 
     Ok(Backup {
@@ -109,7 +109,7 @@ pub async fn plan_import(
     backup: &Backup,
     mode: ImportMode,
 ) -> Result<ImportPlan, StorageError> {
-    let existing = store.get_all_projects().await?;
+    let existing = store.get_all_projects(None).await?;
 
     let existing_ids_by_name: HashMap<String, ProjectId> = existing
         .iter()
@@ -189,12 +189,13 @@ fn plan_replace(
 mod tests {
     use super::*;
     use crate::ids::{NoteId, SectionId, TaskId};
+    use crate::models::{Change, Entity, EntityType};
     use crate::models::{
-        Lifecycle, Note, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskSortingMode,
+        Note, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskSortingMode, TaskState,
     };
     use crate::position::Position;
-    use crate::store::{ProjectToCreate, SectionToCreate, TaskToCreate};
-    use chrono::Utc;
+    use chrono::{DateTime, Utc};
+    use sqlx::{PgConnection, Postgres, Transaction};
     use std::future::Future;
     use std::pin::pin;
     use std::task::{Context, Poll, Waker};
@@ -246,7 +247,7 @@ mod tests {
             priority: Priority::Medium,
             section_id,
             position: position("a0"),
-            lifecycle: Lifecycle::Open,
+            state: TaskState::Open,
             tags: Tags::default(),
             created_at: Utc::now(),
         }
@@ -311,15 +312,26 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Store for EmptyStore {
-        async fn get_all_projects(&self) -> Result<Vec<Project>, StorageError> {
+        async fn get_all_projects(
+            &self,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Vec<Project>, StorageError> {
             Ok(Vec::new())
         }
 
-        async fn create_task(&self, _: TaskToCreate) -> Result<Task, StorageError> {
+        async fn create_task(
+            &self,
+            _: Task,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Task, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn get_task_by_id(&self, _: TaskId) -> Result<Option<Task>, StorageError> {
+        async fn get_task_by_id(
+            &self,
+            _: TaskId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Option<Task>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
@@ -327,17 +339,22 @@ mod tests {
             &self,
             _: &crate::ids::Handle,
             _: i64,
+            _: Option<&mut PgConnection>,
         ) -> Result<Vec<TaskId>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn get_all_task_ids(&self) -> Result<Vec<TaskId>, StorageError> {
+        async fn get_all_task_ids(
+            &self,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Vec<TaskId>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
         async fn get_all_tasks_by_project_id(
             &self,
             _: ProjectId,
+            _: Option<&mut PgConnection>,
         ) -> Result<Vec<Task>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
@@ -345,42 +362,72 @@ mod tests {
         async fn get_all_tasks_by_section_id(
             &self,
             _: SectionId,
+            _: Option<&mut PgConnection>,
         ) -> Result<Vec<Task>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn update_task(&self, _: Task) -> Result<Task, StorageError> {
+        async fn update_task(
+            &self,
+            _: Task,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Task, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn delete_task(&self, _: TaskId) -> Result<(), StorageError> {
+        async fn delete_task(
+            &self,
+            _: TaskId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<(), StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn create_note(&self, _: NoteId, _: TaskId, _: String) -> Result<Note, StorageError> {
+        async fn create_note(
+            &self,
+            _: Note,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Note, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn get_note_by_id(&self, _: NoteId) -> Result<Option<Note>, StorageError> {
+        async fn get_note_by_id(
+            &self,
+            _: NoteId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Option<Note>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn get_all_notes_by_task_id(&self, _: TaskId) -> Result<Vec<Note>, StorageError> {
+        async fn get_all_notes_by_task_id(
+            &self,
+            _: TaskId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Vec<Note>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
         async fn get_all_notes_by_project_id(
             &self,
             _: ProjectId,
+            _: Option<&mut PgConnection>,
         ) -> Result<Vec<Note>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn update_note(&self, _: Note) -> Result<Note, StorageError> {
+        async fn update_note(
+            &self,
+            _: Note,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Note, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn delete_note(&self, _: NoteId) -> Result<(), StorageError> {
+        async fn delete_note(
+            &self,
+            _: NoteId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<(), StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
@@ -388,19 +435,31 @@ mod tests {
             &self,
             _: &crate::ids::Handle,
             _: i64,
+            _: Option<&mut PgConnection>,
         ) -> Result<Vec<NoteId>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn get_all_note_ids(&self) -> Result<Vec<NoteId>, StorageError> {
+        async fn get_all_note_ids(
+            &self,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Vec<NoteId>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn create_section(&self, _: SectionToCreate) -> Result<Section, StorageError> {
+        async fn create_section(
+            &self,
+            _: Section,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Section, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn get_section_by_id(&self, _: SectionId) -> Result<Option<Section>, StorageError> {
+        async fn get_section_by_id(
+            &self,
+            _: SectionId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Option<Section>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
@@ -408,6 +467,7 @@ mod tests {
             &self,
             _: ProjectId,
             _: &str,
+            _: Option<&mut PgConnection>,
         ) -> Result<Option<Section>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
@@ -415,46 +475,127 @@ mod tests {
         async fn get_all_sections_by_project_id(
             &self,
             _: ProjectId,
+            _: Option<&mut PgConnection>,
         ) -> Result<Vec<Section>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn update_section(&self, _: Section) -> Result<Section, StorageError> {
+        async fn update_section(
+            &self,
+            _: Section,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Section, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn delete_section(&self, _: SectionId) -> Result<(), StorageError> {
+        async fn delete_section(
+            &self,
+            _: SectionId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<(), StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn create_project(&self, _: ProjectToCreate) -> Result<Project, StorageError> {
+        async fn create_project(
+            &self,
+            _: Project,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Project, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn get_project_by_id(&self, _: ProjectId) -> Result<Option<Project>, StorageError> {
+        async fn get_project_by_id(
+            &self,
+            _: ProjectId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Option<Project>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
         async fn get_project_snapshot(
             &self,
             _: ProjectId,
+            _: Option<&mut PgConnection>,
         ) -> Result<ProjectSnapshot, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn get_project_by_name(&self, _: &str) -> Result<Option<Project>, StorageError> {
+        async fn get_project_by_name(
+            &self,
+            _: &str,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Option<Project>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn update_project(&self, _: Project) -> Result<Project, StorageError> {
+        async fn update_project(
+            &self,
+            _: Project,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Project, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn delete_project_by_id(&self, _: ProjectId) -> Result<(), StorageError> {
+        async fn delete_project_by_id(
+            &self,
+            _: ProjectId,
+            _: Option<&mut PgConnection>,
+        ) -> Result<(), StorageError> {
             unimplemented!("plan_import only reads projects")
         }
 
-        async fn import(&self, _: ImportPlan) -> Result<ImportReport, StorageError> {
+        async fn import(
+            &self,
+            _: ImportPlan,
+            _: Option<&mut PgConnection>,
+        ) -> Result<ImportReport, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn is_operation_applied(
+            &self,
+            _: Uuid,
+            _: Option<&mut PgConnection>,
+        ) -> Result<bool, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn record_applied_operation(
+            &self,
+            _: Uuid,
+            _: DateTime<Utc>,
+            _: Option<&mut PgConnection>,
+        ) -> Result<(), StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn record_change(
+            &self,
+            _: Change,
+            _: Option<&mut PgConnection>,
+        ) -> Result<i64, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn is_tombstoned(
+            &self,
+            _: EntityType,
+            _: Uuid,
+            _: Option<&mut PgConnection>,
+        ) -> Result<bool, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn create_tombstone(
+            &self,
+            _: Entity,
+            _: DateTime<Utc>,
+            _: Option<&mut PgConnection>,
+        ) -> Result<(), StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn begin_apply(&self) -> Result<Transaction<'static, Postgres>, StorageError> {
             unimplemented!("plan_import only reads projects")
         }
     }

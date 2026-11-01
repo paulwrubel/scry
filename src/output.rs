@@ -1,13 +1,11 @@
 //! Shared human and JSON output helpers.
 
-use std::collections::HashMap;
-
-use scry_core::ids::TaskId;
-use scry_core::models::{CloseReason, Lifecycle, Section};
-
 use crate::color;
 use crate::error::AppError;
 use crate::state::TaskWithNotes;
+use scry_core::ids::TaskId;
+use scry_core::models::{Section, TaskState};
+use std::collections::HashMap;
 
 /// Print a value as compact JSON on stdout.
 pub fn print_json<T: serde::Serialize + ?Sized>(value: &T) -> Result<(), AppError> {
@@ -30,12 +28,9 @@ pub fn task_line(
     show_priority: bool,
     handles: &HashMap<TaskId, String>,
 ) -> String {
-    let checkbox = match &task.lifecycle {
-        Lifecycle::Open => "[ ]",
-        Lifecycle::Closed { reason, .. } => match reason {
-            CloseReason::Completed => "[x]",
-            CloseReason::Cancelled => "[~]",
-        },
+    let checkbox = match task.state {
+        TaskState::Open => "[ ]",
+        TaskState::Closed => "[x]",
     };
 
     // fall back to the full hex id if the handle map is missing this task
