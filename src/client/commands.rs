@@ -6,6 +6,9 @@ pub use add::{AddTask, add};
 mod list;
 pub use list::list;
 
+mod move_task;
+pub use move_task::{MoveTask, move_task};
+
 mod project_list;
 pub use project_list::project_list;
 

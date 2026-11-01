@@ -13,9 +13,7 @@ mod state;
 mod store;
 
 use crate::color::ColorChoice;
-use crate::service::{
-    ColorChange, ProjectService, ProjectSetup, SectionInput, UpdateProject, UpdateSection,
-};
+use crate::service::{ColorChange, ProjectService, ProjectSetup, UpdateProject, UpdateSection};
 use crate::skill::Harness;
 use crate::state::DATETIME_FORMAT_STR;
 use crate::store::{ArcStore, PostgresStore};
@@ -491,6 +489,23 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             )
             .await;
         }
+        Some(Command::Move {
+            id,
+            section,
+            no_section,
+        }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::move_task(
+                &client,
+                client::MoveTask {
+                    handle: id.as_str(),
+                    section: section.as_deref(),
+                    no_section: *no_section,
+                },
+                output_json,
+            )
+            .await;
+        }
         _ => {}
     }
 
@@ -696,33 +711,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let command = cli.command.expect("no subcommand is handled above");
 
     match command {
-        Command::Move {
-            id,
-            section,
-            no_section,
-        } => {
-            if section.is_none() && !no_section {
-                return Err(AppError::Usage(
-                    "Specify a section or --no-section.".to_string(),
-                ));
-            }
-            let task = resolve_task(&service, &project, &id).await?;
-            let section =
-                resolve_section_input(&service, &project, section, None, no_section).await?;
-            let change = service
-                .move_task_to_section(&project, task.id, section, None)
-                .await?;
-            if output_json {
-                output::print_json(&change.task)?;
-            } else {
-                let handle = service.get_task_handle(change.task.id).await?;
-                println!(
-                    "Moved task {} --> \"{}\"",
-                    handle,
-                    output::section_label(&change.section)
-                );
-            }
-        }
         Command::Duplicate { id } => {
             let source = resolve_task(&service, &project, &id).await?;
             let source_handle = service.get_task_handle(source.id).await?;
@@ -956,6 +944,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         },
         Command::Add { .. }
         | Command::Update { .. }
+        | Command::Move { .. }
         | Command::Show { .. }
         | Command::List { .. } => {
             unreachable!("handled on the HTTP path")
@@ -1056,26 +1045,4 @@ async fn resolve_task(
         .into());
     }
     Ok(task)
-}
-
-/// Render the handle for a task id at the built-in 4-character floor.
-/// Resolve the section flags shared by `add`, `move`, and `update` into the
-/// service's section-selection input.
-async fn resolve_section_input(
-    service: &ProjectService,
-    project: &Project,
-    section: Option<String>,
-    new_section: Option<String>,
-    no_section: bool,
-) -> Result<SectionInput, AppError> {
-    if no_section {
-        Ok(SectionInput::NoSection)
-    } else if let Some(name) = new_section {
-        Ok(SectionInput::New(name))
-    } else if let Some(name) = section {
-        let section = service.get_section_by_name(project.id, &name).await?;
-        Ok(SectionInput::Existing(section.id))
-    } else {
-        Ok(SectionInput::Unchanged)
-    }
 }

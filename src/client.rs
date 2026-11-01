@@ -1,7 +1,9 @@
 //! Client-side access to the scry REST API.
 
 mod commands;
-pub use commands::{AddTask, UpdateTask, add, list, project_list, show, update};
+pub use commands::{
+    AddTask, MoveTask, UpdateTask, add, list, move_task, project_list, show, update,
+};
 
 mod http;
 pub use http::Client;
