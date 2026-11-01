@@ -92,6 +92,8 @@ fn build_sections_router() -> Router<ScryState> {
 /// Routes nested under `/tasks`.
 fn build_tasks_router() -> Router<ScryState> {
     Router::new()
+        .route("/close", post(handlers::close_tasks))
+        .route("/open", post(handlers::open_tasks))
         .route(
             "/{id}",
             get(handlers::get_task)

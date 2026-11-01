@@ -7,8 +7,13 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 
+mod batch;
+
 mod close_task;
 pub use close_task::close_task;
+
+mod close_tasks;
+pub use close_tasks::close_tasks;
 
 mod create_note;
 pub use create_note::create_note;
@@ -87,6 +92,9 @@ pub use move_task::move_task;
 
 mod open_task;
 pub use open_task::open_task;
+
+mod open_tasks;
+pub use open_tasks::open_tasks;
 
 mod update_note;
 pub use update_note::update_note;
