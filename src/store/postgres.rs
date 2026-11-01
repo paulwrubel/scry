@@ -619,10 +619,12 @@ impl Store for PostgresStore {
     }
 
     async fn create_section(&self, section: SectionToCreate) -> Result<Section, StorageError> {
+        let created_at = Utc::now();
+
         match sqlx::query!(
             r#"
-                INSERT INTO sections (id, project_id, name, position, color)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO sections (id, project_id, name, position, color, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING
                     id,
                     project_id,
@@ -636,6 +638,7 @@ impl Store for PostgresStore {
             &section.name,
             section.position.as_str(),
             section.color.map(|c| c.to_string()),
+            created_at,
         )
         .fetch_one(&self.pool)
         .await

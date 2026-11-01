@@ -15,7 +15,7 @@ CREATE TABLE sections (
     name       TEXT NOT NULL,
     position   TEXT COLLATE "C" NOT NULL,
     color      TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX sections_project_id_position_idx ON sections (project_id, position);
 
