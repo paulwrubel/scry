@@ -441,6 +441,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         .await;
     }
 
+    if let Some(Command::Show { id }) = cli.command.as_ref() {
+        let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+        return client::show(&client, id.as_str(), output_json).await;
+    }
+
     let database_url = secrets.resolved_database_url(&config)?;
     let store = connect_store(&database_url).await?;
     let service = ProjectService::new(store);

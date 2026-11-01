@@ -1,10 +1,10 @@
 //! Client-side access to the scry REST API.
 
 mod commands;
-pub use commands::{list, project_list};
+pub use commands::{list, project_list, show};
 
 mod http;
 pub use http::Client;
 
 mod models;
-pub use models::ProjectDetail;
+pub use models::{ProjectDetail, TaskDetails};
