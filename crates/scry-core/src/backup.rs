@@ -333,8 +333,8 @@ fn plan_replace(
 mod tests {
     use super::*;
     use crate::ids::{NoteId, SectionId, TaskId};
-    use crate::models::{Lifecycle, Priority, Tags, TaskSortingMode};
-    use crate::store::{ProjectSnapshot, ProjectToCreate, SectionToCreate, TaskToCreate};
+    use crate::models::{Lifecycle, Priority, ProjectSnapshot, Tags, TaskSortingMode};
+    use crate::store::{ProjectToCreate, SectionToCreate, TaskToCreate};
     use chrono::Utc;
     use std::future::Future;
     use std::pin::pin;

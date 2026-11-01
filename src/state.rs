@@ -1,11 +1,10 @@
 use chrono::DateTime;
 use chrono::Utc;
 use scry_core::models::{
-    Lifecycle, Note, Priority, Project, ProjectId, Section, SectionId, Tags, Task, TaskId,
-    TaskSortingMode,
+    Lifecycle, Note, Priority, Project, ProjectId, ProjectSnapshot, Section, SectionId, Tags, Task,
+    TaskId, TaskSortingMode,
 };
 use scry_core::position::Position;
-use scry_core::store::ProjectSnapshot;
 use serde::Serialize;
 
 // Aug 9, 2026 at 4:40pm

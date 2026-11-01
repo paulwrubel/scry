@@ -5,10 +5,10 @@ use scry_core::backup::{ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
 use scry_core::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
 use scry_core::models::{
-    CloseReason, Color, Lifecycle, Note, Priority, Project, Section, Tags, Task,
+    CloseReason, Color, Lifecycle, Note, Priority, Project, ProjectSnapshot, Section, Tags, Task,
 };
 use scry_core::position::{Position, n_keys_between};
-use scry_core::store::{ProjectSnapshot, ProjectToCreate, SectionToCreate, Store, TaskToCreate};
+use scry_core::store::{ProjectToCreate, SectionToCreate, Store, TaskToCreate};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
 
