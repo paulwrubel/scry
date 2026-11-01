@@ -4,13 +4,11 @@
 //! backend, so each machine that talks to a shared server keeps its own active
 //! project.
 
-use scry_core::models::Project;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::config::ScryConfig;
 use crate::error::AppError;
-use crate::service::ProjectService;
 
 /// TOML file holding the client-local active project.
 const STATE_FILE: &str = "state.toml";
@@ -117,31 +115,6 @@ fn default_state_path() -> PathBuf {
             .join("scry")
             .join(STATE_FILE)
     }
-}
-
-/// Resolve the active project: the state file's project when it still exists,
-/// otherwise the project named `default`. Errors when neither is present.
-pub async fn active_project(
-    service: &ProjectService,
-    config: &ScryConfig,
-) -> Result<Project, AppError> {
-    let state = ClientState::load(config)?;
-
-    if let Some(name) = &state.active_project
-        && let Some(project) = service.get_project_by_name(name).await?
-    {
-        return Ok(project);
-    }
-
-    service
-        .get_project_by_name("default")
-        .await?
-        .ok_or_else(|| {
-            AppError::Usage(
-                "no active project; create one with `scry project create <name>` and select it with `scry project use <name>`"
-                    .to_string(),
-            )
-        })
 }
 
 #[cfg(test)]

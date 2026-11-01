@@ -13,7 +13,7 @@ mod state;
 mod store;
 
 use crate::color::ColorChoice;
-use crate::service::{ColorChange, ProjectService, UpdateSection};
+use crate::service::ProjectService;
 use crate::skill::Harness;
 use crate::store::{ArcStore, PostgresStore};
 use clap::{CommandFactory, Parser, Subcommand};
@@ -21,7 +21,7 @@ use config::{ScryConfig, ScrySecrets};
 use error::AppError;
 use scry_core::backup::{self, ImportMode};
 use scry_core::ids::Handle;
-use scry_core::models::{CloseReason, Color, Priority, Project, TaskSortingMode};
+use scry_core::models::{CloseReason, Color, Priority, TaskSortingMode};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -593,6 +593,81 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::project_delete(&client, name, *force, output_json).await;
         }
+        Some(Command::Section(SectionCommand::List)) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::section_list(&client, &config, cli.project.as_deref(), output_json)
+                .await;
+        }
+        Some(Command::Section(SectionCommand::Add { name, color })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::section_add(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                name,
+                *color,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Section(SectionCommand::Remove { name })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::section_remove(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                name,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Section(SectionCommand::Rename { old_name, new_name })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::section_rename(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                old_name,
+                new_name,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Section(SectionCommand::Merge { source, target })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::section_merge(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                source,
+                target,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Section(SectionCommand::SetColor { name, color })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::section_set_color(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                name,
+                *color,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Section(SectionCommand::ResetColor { name })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::section_reset_color(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                name,
+                output_json,
+            )
+            .await;
+        }
         _ => {}
     }
 
@@ -666,122 +741,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         return Ok(());
     }
 
-    let project = resolve_project(&service, &config, cli.project.as_deref()).await?;
-
     let command = cli.command.expect("no subcommand is handled above");
 
     match command {
-        Command::Section(section_cmd) => match section_cmd {
-            SectionCommand::List => {
-                let sections = service.list_sections_by_project_id(project.id).await?;
-                if output_json {
-                    output::print_json(&sections)?;
-                } else {
-                    println!("Sections for \"{}\":", project.name);
-                    for section in &sections {
-                        anstream::println!("  {}", color::status(section.color, &section.name));
-                    }
-                }
-            }
-            SectionCommand::Add { name, color } => {
-                let section = service.create_section(&project, name, color).await?;
-                if output_json {
-                    output::print_json(&section)?;
-                } else {
-                    println!(
-                        "Added section \"{}\" to project \"{}\"",
-                        section.name, project.name
-                    );
-                }
-            }
-            SectionCommand::Remove { name } => {
-                let section = service.get_section_by_name(project.id, &name).await?;
-                let removed = service.delete_section(&project, section.id).await?;
-                if output_json {
-                    output::print_json(&removed)?;
-                } else {
-                    println!(
-                        "Removed section \"{}\" from project \"{}\"; its tasks moved to No section",
-                        name, project.name
-                    );
-                }
-            }
-            SectionCommand::Rename { old_name, new_name } => {
-                let section = service.get_section_by_name(project.id, &old_name).await?;
-                let renamed = service
-                    .update_section(
-                        section.id,
-                        UpdateSection {
-                            name: Some(new_name.clone()),
-                            color: ColorChange::Keep,
-                        },
-                    )
-                    .await?;
-                if output_json {
-                    output::print_json(&renamed)?;
-                } else {
-                    println!(
-                        "Renamed section \"{}\" --> \"{}\" in project \"{}\"",
-                        old_name, new_name, project.name
-                    );
-                }
-            }
-            SectionCommand::Merge { source, target } => {
-                let source_section = service.get_section_by_name(project.id, &source).await?;
-                let target_section = service.get_section_by_name(project.id, &target).await?;
-                let (source_section, target_section) = service
-                    .merge_sections(&project, source_section.id, target_section.id)
-                    .await?;
-                if output_json {
-                    output::print_json(&target_section)?;
-                } else {
-                    println!(
-                        "Merged section \"{}\" into \"{}\"",
-                        source_section.name, target_section.name
-                    );
-                }
-            }
-            SectionCommand::SetColor { name, color } => {
-                let section = service.get_section_by_name(project.id, &name).await?;
-                let updated = service
-                    .update_section(
-                        section.id,
-                        UpdateSection {
-                            name: None,
-                            color: ColorChange::Set(color),
-                        },
-                    )
-                    .await?;
-                if output_json {
-                    output::print_json(&updated)?;
-                } else {
-                    println!(
-                        "Set color of section \"{}\" to \"{}\" in project \"{}\"",
-                        name, color, project.name
-                    );
-                }
-            }
-            SectionCommand::ResetColor { name } => {
-                let section = service.get_section_by_name(project.id, &name).await?;
-                let updated = service
-                    .update_section(
-                        section.id,
-                        UpdateSection {
-                            name: None,
-                            color: ColorChange::Clear,
-                        },
-                    )
-                    .await?;
-                if output_json {
-                    output::print_json(&updated)?;
-                } else {
-                    println!(
-                        "Reset color of section \"{}\" in project \"{}\"",
-                        name, project.name
-                    );
-                }
-            }
-        },
         Command::Add { .. }
         | Command::Update { .. }
         | Command::Move { .. }
@@ -791,6 +753,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         | Command::Open { .. }
         | Command::Note(_)
         | Command::Project(_)
+        | Command::Section(_)
         | Command::Show { .. }
         | Command::List { .. } => {
             unreachable!("handled on the HTTP path")
@@ -803,8 +766,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             unreachable!("the REST server is handled before database-backed commands")
         }
     }
-
-    Ok(())
 }
 
 /// Handle `scry skill` commands. These operate on the filesystem only and never
@@ -857,20 +818,3 @@ async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
     }
 }
 
-/// Resolve which project to use: --project flag takes precedence over active project.
-async fn resolve_project(
-    service: &ProjectService,
-    config: &ScryConfig,
-    flag: Option<&str>,
-) -> Result<Project, AppError> {
-    if let Some(name) = flag {
-        let project = service
-            .get_project_by_name(name)
-            .await?
-            .ok_or_else(|| AppError::Usage(format!("project '{}' not found", name)))?;
-        Ok(project)
-    } else {
-        let project = client_state::active_project(service, config).await?;
-        Ok(project)
-    }
-}

@@ -45,13 +45,34 @@ pub use project_update::{UpdateProject, project_update};
 mod project_use;
 pub use project_use::project_use;
 
+mod section_add;
+pub use section_add::section_add;
+
+mod section_list;
+pub use section_list::section_list;
+
+mod section_merge;
+pub use section_merge::section_merge;
+
+mod section_remove;
+pub use section_remove::section_remove;
+
+mod section_rename;
+pub use section_rename::section_rename;
+
+mod section_reset_color;
+pub use section_reset_color::section_reset_color;
+
+mod section_set_color;
+pub use section_set_color::section_set_color;
+
 mod show;
 pub use show::show;
 
 mod update;
 pub use update::{UpdateTask, update};
 
-use scry_core::models::Project;
+use scry_core::models::{Project, Section};
 
 use crate::client::{BatchTaskResult, Client};
 use crate::client_state::ClientState;
@@ -93,6 +114,21 @@ async fn fetch_project(client: &Client, name: &str) -> Result<Project, AppError>
             message: format!("project '{name}' not found"),
             details: None,
         })
+}
+
+/// Resolve a section by exact name within a project.
+async fn section_by_name(
+    client: &Client,
+    project: &Project,
+    name: &str,
+) -> Result<Section, AppError> {
+    let project_id = project.id.to_string();
+    client
+        .get_json(
+            &["projects", project_id.as_str(), "sections", "by-name", name],
+            &[],
+        )
+        .await
 }
 
 /// Render the per-handle outcomes of a batch lifecycle command.

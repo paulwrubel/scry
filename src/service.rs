@@ -74,8 +74,6 @@ pub struct UpdateProject {
 /// How an update changes a section's color.
 #[derive(Debug, Clone, Copy)]
 pub enum ColorChange {
-    /// Leave the current color unchanged.
-    Keep,
     /// Remove the section's color.
     Clear,
     /// Set the section's color.
@@ -520,7 +518,6 @@ impl ProjectService {
             None => section.name.clone(),
         };
         let color = match update.color {
-            ColorChange::Keep => section.color,
             ColorChange::Clear => None,
             ColorChange::Set(color) => Some(color),
         };
