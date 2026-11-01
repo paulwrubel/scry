@@ -99,8 +99,6 @@ pub enum ProjectSetup {
         task_sorting_mode: TaskSortingMode,
         show_priority: bool,
     },
-    /// Take the default sorting mode and seed no sections.
-    Defaults,
 }
 
 /// Frontend-agnostic, high-level operations over one project. Resolves names to
@@ -613,7 +611,6 @@ impl ProjectService {
                 task_sorting_mode,
                 show_priority,
             } => (task_sorting_mode, show_priority, None),
-            ProjectSetup::Defaults => (TaskSortingMode::default(), false, None),
         };
 
         let id = Uuid::new_v4();

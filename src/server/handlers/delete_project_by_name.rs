@@ -1,14 +1,14 @@
 //! Handler for deleting a project by name.
 
+use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use scry_core::error::StorageError;
 
 use crate::error::AppError;
 use crate::server::ScryState;
 
-/// Delete a project by exact name; responds with `204 No Content`.
+/// Delete a project by exact name and return the removed project.
 pub async fn delete_project_by_name(
     State(state): State<ScryState>,
     Path(name): Path<String>,
@@ -25,7 +25,7 @@ pub async fn delete_project_by_name(
     };
 
     match state.service.delete_project_by_id(project.id).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Ok(removed) => Json(removed).into_response(),
         Err(error) => AppError::from(error).into(),
     }
 }

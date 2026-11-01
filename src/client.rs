@@ -2,8 +2,9 @@
 
 mod commands;
 pub use commands::{
-    AddTask, MoveTask, UpdateTask, add, close_tasks, delete, duplicate, list, move_task, note_add,
-    open_tasks, project_current, project_list, project_show, project_use, show, update,
+    AddTask, CreateProject, MoveTask, UpdateProject, UpdateTask, add, close_tasks, delete,
+    duplicate, list, move_task, note_add, open_tasks, project_create, project_current,
+    project_delete, project_list, project_show, project_update, project_use, show, update,
 };
 
 mod http;

@@ -1,7 +1,7 @@
 //! Handler for deleting a project by id.
 
+use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use scry_core::error::StorageError;
 use scry_core::models::ProjectId;
@@ -9,7 +9,7 @@ use scry_core::models::ProjectId;
 use crate::error::AppError;
 use crate::server::ScryState;
 
-/// Delete a project by id; responds with `204 No Content`.
+/// Delete a project by id and return the removed project.
 pub async fn delete_project_by_id(
     State(state): State<ScryState>,
     Path(id): Path<ProjectId>,
@@ -24,7 +24,7 @@ pub async fn delete_project_by_id(
     };
 
     match state.service.delete_project_by_id(project.id).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Ok(removed) => Json(removed).into_response(),
         Err(error) => AppError::from(error).into(),
     }
 }

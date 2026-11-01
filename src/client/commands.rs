@@ -24,14 +24,23 @@ pub use note_add::note_add;
 mod open_tasks;
 pub use open_tasks::open_tasks;
 
+mod project_create;
+pub use project_create::{CreateProject, project_create};
+
 mod project_current;
 pub use project_current::project_current;
+
+mod project_delete;
+pub use project_delete::project_delete;
 
 mod project_list;
 pub use project_list::project_list;
 
 mod project_show;
 pub use project_show::project_show;
+
+mod project_update;
+pub use project_update::{UpdateProject, project_update};
 
 mod project_use;
 pub use project_use::project_use;
@@ -51,27 +60,39 @@ use crate::error::AppError;
 use crate::output::print_json;
 
 /// Resolve a project from `-p` or the local active project.
+///
+/// An explicit `-p` must exist. A stale active project falls back to `default`,
+/// matching the old local resolver.
 async fn project_by_name(
     client: &Client,
     config: &ScryConfig,
     project_flag: Option<&str>,
 ) -> Result<Project, AppError> {
-    let project_name = match project_flag {
-        Some(name) => name.to_string(),
-        None => ClientState::load(config)?
-            .active_project
-            .unwrap_or_else(|| "default".to_string()),
-    };
+    if let Some(name) = project_flag {
+        return fetch_project(client, name).await;
+    }
 
-    let project: Option<Project> = client
-        .get_json(&["projects", "by-name", project_name.as_str()], &[])
-        .await?;
+    if let Some(name) = ClientState::load(config)?.active_project
+        && let Some(project) = fetch_project_opt(client, &name).await?
+    {
+        return Ok(project);
+    }
 
-    project.ok_or_else(|| AppError::Remote {
-        kind: "not_found",
-        message: format!("project '{project_name}' not found"),
-        details: None,
-    })
+    fetch_project(client, "default").await
+}
+
+async fn fetch_project_opt(client: &Client, name: &str) -> Result<Option<Project>, AppError> {
+    client.get_json(&["projects", "by-name", name], &[]).await
+}
+
+async fn fetch_project(client: &Client, name: &str) -> Result<Project, AppError> {
+    fetch_project_opt(client, name)
+        .await?
+        .ok_or_else(|| AppError::Remote {
+            kind: "not_found",
+            message: format!("project '{name}' not found"),
+            details: None,
+        })
 }
 
 /// Render the per-handle outcomes of a batch lifecycle command.

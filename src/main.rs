@@ -13,7 +13,7 @@ mod state;
 mod store;
 
 use crate::color::ColorChoice;
-use crate::service::{ColorChange, ProjectService, ProjectSetup, UpdateProject, UpdateSection};
+use crate::service::{ColorChange, ProjectService, UpdateSection};
 use crate::skill::Harness;
 use crate::store::{ArcStore, PostgresStore};
 use clap::{CommandFactory, Parser, Subcommand};
@@ -21,9 +21,7 @@ use config::{ScryConfig, ScrySecrets};
 use error::AppError;
 use scry_core::backup::{self, ImportMode};
 use scry_core::ids::Handle;
-use scry_core::models::{
-    CloseReason, Color, PROJECT_TEMPLATES, Priority, Project, ProjectTemplate, TaskSortingMode,
-};
+use scry_core::models::{CloseReason, Color, Priority, Project, TaskSortingMode};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -544,6 +542,57 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::project_use(&client, &config, name, output_json).await;
         }
+        Some(Command::Project(ProjectCommand::Create {
+            name,
+            template_name,
+            description,
+        })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::project_create(
+                &client,
+                client::CreateProject {
+                    name,
+                    description: description.as_deref(),
+                    template: template_name.as_deref(),
+                },
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Project(ProjectCommand::Update {
+            name,
+            description,
+            sort,
+            show_priority,
+            hide_priority,
+        })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            let show_priority = if *show_priority {
+                Some(true)
+            } else if *hide_priority {
+                Some(false)
+            } else {
+                None
+            };
+
+            return client::project_update(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                client::UpdateProject {
+                    name: name.as_deref(),
+                    description: description.as_deref(),
+                    sort: *sort,
+                    show_priority,
+                },
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Project(ProjectCommand::Delete { name, force })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::project_delete(&client, name, *force, output_json).await;
+        }
         _ => {}
     }
 
@@ -553,88 +602,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
 
     if let Some(Command::Serve { http }) = &cli.command {
         return server::serve_http(service, http, secrets.api_token()).await;
-    }
-
-    // These commands create, list, select, or remove projects, or move data in
-    // and out; none of them needs an active project, so they run even when the
-    // active project cannot be resolved.
-    if let Some(Command::Project(subcommand)) = cli.command.as_ref() {
-        match subcommand {
-            ProjectCommand::Create {
-                name,
-                template_name,
-                description,
-            } => {
-                let template: Option<&ProjectTemplate> = match template_name {
-                    Some(requested) => {
-                        let Some(template) =
-                            PROJECT_TEMPLATES.iter().find(|t| t.name == *requested)
-                        else {
-                            return Err(AppError::Usage(format!(
-                                "Unknown template name: \"{}\".",
-                                requested
-                            )));
-                        };
-                        Some(template)
-                    }
-                    None => None,
-                };
-
-                let setup = match template {
-                    Some(template) => ProjectSetup::Template(*template),
-                    None => ProjectSetup::Defaults,
-                };
-                let project = service
-                    .create_project(name.clone(), description.clone(), setup)
-                    .await?;
-
-                if output_json {
-                    output::print_json(&project)?;
-                } else {
-                    println!("Created project \"{}\"", project.name);
-                    if template.is_none() {
-                        println!(
-                            "Note: sections are optional. Add one with 'scry section add <name>'."
-                        );
-                    }
-                    println!(
-                        "Make it active with 'scry project use \"{}\"'.",
-                        project.name
-                    );
-                }
-                return Ok(());
-            }
-            ProjectCommand::Delete { name, force } => {
-                let project = service
-                    .get_project_by_name(name)
-                    .await?
-                    .ok_or_else(|| AppError::Usage(format!("project '{name}' not found")))?;
-                if !force && !output_json {
-                    use std::io::Write;
-                    print!("Delete project \"{}\" and all its tasks? [y/N]: ", name);
-                    std::io::stdout().flush().unwrap();
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input).unwrap();
-                    if input.trim().to_lowercase() != "y" {
-                        println!("Cancelled.");
-                        return Ok(());
-                    }
-                }
-                let removed = service.delete_project_by_id(project.id).await?;
-                if output_json {
-                    output::print_json(&removed)?;
-                } else {
-                    println!("Deleted project \"{}\"", name);
-                    if let Ok(new_active) = client_state::active_project(&service, &config).await
-                        && new_active.name != *name
-                    {
-                        println!("Using project \"{}\"", new_active.name);
-                    }
-                }
-                return Ok(());
-            }
-            _ => {}
-        }
     }
 
     if let Some(Command::Export) = cli.command.as_ref() {
@@ -704,58 +671,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let command = cli.command.expect("no subcommand is handled above");
 
     match command {
-        Command::Project(project_cmd) => match project_cmd {
-            ProjectCommand::List
-            | ProjectCommand::Create { .. }
-            | ProjectCommand::Show { .. }
-            | ProjectCommand::Use { .. }
-            | ProjectCommand::Delete { .. }
-            | ProjectCommand::Current => {
-                unreachable!("handled before the active project is resolved")
-            }
-            ProjectCommand::Update {
-                name,
-                description,
-                sort,
-                show_priority,
-                hide_priority,
-            } => {
-                if name.is_none()
-                    && description.is_none()
-                    && sort.is_none()
-                    && !show_priority
-                    && !hide_priority
-                {
-                    return Err(AppError::Usage(
-                        "No flags provided. Use 'scry project update --help' for available options."
-                            .to_string(),
-                    ));
-                }
-                let show_priority = if show_priority {
-                    Some(true)
-                } else if hide_priority {
-                    Some(false)
-                } else {
-                    None
-                };
-                let updated = service
-                    .update_project(
-                        &project,
-                        UpdateProject {
-                            name,
-                            description,
-                            task_sorting_mode: sort,
-                            show_priority,
-                        },
-                    )
-                    .await?;
-                if output_json {
-                    output::print_json(&updated)?;
-                } else {
-                    println!("Updated project \"{}\".", updated.name);
-                }
-            }
-        },
         Command::Section(section_cmd) => match section_cmd {
             SectionCommand::List => {
                 let sections = service.list_sections_by_project_id(project.id).await?;
@@ -875,6 +790,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         | Command::Close { .. }
         | Command::Open { .. }
         | Command::Note(_)
+        | Command::Project(_)
         | Command::Show { .. }
         | Command::List { .. } => {
             unreachable!("handled on the HTTP path")
