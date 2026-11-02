@@ -19,9 +19,9 @@ use crate::store::{ArcStore, PostgresStore};
 use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::AppError;
-use scry_core::backup::ImportMode;
 use scry_core::ids::Handle;
 use scry_core::models::{Color, Priority, TaskSortingMode};
+use scry_core::snapshot::ImportMode;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -156,14 +156,14 @@ enum Command {
     /// Manage notes on a task
     #[command(subcommand)]
     Note(NoteCommand),
-    /// Export all data (or a single project with the global -p/--project) as JSON to stdout
+    /// Snapshot all data (or a single project with the global -p/--project) as JSON to stdout
     Export,
-    /// Import a JSON backup from stdin
+    /// Import a JSON snapshot from stdin
     Import {
-        /// Replace the existing project when the backup has a project with the same name
+        /// Replace the existing project when the snapshot has a project with the same name
         #[arg(long, conflicts_with = "skip_existing_projects")]
         replace_existing_projects: bool,
-        /// Keep the existing project and skip the backup's project of the same name
+        /// Keep the existing project and skip the snapshot's project of the same name
         #[arg(long, conflicts_with = "replace_existing_projects")]
         skip_existing_projects: bool,
     },

@@ -396,11 +396,17 @@ impl ChangeKind {
 
 /// One row of the changes log, as written by the server.
 ///
+/// `seq` is assigned by the database and defines the row's order. Writers pass
+/// a placeholder (`0`) to [`Store::record_change`](crate::store::Store::record_change),
+/// which ignores it and returns the assigned value; readers get the real value
+/// back from the pull query.
+///
 /// `created_at` is when the server wrote the row and is supplied by the
 /// service. `client_timestamp` is recorded as the client reported it and never
-/// compared; the row's own `seq`, assigned by the database, defines the order.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// compared; `seq` remains the only ordering.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Change {
+    pub seq: i64,
     pub entity_type: EntityType,
     pub entity_id: Uuid,
     pub kind: ChangeKind,
@@ -413,7 +419,7 @@ pub struct Change {
 /// A project together with all of its sections, tasks, and notes.
 ///
 /// This is scry's canonical project document: `GET /projects/{id}/snapshot`
-/// returns it directly, and each entry in an export/backup is the same
+/// returns it directly, and each entry in a snapshot file is the same
 /// object. The project's own fields are flattened into the object's top
 /// level, and all ids and positions are carried verbatim so the document can
 /// be serialized and deserialized without loss.

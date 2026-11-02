@@ -1,7 +1,7 @@
-use crate::backup::{ImportPlan, ImportReport};
 use crate::error::StorageError;
 use crate::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
 use crate::models::{Change, Entity, EntityType, Note, Project, ProjectSnapshot, Section, Task};
+use crate::snapshot::{ImportPlan, ImportReport};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{PgConnection, Postgres, Transaction};
@@ -261,7 +261,7 @@ pub trait Store: Send + Sync {
     /// projects are inserted; in `Skip` and `Fail` mode no existing data is
     /// removed. Rows are inserted or updated by the UUID ids and carry the
     /// timestamps held by the plan, so callers must resolve project-name
-    /// collisions beforehand (see `crate::backup::plan_import`).
+    /// collisions beforehand (see `crate::snapshot::plan_import`).
     async fn import(
         &self,
         plan: ImportPlan,
@@ -287,12 +287,24 @@ pub trait Store: Send + Sync {
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError>;
 
-    /// Append a row to the changes log, returning its `seq`.
+    /// Append a row to the changes log, returning the database-assigned `seq`.
+    ///
+    /// The passed `change.seq` is a placeholder and is ignored.
     async fn record_change(
         &self,
         change: Change,
         tx: Option<&mut PgConnection>,
     ) -> Result<i64, StorageError>;
+
+    /// Return every changes-log row after `after`, in ascending `seq` order.
+    async fn changes_after(
+        &self,
+        after: i64,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Vec<Change>, StorageError>;
+
+    /// The highest `seq` in the changes log, or `0` when the log is empty.
+    async fn last_change_seq(&self, tx: Option<&mut PgConnection>) -> Result<i64, StorageError>;
 
     /// Whether a tombstone exists for the entity, meaning an earlier delete
     /// removed it and later operations against it must be rejected.

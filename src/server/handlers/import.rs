@@ -1,36 +1,36 @@
-//! Handler for importing a backup.
+//! Handler for importing a snapshot file.
 
 use axum::Json;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
-use scry_core::backup::{self, ImportMode};
+use scry_core::snapshot::{self, ImportMode};
 use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::server::ScryState;
 
-/// Request body for an import: the raw backup plus the collision mode.
+/// Request body for an import: the raw snapshot file plus the collision mode.
 #[derive(Deserialize)]
 pub struct ImportRequest {
-    pub backup: serde_json::Value,
+    pub snapshot: serde_json::Value,
     pub mode: ImportMode,
 }
 
-/// Parse a backup, plan the import, and apply it server-side.
+/// Parse a snapshot file, plan the import, and apply it server-side.
 pub async fn import(State(state): State<ScryState>, Json(body): Json<ImportRequest>) -> Response {
-    let text = match serde_json::to_string(&body.backup) {
+    let text = match serde_json::to_string(&body.snapshot) {
         Ok(text) => text,
         Err(error) => {
-            return AppError::Internal(format!("failed to serialize backup: {error}")).into();
+            return AppError::Internal(format!("failed to serialize snapshot: {error}")).into();
         }
     };
 
-    let backup = match backup::parse(&text) {
-        Ok(backup) => backup,
+    let file = match snapshot::parse_file(&text) {
+        Ok(file) => file,
         Err(error) => return AppError::Usage(error.to_string()).into(),
     };
 
-    let plan = match state.service.plan_import(&backup, body.mode).await {
+    let plan = match state.service.plan_import(&file, body.mode).await {
         Ok(plan) => plan,
         Err(error) => return AppError::from(error).into(),
     };
