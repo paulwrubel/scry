@@ -12,8 +12,12 @@ use scry_core::models::{
 };
 use scry_core::position::{Position, key_between, n_keys_between};
 use scry_core::store::ArcStore;
-use scry_core::sync::ack::{ApplyOutcome, OperationAcknowledgment, RejectionReason};
-use scry_core::sync::operations::{ColorChange as OperationColorChange, Operation, OperationKind};
+use scry_core::sync::ack::{
+    AcknowledgmentStatus, ApplyOutcome, OperationAcknowledgment, RejectionReason,
+};
+use scry_core::sync::operations::{
+    ColorChange as OperationColorChange, OPERATION_VERSION, Operation, OperationKind,
+};
 use serde_json::{Map, Value, json};
 use sqlx::{Postgres, Transaction};
 use std::collections::HashMap;
@@ -34,6 +38,38 @@ fn position_error(error: scry_core::position::PositionError) -> ServiceError {
     ServiceError::Storage(StorageError::Invalid(format!(
         "failed to generate position: {error}"
     )))
+}
+
+/// Build a wire operation for a REST write. REST writes carry no client
+/// timestamp (#46); the server's time is recorded on the change row.
+fn new_operation(operation_id: Uuid, kind: OperationKind) -> Operation {
+    Operation {
+        operation_id,
+        operation_version: OPERATION_VERSION,
+        timestamp: None,
+        kind,
+    }
+}
+
+/// Turn a pipeline rejection into the error a REST write returns. Tombstoned
+/// entities are reported as not found because they no longer exist.
+fn rejection_error(operation_id: Uuid, reason: RejectionReason) -> ServiceError {
+    let message = format!("operation {operation_id} rejected: {}", reason.as_str());
+    ServiceError::Storage(match reason {
+        RejectionReason::NotFound | RejectionReason::Tombstoned => StorageError::NotFound(message),
+        RejectionReason::Conflict => StorageError::Conflict(message),
+        RejectionReason::UnsupportedVersion => StorageError::Invalid(message),
+    })
+}
+
+/// How a batch of operations treats a rejected operation.
+#[derive(Debug, Clone, Copy)]
+pub enum ApplyMode {
+    /// Roll the whole batch back on the first rejection (REST writes).
+    Atomic,
+    /// Acknowledge the rejection and apply the rest of the batch (#104's `/sync`).
+    #[allow(dead_code)]
+    PerOperation,
 }
 
 /// Input for creating a task. `SectionInput::Unchanged` means no section.
@@ -121,30 +157,45 @@ impl ProjectService {
         input: NewTask,
     ) -> Result<TaskChangeResult, ServiceError> {
         let project = self.require_project(project_id).await?;
-        let section = self.resolve_section(&project, input.section).await?;
+        let (section, section_op) = self.resolve_section(&project, input.section).await?;
         let section_id = section.as_ref().map(|section| section.id);
         let position = self.append_position(project.id, section_id).await?;
 
-        let task = self
-            .store
-            .create_task(
-                Task {
-                    id: Uuid::new_v4(),
-                    project_id: project.id,
-                    title: input.title,
-                    description: input
-                        .description
-                        .filter(|description| !description.is_empty()),
-                    priority: input.priority.unwrap_or_default(),
-                    section_id,
-                    position,
-                    state: TaskState::Open,
-                    tags: input.tags.unwrap_or_default(),
-                    created_at: Utc::now(),
-                },
-                None,
-            )
-            .await?;
+        let task = Task {
+            id: Uuid::new_v4(),
+            project_id: project.id,
+            title: input.title,
+            description: input
+                .description
+                .filter(|description| !description.is_empty()),
+            priority: input.priority.unwrap_or_default(),
+            section_id,
+            position: position.clone(),
+            state: TaskState::Open,
+            tags: input.tags.unwrap_or_default(),
+            created_at: Utc::now(),
+        };
+
+        let mut ops = Vec::new();
+        if let Some(section_op) = section_op {
+            ops.push(section_op);
+        }
+        ops.push(new_operation(
+            Uuid::new_v4(),
+            OperationKind::CreateTask {
+                id: task.id,
+                project_id: task.project_id,
+                title: task.title.clone(),
+                description: task.description.clone(),
+                priority: task.priority,
+                section_id: task.section_id,
+                position,
+                state: task.state,
+                tags: task.tags.clone(),
+                created_at: task.created_at,
+            },
+        ));
+        self.apply_operations(&ops, ApplyMode::Atomic).await?;
 
         Ok(TaskChangeResult { task })
     }
@@ -164,24 +215,35 @@ impl ProjectService {
         let position =
             key_between(Some(&source.position), next_position).map_err(position_error)?;
 
-        let task = self
-            .store
-            .create_task(
-                Task {
-                    id: Uuid::new_v4(),
-                    project_id: source.project_id,
-                    title: source.title,
-                    description: source.description,
-                    priority: source.priority,
-                    section_id: source.section_id,
-                    position,
-                    state: source.state,
-                    tags: source.tags,
-                    created_at: Utc::now(),
-                },
-                None,
-            )
-            .await?;
+        let task = Task {
+            id: Uuid::new_v4(),
+            project_id: source.project_id,
+            title: source.title,
+            description: source.description,
+            priority: source.priority,
+            section_id: source.section_id,
+            position: position.clone(),
+            state: source.state,
+            tags: source.tags,
+            created_at: Utc::now(),
+        };
+
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::CreateTask {
+                id: task.id,
+                project_id: task.project_id,
+                title: task.title.clone(),
+                description: task.description.clone(),
+                priority: task.priority,
+                section_id: task.section_id,
+                position,
+                state: task.state,
+                tags: task.tags.clone(),
+                created_at: task.created_at,
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
 
         Ok(TaskChangeResult { task })
     }
@@ -213,25 +275,57 @@ impl ProjectService {
     ) -> Result<Task, ServiceError> {
         let mut task = self.require_task(task_id).await?;
         let project = self.require_project(task.project_id).await?;
+        let mut ops = Vec::new();
+        let mut moved = false;
 
         if patch.section != SectionInput::Unchanged {
-            let section = self.resolve_section(&project, patch.section).await?;
+            let (section, section_op) = self.resolve_section(&project, patch.section).await?;
+            if let Some(section_op) = section_op {
+                ops.push(section_op);
+            }
             let section_id = section.as_ref().map(|section| section.id);
             if section_id != task.section_id {
                 task.position = self.append_position(project.id, section_id).await?;
                 task.section_id = section_id;
+                moved = true;
             }
         }
 
-        task.title = patch.title.unwrap_or(task.title);
-        task.description = match patch.description {
-            Some(description) => Some(description).filter(|description| !description.is_empty()),
-            None => task.description,
-        };
-        task.priority = patch.priority.unwrap_or(task.priority);
-        task.tags = patch.tags.unwrap_or(task.tags);
+        if moved {
+            ops.push(new_operation(
+                Uuid::new_v4(),
+                OperationKind::MoveTask {
+                    id: task.id,
+                    section_id: task.section_id,
+                    position: task.position.clone(),
+                },
+            ));
+        }
 
-        Ok(self.store.update_task(task, None).await?)
+        if patch.title.is_some()
+            || patch.description.is_some()
+            || patch.priority.is_some()
+            || patch.tags.is_some()
+        {
+            let description = patch
+                .description
+                .map(|value| Some(value).filter(|value| !value.is_empty()));
+            let kind = OperationKind::UpdateTask {
+                id: task.id,
+                title: patch.title,
+                description,
+                priority: patch.priority,
+                tags: patch.tags,
+                state: None,
+            };
+            // apply exactly the op's fields to the returned model
+            task_field_updates(&mut task, &kind);
+            ops.push(new_operation(Uuid::new_v4(), kind));
+        }
+
+        self.apply_operations(&ops, ApplyMode::Atomic).await?;
+
+        Ok(task)
     }
 
     pub async fn move_task_to_section_by_id(
@@ -243,13 +337,16 @@ impl ProjectService {
         let mut task = self.require_task(task_id).await?;
         let project = self.require_project(task.project_id).await?;
         let unchanged = section == SectionInput::Unchanged;
-        let section = if unchanged {
+        let (section, section_op) = if unchanged {
             match task.section_id {
-                Some(section_id) => Some(
-                    self.require_section_in_project(&project, section_id)
-                        .await?,
+                Some(section_id) => (
+                    Some(
+                        self.require_section_in_project(&project, section_id)
+                            .await?,
+                    ),
+                    None,
                 ),
-                None => None,
+                None => (None, None),
             }
         } else {
             self.resolve_section(&project, section).await?
@@ -266,7 +363,20 @@ impl ProjectService {
         };
         task.section_id = section_id;
 
-        let task = self.store.update_task(task, None).await?;
+        let mut ops = Vec::new();
+        if let Some(section_op) = section_op {
+            ops.push(section_op);
+        }
+        ops.push(new_operation(
+            Uuid::new_v4(),
+            OperationKind::MoveTask {
+                id: task.id,
+                section_id: task.section_id,
+                position: task.position.clone(),
+            },
+        ));
+        self.apply_operations(&ops, ApplyMode::Atomic).await?;
+
         Ok(TaskChangeResult { task })
     }
 
@@ -276,7 +386,19 @@ impl ProjectService {
             return Ok(task);
         }
         task.state = TaskState::Closed;
-        Ok(self.store.update_task(task, None).await?)
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::UpdateTask {
+                id: task.id,
+                title: None,
+                description: None,
+                priority: None,
+                tags: None,
+                state: Some(task.state),
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(task)
     }
 
     pub async fn open_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
@@ -285,29 +407,47 @@ impl ProjectService {
             return Ok(task);
         }
         task.state = TaskState::Open;
-        Ok(self.store.update_task(task, None).await?)
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::UpdateTask {
+                id: task.id,
+                title: None,
+                description: None,
+                priority: None,
+                tags: None,
+                state: Some(task.state),
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(task)
     }
 
     pub async fn delete_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
         let task = self.require_task(task_id).await?;
-        self.store.delete_task(task_id, None).await?;
+        let op = new_operation(Uuid::new_v4(), OperationKind::DeleteTask { id: task_id });
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
         Ok(task)
     }
 
     pub async fn add_note(&self, task_id: TaskId, contents: String) -> Result<Note, ServiceError> {
         self.require_task(task_id).await?;
-        Ok(self
-            .store
-            .create_note(
-                Note {
-                    id: Uuid::new_v4(),
-                    task_id,
-                    contents,
-                    created_at: Utc::now(),
-                },
-                None,
-            )
-            .await?)
+        let note = Note {
+            id: Uuid::new_v4(),
+            task_id,
+            contents,
+            created_at: Utc::now(),
+        };
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::CreateNote {
+                id: note.id,
+                task_id: note.task_id,
+                contents: note.contents.clone(),
+                created_at: note.created_at,
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(note)
     }
 
     pub async fn list_notes_by_project_id(
@@ -329,11 +469,25 @@ impl ProjectService {
     }
 
     pub async fn update_note(&self, note: Note) -> Result<Note, ServiceError> {
-        Ok(self.store.update_note(note, None).await?)
+        let existing = self.require_note(note.id).await?;
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::UpdateNote {
+                id: note.id,
+                contents: note.contents.clone(),
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(Note {
+            contents: note.contents,
+            ..existing
+        })
     }
 
     pub async fn delete_note(&self, id: NoteId) -> Result<(), ServiceError> {
-        self.store.delete_note(id, None).await?;
+        self.require_note(id).await?;
+        let op = new_operation(Uuid::new_v4(), OperationKind::DeleteNote { id });
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
         Ok(())
     }
 
@@ -396,12 +550,12 @@ impl ProjectService {
         }
     }
 
-    async fn create_section(
+    async fn build_section(
         &self,
         project: &Project,
         name: String,
         color: Option<Color>,
-    ) -> Result<Section, ServiceError> {
+    ) -> Result<(Section, Operation), ServiceError> {
         let name = self.validated_section_name(project, None, name).await?;
         let sections = self
             .store
@@ -414,20 +568,27 @@ impl ProjectService {
             .cloned();
         let position = key_between(last.as_ref(), None).map_err(position_error)?;
         let id = Uuid::new_v4();
-        Ok(self
-            .store
-            .create_section(
-                Section {
-                    id,
-                    project_id: project.id,
-                    name,
-                    position,
-                    color,
-                    created_at: Utc::now(),
-                },
-                None,
-            )
-            .await?)
+        let created_at = Utc::now();
+        let section = Section {
+            id,
+            project_id: project.id,
+            name: name.clone(),
+            position: position.clone(),
+            color,
+            created_at,
+        };
+        let operation = new_operation(
+            Uuid::new_v4(),
+            OperationKind::CreateSection {
+                id,
+                project_id: project.id,
+                name,
+                position,
+                color,
+                created_at,
+            },
+        );
+        Ok((section, operation))
     }
 
     pub async fn create_section_in_project(
@@ -437,7 +598,10 @@ impl ProjectService {
         color: Option<Color>,
     ) -> Result<Section, ServiceError> {
         let project = self.require_project(project_id).await?;
-        self.create_section(&project, name, color).await
+        let (section, operation) = self.build_section(&project, name, color).await?;
+        self.apply_operations(&[operation], ApplyMode::Atomic)
+            .await?;
+        Ok(section)
     }
 
     /// Look up a section by its exact name within a project.
@@ -495,17 +659,25 @@ impl ProjectService {
             ColorChange::Clear => None,
             ColorChange::Set(color) => Some(color),
         };
-        Ok(self
-            .store
-            .update_section(
-                Section {
-                    name,
-                    color,
-                    ..section
-                },
-                None,
-            )
-            .await?)
+        let operation_color = match update.color {
+            ColorChange::Clear => OperationColorChange::Clear,
+            ColorChange::Set(color) => OperationColorChange::Set(color),
+        };
+        let updated = Section {
+            name: name.clone(),
+            color,
+            ..section
+        };
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::UpdateSection {
+                id: updated.id,
+                name: Some(name),
+                color: Some(operation_color),
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(updated)
     }
 
     pub async fn delete_section_by_id(
@@ -513,7 +685,11 @@ impl ProjectService {
         section_id: SectionId,
     ) -> Result<Section, ServiceError> {
         let section = self.require_section(section_id).await?;
-        self.store.delete_section(section_id, None).await?;
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::DeleteSection { id: section_id },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
         Ok(section)
     }
 
@@ -535,12 +711,22 @@ impl ProjectService {
         let last_target = self.last_task_position(project.id, Some(target.id)).await?;
         let positions = n_keys_between(last_target.as_ref(), None, source_tasks.len())
             .map_err(position_error)?;
-        for (mut task, position) in source_tasks.into_iter().zip(positions) {
-            task.section_id = Some(target.id);
-            task.position = position;
-            self.store.update_task(task, None).await?;
+        let mut ops = Vec::with_capacity(source_tasks.len() + 1);
+        for (task, position) in source_tasks.into_iter().zip(positions) {
+            ops.push(new_operation(
+                Uuid::new_v4(),
+                OperationKind::MoveTask {
+                    id: task.id,
+                    section_id: Some(target.id),
+                    position,
+                },
+            ));
         }
-        self.store.delete_section(source.id, None).await?;
+        ops.push(new_operation(
+            Uuid::new_v4(),
+            OperationKind::DeleteSection { id: source.id },
+        ));
+        self.apply_operations(&ops, ApplyMode::Atomic).await?;
 
         Ok((source, target))
     }
@@ -564,32 +750,42 @@ impl ProjectService {
             } => (task_sorting_mode, show_priority, None),
         };
 
-        let id = Uuid::new_v4();
-        let project = self
-            .store
-            .create_project(
-                Project {
-                    id,
-                    name,
-                    description: description.filter(|description| !description.is_empty()),
-                    task_sorting_mode,
-                    show_priority,
-                    created_at: Utc::now(),
-                },
-                None,
-            )
-            .await?;
-
-        let Some(sections) = template_sections else {
-            return Ok(project);
+        let project = Project {
+            id: Uuid::new_v4(),
+            name,
+            description: description.filter(|description| !description.is_empty()),
+            task_sorting_mode,
+            show_priority,
+            created_at: Utc::now(),
         };
 
-        for section in sections {
-            let position = Position::parse(section.position).map_err(position_error)?;
-            let id = template_section_id(project.id, section.name);
-            self.store
-                .create_section(
-                    Section {
+        if self.get_project_by_name(&project.name).await?.is_some() {
+            return Err(StorageError::Conflict(format!(
+                "project '{}' already exists",
+                project.name
+            ))
+            .into());
+        }
+
+        let mut ops = vec![new_operation(
+            Uuid::new_v4(),
+            OperationKind::CreateProject {
+                id: project.id,
+                name: project.name.clone(),
+                description: project.description.clone(),
+                task_sorting_mode: project.task_sorting_mode,
+                show_priority: project.show_priority,
+                created_at: project.created_at,
+            },
+        )];
+
+        if let Some(sections) = template_sections {
+            for section in sections {
+                let position = Position::parse(section.position).map_err(position_error)?;
+                let id = template_section_id(project.id, section.name);
+                ops.push(new_operation(
+                    Uuid::new_v4(),
+                    OperationKind::CreateSection {
                         id,
                         project_id: project.id,
                         name: section.name.to_string(),
@@ -597,11 +793,11 @@ impl ProjectService {
                         color: section.color,
                         created_at: Utc::now(),
                     },
-                    None,
-                )
-                .await?;
+                ));
+            }
         }
 
+        self.apply_operations(&ops, ApplyMode::Atomic).await?;
         Ok(project)
     }
 
@@ -629,25 +825,41 @@ impl ProjectService {
         project: &Project,
         update: UpdateProject,
     ) -> Result<Project, ServiceError> {
-        let description = match update.description {
+        let description = match update.description.clone() {
             Some(value) => Some(value).filter(|value| !value.is_empty()),
             None => project.description.clone(),
         };
-        Ok(self
-            .store
-            .update_project(
-                Project {
-                    name: update.name.unwrap_or_else(|| project.name.clone()),
+        let updated = Project {
+            name: update.name.clone().unwrap_or_else(|| project.name.clone()),
+            description,
+            task_sorting_mode: update
+                .task_sorting_mode
+                .unwrap_or(project.task_sorting_mode),
+            show_priority: update.show_priority.unwrap_or(project.show_priority),
+            ..project.clone()
+        };
+
+        let changed = update.name.is_some()
+            || update.description.is_some()
+            || update.task_sorting_mode.is_some()
+            || update.show_priority.is_some();
+        if changed {
+            let description = update
+                .description
+                .map(|value| Some(value).filter(|value| !value.is_empty()));
+            let op = new_operation(
+                Uuid::new_v4(),
+                OperationKind::UpdateProject {
+                    id: project.id,
+                    name: update.name,
                     description,
-                    task_sorting_mode: update
-                        .task_sorting_mode
-                        .unwrap_or(project.task_sorting_mode),
-                    show_priority: update.show_priority.unwrap_or(project.show_priority),
-                    ..project.clone()
+                    task_sorting_mode: update.task_sorting_mode,
+                    show_priority: update.show_priority,
                 },
-                None,
-            )
-            .await?)
+            );
+            self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        }
+        Ok(updated)
     }
 
     /// Delete a project by id, returning the deleted project.
@@ -656,7 +868,11 @@ impl ProjectService {
         project_id: ProjectId,
     ) -> Result<Project, ServiceError> {
         let project = self.require_project(project_id).await?;
-        self.store.delete_project_by_id(project.id, None).await?;
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::DeleteProject { id: project.id },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
         Ok(project)
     }
 
@@ -676,18 +892,31 @@ impl ProjectService {
         Ok(self.store.import(plan, None).await?)
     }
 
-    // #103 wires the REST surface into this; until then nothing calls it.
-    #[allow(dead_code)]
+    /// Apply a batch of operations in one transaction. `Atomic` rolls the
+    /// batch back on the first rejection so one HTTP write cannot leave partial
+    /// state; `PerOperation` acknowledges the rejection and applies the rest
+    /// (#104's `/sync`).
     pub async fn apply_operations(
         &self,
-        ops: Vec<Operation>,
+        ops: &[Operation],
+        mode: ApplyMode,
     ) -> Result<ApplyOutcome, ServiceError> {
+        if ops.is_empty() {
+            return Ok(ApplyOutcome::default());
+        }
+
         let mut tx = self.store.begin_apply().await?;
         let mut acks = Vec::with_capacity(ops.len());
         let mut last_seq = None;
 
-        for op in &ops {
+        for op in ops {
             let (ack, seq) = self.apply_one_operation(&mut tx, op).await?;
+            if matches!(mode, ApplyMode::Atomic)
+                && let AcknowledgmentStatus::Rejected { reason } = &ack.status
+            {
+                // dropping `tx` rolls the whole batch back
+                return Err(rejection_error(op.operation_id, *reason));
+            }
             last_seq = last_seq.max(seq);
             acks.push(ack);
         }
@@ -1304,13 +1533,17 @@ impl ProjectService {
         &self,
         project: &Project,
         input: SectionInput,
-    ) -> Result<Option<Section>, ServiceError> {
+    ) -> Result<(Option<Section>, Option<Operation>), ServiceError> {
         match input {
-            SectionInput::Unchanged | SectionInput::NoSection => Ok(None),
-            SectionInput::Existing(section_id) => Ok(Some(
-                self.require_section_in_project(project, section_id).await?,
+            SectionInput::Unchanged | SectionInput::NoSection => Ok((None, None)),
+            SectionInput::Existing(section_id) => Ok((
+                Some(self.require_section_in_project(project, section_id).await?),
+                None,
             )),
-            SectionInput::New(name) => Ok(Some(self.create_section(project, name, None).await?)),
+            SectionInput::New(name) => {
+                let (section, operation) = self.build_section(project, name, None).await?;
+                Ok((Some(section), Some(operation)))
+            }
         }
     }
 
