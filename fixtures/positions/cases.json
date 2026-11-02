@@ -1,0 +1,524 @@
+{
+  "area": "positions",
+  "cases": [
+    {
+      "expected": {
+        "key": "a1"
+      },
+      "input": {
+        "after": null,
+        "before": "a0"
+      },
+      "kind": "key_between",
+      "name": "append-after-a0"
+    },
+    {
+      "expected": {
+        "key": "a2"
+      },
+      "input": {
+        "after": null,
+        "before": "a1"
+      },
+      "kind": "key_between",
+      "name": "append-after-a1"
+    },
+    {
+      "expected": {
+        "key": "c000"
+      },
+      "input": {
+        "after": null,
+        "before": "bzz"
+      },
+      "kind": "key_between",
+      "name": "append-after-bzz"
+    },
+    {
+      "expected": {
+        "key": "zzzzzzzzzzzzzzzzzzzzzzzzzzzV"
+      },
+      "input": {
+        "after": null,
+        "before": "zzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      },
+      "kind": "key_between",
+      "name": "append-after-max"
+    },
+    {
+      "expected": {
+        "key": "zzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      },
+      "input": {
+        "after": null,
+        "before": "zzzzzzzzzzzzzzzzzzzzzzzzzzy"
+      },
+      "kind": "key_between",
+      "name": "append-after-second-max"
+    },
+    {
+      "expected": {
+        "key": "ZzV"
+      },
+      "input": {
+        "after": "a0",
+        "before": "Zz"
+      },
+      "kind": "key_between",
+      "name": "between-Zz-a0"
+    },
+    {
+      "expected": {
+        "key": "a0"
+      },
+      "input": {
+        "after": "a01",
+        "before": "Zz"
+      },
+      "kind": "key_between",
+      "name": "between-Zz-a01"
+    },
+    {
+      "expected": {
+        "key": "a0"
+      },
+      "input": {
+        "after": "a1",
+        "before": "Zz"
+      },
+      "kind": "key_between",
+      "name": "between-Zz-a1"
+    },
+    {
+      "expected": {
+        "key": "a08"
+      },
+      "input": {
+        "after": "a0G",
+        "before": "a0"
+      },
+      "kind": "key_between",
+      "name": "between-a0-a0G"
+    },
+    {
+      "expected": {
+        "key": "a0G"
+      },
+      "input": {
+        "after": "a0V",
+        "before": "a0"
+      },
+      "kind": "key_between",
+      "name": "between-a0-a0V"
+    },
+    {
+      "expected": {
+        "key": "a0V"
+      },
+      "input": {
+        "after": "a1",
+        "before": "a0"
+      },
+      "kind": "key_between",
+      "name": "between-a0-a1"
+    },
+    {
+      "expected": {
+        "key": "a1"
+      },
+      "input": {
+        "after": "a1V",
+        "before": "a0"
+      },
+      "kind": "key_between",
+      "name": "between-a0-a1V"
+    },
+    {
+      "expected": {
+        "key": "a0l"
+      },
+      "input": {
+        "after": "a1",
+        "before": "a0V"
+      },
+      "kind": "key_between",
+      "name": "between-a0V-a1"
+    },
+    {
+      "expected": {
+        "key": "a1V"
+      },
+      "input": {
+        "after": "a2",
+        "before": "a1"
+      },
+      "kind": "key_between",
+      "name": "between-a1-a2"
+    },
+    {
+      "expected": {
+        "key": "b127"
+      },
+      "input": {
+        "after": "b129",
+        "before": "b125"
+      },
+      "kind": "key_between",
+      "name": "between-b125-b129"
+    },
+    {
+      "expected": {
+        "key": "a0"
+      },
+      "input": {
+        "after": null,
+        "before": null
+      },
+      "kind": "key_between",
+      "name": "both-open"
+    },
+    {
+      "expected": {
+        "error": "invalid_bounds"
+      },
+      "input": {
+        "after": "a0",
+        "before": "a0"
+      },
+      "kind": "key_between",
+      "name": "equal-bounds"
+    },
+    {
+      "expected": {
+        "key": "A000000000000000000000000000V"
+      },
+      "input": {
+        "after": "A000000000000000000000000001",
+        "before": null
+      },
+      "kind": "key_between",
+      "name": "insert-above-smallest"
+    },
+    {
+      "expected": {
+        "error": "invalid_key"
+      },
+      "input": {
+        "after": null,
+        "before": "a00"
+      },
+      "kind": "key_between",
+      "name": "invalid-before"
+    },
+    {
+      "expected": {
+        "error": "invalid_key"
+      },
+      "input": {
+        "after": "a1",
+        "before": "a00"
+      },
+      "kind": "key_between",
+      "name": "invalid-before-with-after"
+    },
+    {
+      "expected": {
+        "error": "invalid_key"
+      },
+      "input": {
+        "after": "1",
+        "before": "0"
+      },
+      "kind": "key_between",
+      "name": "invalid-head"
+    },
+    {
+      "expected": {
+        "keys": [
+          "a2",
+          "a3"
+        ]
+      },
+      "input": {
+        "after": null,
+        "before": "a1",
+        "n": 2
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-append"
+    },
+    {
+      "expected": {
+        "keys": [
+          "a1G",
+          "a1V"
+        ]
+      },
+      "input": {
+        "after": "a2",
+        "before": "a1",
+        "n": 2
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-between"
+    },
+    {
+      "expected": {
+        "keys": [
+          "a0",
+          "a1"
+        ]
+      },
+      "input": {
+        "after": null,
+        "before": null,
+        "n": 2
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-empty"
+    },
+    {
+      "expected": {
+        "error": "invalid_bounds"
+      },
+      "input": {
+        "after": "a0",
+        "before": "a0",
+        "n": 3
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-equal-bounds"
+    },
+    {
+      "expected": {
+        "keys": [
+          "a0",
+          "a1",
+          "a2",
+          "a3",
+          "a4"
+        ]
+      },
+      "input": {
+        "after": null,
+        "before": null,
+        "n": 5
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-five"
+    },
+    {
+      "expected": {
+        "keys": [
+          "a1",
+          "a2",
+          "a3",
+          "a4",
+          "a5"
+        ]
+      },
+      "input": {
+        "after": null,
+        "before": "a0",
+        "n": 5
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-five-append"
+    },
+    {
+      "expected": {
+        "keys": [
+          "a08",
+          "a0G",
+          "a0V",
+          "a0d",
+          "a0l"
+        ]
+      },
+      "input": {
+        "after": "a1",
+        "before": "a0",
+        "n": 5
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-five-between"
+    },
+    {
+      "expected": {
+        "keys": [
+          "Zv",
+          "Zw",
+          "Zx",
+          "Zy",
+          "Zz"
+        ]
+      },
+      "input": {
+        "after": "a0",
+        "before": null,
+        "n": 5
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-five-prepend"
+    },
+    {
+      "expected": {
+        "error": "invalid_key"
+      },
+      "input": {
+        "after": null,
+        "before": "a00",
+        "n": 2
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-invalid-before"
+    },
+    {
+      "expected": {
+        "keys": [
+          "Zy",
+          "Zz"
+        ]
+      },
+      "input": {
+        "after": "a0",
+        "before": null,
+        "n": 2
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-prepend"
+    },
+    {
+      "expected": {
+        "keys": []
+      },
+      "input": {
+        "after": null,
+        "before": null,
+        "n": 0
+      },
+      "kind": "n_keys_between",
+      "name": "n-keys-zero"
+    },
+    {
+      "expected": {
+        "keys": [
+          "a0V",
+          "a0G",
+          "a08",
+          "a04",
+          "a02",
+          "a01",
+          "a00V",
+          "a00G"
+        ]
+      },
+      "input": {
+        "after": "a1",
+        "before": "a0",
+        "iterations": 8
+      },
+      "kind": "narrowing",
+      "name": "narrowing-gap"
+    },
+    {
+      "expected": {
+        "sorted": [
+          "Zz",
+          "a0",
+          "a0V",
+          "a1"
+        ]
+      },
+      "input": {
+        "keys": [
+          "a1",
+          "a0V",
+          "Zz",
+          "a0"
+        ]
+      },
+      "kind": "ordering",
+      "name": "ordering-is-code-unit-order"
+    },
+    {
+      "expected": {
+        "key": "Xzzz"
+      },
+      "input": {
+        "after": "Y00",
+        "before": null
+      },
+      "kind": "key_between",
+      "name": "prepend-before-Y00"
+    },
+    {
+      "expected": {
+        "key": "Zy"
+      },
+      "input": {
+        "after": "Zz",
+        "before": null
+      },
+      "kind": "key_between",
+      "name": "prepend-before-Zz"
+    },
+    {
+      "expected": {
+        "key": "Zz"
+      },
+      "input": {
+        "after": "a0",
+        "before": null
+      },
+      "kind": "key_between",
+      "name": "prepend-before-a0"
+    },
+    {
+      "expected": {
+        "key": "a0"
+      },
+      "input": {
+        "after": "a0V",
+        "before": null
+      },
+      "kind": "key_between",
+      "name": "prepend-before-a0V"
+    },
+    {
+      "expected": {
+        "key": "b99"
+      },
+      "input": {
+        "after": "b999",
+        "before": null
+      },
+      "kind": "key_between",
+      "name": "prepend-before-b999"
+    },
+    {
+      "expected": {
+        "key": "a0V"
+      },
+      "input": {
+        "after": "a0",
+        "before": "a1"
+      },
+      "kind": "key_between",
+      "name": "reversed-bounds-a1-a0"
+    },
+    {
+      "expected": {
+        "error": "invalid_key"
+      },
+      "input": {
+        "after": "A00000000000000000000000000",
+        "before": null
+      },
+      "kind": "key_between",
+      "name": "smallest-integer-is-reserved"
+    }
+  ],
+  "description": "Fractional-index keys: generation, bulk insertion, narrowing gaps, and ordering.",
+  "version": 1
+}

@@ -144,6 +144,22 @@ check-bindings: generate-bindings
         exit 1
     fi
 
+# regenerate the shared cross-language fixtures
+[group('validate')]
+generate-fixtures:
+    cargo run -p scry-core --example generate_fixtures
+
+# verify the shared cross-language fixtures are committed and up to date
+[group('validate')]
+check-fixtures: generate-fixtures
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -n "$(git status --porcelain -- fixtures)" ]]; then
+        echo "fixtures are out of date; run 'just generate-fixtures' and commit the result" >&2
+        git status --porcelain -- fixtures >&2
+        exit 1
+    fi
+
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]
 release-patch:
