@@ -1,0 +1,580 @@
+{
+  "area": "handles",
+  "cases": [
+    {
+      "expected": {
+        "hex": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c"
+      },
+      "input": {
+        "value": "4F3A2B1C-9D2E-4F5A-8B6C-1D2E3F4A5B6C"
+      },
+      "kind": "normalize",
+      "name": "normalize-canonical-uuid"
+    },
+    {
+      "expected": {
+        "hex": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c"
+      },
+      "input": {
+        "value": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c"
+      },
+      "kind": "normalize",
+      "name": "normalize-compact"
+    },
+    {
+      "expected": {
+        "error": "empty"
+      },
+      "input": {
+        "value": ""
+      },
+      "kind": "normalize",
+      "name": "normalize-empty"
+    },
+    {
+      "expected": {
+        "error": "invalid_character"
+      },
+      "input": {
+        "value": "zzzz"
+      },
+      "kind": "normalize",
+      "name": "normalize-invalid-character"
+    },
+    {
+      "expected": {
+        "error": "misplaced_dash"
+      },
+      "input": {
+        "value": "-4f3a2b1c"
+      },
+      "kind": "normalize",
+      "name": "normalize-leading-dash"
+    },
+    {
+      "expected": {
+        "hex": "0123456789abcdef0123456789abcdef"
+      },
+      "input": {
+        "value": "0123456789abcdef0123456789abcdef"
+      },
+      "kind": "normalize",
+      "name": "normalize-max-length"
+    },
+    {
+      "expected": {
+        "error": "misplaced_dash"
+      },
+      "input": {
+        "value": "4f3a-2b1c"
+      },
+      "kind": "normalize",
+      "name": "normalize-misplaced-dash"
+    },
+    {
+      "expected": {
+        "hex": "4f3a2b1c9d2e4f5a"
+      },
+      "input": {
+        "value": "4f3a2b1c9d2e-4f5a"
+      },
+      "kind": "normalize",
+      "name": "normalize-partial-dash-12"
+    },
+    {
+      "expected": {
+        "hex": "4f3a2b1c9d2e4f5a8b6c"
+      },
+      "input": {
+        "value": "4f3a2b1c9d2e4f5a-8b6c"
+      },
+      "kind": "normalize",
+      "name": "normalize-partial-dash-16"
+    },
+    {
+      "expected": {
+        "hex": "4f3a2b1c9d2e4f5a8b6c1d2e"
+      },
+      "input": {
+        "value": "4f3a2b1c9d2e4f5a8b6c-1d2e"
+      },
+      "kind": "normalize",
+      "name": "normalize-partial-dash-20"
+    },
+    {
+      "expected": {
+        "hex": "4f3a2b1c9d2e"
+      },
+      "input": {
+        "value": "4f3a2b1c-9d2e"
+      },
+      "kind": "normalize",
+      "name": "normalize-partial-dash-8"
+    },
+    {
+      "expected": {
+        "error": "too_long"
+      },
+      "input": {
+        "value": "0123456789abcdef0123456789abcdef0"
+      },
+      "kind": "normalize",
+      "name": "normalize-too-long"
+    },
+    {
+      "expected": {
+        "error": "too_short"
+      },
+      "input": {
+        "value": "abc"
+      },
+      "kind": "normalize",
+      "name": "normalize-too-short"
+    },
+    {
+      "expected": {
+        "error": "misplaced_dash"
+      },
+      "input": {
+        "value": "4f3a2b1c-"
+      },
+      "kind": "normalize",
+      "name": "normalize-trailing-dash"
+    },
+    {
+      "expected": {
+        "hex": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c"
+      },
+      "input": {
+        "value": "4F3A2B1C9D2E4F5A8B6C1D2E3F4A5B6C"
+      },
+      "kind": "normalize",
+      "name": "normalize-uppercase"
+    },
+    {
+      "expected": {
+        "hex": "4f3a2b1c9d2e"
+      },
+      "input": {
+        "value": "  4f3a2b1c-9d2e  "
+      },
+      "kind": "normalize",
+      "name": "normalize-whitespace"
+    },
+    {
+      "expected": {
+        "matches": [
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c"
+        ]
+      },
+      "input": {
+        "handle": "4f3a",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-ambiguous"
+    },
+    {
+      "expected": {
+        "matches": [
+          "00000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "input": {
+        "handle": "0000",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-first-id"
+    },
+    {
+      "expected": {
+        "matches": [
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+        ]
+      },
+      "input": {
+        "handle": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-full-id"
+    },
+    {
+      "expected": {
+        "error": "invalid_character"
+      },
+      "input": {
+        "handle": "zz",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-invalid-character"
+    },
+    {
+      "expected": {
+        "matches": [
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "input": {
+        "handle": "ffff",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-last-id"
+    },
+    {
+      "expected": {
+        "error": "misplaced_dash"
+      },
+      "input": {
+        "handle": "4f3a-2b1c",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-misplaced-dash"
+    },
+    {
+      "expected": {
+        "matches": []
+      },
+      "input": {
+        "handle": "abcd",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-no-match"
+    },
+    {
+      "expected": {
+        "matches": [
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+        ]
+      },
+      "input": {
+        "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-shared-prefix"
+    },
+    {
+      "expected": {
+        "matches": [
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c"
+        ]
+      },
+      "input": {
+        "handle": "4F3A2B1C-9D2E",
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ]
+      },
+      "kind": "resolve",
+      "name": "resolve-uppercase-dashed"
+    },
+    {
+      "expected": {
+        "handles": [
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+          }
+        ]
+      },
+      "input": {
+        "ids": [
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+        ],
+        "min_length": 4
+      },
+      "kind": "shortest",
+      "name": "shortest-duplicate-ids"
+    },
+    {
+      "expected": {
+        "handles": [
+          {
+            "handle": "00000000",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b7",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c"
+          },
+          {
+            "handle": "ffffffff",
+            "id": "ffffffff-ffff-4fff-8fff-ffffffffffff"
+          }
+        ]
+      },
+      "input": {
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ],
+        "min_length": 8
+      },
+      "kind": "shortest",
+      "name": "shortest-min-eight"
+    },
+    {
+      "expected": {
+        "handles": [
+          {
+            "handle": "0000",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b7",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c"
+          },
+          {
+            "handle": "ffff",
+            "id": "ffffffff-ffff-4fff-8fff-ffffffffffff"
+          }
+        ]
+      },
+      "input": {
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ],
+        "min_length": 4
+      },
+      "kind": "shortest",
+      "name": "shortest-min-four"
+    },
+    {
+      "expected": {
+        "handles": [
+          {
+            "handle": "00000000000040008000000000000001",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b7c",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c"
+          },
+          {
+            "handle": "ffffffffffff4fff8fffffffffffffff",
+            "id": "ffffffff-ffff-4fff-8fff-ffffffffffff"
+          }
+        ]
+      },
+      "input": {
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ],
+        "min_length": 40
+      },
+      "kind": "shortest",
+      "name": "shortest-min-over-max-clamps"
+    },
+    {
+      "expected": {
+        "handles": [
+          {
+            "handle": "0000",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b7",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c"
+          },
+          {
+            "handle": "ffff",
+            "id": "ffffffff-ffff-4fff-8fff-ffffffffffff"
+          }
+        ]
+      },
+      "input": {
+        "ids": [
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        ],
+        "min_length": 0
+      },
+      "kind": "shortest",
+      "name": "shortest-min-zero-clamps"
+    },
+    {
+      "expected": {
+        "handles": []
+      },
+      "input": {
+        "ids": [],
+        "min_length": 4
+      },
+      "kind": "shortest",
+      "name": "shortest-no-ids"
+    },
+    {
+      "expected": {
+        "handles": [
+          {
+            "handle": "0000",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+          },
+          {
+            "handle": "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b7",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c"
+          },
+          {
+            "handle": "ffff",
+            "id": "ffffffff-ffff-4fff-8fff-ffffffffffff"
+          }
+        ]
+      },
+      "input": {
+        "ids": [
+          "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+          "00000000-0000-4000-8000-000000000001",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d"
+        ],
+        "min_length": 4
+      },
+      "kind": "shortest",
+      "name": "shortest-shuffled-input"
+    },
+    {
+      "expected": {
+        "handles": [
+          {
+            "handle": "4f3a",
+            "id": "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+          }
+        ]
+      },
+      "input": {
+        "ids": [
+          "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c"
+        ],
+        "min_length": 4
+      },
+      "kind": "shortest",
+      "name": "shortest-single-id"
+    }
+  ],
+  "description": "Handle normalization, shortest distinguishing prefixes, and prefix resolution.",
+  "version": 1
+}

@@ -18,7 +18,7 @@ export type FixtureFile = {
 };
 
 export const FIXTURE_VERSION = 1;
-export const REGISTERED_AREAS: readonly string[] = ['positions'];
+export const REGISTERED_AREAS: readonly string[] = ['positions', 'handles'];
 
 const ENVELOPE_KEYS = ['version', 'area', 'description', 'cases'] as const;
 const CASE_KEYS = ['name', 'description', 'kind', 'input', 'expected'] as const;

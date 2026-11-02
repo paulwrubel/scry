@@ -3,10 +3,12 @@
 //! Run with `just generate-fixtures`. The output is deterministic: cases are
 //! listed explicitly, and generated sequences are recorded in order.
 
+use scry_core::ids::{Handle, HandleError, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH, shortest_handles};
 use scry_core::position::{Position, key_between};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
+use uuid::Uuid;
 
 const SECOND_MAX: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzy";
 const MAX: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzz";
@@ -20,6 +22,12 @@ fn main() {
         "positions",
         "Fractional-index keys: generation, bulk insertion, narrowing gaps, and ordering.",
         position_cases(),
+    );
+    write_area(
+        &root,
+        "handles",
+        "Handle normalization, shortest distinguishing prefixes, and prefix resolution.",
+        handle_cases(),
     );
 }
 
@@ -222,4 +230,180 @@ fn ordering_case(name: &str, keys: &[&str]) -> Value {
         "input": { "keys": keys },
         "expected": { "sorted": sorted },
     })
+}
+
+const HANDLE_IDS: &[&str] = &[
+    "00000000-0000-4000-8000-000000000001",
+    "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c",
+    "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d",
+    "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b7c",
+    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+];
+const MAX_HANDLE_HEX: &str = "0123456789abcdef0123456789abcdef";
+const TOO_LONG_HANDLE_HEX: &str = "0123456789abcdef0123456789abcdef0";
+
+fn handle_cases() -> Vec<Value> {
+    let mut cases = vec![
+        normalize_ok("normalize-compact", "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c"),
+        normalize_ok("normalize-uppercase", "4F3A2B1C9D2E4F5A8B6C1D2E3F4A5B6C"),
+        normalize_ok(
+            "normalize-canonical-uuid",
+            "4F3A2B1C-9D2E-4F5A-8B6C-1D2E3F4A5B6C",
+        ),
+        normalize_ok("normalize-whitespace", "  4f3a2b1c-9d2e  "),
+        normalize_ok("normalize-partial-dash-8", "4f3a2b1c-9d2e"),
+        normalize_ok("normalize-partial-dash-12", "4f3a2b1c9d2e-4f5a"),
+        normalize_ok("normalize-partial-dash-16", "4f3a2b1c9d2e4f5a-8b6c"),
+        normalize_ok("normalize-partial-dash-20", "4f3a2b1c9d2e4f5a8b6c-1d2e"),
+        normalize_ok("normalize-max-length", MAX_HANDLE_HEX),
+        normalize_err("normalize-empty", ""),
+        normalize_err("normalize-too-short", "abc"),
+        normalize_err("normalize-too-long", TOO_LONG_HANDLE_HEX),
+        normalize_err("normalize-invalid-character", "zzzz"),
+        normalize_err("normalize-misplaced-dash", "4f3a-2b1c"),
+        normalize_err("normalize-leading-dash", "-4f3a2b1c"),
+        normalize_err("normalize-trailing-dash", "4f3a2b1c-"),
+        shortest_case("shortest-min-four", HANDLE_IDS, MIN_HANDLE_LENGTH),
+        shortest_case("shortest-min-eight", HANDLE_IDS, 8),
+        shortest_case("shortest-min-zero-clamps", HANDLE_IDS, 0),
+        shortest_case(
+            "shortest-min-over-max-clamps",
+            HANDLE_IDS,
+            MAX_HANDLE_LENGTH + 8,
+        ),
+        shortest_case("shortest-single-id", &[HANDLE_IDS[1]], MIN_HANDLE_LENGTH),
+        shortest_case(
+            "shortest-duplicate-ids",
+            &[HANDLE_IDS[1], HANDLE_IDS[1], HANDLE_IDS[2]],
+            MIN_HANDLE_LENGTH,
+        ),
+        shortest_case(
+            "shortest-shuffled-input",
+            &[
+                HANDLE_IDS[4],
+                HANDLE_IDS[1],
+                HANDLE_IDS[0],
+                HANDLE_IDS[3],
+                HANDLE_IDS[2],
+            ],
+            MIN_HANDLE_LENGTH,
+        ),
+        shortest_case("shortest-no-ids", &[], MIN_HANDLE_LENGTH),
+        resolve_ok("resolve-ambiguous", HANDLE_IDS, "4f3a"),
+        resolve_ok("resolve-uppercase-dashed", HANDLE_IDS, "4F3A2B1C-9D2E"),
+        resolve_ok(
+            "resolve-shared-prefix",
+            HANDLE_IDS,
+            "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6",
+        ),
+        resolve_ok("resolve-full-id", HANDLE_IDS, HANDLE_IDS[1]),
+        resolve_ok("resolve-first-id", HANDLE_IDS, "0000"),
+        resolve_ok("resolve-last-id", HANDLE_IDS, "ffff"),
+        resolve_ok("resolve-no-match", HANDLE_IDS, "abcd"),
+        resolve_err("resolve-invalid-character", HANDLE_IDS, "zz"),
+        resolve_err("resolve-misplaced-dash", HANDLE_IDS, "4f3a-2b1c"),
+    ];
+    cases.sort_by(|left, right| {
+        left["name"]
+            .as_str()
+            .unwrap_or_default()
+            .cmp(right["name"].as_str().unwrap_or_default())
+    });
+    cases
+}
+
+fn normalize_ok(name: &str, value: &str) -> Value {
+    let handle: Handle = value
+        .parse()
+        .expect("normalize fixture uses a valid handle");
+    json!({
+        "name": name,
+        "kind": "normalize",
+        "input": { "value": value },
+        "expected": { "hex": handle.as_str() },
+    })
+}
+
+fn normalize_err(name: &str, value: &str) -> Value {
+    let error = value
+        .parse::<Handle>()
+        .expect_err("normalize fixture uses an invalid handle");
+    json!({
+        "name": name,
+        "kind": "normalize",
+        "input": { "value": value },
+        "expected": { "error": handle_error_code(&error) },
+    })
+}
+
+fn shortest_case(name: &str, ids: &[&str], min_length: usize) -> Value {
+    let mut unique: Vec<Uuid> = ids
+        .iter()
+        .map(|id| Uuid::parse_str(id).expect("shortest fixture uses a valid uuid"))
+        .collect();
+    unique.sort();
+    unique.dedup();
+
+    let handles = shortest_handles(unique.iter().copied(), min_length);
+    let mut expected: Vec<Value> = unique
+        .iter()
+        .map(|id| {
+            let handle = handles.get(id).expect("every id in the set has a handle");
+            json!({ "id": id.to_string(), "handle": handle })
+        })
+        .collect();
+    expected.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
+
+    json!({
+        "name": name,
+        "kind": "shortest",
+        "input": { "ids": ids, "min_length": min_length },
+        "expected": { "handles": expected },
+    })
+}
+
+fn resolve_ok(name: &str, ids: &[&str], raw: &str) -> Value {
+    let handle: Handle = raw.parse().expect("resolve fixture uses a valid handle");
+    let mut matches: Vec<String> = ids
+        .iter()
+        .filter(|id| {
+            Uuid::parse_str(id)
+                .expect("resolve fixture uses a valid uuid")
+                .simple()
+                .to_string()
+                .starts_with(handle.as_str())
+        })
+        .map(|id| id.to_string())
+        .collect();
+    matches.sort();
+    matches.dedup();
+
+    json!({
+        "name": name,
+        "kind": "resolve",
+        "input": { "ids": ids, "handle": raw },
+        "expected": { "matches": matches },
+    })
+}
+
+fn resolve_err(name: &str, ids: &[&str], raw: &str) -> Value {
+    let error = raw
+        .parse::<Handle>()
+        .expect_err("resolve fixture uses an invalid handle");
+    json!({
+        "name": name,
+        "kind": "resolve",
+        "input": { "ids": ids, "handle": raw },
+        "expected": { "error": handle_error_code(&error) },
+    })
+}
+
+fn handle_error_code(error: &HandleError) -> &'static str {
+    match error {
+        HandleError::Empty => "empty",
+        HandleError::TooShort { .. } => "too_short",
+        HandleError::TooLong { .. } => "too_long",
+        HandleError::MisplacedDash { .. } => "misplaced_dash",
+        HandleError::InvalidCharacter { .. } => "invalid_character",
+    }
 }
