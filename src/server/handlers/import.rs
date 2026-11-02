@@ -16,7 +16,7 @@ pub struct ImportRequest {
     pub mode: ImportMode,
 }
 
-/// Parse a snapshot file, plan the import, and apply it server-side.
+/// Parse a snapshot file and apply it server-side.
 pub async fn import(State(state): State<ScryState>, Json(body): Json<ImportRequest>) -> Response {
     let text = match serde_json::to_string(&body.snapshot) {
         Ok(text) => text,
@@ -30,12 +30,7 @@ pub async fn import(State(state): State<ScryState>, Json(body): Json<ImportReque
         Err(error) => return AppError::Usage(error.to_string()).into(),
     };
 
-    let plan = match state.service.plan_import(&file, body.mode).await {
-        Ok(plan) => plan,
-        Err(error) => return AppError::from(error).into(),
-    };
-
-    match state.service.import(plan).await {
+    match state.service.import(&file, body.mode).await {
         Ok(report) => Json(report).into_response(),
         Err(error) => AppError::from(error).into(),
     }

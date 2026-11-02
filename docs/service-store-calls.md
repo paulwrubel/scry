@@ -417,7 +417,7 @@ flowchart LR
 
 ## 6. Snapshots and import
 
-`snapshot` and `snapshot_file` delegate into `scry_core::snapshot`, which reads through `&dyn Store`; `import` applies a plan directly. `GET /snapshot` returns the bare document, `GET /export` returns the versioned file, `GET /projects/{id}/export` wraps one project, and `POST /import` parses the file, plans the import, and applies it server-side.
+`snapshot` and `snapshot_file` delegate into `scry_core::snapshot`, which reads through `&dyn Store`; `import` opens one `begin_apply` transaction, loads live rows and tombstones through `Store`, calls the pure `plan_import`, and applies the resulting operations through the shared batch applier. `GET /snapshot` returns the bare document, `GET /export` returns the versioned file, `GET /projects/{id}/export` wraps one project, and `POST /import` parses the file and applies it server-side.
 
 ```mermaid
 flowchart LR
@@ -431,7 +431,6 @@ flowchart LR
   subgraph svc["ProjectService"]
     snapshot[snapshot]
     snapshot_file[snapshot_file]
-    plan_import[plan_import]
     import[import]
   end
 
@@ -444,7 +443,11 @@ flowchart LR
     st_get_all_projects[get_all_projects]
     st_get_project_snapshot[get_project_snapshot]
     st_last_change_seq[last_change_seq]
-    st_import[import]
+    st_begin_apply[begin_apply]
+    st_get_all_sections_by_project_id[get_all_sections_by_project_id]
+    st_get_all_tasks_by_project_id[get_all_tasks_by_project_id]
+    st_get_all_notes_by_project_id[get_all_notes_by_project_id]
+    st_is_tombstoned[is_tombstoned]
   end
 
   h_snapshot ==> snapshot
@@ -454,24 +457,28 @@ flowchart LR
 
   snapshot_file --> snapshot
   snapshot -.-> bk_build
-  plan_import -.-> bk_plan_import
-  import --> st_import
+  import --> bk_plan_import
+  import --> st_begin_apply
+  import --> st_get_all_projects
+  import --> st_get_all_sections_by_project_id
+  import --> st_get_all_tasks_by_project_id
+  import --> st_get_all_notes_by_project_id
+  import --> st_is_tombstoned
   bk_build --> st_last_change_seq
   bk_build --> st_get_all_projects
   bk_build --> st_get_project_snapshot
-  bk_plan_import --> st_get_all_projects
 
   classDef storeNode fill:#eef3fb,stroke:#5b7fae,stroke-width:1px
-  class st_get_all_projects,st_get_project_snapshot,st_last_change_seq,st_import storeNode
+  class st_get_all_projects,st_get_project_snapshot,st_last_change_seq,st_begin_apply,st_get_all_sections_by_project_id,st_get_all_tasks_by_project_id,st_get_all_notes_by_project_id,st_is_tombstoned storeNode
 ```
 
 ## Coverage
 
-- The six diagrams together touch all 32 `Store` trait methods (8 task, 8 note, 6 section, 7 project, 1 import, 2 sync) and every REST handler in `src/server/handlers.rs` except `index`, which only reports server metadata.
+- The six diagrams together touch all 31 `Store` trait methods (8 task, 8 note, 6 section, 7 project, 2 sync) and every REST handler in `src/server/handlers.rs` except `index`, which only reports server metadata.
 - `get_note_by_id`, `get_all_notes_by_task_id`, `update_note`, `delete_note` and `find_note_ids_by_handle` are marked `dead_code` on the trait and are reached only by the note scaffolding methods `get_note`, `list_notes_by_task_id`, `update_note`, `delete_note` and `get_note_by_handle`.
 
 ## Notes
 
-- `build` and `plan_import` live in `scry_core::snapshot` and take `&dyn Store`, so the service reaches the store through them rather than calling it directly.
+- `build` lives in `scry_core::snapshot` and takes `&dyn Store`, so the service reaches the store through it rather than calling it directly; `plan_import` is pure and takes an `ImportState`.
 - `ProjectSnapshot` lives in `scry_core::models` and is the one project document used by the snapshot endpoints, export, and import.
 - Reads may use `Store` directly in principle, but in this codebase every store call goes through `ProjectService`.

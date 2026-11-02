@@ -679,7 +679,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             } else if *skip_existing_projects {
                 ImportMode::Skip
             } else {
-                ImportMode::Fail
+                ImportMode::Merge
             };
 
             return client::import(&client, mode, output_json).await;
