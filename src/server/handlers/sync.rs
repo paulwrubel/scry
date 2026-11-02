@@ -16,6 +16,7 @@ use crate::server::ScryState;
 /// One push/pull request. `last_seen_seq` is the cursor the client has
 /// already applied, and `ops` defaults to empty so a pull-only request can
 /// omit it.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize)]
 pub struct SyncRequest {
     pub op_version: u16,
@@ -27,6 +28,7 @@ pub struct SyncRequest {
 
 /// One push/pull response. `next_seq` is the last `seq` included in
 /// `changes`, or the request's `last_seen_seq` when nothing new was found.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct SyncResponse {
     pub acks: Vec<OperationAcknowledgment>,
@@ -120,5 +122,53 @@ mod tests {
         let decoded: Change = serde_json::from_str(&encoded).unwrap();
 
         assert_eq!(decoded, change);
+    }
+}
+
+// The root crate is a binary, so the export hook lives beside the handler types
+// it needs to see; export_all then pulls in every dependency by itself.
+#[cfg(all(test, feature = "ts"))]
+mod export_bindings {
+    use scry_core::models::{
+        Change, ChangeKind, Color, EntityType, Note, Priority, Project, ProjectSnapshot, Section,
+        Tags, Task, TaskSortingMode, TaskState,
+    };
+    use scry_core::position::Position;
+    use scry_core::sync::ack::{AcknowledgmentStatus, OperationAcknowledgment, RejectionReason};
+    use scry_core::sync::operations::{ColorChange, Operation, OperationKind};
+    use ts_rs::{Config, TS};
+
+    use super::{SyncRequest, SyncResponse};
+
+    #[test]
+    fn export_bindings() {
+        let config = Config::new()
+            .with_out_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/ui/src/generated"))
+            // seq and next_seq are JSON numbers in JavaScript, not bigints
+            .with_large_int("number");
+
+        SyncRequest::export_all(&config).expect("failed to export SyncRequest");
+        SyncResponse::export_all(&config).expect("failed to export SyncResponse");
+        ProjectSnapshot::export_all(&config).expect("failed to export ProjectSnapshot");
+        Change::export_all(&config).expect("failed to export Change");
+        Operation::export_all(&config).expect("failed to export Operation");
+        OperationKind::export_all(&config).expect("failed to export OperationKind");
+        OperationAcknowledgment::export_all(&config)
+            .expect("failed to export OperationAcknowledgment");
+        AcknowledgmentStatus::export_all(&config).expect("failed to export AcknowledgmentStatus");
+        RejectionReason::export_all(&config).expect("failed to export RejectionReason");
+        ColorChange::export_all(&config).expect("failed to export ColorChange");
+        Color::export_all(&config).expect("failed to export Color");
+        Priority::export_all(&config).expect("failed to export Priority");
+        TaskState::export_all(&config).expect("failed to export TaskState");
+        TaskSortingMode::export_all(&config).expect("failed to export TaskSortingMode");
+        Tags::export_all(&config).expect("failed to export Tags");
+        Position::export_all(&config).expect("failed to export Position");
+        Project::export_all(&config).expect("failed to export Project");
+        Section::export_all(&config).expect("failed to export Section");
+        Task::export_all(&config).expect("failed to export Task");
+        Note::export_all(&config).expect("failed to export Note");
+        EntityType::export_all(&config).expect("failed to export EntityType");
+        ChangeKind::export_all(&config).expect("failed to export ChangeKind");
     }
 }

@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    color: var(--color-zinc-200);
+  }
+  body {
+    background-color: var(--color-zinc-950);
+  }
+}

@@ -24,7 +24,7 @@ Download the latest binary from the [Releases page](https://github.com/paulwrube
 
 ### Build from source
 
-Requires [Rust](https://www.rust-lang.org/tools/install).
+Requires [Rust](https://www.rust-lang.org/tools/install). The optional UI package also requires Node 26 (see `ui/.nvmrc`).
 
 ```sh
 git clone https://github.com/paulwrubel/scry.git
@@ -32,6 +32,20 @@ cd scry
 cargo build --release
 ./target/release/scry --help
 ```
+
+### Web UI
+
+The React/TypeScript frontend lives in `ui/` and is built with Vite, oxlint, Prettier, and Vitest. It is a separate npm package; the Rust server does not serve it yet (#50 builds the PWA).
+
+```sh
+just setup-ui-env   # install Node 26 through nvm and npm dependencies
+just run-ui         # Docker API/Postgres plus the Vite dev server on :5173
+just lint-ui        # oxlint
+just typecheck-ui   # tsc
+just test-ui        # Vitest
+```
+
+The Rust wire types are the source of truth for the generated declarations in `ui/src/generated/`; never edit those files by hand. Rules implemented in both languages are pinned by the committed JSON fixtures under `fixtures/<area>/cases.json`, which both Rust and Vitest must consume. `just generate-bindings` and `just generate-fixtures` rewrite the committed output, while `just check-bindings` and `just check-fixtures` fail if it is stale. Add a new fixture area whenever a rule gains a second implementation.
 
 ## Docker
 

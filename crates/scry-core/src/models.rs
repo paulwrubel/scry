@@ -84,7 +84,7 @@ impl TaskState {
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Tags(pub(crate) Vec<String>);
 
 impl Tags {
@@ -285,7 +285,8 @@ pub const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
     },
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectId,
     pub name: String,
@@ -295,7 +296,8 @@ pub struct Project {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Section {
     pub id: SectionId,
     pub project_id: ProjectId,
@@ -305,7 +307,8 @@ pub struct Section {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Task {
     pub id: TaskId,
     pub project_id: ProjectId,
@@ -319,7 +322,8 @@ pub struct Task {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     pub id: NoteId,
     pub task_id: TaskId,
@@ -331,6 +335,7 @@ pub struct Note {
 /// the operation, as recorded in the changes log.
 pub type FieldValues = serde_json::Value;
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EntityType {
@@ -376,6 +381,7 @@ impl Entity {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChangeKind {
@@ -404,6 +410,7 @@ impl ChangeKind {
 /// `created_at` is when the server wrote the row and is supplied by the
 /// service. `client_timestamp` is recorded as the client reported it and never
 /// compared; `seq` remains the only ordering.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Change {
     pub seq: i64,
@@ -412,6 +419,7 @@ pub struct Change {
     pub kind: ChangeKind,
     pub operation_id: Uuid,
     pub client_timestamp: Option<DateTime<Utc>>,
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
     pub field_values: FieldValues,
     pub created_at: DateTime<Utc>,
 }
@@ -423,7 +431,8 @@ pub struct Change {
 /// object. The project's own fields are flattened into the object's top
 /// level, and all ids and positions are carried verbatim so the document can
 /// be serialized and deserialized without loss.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectSnapshot {
     #[serde(flatten)]
     pub project: Project,
