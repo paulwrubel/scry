@@ -40,6 +40,11 @@ pg-reset:
 view-logs:
     docker compose logs -f scry
 
+# run the ui dev server against the docker stack
+[group('run')]
+run-ui: run-docker setup-ui-env
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run dev
+
 # regenerate the Postgres offline query cache
 [group('build')]
 sqlx-prepare: sqlx-prepare-postgres
@@ -56,9 +61,18 @@ install:
     mkdir -p {{"${HOME}"}}/.local/bin
     cp target/release/scry {{"${HOME}"}}/.local/bin/scry
 
-# run all validation checks: test, check, clippy
+# build the ui
+[group('build')]
+build-ui: setup-ui-env
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run build
+
+# run all validation checks: rust test/check/clippy and ui lint/format/type-check
 [group('validate')]
 validate: cargo-test cargo-check cargo-clippy
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use \
+    && npm run lint \
+    && npm run prettier-check \
+    && npm run type-check
 
 # run the test suite
 alias test := cargo-test
@@ -77,6 +91,26 @@ alias clippy := cargo-clippy
 [group('validate')]
 cargo-clippy:
     cargo clippy --workspace -- -D warnings
+
+# lint the ui
+[group('validate')]
+lint-ui: setup-ui-env
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run lint
+
+# check ui formatting
+[group('validate')]
+prettier-check-ui: setup-ui-env
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run prettier-check
+
+# type-check the ui
+[group('validate')]
+typecheck-ui: setup-ui-env
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run type-check
+
+# run the ui test suite
+[group('validate')]
+test-ui: setup-ui-env
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm test
 
 # regenerate the postgres offline query cache against the local postgres
 [group('validate')]
@@ -169,8 +203,19 @@ _release type do_push="":
         echo "  git push origin main v$next"; \
     fi
 
+# install the ui dependencies
+[group('misc')]
+setup-ui-env:
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm install && nvm use && npm install
+
+# format the ui
+[group('misc')]
+prettier-fix-ui:
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run prettier-fix
+
 # wipe build artifacts and stop the Docker stack
 [group('misc')]
 clean:
     cargo clean
+    -rm -r ./ui/dist
     docker compose down
