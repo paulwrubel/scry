@@ -1,14 +1,14 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
-use scry_core::backup::{ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
 use scry_core::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
 use scry_core::models::{
-    Change, Color, Entity, EntityType, Note, Priority, Project, ProjectSnapshot, Section, Tags,
-    Task, TaskState,
+    Change, ChangeKind, Color, Entity, EntityType, Note, Priority, Project, ProjectSnapshot,
+    Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
+use scry_core::snapshot::{ImportMode, ImportPlan, ImportReport};
 use scry_core::store::Store;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};
@@ -242,6 +242,29 @@ fn section_from_fields(
         color: color.and_then(|c| Color::from_str(&c, false).ok()),
         created_at,
     })
+}
+
+fn entity_type_from_field(value: &str) -> Result<EntityType, StorageError> {
+    match value {
+        "project" => Ok(EntityType::Project),
+        "section" => Ok(EntityType::Section),
+        "task" => Ok(EntityType::Task),
+        "note" => Ok(EntityType::Note),
+        other => Err(StorageError::Database(format!(
+            "unknown change entity type '{other}'"
+        ))),
+    }
+}
+
+fn change_kind_from_field(value: &str) -> Result<ChangeKind, StorageError> {
+    match value {
+        "create" => Ok(ChangeKind::Create),
+        "update" => Ok(ChangeKind::Update),
+        "delete" => Ok(ChangeKind::Delete),
+        other => Err(StorageError::Database(format!(
+            "unknown change kind '{other}'"
+        ))),
+    }
 }
 
 #[async_trait]
@@ -1382,8 +1405,8 @@ impl Store for PostgresStore {
 
         let mut report = ImportReport::default();
 
-        for backup_project in &plan.projects {
-            let project = &backup_project.project;
+        for snapshot_project in &plan.projects {
+            let project = &snapshot_project.project;
 
             sqlx::query!(
                 r#"
@@ -1407,7 +1430,7 @@ impl Store for PostgresStore {
             .map_err(|e| StorageError::Database(format!("failed to create project: {}", e)))?;
             report.projects += 1;
 
-            for section in &backup_project.sections {
+            for section in &snapshot_project.sections {
                 let color = section.color.map(|c| c.to_string());
                 sqlx::query!(
                     r#"
@@ -1432,7 +1455,7 @@ impl Store for PostgresStore {
                 report.sections += 1;
             }
 
-            for task in &backup_project.tasks {
+            for task in &snapshot_project.tasks {
                 sqlx::query!(
                     r#"
                         INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, tags, created_at)
@@ -1464,7 +1487,7 @@ impl Store for PostgresStore {
                 report.tasks += 1;
             }
 
-            for note in &backup_project.notes {
+            for note in &snapshot_project.notes {
                 sqlx::query!(
                     r#"
                         INSERT INTO notes (id, task_id, contents, created_at)
@@ -1542,6 +1565,7 @@ impl Store for PostgresStore {
         let mut conn = self.connection(tx).await?;
 
         let Change {
+            seq: _,
             entity_type,
             entity_id,
             kind,
@@ -1570,6 +1594,59 @@ impl Store for PostgresStore {
         .map_err(|e| StorageError::Database(format!("failed to append change: {}", e)))?;
 
         Ok(seq)
+    }
+
+    async fn changes_after(
+        &self,
+        after: i64,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Vec<Change>, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        let rows = sqlx::query!(
+            r#"
+                SELECT seq, entity_type, entity_id, kind, operation_id, client_timestamp, field_values, created_at
+                FROM changes
+                WHERE seq > $1
+                ORDER BY seq ASC
+            "#,
+            after,
+        )
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to list changes: {}", e)))?;
+
+        rows.into_iter()
+            .map(|row| {
+                Ok(Change {
+                    seq: row.seq,
+                    entity_type: entity_type_from_field(&row.entity_type)?,
+                    entity_id: row.entity_id,
+                    kind: change_kind_from_field(&row.kind)?,
+                    operation_id: row.operation_id,
+                    client_timestamp: row.client_timestamp,
+                    field_values: row.field_values,
+                    created_at: row.created_at,
+                })
+            })
+            .collect()
+    }
+
+    async fn last_change_seq(&self, tx: Option<&mut PgConnection>) -> Result<i64, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        let last_seq = sqlx::query_scalar!(
+            r#"
+                SELECT COALESCE(MAX(seq), 0) AS "max_seq!" FROM changes
+            "#
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(|e| {
+            StorageError::Database(format!("failed to read the last change seq: {}", e))
+        })?;
+
+        Ok(last_seq)
     }
 
     async fn is_tombstoned(

@@ -5,16 +5,28 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-pub const BACKUP_VERSION: u32 = 1;
+pub const SNAPSHOT_VERSION: u32 = 1;
 
-/// The backup envelope: the format version, the producing app version, and
-/// one canonical project document per project.
+/// The bare server-wide snapshot: every project document plus the cursor a
+/// client should pull from next.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Backup {
+pub struct Snapshot {
+    pub projects: Vec<ProjectSnapshot>,
+    pub last_seen_seq: i64,
+}
+
+/// The importable/exportable snapshot envelope: the format version, the
+/// producing app version, and one canonical project document per project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotFile {
     pub version: u32,
     #[serde(default)]
     pub app_version: String,
     pub projects: Vec<ProjectSnapshot>,
+    /// The highest changes-log `seq` reflected by this export, when the
+    /// caller asked for a sync cursor. Omitted from JSON when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_seq: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,7 +42,7 @@ pub enum ImportMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportPlan {
     pub mode: ImportMode,
-    /// Projects to insert, keeping the UUID ids and foreign keys held by the backup.
+    /// Projects to insert, keeping the UUID ids and foreign keys held by the snapshot file.
     pub projects: Vec<ProjectSnapshot>,
     /// Ids of existing projects to delete before inserting (Replace mode only; empty otherwise).
     pub project_ids_to_delete: Vec<ProjectId>,
@@ -45,42 +57,52 @@ pub struct ImportReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BackupError {
+pub enum SnapshotFileError {
     InvalidJson(String),
     UnsupportedVersion { found: u32, supported: u32 },
 }
 
-impl fmt::Display for BackupError {
+impl fmt::Display for SnapshotFileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidJson(message) => write!(f, "invalid backup JSON: {message}"),
+            Self::InvalidJson(message) => write!(f, "invalid snapshot JSON: {message}"),
             Self::UnsupportedVersion { found, supported } => write!(
                 f,
-                "unsupported backup version {found}; this build supports version {supported}"
+                "unsupported snapshot version {found}; this build supports version {supported}"
             ),
         }
     }
 }
 
-impl std::error::Error for BackupError {}
+impl std::error::Error for SnapshotFileError {}
 
-/// Parse a backup document.
+/// Parse a snapshot file.
 ///
 /// Only the current format version is accepted; there is no upgrade path for
 /// other versions, so a mismatched document is rejected rather than guessed at.
-pub fn parse(input: &str) -> Result<Backup, BackupError> {
-    let backup: Backup =
-        serde_json::from_str(input).map_err(|error| BackupError::InvalidJson(error.to_string()))?;
-    if backup.version != BACKUP_VERSION {
-        return Err(BackupError::UnsupportedVersion {
-            found: backup.version,
-            supported: BACKUP_VERSION,
+pub fn parse_file(input: &str) -> Result<SnapshotFile, SnapshotFileError> {
+    let file: SnapshotFile = serde_json::from_str(input)
+        .map_err(|error| SnapshotFileError::InvalidJson(error.to_string()))?;
+    if file.version != SNAPSHOT_VERSION {
+        return Err(SnapshotFileError::UnsupportedVersion {
+            found: file.version,
+            supported: SNAPSHOT_VERSION,
         });
     }
-    Ok(backup)
+    Ok(file)
 }
 
-pub async fn export(store: &dyn Store, project: Option<ProjectId>) -> Result<Backup, StorageError> {
+/// Read a consistent server-wide snapshot.
+///
+/// The cursor is read before the project documents so it can never be ahead of
+/// the captured state. A write that lands in between is replayed by the next
+/// pull, which is idempotent; reading it afterwards could skip that write.
+pub async fn build(
+    store: &dyn Store,
+    project: Option<ProjectId>,
+) -> Result<Snapshot, StorageError> {
+    let last_seen_seq = store.last_change_seq(None).await?;
+
     let project_ids = match project {
         Some(id) => vec![id],
         None => store
@@ -96,17 +118,15 @@ pub async fn export(store: &dyn Store, project: Option<ProjectId>) -> Result<Bac
         projects.push(store.get_project_snapshot(project_id, None).await?);
     }
 
-    Ok(Backup {
-        version: BACKUP_VERSION,
-        // the binary crate stamps the real value when it writes a backup out
-        app_version: String::new(),
+    Ok(Snapshot {
         projects,
+        last_seen_seq,
     })
 }
 
 pub async fn plan_import(
     store: &dyn Store,
-    backup: &Backup,
+    file: &SnapshotFile,
     mode: ImportMode,
 ) -> Result<ImportPlan, StorageError> {
     let existing = store.get_all_projects(None).await?;
@@ -118,17 +138,17 @@ pub async fn plan_import(
     let existing_names: HashSet<String> = existing_ids_by_name.keys().cloned().collect();
 
     match mode {
-        ImportMode::Fail => plan_fail(backup, &existing_names),
-        ImportMode::Skip => plan_skip(backup, &existing_names),
-        ImportMode::Replace => plan_replace(backup, &existing_ids_by_name),
+        ImportMode::Fail => plan_fail(file, &existing_names),
+        ImportMode::Skip => plan_skip(file, &existing_names),
+        ImportMode::Replace => plan_replace(file, &existing_ids_by_name),
     }
 }
 
 fn plan_fail(
-    backup: &Backup,
+    file: &SnapshotFile,
     existing_names: &HashSet<String>,
 ) -> Result<ImportPlan, StorageError> {
-    let mut collisions: Vec<&str> = backup
+    let mut collisions: Vec<&str> = file
         .projects
         .iter()
         .map(|entry| entry.project.name.as_str())
@@ -145,16 +165,16 @@ fn plan_fail(
 
     Ok(ImportPlan {
         mode: ImportMode::Fail,
-        projects: backup.projects.clone(),
+        projects: file.projects.clone(),
         project_ids_to_delete: Vec::new(),
     })
 }
 
 fn plan_skip(
-    backup: &Backup,
+    file: &SnapshotFile,
     existing_names: &HashSet<String>,
 ) -> Result<ImportPlan, StorageError> {
-    let projects: Vec<ProjectSnapshot> = backup
+    let projects: Vec<ProjectSnapshot> = file
         .projects
         .iter()
         .filter(|entry| !existing_names.contains(&entry.project.name))
@@ -169,10 +189,10 @@ fn plan_skip(
 }
 
 fn plan_replace(
-    backup: &Backup,
+    file: &SnapshotFile,
     existing_ids_by_name: &HashMap<String, ProjectId>,
 ) -> Result<ImportPlan, StorageError> {
-    let project_ids_to_delete = backup
+    let project_ids_to_delete = file
         .projects
         .iter()
         .filter_map(|entry| existing_ids_by_name.get(&entry.project.name).copied())
@@ -180,7 +200,7 @@ fn plan_replace(
 
     Ok(ImportPlan {
         mode: ImportMode::Replace,
-        projects: backup.projects.clone(),
+        projects: file.projects.clone(),
         project_ids_to_delete,
     })
 }
@@ -195,6 +215,7 @@ mod tests {
     };
     use crate::position::Position;
     use chrono::{DateTime, Utc};
+    use serde_json::json;
     use sqlx::{PgConnection, Postgres, Transaction};
     use std::future::Future;
     use std::pin::pin;
@@ -262,7 +283,7 @@ mod tests {
         }
     }
 
-    fn backup_project(id: &str, name: &str) -> ProjectSnapshot {
+    fn project_doc(id: &str, name: &str) -> ProjectSnapshot {
         ProjectSnapshot {
             project: project(id, name),
             sections: vec![],
@@ -271,7 +292,7 @@ mod tests {
         }
     }
 
-    fn full_backup_project(id: &str, name: &str) -> ProjectSnapshot {
+    fn full_project_doc(id: &str, name: &str) -> ProjectSnapshot {
         let project = project(id, name);
         let section = section(SECTION_ID, project.id);
         let task = task(TASK_ID, project.id, Some(section.id));
@@ -285,11 +306,12 @@ mod tests {
         }
     }
 
-    fn backup(projects: Vec<ProjectSnapshot>) -> Backup {
-        Backup {
-            version: BACKUP_VERSION,
+    fn snapshot_file(projects: Vec<ProjectSnapshot>) -> SnapshotFile {
+        SnapshotFile {
+            version: SNAPSHOT_VERSION,
             app_version: String::new(),
             projects,
+            last_seen_seq: None,
         }
     }
 
@@ -577,6 +599,18 @@ mod tests {
             unimplemented!("plan_import only reads projects")
         }
 
+        async fn changes_after(
+            &self,
+            _: i64,
+            _: Option<&mut PgConnection>,
+        ) -> Result<Vec<Change>, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
+        async fn last_change_seq(&self, _: Option<&mut PgConnection>) -> Result<i64, StorageError> {
+            unimplemented!("plan_import only reads projects")
+        }
+
         async fn is_tombstoned(
             &self,
             _: EntityType,
@@ -602,24 +636,24 @@ mod tests {
 
     #[test]
     fn plan_fail_rejects_colliding_names() {
-        let backup = backup(vec![
-            backup_project(PROJECT_ID, "keep"),
-            backup_project(OTHER_PROJECT_ID, "collide"),
+        let file = snapshot_file(vec![
+            project_doc(PROJECT_ID, "keep"),
+            project_doc(OTHER_PROJECT_ID, "collide"),
         ]);
         let existing = HashSet::from(["collide".to_string()]);
 
         assert!(matches!(
-            plan_fail(&backup, &existing),
+            plan_fail(&file, &existing),
             Err(StorageError::Conflict(_))
         ));
     }
 
     #[test]
     fn plan_fail_preserves_every_id() {
-        let backup = backup(vec![full_backup_project(PROJECT_ID, "alpha")]);
+        let file = snapshot_file(vec![full_project_doc(PROJECT_ID, "alpha")]);
 
         let plan =
-            plan_fail(&backup, &HashSet::new()).expect("fail should succeed when no name collides");
+            plan_fail(&file, &HashSet::new()).expect("fail should succeed when no name collides");
 
         assert_eq!(plan.mode, ImportMode::Fail);
         assert_eq!(plan.projects.len(), 1);
@@ -638,13 +672,13 @@ mod tests {
 
     #[test]
     fn plan_skip_drops_colliding_projects_and_preserves_other_ids() {
-        let backup = backup(vec![
-            backup_project(PROJECT_ID, "keep"),
-            full_backup_project(OTHER_PROJECT_ID, "skip"),
+        let file = snapshot_file(vec![
+            project_doc(PROJECT_ID, "keep"),
+            full_project_doc(OTHER_PROJECT_ID, "skip"),
         ]);
         let existing = HashSet::from(["skip".to_string()]);
 
-        let plan = plan_skip(&backup, &existing).expect("skip should succeed");
+        let plan = plan_skip(&file, &existing).expect("skip should succeed");
 
         assert_eq!(plan.mode, ImportMode::Skip);
         assert_eq!(plan.projects.len(), 1);
@@ -655,14 +689,14 @@ mod tests {
 
     #[test]
     fn plan_replace_lists_collisions_and_preserves_incoming_ids() {
-        let backup = backup(vec![
-            full_backup_project(PROJECT_ID, "alpha"),
-            backup_project(OTHER_PROJECT_ID, "beta"),
+        let file = snapshot_file(vec![
+            full_project_doc(PROJECT_ID, "alpha"),
+            project_doc(OTHER_PROJECT_ID, "beta"),
         ]);
         let existing_id = uuid(EXISTING_PROJECT_ID);
         let existing = HashMap::from([("alpha".to_string(), existing_id)]);
 
-        let plan = plan_replace(&backup, &existing).expect("replace should succeed");
+        let plan = plan_replace(&file, &existing).expect("replace should succeed");
 
         assert_eq!(plan.mode, ImportMode::Replace);
         assert_eq!(plan.projects.len(), 2);
@@ -672,15 +706,15 @@ mod tests {
     }
 
     #[test]
-    fn plan_import_keeps_a_full_backup_unchanged() {
-        let backup = backup(vec![full_backup_project(PROJECT_ID, "alpha")]);
+    fn plan_import_keeps_a_full_snapshot_file_unchanged() {
+        let file = snapshot_file(vec![full_project_doc(PROJECT_ID, "alpha")]);
 
-        let plan = block_on(plan_import(&EmptyStore, &backup, ImportMode::Fail))
+        let plan = block_on(plan_import(&EmptyStore, &file, ImportMode::Fail))
             .expect("import planning should succeed");
 
         assert_eq!(plan.mode, ImportMode::Fail);
         assert!(plan.project_ids_to_delete.is_empty());
-        assert_eq!(plan.projects.len(), backup.projects.len());
+        assert_eq!(plan.projects.len(), file.projects.len());
 
         let imported = &plan.projects[0];
         assert_eq!(imported.project.id, uuid(PROJECT_ID));
@@ -694,7 +728,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(&plan.projects).unwrap(),
-            serde_json::to_value(&backup.projects).unwrap(),
+            serde_json::to_value(&file.projects).unwrap(),
             "planning must not rewrite ids, foreign keys, or timestamps"
         );
     }
@@ -704,25 +738,60 @@ mod tests {
         let v4 = r#"{ "version": 4, "projects": [] }"#;
 
         assert!(matches!(
-            parse(v4),
-            Err(BackupError::UnsupportedVersion {
+            parse_file(v4),
+            Err(SnapshotFileError::UnsupportedVersion {
                 found: 4,
-                supported: BACKUP_VERSION
+                supported: SNAPSHOT_VERSION
             })
         ));
     }
 
     #[test]
-    fn backup_round_trips_string_positions() {
-        let mut original = backup(vec![full_backup_project(PROJECT_ID, "alpha")]);
+    fn snapshot_file_round_trips_string_positions() {
+        let mut original = snapshot_file(vec![full_project_doc(PROJECT_ID, "alpha")]);
         original.projects[0].sections[0].position = position("a2");
         original.projects[0].tasks[0].position = position("a5");
 
-        let serialized = serde_json::to_string(&original).expect("backup should serialize");
-        let parsed = parse(&serialized).expect("current version should parse");
+        let serialized = serde_json::to_string(&original).expect("snapshot file should serialize");
+        let parsed = parse_file(&serialized).expect("current version should parse");
 
-        assert_eq!(parsed.version, BACKUP_VERSION);
+        assert_eq!(parsed.version, SNAPSHOT_VERSION);
         assert_eq!(parsed.projects[0].sections[0].position, position("a2"));
         assert_eq!(parsed.projects[0].tasks[0].position, position("a5"));
+    }
+
+    #[test]
+    fn snapshot_file_omits_the_cursor_by_default() {
+        let serialized =
+            serde_json::to_value(snapshot_file(vec![])).expect("snapshot file should serialize");
+
+        assert!(serialized.get("last_seen_seq").is_none());
+    }
+
+    #[test]
+    fn snapshot_file_carries_the_cursor_when_set() {
+        let mut file = snapshot_file(vec![]);
+        file.last_seen_seq = Some(7);
+
+        let serialized = serde_json::to_value(&file).expect("snapshot file should serialize");
+
+        assert_eq!(serialized["last_seen_seq"], json!(7));
+    }
+
+    #[test]
+    fn parse_file_accepts_snapshots_with_and_without_a_cursor() {
+        let without_cursor = format!(r#"{{ "version": {SNAPSHOT_VERSION}, "projects": [] }}"#);
+        let with_cursor =
+            format!(r#"{{ "version": {SNAPSHOT_VERSION}, "projects": [], "last_seen_seq": 7 }}"#);
+
+        let parsed_without =
+            parse_file(&without_cursor).expect("snapshot file without a cursor should parse");
+        let parsed_with =
+            parse_file(&with_cursor).expect("snapshot file with a cursor should parse");
+
+        assert_eq!(parsed_without.last_seen_seq, None);
+        assert_eq!(parsed_with.last_seen_seq, Some(7));
+        assert_eq!(parsed_without.version, SNAPSHOT_VERSION);
+        assert_eq!(parsed_with.version, SNAPSHOT_VERSION);
     }
 }

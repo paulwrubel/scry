@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT COALESCE(MAX(seq), 0) AS \"max_seq!\" FROM changes\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max_seq!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "45010cf2885eae6536fdc9bf7481b6f212ee1c4b9dd3e66f2d4ccfcae941f9e5"
+}

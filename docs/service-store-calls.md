@@ -1,11 +1,11 @@
 # Service / Store call graph
 
-Derived from `src/service.rs` (`ProjectService`), `crates/scry-core/src/store.rs` (the `Store` trait), `crates/scry-core/src/backup.rs`, and the REST handlers in `src/server/handlers.rs`. `PostgresStore` is the only implementor of `Store`, and `ProjectService` is the only caller of `Store` apart from the backup module.
+Derived from `src/service.rs` (`ProjectService`), `crates/scry-core/src/store.rs` (the `Store` trait), `crates/scry-core/src/snapshot.rs`, and the REST handlers in `src/server/handlers.rs`. `PostgresStore` is the only implementor of `Store`, and `ProjectService` is the only caller of `Store` apart from the snapshot module.
 
 ## How to read these diagrams
 
 - Solid arrow (`-->`): a call across the boundary into the `Store` trait.
-- Dashed arrow (`-.->`): an internal `ProjectService` call, including delegations into `scry_core::backup`.
+- Dashed arrow (`-.->`): an internal `ProjectService` call, including delegations into `scry_core::snapshot`.
 - Thick arrow (`==>`): a REST handler calling into the service. The route is in the handler's label. CLI commands call the same service methods and are not drawn.
 - A node label containing arrows, such as `append_position -> last_task_position -> tasks_in_section`, is a collapsed call chain drawn as one node so the diagram stays legible; its edges leave the collapsed node for the store calls made at the end of the chain. The arrow direction is written with the ASCII sequence `->`.
 - `*_by_id` and `*_in_project` service methods are drawn only where a handler or another service method calls them.
@@ -415,57 +415,63 @@ flowchart LR
   class st_create_project,st_create_section,st_get_project_by_id,st_get_project_by_name,st_get_all_projects,st_get_project_snapshot,st_update_project,st_delete_project_by_id storeNode
 ```
 
-## 6. Backup and import
+## 6. Snapshots and import
 
-`export` and `plan_import` delegate into `scry_core::backup`, which reads through `&dyn Store`; `import` applies a plan directly. The export handlers (`GET /export` and `GET /projects/{id}/export`) call `export`, and `POST /import` parses the document, plans the import, and applies it server-side.
+`snapshot` and `snapshot_file` delegate into `scry_core::snapshot`, which reads through `&dyn Store`; `import` applies a plan directly. `GET /snapshot` returns the bare document, `GET /export` returns the versioned file, `GET /projects/{id}/export` wraps one project, and `POST /import` parses the file, plans the import, and applies it server-side.
 
 ```mermaid
 flowchart LR
   subgraph http["HTTP handlers"]
+    h_snapshot["snapshot  GET /snapshot"]
     h_export["export  GET /export"]
     h_export_project["export_project  GET /projects/{id}/export"]
     h_import["import  POST /import"]
   end
 
   subgraph svc["ProjectService"]
-    export[export]
+    snapshot[snapshot]
+    snapshot_file[snapshot_file]
     plan_import[plan_import]
     import[import]
   end
 
-  subgraph backup["scry_core::backup"]
-    bk_export[export]
+  subgraph snapshot_core["scry_core::snapshot"]
+    bk_build[build]
     bk_plan_import[plan_import]
   end
 
   subgraph store["Store"]
     st_get_all_projects[get_all_projects]
     st_get_project_snapshot[get_project_snapshot]
+    st_last_change_seq[last_change_seq]
     st_import[import]
   end
 
-  h_export ==> export
-  h_export_project ==> export
+  h_snapshot ==> snapshot
+  h_export ==> snapshot_file
+  h_export_project ==> snapshot_file
   h_import ==> import
 
-  export -.-> bk_export
+  snapshot_file --> snapshot
+  snapshot -.-> bk_build
   plan_import -.-> bk_plan_import
   import --> st_import
-  bk_export --> st_get_all_projects
-  bk_export --> st_get_project_snapshot
+  bk_build --> st_last_change_seq
+  bk_build --> st_get_all_projects
+  bk_build --> st_get_project_snapshot
   bk_plan_import --> st_get_all_projects
 
   classDef storeNode fill:#eef3fb,stroke:#5b7fae,stroke-width:1px
-  class st_get_all_projects,st_get_project_snapshot,st_import storeNode
+  class st_get_all_projects,st_get_project_snapshot,st_last_change_seq,st_import storeNode
 ```
 
 ## Coverage
 
-- The six diagrams together touch all 30 `Store` trait methods (8 task, 8 note, 6 section, 7 project, 1 import) and every REST handler in `src/server/handlers.rs` except `index`, which only reports server metadata.
+- The six diagrams together touch all 32 `Store` trait methods (8 task, 8 note, 6 section, 7 project, 1 import, 2 sync) and every REST handler in `src/server/handlers.rs` except `index`, which only reports server metadata.
 - `get_note_by_id`, `get_all_notes_by_task_id`, `update_note`, `delete_note` and `find_note_ids_by_handle` are marked `dead_code` on the trait and are reached only by the note scaffolding methods `get_note`, `list_notes_by_task_id`, `update_note`, `delete_note` and `get_note_by_handle`.
 
 ## Notes
 
-- `export` and `plan_import` live in `scry_core::backup` and take `&dyn Store`, so the service reaches the store through them rather than calling it directly.
-- `ProjectSnapshot` lives in `scry_core::models` and is the one project document used by the snapshot endpoint, export, and import.
+- `build` and `plan_import` live in `scry_core::snapshot` and take `&dyn Store`, so the service reaches the store through them rather than calling it directly.
+- `ProjectSnapshot` lives in `scry_core::models` and is the one project document used by the snapshot endpoints, export, and import.
 - Reads may use `Store` directly in principle, but in this codebase every store call goes through `ProjectService`.

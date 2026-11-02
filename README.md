@@ -193,28 +193,28 @@ Sections belong to the active project, or to `-p` when given.
 
 ### Export & Import
 
-Back up and restore projects as a single JSON document. `export` always writes to stdout and `import` always reads from stdin, so both compose with shell redirection.
+Snapshot and restore projects as a single JSON document. `export` always writes to stdout and `import` always reads from stdin, so both compose with shell redirection.
 
 | Command                                   | Description                                                                                |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `scry export`                             | Write all projects (with sections, tasks, and notes) as JSON to stdout                     |
 | `scry -p <name> export`                   | Write a single project as JSON to stdout (`-p` is the global flag, placed before `export`) |
-| `scry import`                             | Read a JSON backup from stdin and add its projects (fails if any name already exists)      |
+| `scry import`                             | Read a JSON snapshot from stdin and add its projects (fails if any name already exists)    |
 | `scry import --replace-existing-projects` | Add new projects, replacing existing projects whose names collide                          |
 | `scry import --skip-existing-projects`    | Add new projects, keeping existing projects whose names collide                            |
 
-A plain `scry import` is strict: it adds the incoming projects but fails, writing nothing, if any name already exists. Because scry always ships a built-in `default` project, a full backup (which contains `default`) conflicts on a plain import — restoring one therefore requires `scry import --replace-existing-projects`. `--replace-existing-projects` adds new projects and replaces any existing project whose name collides, while `--skip-existing-projects` adds new projects and keeps the existing ones on collision; the two flags are mutually exclusive. `scry -p <name> export` is handy for sharing a single project that doesn't collide.
+A plain `scry import` is strict: it adds the incoming projects but fails, writing nothing, if any name already exists. Because scry always ships a built-in `default` project, a full snapshot file (which contains `default`) conflicts on a plain import — restoring one therefore requires `scry import --replace-existing-projects`. `--replace-existing-projects` adds new projects and replaces any existing project whose name collides, while `--skip-existing-projects` adds new projects and keeps the existing ones on collision; the two flags are mutually exclusive. `scry -p <name> export` is handy for sharing a single project that doesn't collide.
 
 The typical round trip pipes one into the other:
 
 ```sh
-scry export > scry-backup.json
-scry import --replace-existing-projects < scry-backup.json
+scry export > scry-snapshot.json
+scry import --replace-existing-projects < scry-snapshot.json
 ```
 
-The document is a single object, `{ "version": 1, "app_version": "0.24.0", "projects": [ ... ] }`. `version` is the format version checked on import, and `app_version` is informational, recording the binary that produced the backup. Each element of `projects` is a project document: the project's own fields (`id`, `name`, `description`, `task_sorting_mode`, `show_priority`, `created_at`) sit at the top level alongside its `sections`, `tasks`, and `notes` arrays. That object is exactly what `GET /projects/{id}/snapshot` returns, so a snapshot response and a backup entry are the same document, and `scry -p <name> export` is that same object wrapped in a one-project envelope. Every id (`id`, `project_id`, `section_id`, `task_id`) is a UUID string. Every task and section carries a `position` string key: ordering is lexicographic, unresolved ties break by id, and the key itself is opaque. Every task carries a nullable `section_id` and a `state` string, either `"open"` or `"closed"`. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
+The snapshot file is a single object, `{ "version": 1, "app_version": "0.24.0", "projects": [ ... ] }`. `version` is the format version checked on import, and `app_version` is informational, recording the binary that produced the snapshot. Each element of `projects` is a project document: the project's own fields (`id`, `name`, `description`, `task_sorting_mode`, `show_priority`, `created_at`) sit at the top level alongside its `sections`, `tasks`, and `notes` arrays. That object is exactly what `GET /projects/{id}/snapshot` returns, so a project snapshot and a snapshot file entry are the same document, and `scry -p <name> export` is that same object wrapped in a one-project envelope. Every id (`id`, `project_id`, `section_id`, `task_id`) is a UUID string. Every task and section carries a `position` string key: ordering is lexicographic, unresolved ties break by id, and the key itself is opaque. Every task carries a nullable `section_id` and a `state` string, either `"open"` or `"closed"`. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
 
-Import preserves the UUIDs carried by the backup and inserts or updates by id, keeping the other fields and timestamps. Only version 1 is accepted: a document carrying any other `version` is rejected rather than upgraded. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `sections`, `tasks`, and `notes`.
+Import preserves the UUIDs carried by the snapshot file and inserts or updates by id, keeping the other fields and timestamps. Only version 1 is accepted: a document carrying any other `version` is rejected rather than upgraded. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `sections`, `tasks`, and `notes`.
 
 ### Documentation
 
@@ -313,37 +313,42 @@ server behind a TLS-terminating proxy or a private network if it leaves the host
 
 Endpoints, all under `/api/v1`:
 
-| Method                   | Path                                     | Purpose                                            |
-| ------------------------ | ---------------------------------------- | -------------------------------------------------- |
-| `GET`                    | `/`                                      | Server info                                        |
-| `GET` / `POST`           | `/projects`                              | List / create projects (create accepts `template`) |
-| `GET`                    | `/projects/by-name/{name}`               | Fetch a project by name                            |
-| `PUT` / `DELETE`         | `/projects/by-name/{name}`               | Update / delete a project by name                  |
-| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project by id            |
-| `GET`                    | `/projects/{id}/export`                  | Export one project                                 |
-| `GET`                    | `/export`                                | Export all projects                                |
-| `GET` / `POST`           | `/projects/{id}/sections`                | List / create sections                             |
-| `GET`                    | `/projects/{id}/sections/by-name/{name}` | Fetch a section by name                            |
-| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks                    |
-| `GET`                    | `/projects/{id}/notes`                   | List a project's notes                             |
-| `GET`                    | `/projects/{id}/snapshot`                | Fetch the project document (one export entry)      |
-| `GET` / `PUT` / `DELETE` | `/sections/{id}`                         | Fetch / update / delete a section                  |
-| `POST`                   | `/sections/{id}/merge`                   | Merge a section into another                       |
-| `GET`                    | `/sections/{id}/tasks`                   | List a section's tasks                             |
-| `GET` / `PUT` / `DELETE` | `/tasks/{handle}`                        | Fetch / update / delete a task by UUID or handle   |
-| `POST`                   | `/tasks/{handle}/move`                   | Move a task to a section (appends)                 |
-| `POST`                   | `/tasks/{handle}/duplicate`              | Duplicate a task                                   |
-| `POST`                   | `/tasks/{handle}/close`                  | Close one task                                     |
-| `POST`                   | `/tasks/{handle}/open`                   | Reopen one task                                    |
-| `POST`                   | `/tasks/close`                           | Close several tasks in one request                 |
-| `POST`                   | `/tasks/open`                            | Reopen several tasks in one request                |
-| `GET` / `POST`           | `/tasks/{handle}/notes`                  | List / create a task's notes                       |
-| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note                     |
-| `POST`                   | `/import`                                | Import a backup (`{ backup, mode }`)               |
+| Method                   | Path                                     | Purpose                                                                      |
+| ------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `GET`                    | `/`                                      | Server info                                                                  |
+| `GET` / `POST`           | `/projects`                              | List / create projects (create accepts `template`)                           |
+| `GET`                    | `/projects/by-name/{name}`               | Fetch a project by name                                                      |
+| `PUT` / `DELETE`         | `/projects/by-name/{name}`               | Update / delete a project by name                                            |
+| `GET` / `PUT` / `DELETE` | `/projects/{id}`                         | Fetch / update / delete a project by id                                      |
+| `GET`                    | `/projects/{id}/export`                  | Export one project as a snapshot file                                        |
+| `GET`                    | `/export`                                | Export all projects as a snapshot file (`?include_seq=true` adds the cursor) |
+| `GET`                    | `/snapshot`                              | Snapshot all projects plus the cursor                                        |
+| `GET`                    | `/max_seq`                               | Highest changes-log `seq`                                                    |
+| `POST`                   | `/sync`                                  | Push ops and pull changes after `last_seen_seq`                              |
+| `GET` / `POST`           | `/projects/{id}/sections`                | List / create sections                                                       |
+| `GET`                    | `/projects/{id}/sections/by-name/{name}` | Fetch a section by name                                                      |
+| `GET` / `POST`           | `/projects/{id}/tasks`                   | List / create a project's tasks                                              |
+| `GET`                    | `/projects/{id}/notes`                   | List a project's notes                                                       |
+| `GET`                    | `/projects/{id}/snapshot`                | Fetch the project document (one snapshot file entry)                         |
+| `GET` / `PUT` / `DELETE` | `/sections/{id}`                         | Fetch / update / delete a section                                            |
+| `POST`                   | `/sections/{id}/merge`                   | Merge a section into another                                                 |
+| `GET`                    | `/sections/{id}/tasks`                   | List a section's tasks                                                       |
+| `GET` / `PUT` / `DELETE` | `/tasks/{handle}`                        | Fetch / update / delete a task by UUID or handle                             |
+| `POST`                   | `/tasks/{handle}/move`                   | Move a task to a section (appends)                                           |
+| `POST`                   | `/tasks/{handle}/duplicate`              | Duplicate a task                                                             |
+| `POST`                   | `/tasks/{handle}/close`                  | Close one task                                                               |
+| `POST`                   | `/tasks/{handle}/open`                   | Reopen one task                                                              |
+| `POST`                   | `/tasks/close`                           | Close several tasks in one request                                           |
+| `POST`                   | `/tasks/open`                            | Reopen several tasks in one request                                          |
+| `GET` / `POST`           | `/tasks/{handle}/notes`                  | List / create a task's notes                                                 |
+| `GET` / `PUT` / `DELETE` | `/notes/{id}`                            | Fetch / update / delete a note                                               |
+| `POST`                   | `/import`                                | Import a snapshot file (`{ snapshot, mode }`)                                |
 
 Task paths accept a full UUID or a short handle. `/projects/{id}?detailed=true` adds `sections`, `tasks`, and per-task `notes`; `include_handles=true` adds a `handle` to each task. `/tasks/{handle}?detailed=true` adds `notes`, and `include_handle=true` adds the display `handle`.
 
-`POST /tasks/{handle}/move` takes `{ "section_id": <id-or-null> }`; null moves the task to No section, and either way the task appends to the destination group. `POST /tasks/close` takes `{ "handles": [...] }`; `POST /tasks/open` takes `{ "handles": [...] }`. Both return one result per handle, with failures reported per item. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`. Deletions return the removed object. `POST /import` takes `{ "backup": <backup JSON>, "mode": "Fail" | "Replace" | "Skip" }` and plans the import on the server.
+`POST /tasks/{handle}/move` takes `{ "section_id": <id-or-null> }`; null moves the task to No section, and either way the task appends to the destination group. `POST /tasks/close` takes `{ "handles": [...] }`; `POST /tasks/open` takes `{ "handles": [...] }`. Both return one result per handle, with failures reported per item. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`. Deletions return the removed object. `POST /import` takes `{ "snapshot": <snapshot JSON>, "mode": "Fail" | "Replace" | "Skip" }` and plans the import on the server.
+
+`POST /sync` takes `{ "op_version": 1, "last_seen_seq": <seq>, "ops": [...] }` and returns `{ "acks": [...], "changes": [...], "next_seq": <seq> }`. Each change carries the resulting field values for one entity: `create` carries the full row, `update` only the changed fields, and `delete` carries `{}`. `next_seq` is the cursor to send on the next request. `GET /max_seq` returns the server's current cursor without syncing. `GET /snapshot` returns the bare `{ "projects": [...], "last_seen_seq": <seq> }` document, and `GET /export?include_seq=true` adds that cursor to the importable snapshot file.
 
 ### JSON Output
 

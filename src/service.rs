@@ -1,6 +1,5 @@
 use crate::error::ServiceError;
 use chrono::Utc;
-use scry_core::backup::{self, Backup, ImportMode, ImportPlan, ImportReport};
 use scry_core::error::StorageError;
 use scry_core::ids::{
     Handle, MIN_HANDLE_LENGTH, NoteId, ProjectId, SectionId, TaskId, distinguishing_prefixes,
@@ -11,6 +10,9 @@ use scry_core::models::{
     ProjectSnapshot, ProjectTemplate, Section, Tags, Task, TaskSortingMode, TaskState,
 };
 use scry_core::position::{Position, key_between, n_keys_between};
+use scry_core::snapshot::{
+    self, ImportMode, ImportPlan, ImportReport, SNAPSHOT_VERSION, Snapshot, SnapshotFile,
+};
 use scry_core::store::ArcStore;
 use scry_core::sync::ack::{
     AcknowledgmentStatus, ApplyOutcome, OperationAcknowledgment, RejectionReason,
@@ -68,8 +70,15 @@ pub enum ApplyMode {
     /// Roll the whole batch back on the first rejection (REST writes).
     Atomic,
     /// Acknowledge the rejection and apply the rest of the batch (#104's `/sync`).
-    #[allow(dead_code)]
     PerOperation,
+}
+
+/// The acks, pulled changes, and next cursor produced by one sync round.
+#[derive(Debug, Clone)]
+pub struct SyncResult {
+    pub acks: Vec<OperationAcknowledgment>,
+    pub changes: Vec<Change>,
+    pub next_seq: i64,
 }
 
 /// Input for creating a task. `SectionInput::Unchanged` means no section.
@@ -876,16 +885,33 @@ impl ProjectService {
         Ok(project)
     }
 
-    pub async fn export(&self, project: Option<ProjectId>) -> Result<Backup, ServiceError> {
-        Ok(backup::export(self.store.as_ref(), project).await?)
+    /// Read one consistent server-wide snapshot plus its cursor.
+    pub async fn snapshot(&self, project: Option<ProjectId>) -> Result<Snapshot, ServiceError> {
+        Ok(snapshot::build(self.store.as_ref(), project).await?)
+    }
+
+    /// Wrap a snapshot in the exportable file envelope. `include_seq` adds the
+    /// cursor to the file; ordinary exports leave it out.
+    pub async fn snapshot_file(
+        &self,
+        project: Option<ProjectId>,
+        include_seq: bool,
+    ) -> Result<SnapshotFile, ServiceError> {
+        let snapshot = self.snapshot(project).await?;
+        Ok(SnapshotFile {
+            version: SNAPSHOT_VERSION,
+            app_version: String::new(),
+            projects: snapshot.projects,
+            last_seen_seq: include_seq.then_some(snapshot.last_seen_seq),
+        })
     }
 
     pub async fn plan_import(
         &self,
-        backup: &Backup,
+        file: &SnapshotFile,
         mode: ImportMode,
     ) -> Result<ImportPlan, ServiceError> {
-        Ok(backup::plan_import(self.store.as_ref(), backup, mode).await?)
+        Ok(snapshot::plan_import(self.store.as_ref(), file, mode).await?)
     }
 
     pub async fn import(&self, plan: ImportPlan) -> Result<ImportReport, ServiceError> {
@@ -926,6 +952,36 @@ impl ProjectService {
         })?;
 
         Ok(ApplyOutcome { acks, last_seq })
+    }
+
+    /// Apply a pushed batch per-op, then return every change after the
+    /// client's cursor plus the cursor to send next.
+    ///
+    /// `next_seq` is the last change returned, or `last_seen_seq` when the
+    /// client is already up to date. No paging: the caller gets the whole
+    /// remainder of the changes log.
+    pub async fn sync(
+        &self,
+        ops: &[Operation],
+        last_seen_seq: i64,
+    ) -> Result<SyncResult, ServiceError> {
+        let outcome = self.apply_operations(ops, ApplyMode::PerOperation).await?;
+        let changes = self.store.changes_after(last_seen_seq, None).await?;
+        let next_seq = changes
+            .last()
+            .map(|change| change.seq)
+            .unwrap_or(last_seen_seq);
+
+        Ok(SyncResult {
+            acks: outcome.acks,
+            changes,
+            next_seq,
+        })
+    }
+
+    /// The highest changes-log `seq`, or `0` when the log is empty.
+    pub async fn max_seq(&self) -> Result<i64, ServiceError> {
+        Ok(self.store.last_change_seq(None).await?)
     }
 
     async fn apply_one_operation(
@@ -1517,6 +1573,8 @@ impl ProjectService {
         field_values: FieldValues,
     ) -> Result<i64, ServiceError> {
         let change = Change {
+            // assigned by the database; the store ignores this placeholder
+            seq: 0,
             entity_type: entity.entity_type(),
             entity_id: entity.id(),
             kind,

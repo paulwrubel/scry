@@ -94,6 +94,9 @@ pub use get_tasks_by_section::get_tasks_by_section;
 mod import;
 pub use import::import;
 
+mod max_seq;
+pub use max_seq::max_seq;
+
 mod merge_section;
 pub use merge_section::merge_section;
 
@@ -105,6 +108,12 @@ pub use open_task::open_task;
 
 mod open_tasks;
 pub use open_tasks::open_tasks;
+
+mod snapshot;
+pub use snapshot::snapshot;
+
+mod sync;
+pub use sync::sync;
 
 mod update_note;
 pub use update_note::update_note;
