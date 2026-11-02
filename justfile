@@ -94,6 +94,22 @@ sqlx-prepare-check: run-postgres
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
     SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
 
+# regenerate the TypeScript bindings for the sync wire types
+[group('validate')]
+generate-bindings:
+    cargo test -p scry --features ts export_bindings
+
+# verify the generated TypeScript bindings are committed and up to date
+[group('validate')]
+check-bindings: generate-bindings
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -n "$(git status --porcelain -- ui/src/generated)" ]]; then
+        echo "TypeScript bindings are out of date; run 'just generate-bindings' and commit the result" >&2
+        git status --porcelain -- ui/src/generated >&2
+        exit 1
+    fi
+
 # bump patch version (x.y.Z → x.y.Z+1)
 [group('release')]
 release-patch:
