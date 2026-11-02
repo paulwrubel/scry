@@ -66,13 +66,14 @@ install:
 build-ui: setup-ui-env
     cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run build
 
-# run all validation checks: rust test/check/clippy and ui lint/format/type-check
+# run all validation checks: Rust, generated output, fixtures, and the UI suite
 [group('validate')]
-validate: cargo-test cargo-check cargo-clippy
+validate: cargo-test cargo-check cargo-clippy check-bindings check-fixtures
     cd ui && . "$HOME/.nvm/nvm.sh" && nvm use \
     && npm run lint \
     && npm run prettier-check \
-    && npm run type-check
+    && npm run type-check \
+    && npm test
 
 # run the test suite
 alias test := cargo-test

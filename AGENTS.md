@@ -1,13 +1,14 @@
 # AGENTS.md
 
-`scry` is a terminal task manager with a PostgreSQL backend: a clap CLI. Rust edition 2024. It is a Cargo workspace: the root `scry` binary and `crates/scry-core` (domain types and the `Store` trait). The tests are unit tests that need no database; `just cargo-test` (alias `just test`) runs them (`cargo test --workspace`).
+`scry` is a terminal task manager with a PostgreSQL backend: a clap CLI. Rust edition 2024. It is a Cargo workspace: the root `scry` binary and `crates/scry-core` (domain types and the `Store` trait). The tests are unit tests that need no database; `just cargo-test` (alias `just test`) runs them (`cargo test --workspace`). The `ui/` package is the React/TypeScript frontend (Vite, oxlint, Prettier, Vitest); it is a separate npm package, not a Cargo workspace member.
 
 ## Tooling prerequisites
 
 - The standard workflow uses `just` and sqlx-cli (`cargo install just sqlx-cli`). The `sqlx-prepare*` and `run-postgres` targets need sqlx-cli; the Postgres targets also need Docker, since they start and stop the Postgres defined in `compose.yaml`, which runs the app together with its own `postgres:18` service.
 - `just run` (the `run-docker` alias) builds and starts the whole Docker stack, app plus database, so no host Postgres is needed; `just view-logs` tails the app container. `just run-local` builds the release binary and runs the REST server on the host against that same Postgres with `--config scry.dev.toml --secrets scry.dev-secrets.toml`, and `just run-postgres` only starts Postgres and applies migrations.
-- `just pg-down` keeps the data volume and `just pg-reset` wipes it; `pg-reset` and `clean` take the whole stack down, and `clean` also runs `cargo clean`.
-- rust-analyzer is configured to run `cargo clippy` as its check command (`.vscode/settings.json`), and `just cargo-clippy` (alias `just clippy`) is `cargo clippy --workspace -- -D warnings`. Keep clippy clean at `-D warnings`; CI runs it through `just validate` (`.github/workflows/ci.yml`), so `just validate` is your local gate: `cargo-test` -> `cargo-check` -> `cargo-clippy`.
+- `just pg-down` keeps the data volume and `just pg-reset` wipes it; `pg-reset` and `clean` take the whole stack down, and `clean` also runs `cargo clean` and removes `ui/dist`.
+- The `ui/` package uses Node from `ui/.nvmrc` (Node 26). `just setup-ui-env` installs it through nvm and runs `npm install`; `just run-ui` starts the Docker stack and the Vite dev server on `:5173`; `just build-ui`, `just lint-ui`, `just prettier-check-ui`, `just typecheck-ui`, `just test-ui`, and `just prettier-fix-ui` are the UI build and check commands.
+- rust-analyzer is configured to run `cargo clippy` as its check command (`.vscode/settings.json`), and `just cargo-clippy` (alias `just clippy`) is `cargo clippy --workspace -- -D warnings`. Keep clippy clean at `-D warnings`. `just validate` is the local gate: Rust test/check/clippy, generated-binding and fixture drift checks, and UI lint/format/type-check/Vitest.
 
 ## sqlx compile-time database (the #1 gotcha)
 
@@ -40,6 +41,19 @@ All SQL lives in `sqlx::query!`/`query_as!` macros in `src/store/postgres.rs`, a
 - Row->model mapping is hand-rolled per query via the `*_from_fields` helpers in the store. Enums are stored as their `Display`/string names (or numeric for `Priority`) — route all conversions through these helpers rather than deserializing directly.
 - `src/state.rs` — `ProjectState` is the client's read model for `scry list`: it groups a project snapshot into ordered section groups plus a trailing `No section` group, keeps closed tasks in a separate collection (rendered only by `--include-closed`), applies the project's sorting mode, and supports substring filtering. `get_task_by_id` and `tasks` are test-only helpers. It has no UI dependencies.
 - The Postgres pool uses sqlx defaults, so concurrent writers are possible.
+
+## Cross-language contract
+
+The Rust server and the TypeScript UI must agree on the wire format and on every rule implemented in both languages.
+
+- Wire types in `crates/scry-core` derive `ts_rs::TS` behind the optional `ts` feature; the root `SyncRequest`/`SyncResponse` do the same. `just generate-bindings` runs the exporter and writes `ui/src/generated/`; `just check-bindings` regenerates and fails on a diff. `ui/src/generated/` is machine-owned: never hand-edit or hand-add types there. Put hand-written client types outside it.
+- Every rule implemented in both languages gets a fixture area under `fixtures/<area>/cases.json`. The envelope is versioned (`version`, `area`, optional `description`, `cases`); each case has `name`, optional `description`, `kind`, `input`, and `expected`. Unknown fields and unsupported versions are rejected. `input` and `expected` are always JSON objects.
+- The Rust loader is `crates/scry-core/tests/common.rs`; the TypeScript loader is `ui/src/fixtures/load.ts`. Both keep the same `REGISTERED_AREAS`. A fixture directory missing from either registry, a registered area without `cases.json`, or a case `kind` that an area test does not consume fails the suite.
+- `just generate-fixtures` rewrites the committed fixtures from Rust; `just check-fixtures` regenerates and fails on a diff. Adding a dual-language rule means adding the area, registering it in both loaders, and consuming every case on both sides in the same change.
+- Fixture versions start at `1`. Bump `version` only for an incompatible schema or semantic change; additive cases do not bump it. Consumers reject any other version, and there is no upgrade path.
+- `crates/scry-core/src/sync/replay.rs` is the reference client model: confirmed state, applying pulled changes, replaying the unacknowledged outbox, and computing visible state. The server never calls it. The fixture generator, `crates/scry-core/tests/op_replay.rs`, and the TypeScript mirror in `ui/src/contract/op-replay.ts` use it to pin the client-side rule.
+- Current areas are `positions` (`position.rs` / `ui/src/contract/positions.ts`), `handles` (`ids.rs` / `ui/src/contract/handles.ts`), and `op-replay` (`sync/replay.rs` / `ui/src/contract/op-replay.ts`).
+- CI (`.github/workflows/ci.yml`, currently manual `workflow_dispatch` only) runs the binding and fixture drift checks, the Rust gates, UI lint/format/type-check, and Vitest.
 
 ## Release process
 

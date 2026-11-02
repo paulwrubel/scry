@@ -37,8 +37,36 @@ jobs:
       - name: Install sqlx-cli
         run: cargo install sqlx-cli --locked
 
-      - name: Validate (test -> check -> clippy)
-        run: just validate
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ui/.nvmrc
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: cd ui && npm ci
+
+      - name: Check generated bindings
+        run: just check-bindings
+
+      - name: Check shared fixtures
+        run: just check-fixtures
+
+      - name: Validate Rust (test -> check -> clippy)
+        run: just cargo-test cargo-check cargo-clippy
+
+      - name: Lint UI
+        run: cd ui && npm run lint
+
+      - name: Check UI formatting
+        run: cd ui && npm run prettier-check
+
+      - name: Type-check UI
+        run: cd ui && npm run type-check
+
+      - name: Test UI
+        run: cd ui && npm test
 
       - name: Check offline query cache (postgres)
         run: just sqlx-prepare-check
