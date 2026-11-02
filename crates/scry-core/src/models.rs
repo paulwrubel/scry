@@ -84,7 +84,7 @@ impl TaskState {
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Tags(pub(crate) Vec<String>);
 
 impl Tags {
@@ -286,7 +286,7 @@ pub const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
 ];
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectId,
     pub name: String,
@@ -297,7 +297,7 @@ pub struct Project {
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Section {
     pub id: SectionId,
     pub project_id: ProjectId,
@@ -308,7 +308,7 @@ pub struct Section {
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Task {
     pub id: TaskId,
     pub project_id: ProjectId,
@@ -323,7 +323,7 @@ pub struct Task {
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     pub id: NoteId,
     pub task_id: TaskId,
@@ -432,7 +432,7 @@ pub struct Change {
 /// level, and all ids and positions are carried verbatim so the document can
 /// be serialized and deserialized without loss.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectSnapshot {
     #[serde(flatten)]
     pub project: Project,

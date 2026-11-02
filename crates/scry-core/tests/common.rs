@@ -7,7 +7,7 @@ pub const FIXTURE_VERSION: u32 = 1;
 
 // areas are registered here before their cases are exercised, so a directory
 // added to fixtures/ without a matching entry fails the contract tests
-pub const REGISTERED_AREAS: &[&str] = &["positions", "handles"];
+pub const REGISTERED_AREAS: &[&str] = &["positions", "handles", "op-replay"];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -4,7 +4,10 @@
 //! listed explicitly, and generated sequences are recorded in order.
 
 use scry_core::ids::{Handle, HandleError, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH, shortest_handles};
+use scry_core::models::Change;
 use scry_core::position::{Position, key_between};
+use scry_core::sync::operations::Operation;
+use scry_core::sync::replay::{ClientState, apply_changes, replay_operations, visible_state};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -28,6 +31,12 @@ fn main() {
         "handles",
         "Handle normalization, shortest distinguishing prefixes, and prefix resolution.",
         handle_cases(),
+    );
+    write_area(
+        &root,
+        "op-replay",
+        "Client replay: confirmed state, pulled changes, unacknowledged outbox operations, and the resulting visible state.",
+        op_replay_cases(),
     );
 }
 
@@ -406,4 +415,625 @@ fn handle_error_code(error: &HandleError) -> &'static str {
         HandleError::MisplacedDash { .. } => "misplaced_dash",
         HandleError::InvalidCharacter { .. } => "invalid_character",
     }
+}
+
+const PROJECT_ID: &str = "11111111-1111-4111-8111-111111111111";
+const PROJECT_2: &str = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const SECTION_A: &str = "22222222-2222-4222-8222-222222222222";
+const SECTION_B: &str = "33333333-3333-4333-8333-333333333333";
+const SECTION_C: &str = "99999999-9999-4999-8999-999999999999";
+const TASK_1: &str = "44444444-4444-4444-8444-444444444444";
+const TASK_2: &str = "55555555-5555-4555-8555-555555555555";
+const TASK_3: &str = "88888888-8888-4888-8888-888888888888";
+const NOTE_1: &str = "66666666-6666-4666-8666-666666666666";
+const NOTE_2: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const CREATED_AT: &str = "2026-01-01T00:00:00Z";
+
+const OP_LOCAL_TITLE: &str = "c0000000-0000-4000-8000-000000000001";
+const OP_LOCAL_PRIORITY: &str = "c0000000-0000-4000-8000-000000000002";
+const OP_LOCAL_OTHER: &str = "c0000000-0000-4000-8000-000000000003";
+const OP_SERVER_ONE: &str = "d0000000-0000-4000-8000-000000000001";
+const OP_SERVER_TWO: &str = "d0000000-0000-4000-8000-000000000002";
+
+fn op_replay_cases() -> Vec<Value> {
+    let mut cases = vec![
+        replay_case(
+            "replay-update-task-fields",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_TITLE,
+                "operation_version": 1,
+                "kind": "update_task",
+                "id": TASK_1,
+                "title": "local first",
+                "priority": "critical",
+                "tags": ["local"],
+            }]),
+        ),
+        replay_case(
+            "replay-move-task",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "move_task",
+                "id": TASK_1,
+                "section_id": SECTION_B,
+                "position": "a2",
+            }]),
+        ),
+        replay_case(
+            "replay-create-task",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "create_task",
+                "id": TASK_3,
+                "project_id": PROJECT_ID,
+                "title": "third",
+                "description": "third description",
+                "priority": "low",
+                "section_id": SECTION_A,
+                "position": "a1",
+                "state": "open",
+                "tags": ["new"],
+                "created_at": CREATED_AT,
+            }]),
+        ),
+        replay_case(
+            "replay-delete-task-removes-notes",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "delete_task",
+                "id": TASK_1,
+            }]),
+        ),
+        replay_case(
+            "replay-update-section-name-and-color",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "update_section",
+                "id": SECTION_A,
+                "name": "renamed",
+                "color": { "set": "yellow" },
+            }]),
+        ),
+        replay_case(
+            "replay-clear-section-color",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "update_section",
+                "id": SECTION_B,
+                "color": "clear",
+            }]),
+        ),
+        replay_case(
+            "replay-delete-section-relocates-tasks",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "delete_section",
+                "id": SECTION_A,
+            }]),
+        ),
+        replay_case(
+            "replay-create-section",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "create_section",
+                "id": SECTION_C,
+                "project_id": PROJECT_ID,
+                "name": "later",
+                "position": "a2",
+                "color": "cyan",
+                "created_at": CREATED_AT,
+            }]),
+        ),
+        replay_case(
+            "replay-update-note",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "update_note",
+                "id": NOTE_1,
+                "contents": "local note",
+            }]),
+        ),
+        replay_case(
+            "replay-create-note",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "create_note",
+                "id": NOTE_2,
+                "task_id": TASK_2,
+                "contents": "second note",
+                "created_at": CREATED_AT,
+            }]),
+        ),
+        replay_case(
+            "replay-delete-note",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "delete_note",
+                "id": NOTE_1,
+            }]),
+        ),
+        replay_case(
+            "replay-update-project",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "update_project",
+                "id": PROJECT_ID,
+                "name": "alpha local",
+                "description": "local description",
+                "task_sorting_mode": "priority",
+                "show_priority": false,
+            }]),
+        ),
+        replay_case(
+            "replay-create-project",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "create_project",
+                "id": PROJECT_2,
+                "name": "beta",
+                "description": null,
+                "task_sorting_mode": "manual",
+                "show_priority": false,
+                "created_at": CREATED_AT,
+            }]),
+        ),
+        replay_case(
+            "replay-delete-project",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_OTHER,
+                "operation_version": 1,
+                "kind": "delete_project",
+                "id": PROJECT_ID,
+            }]),
+        ),
+        replay_case(
+            "replay-create-then-update-task",
+            base_state(),
+            json!([
+                {
+                    "operation_id": OP_LOCAL_OTHER,
+                    "operation_version": 1,
+                    "kind": "create_task",
+                    "id": TASK_3,
+                    "project_id": PROJECT_ID,
+                    "title": "third",
+                    "description": null,
+                    "priority": "low",
+                    "section_id": SECTION_A,
+                    "position": "a1",
+                    "state": "open",
+                    "tags": [],
+                    "created_at": CREATED_AT,
+                },
+                {
+                    "operation_id": OP_LOCAL_TITLE,
+                    "operation_version": 1,
+                    "kind": "update_task",
+                    "id": TASK_3,
+                    "title": "third local",
+                },
+            ]),
+        ),
+        apply_changes_case(
+            "apply-changes-update-task",
+            base_state(),
+            json!([change(
+                2,
+                "task",
+                TASK_1,
+                "update",
+                OP_SERVER_ONE,
+                json!({ "title": "server first", "priority": "low", "description": null }),
+            )]),
+        ),
+        apply_changes_case(
+            "apply-changes-create-task",
+            base_state(),
+            json!([change(
+                2,
+                "task",
+                TASK_3,
+                "create",
+                OP_SERVER_ONE,
+                task_3_value(),
+            )]),
+        ),
+        apply_changes_case(
+            "apply-changes-delete-task",
+            base_state(),
+            json!([change(
+                2,
+                "task",
+                TASK_1,
+                "delete",
+                OP_SERVER_ONE,
+                json!({}),
+            )]),
+        ),
+        apply_changes_case(
+            "apply-changes-update-project",
+            base_state(),
+            json!([change(
+                2,
+                "project",
+                PROJECT_ID,
+                "update",
+                OP_SERVER_ONE,
+                json!({ "name": "server alpha", "show_priority": false }),
+            )]),
+        ),
+        apply_changes_case(
+            "apply-changes-update-note",
+            base_state(),
+            json!([change(
+                2,
+                "note",
+                NOTE_1,
+                "update",
+                OP_SERVER_ONE,
+                json!({ "contents": "server note" }),
+            )]),
+        ),
+        cycle_case(
+            "cycle-lost-conflict-corrects-after-ack",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_TITLE,
+                "operation_version": 1,
+                "kind": "update_task",
+                "id": TASK_1,
+                "title": "local",
+            }]),
+            json!([change(
+                2,
+                "task",
+                TASK_1,
+                "update",
+                OP_SERVER_ONE,
+                json!({ "title": "server" }),
+            )]),
+            &[OP_LOCAL_TITLE],
+        ),
+        cycle_case(
+            "cycle-unacked-local-edit-stays-visible",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_TITLE,
+                "operation_version": 1,
+                "kind": "update_task",
+                "id": TASK_1,
+                "title": "local",
+            }]),
+            json!([change(
+                2,
+                "task",
+                TASK_1,
+                "update",
+                OP_SERVER_ONE,
+                json!({ "title": "server" }),
+            )]),
+            &[],
+        ),
+        cycle_case(
+            "cycle-delete-wins-over-unacked-edit",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_TITLE,
+                "operation_version": 1,
+                "kind": "update_task",
+                "id": TASK_1,
+                "title": "local",
+            }]),
+            json!([change(
+                2,
+                "task",
+                TASK_1,
+                "delete",
+                OP_SERVER_ONE,
+                json!({}),
+            )]),
+            &[OP_LOCAL_TITLE],
+        ),
+        cycle_case(
+            "cycle-ack-without-conflict",
+            base_state(),
+            json!([{
+                "operation_id": OP_LOCAL_TITLE,
+                "operation_version": 1,
+                "kind": "update_task",
+                "id": TASK_1,
+                "title": "local",
+            }]),
+            json!([change(
+                2,
+                "task",
+                TASK_1,
+                "update",
+                OP_LOCAL_TITLE,
+                json!({ "title": "local" }),
+            )]),
+            &[OP_LOCAL_TITLE],
+        ),
+        cycle_case(
+            "cycle-remaining-outbox-replays-after-pull",
+            base_state(),
+            json!([
+                {
+                    "operation_id": OP_LOCAL_TITLE,
+                    "operation_version": 1,
+                    "kind": "update_task",
+                    "id": TASK_1,
+                    "title": "local title",
+                },
+                {
+                    "operation_id": OP_LOCAL_PRIORITY,
+                    "operation_version": 1,
+                    "kind": "update_task",
+                    "id": TASK_1,
+                    "priority": "critical",
+                },
+            ]),
+            json!([change(
+                2,
+                "task",
+                TASK_1,
+                "update",
+                OP_SERVER_TWO,
+                json!({ "title": "server title" }),
+            )]),
+            &[OP_LOCAL_TITLE],
+        ),
+        cycle_case(
+            "cycle-create-note-then-update",
+            base_state(),
+            json!([
+                {
+                    "operation_id": OP_LOCAL_OTHER,
+                    "operation_version": 1,
+                    "kind": "create_note",
+                    "id": NOTE_2,
+                    "task_id": TASK_2,
+                    "contents": "second note",
+                    "created_at": CREATED_AT,
+                },
+                {
+                    "operation_id": OP_LOCAL_TITLE,
+                    "operation_version": 1,
+                    "kind": "update_note",
+                    "id": NOTE_2,
+                    "contents": "local final",
+                },
+            ]),
+            json!([]),
+            &[],
+        ),
+        cycle_case(
+            "cycle-delete-section-with-remaining-task-edit",
+            base_state(),
+            json!([
+                {
+                    "operation_id": OP_LOCAL_OTHER,
+                    "operation_version": 1,
+                    "kind": "delete_section",
+                    "id": SECTION_A,
+                },
+                {
+                    "operation_id": OP_LOCAL_TITLE,
+                    "operation_version": 1,
+                    "kind": "update_task",
+                    "id": TASK_1,
+                    "title": "local",
+                },
+            ]),
+            json!([]),
+            &[],
+        ),
+    ];
+    cases.sort_by(|left, right| {
+        left["name"]
+            .as_str()
+            .unwrap_or_default()
+            .cmp(right["name"].as_str().unwrap_or_default())
+    });
+    cases
+}
+
+fn replay_case(name: &str, confirmed: Value, ops: Value) -> Value {
+    let state: ClientState =
+        serde_json::from_value(confirmed.clone()).expect("replay case has a valid confirmed state");
+    let operations: Vec<Operation> =
+        serde_json::from_value(ops.clone()).expect("replay case has valid operations");
+    let visible = replay_operations(&state, &operations);
+
+    json!({
+        "name": name,
+        "kind": "replay",
+        "input": { "confirmed": confirmed, "ops": ops },
+        "expected": { "visible": serde_json::to_value(visible).expect("state serializes") },
+    })
+}
+
+fn apply_changes_case(name: &str, confirmed: Value, changes: Value) -> Value {
+    let state: ClientState =
+        serde_json::from_value(confirmed.clone()).expect("change case has a valid confirmed state");
+    let changes: Vec<Change> =
+        serde_json::from_value(changes.clone()).expect("change case has valid changes");
+    let confirmed_after = apply_changes(&state, &changes);
+
+    json!({
+        "name": name,
+        "kind": "apply_changes",
+        "input": { "confirmed": confirmed, "changes": changes },
+        "expected": { "confirmed": serde_json::to_value(confirmed_after).expect("state serializes") },
+    })
+}
+
+fn cycle_case(
+    name: &str,
+    confirmed: Value,
+    ops: Value,
+    changes: Value,
+    acknowledged: &[&str],
+) -> Value {
+    let state: ClientState =
+        serde_json::from_value(confirmed.clone()).expect("cycle case has a valid confirmed state");
+    let operations: Vec<Operation> =
+        serde_json::from_value(ops.clone()).expect("cycle case has valid operations");
+    let changes: Vec<Change> =
+        serde_json::from_value(changes.clone()).expect("cycle case has valid changes");
+    let acked: Vec<Uuid> = acknowledged
+        .iter()
+        .map(|id| Uuid::parse_str(id).expect("cycle case has valid acknowledged ids"))
+        .collect();
+    let visible = visible_state(&state, &changes, &acked, &operations);
+
+    json!({
+        "name": name,
+        "kind": "cycle",
+        "input": {
+            "confirmed": confirmed,
+            "ops": ops,
+            "changes": changes,
+            "acked": acknowledged,
+        },
+        "expected": { "visible": serde_json::to_value(visible).expect("state serializes") },
+    })
+}
+
+fn change(
+    seq: i64,
+    entity_type: &str,
+    entity_id: &str,
+    kind: &str,
+    operation_id: &str,
+    field_values: Value,
+) -> Value {
+    json!({
+        "seq": seq,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "kind": kind,
+        "operation_id": operation_id,
+        "client_timestamp": null,
+        "field_values": field_values,
+        "created_at": CREATED_AT,
+    })
+}
+
+fn base_state() -> Value {
+    json!({
+        "projects": [{
+            "id": PROJECT_ID,
+            "name": "alpha",
+            "description": null,
+            "task_sorting_mode": "manual",
+            "show_priority": true,
+            "created_at": CREATED_AT,
+            "sections": [section_a_value(), section_b_value()],
+            "tasks": [task_1_value(), task_2_value()],
+            "notes": [note_1_value()],
+        }]
+    })
+}
+
+fn section_a_value() -> Value {
+    json!({
+        "id": SECTION_A,
+        "project_id": PROJECT_ID,
+        "name": "backlog",
+        "position": "a0",
+        "color": null,
+        "created_at": CREATED_AT,
+    })
+}
+
+fn section_b_value() -> Value {
+    json!({
+        "id": SECTION_B,
+        "project_id": PROJECT_ID,
+        "name": "doing",
+        "position": "a1",
+        "color": "blue",
+        "created_at": CREATED_AT,
+    })
+}
+
+fn task_1_value() -> Value {
+    json!({
+        "id": TASK_1,
+        "project_id": PROJECT_ID,
+        "title": "first",
+        "description": "first description",
+        "priority": "medium",
+        "section_id": SECTION_A,
+        "position": "a0",
+        "state": "open",
+        "tags": ["one"],
+        "created_at": CREATED_AT,
+    })
+}
+
+fn task_2_value() -> Value {
+    json!({
+        "id": TASK_2,
+        "project_id": PROJECT_ID,
+        "title": "second",
+        "description": null,
+        "priority": "high",
+        "section_id": SECTION_B,
+        "position": "a1",
+        "state": "open",
+        "tags": [],
+        "created_at": CREATED_AT,
+    })
+}
+
+fn task_3_value() -> Value {
+    json!({
+        "id": TASK_3,
+        "project_id": PROJECT_ID,
+        "title": "third",
+        "description": "third description",
+        "priority": "low",
+        "section_id": SECTION_A,
+        "position": "a1",
+        "state": "open",
+        "tags": ["new"],
+        "created_at": CREATED_AT,
+    })
+}
+
+fn note_1_value() -> Value {
+    json!({
+        "id": NOTE_1,
+        "task_id": TASK_1,
+        "contents": "note one",
+        "created_at": CREATED_AT,
+    })
 }
