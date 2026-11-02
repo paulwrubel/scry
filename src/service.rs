@@ -11,7 +11,7 @@ use scry_core::models::{
 };
 use scry_core::position::{Position, key_between, n_keys_between};
 use scry_core::snapshot::{
-    self, ImportMode, ImportPlan, ImportReport, SNAPSHOT_VERSION, Snapshot, SnapshotFile,
+    self, ImportMode, ImportReport, SNAPSHOT_VERSION, Snapshot, SnapshotFile,
 };
 use scry_core::store::ArcStore;
 use scry_core::sync::ack::{
@@ -22,7 +22,7 @@ use scry_core::sync::operations::{
 };
 use serde_json::{Map, Value, json};
 use sqlx::{Postgres, Transaction};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 /// How an operation selects a task's section: leave it alone, clear it, use an
@@ -906,16 +906,94 @@ impl ProjectService {
         })
     }
 
-    pub async fn plan_import(
+    /// Apply a snapshot file in one atomic batch.
+    pub async fn import(
         &self,
         file: &SnapshotFile,
         mode: ImportMode,
-    ) -> Result<ImportPlan, ServiceError> {
-        Ok(snapshot::plan_import(self.store.as_ref(), file, mode).await?)
+    ) -> Result<ImportReport, ServiceError> {
+        let mut tx = self.store.begin_apply().await?;
+        let state = self.load_import_state(&mut tx, file).await?;
+        let plan = snapshot::plan_import(file, &state, mode)?;
+        self.apply_batch(&mut tx, &plan.operations, ApplyMode::Atomic)
+            .await?;
+        tx.commit()
+            .await
+            .map_err(|error| StorageError::Database(format!("failed to commit import: {error}")))?;
+        Ok(plan.report)
     }
 
-    pub async fn import(&self, plan: ImportPlan) -> Result<ImportReport, ServiceError> {
-        Ok(self.store.import(plan, None).await?)
+    /// Load the live rows and file-referenced tombstones the planner needs,
+    /// inside the import's own transaction.
+    async fn load_import_state(
+        &self,
+        tx: &mut Transaction<'static, Postgres>,
+        file: &SnapshotFile,
+    ) -> Result<snapshot::ImportState, ServiceError> {
+        let projects = self.store.get_all_projects(Some(&mut **tx)).await?;
+        let mut sections = Vec::new();
+        let mut tasks = Vec::new();
+        let mut notes = Vec::new();
+
+        for project in &projects {
+            sections.extend(
+                self.store
+                    .get_all_sections_by_project_id(project.id, Some(&mut **tx))
+                    .await?,
+            );
+            tasks.extend(
+                self.store
+                    .get_all_tasks_by_project_id(project.id, Some(&mut **tx))
+                    .await?,
+            );
+            notes.extend(
+                self.store
+                    .get_all_notes_by_project_id(project.id, Some(&mut **tx))
+                    .await?,
+            );
+        }
+
+        let mut referenced = Vec::new();
+        for document in &file.projects {
+            referenced.push((EntityType::Project, document.project.id));
+            referenced.extend(
+                document
+                    .sections
+                    .iter()
+                    .map(|section| (EntityType::Section, section.id)),
+            );
+            referenced.extend(
+                document
+                    .tasks
+                    .iter()
+                    .map(|task| (EntityType::Task, task.id)),
+            );
+            referenced.extend(
+                document
+                    .notes
+                    .iter()
+                    .map(|note| (EntityType::Note, note.id)),
+            );
+        }
+
+        let mut tombstones = HashSet::new();
+        for (entity_type, id) in referenced {
+            if self
+                .store
+                .is_tombstoned(entity_type, id, Some(&mut **tx))
+                .await?
+            {
+                tombstones.insert((entity_type, id));
+            }
+        }
+
+        Ok(snapshot::ImportState {
+            projects,
+            sections,
+            tasks,
+            notes,
+            tombstones,
+        })
     }
 
     /// Apply a batch of operations in one transaction. `Atomic` rolls the
@@ -932,11 +1010,24 @@ impl ProjectService {
         }
 
         let mut tx = self.store.begin_apply().await?;
+        let outcome = self.apply_batch(&mut tx, ops, mode).await?;
+        tx.commit().await.map_err(|error| {
+            StorageError::Database(format!("failed to commit apply batch: {error}"))
+        })?;
+        Ok(outcome)
+    }
+
+    async fn apply_batch(
+        &self,
+        tx: &mut Transaction<'static, Postgres>,
+        ops: &[Operation],
+        mode: ApplyMode,
+    ) -> Result<ApplyOutcome, ServiceError> {
         let mut acks = Vec::with_capacity(ops.len());
         let mut last_seq = None;
 
         for op in ops {
-            let (ack, seq) = self.apply_one_operation(&mut tx, op).await?;
+            let (ack, seq) = self.apply_one_operation(tx, op).await?;
             if matches!(mode, ApplyMode::Atomic)
                 && let AcknowledgmentStatus::Rejected { reason } = &ack.status
             {
@@ -946,10 +1037,6 @@ impl ProjectService {
             last_seq = last_seq.max(seq);
             acks.push(ack);
         }
-
-        tx.commit().await.map_err(|error| {
-            StorageError::Database(format!("failed to commit apply batch: {error}"))
-        })?;
 
         Ok(ApplyOutcome { acks, last_seq })
     }

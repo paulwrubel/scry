@@ -1,9 +1,14 @@
 use crate::error::StorageError;
-use crate::models::{ProjectId, ProjectSnapshot};
+use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
+use crate::models::{Color, EntityType, Note, Project, ProjectSnapshot, Section, Tags, Task};
 use crate::store::Store;
+use crate::sync::operations::{
+    ColorChange as OperationColorChange, OPERATION_VERSION, Operation, OperationKind,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use uuid::Uuid;
 
 pub const SNAPSHOT_VERSION: u32 = 1;
 
@@ -27,33 +32,6 @@ pub struct SnapshotFile {
     /// caller asked for a sync cursor. Omitted from JSON when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_seen_seq: Option<i64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ImportMode {
-    /// Fail if any incoming project name already exists.
-    Fail,
-    /// Replace existing projects whose names collide with incoming ones.
-    Replace,
-    /// Skip incoming projects whose names already exist.
-    Skip,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImportPlan {
-    pub mode: ImportMode,
-    /// Projects to insert, keeping the UUID ids and foreign keys held by the snapshot file.
-    pub projects: Vec<ProjectSnapshot>,
-    /// Ids of existing projects to delete before inserting (Replace mode only; empty otherwise).
-    pub project_ids_to_delete: Vec<ProjectId>,
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct ImportReport {
-    pub projects: usize,
-    pub sections: usize,
-    pub tasks: usize,
-    pub notes: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,110 +102,686 @@ pub async fn build(
     })
 }
 
-pub async fn plan_import(
-    store: &dyn Store,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ImportMode {
+    /// Merge into the server: upsert same-id entities, remint tombstoned ids,
+    /// and auto-rename project-name collisions.
+    Merge,
+    /// Stricter legacy mode: a different live project with the same name is an error.
+    Fail,
+    /// Replace existing projects whose names collide.
+    Replace,
+    /// Skip incoming projects whose names collide with live projects.
+    Skip,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportIdRemap {
+    pub entity_type: EntityType,
+    pub from: Uuid,
+    pub to: Uuid,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ImportReport {
+    pub projects: usize,
+    pub sections: usize,
+    pub tasks: usize,
+    pub notes: usize,
+    /// Fresh ids assigned because the incoming id was tombstoned or its parent
+    /// was reminted. Omitted from JSON when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remapped: Vec<ImportIdRemap>,
+}
+
+/// All live data plus the tombstones relevant to the incoming file.
+#[derive(Debug, Clone, Default)]
+pub struct ImportState {
+    pub projects: Vec<Project>,
+    pub sections: Vec<Section>,
+    pub tasks: Vec<Task>,
+    pub notes: Vec<Note>,
+    pub tombstones: HashSet<(EntityType, Uuid)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportPlan {
+    pub operations: Vec<Operation>,
+    pub report: ImportReport,
+}
+
+/// Turn a snapshot file into operations against the current server state.
+///
+/// Planning is pure: the caller supplies the live rows and tombstones, so the
+/// whole import can be reviewed and applied as one atomic batch.
+pub fn plan_import(
     file: &SnapshotFile,
+    state: &ImportState,
     mode: ImportMode,
 ) -> Result<ImportPlan, StorageError> {
-    let existing = store.get_all_projects(None).await?;
+    let deleted_project_ids = replace_deletions(file, state, mode);
 
-    let existing_ids_by_name: HashMap<String, ProjectId> = existing
+    let deleted_projects: HashSet<ProjectId> = deleted_project_ids.iter().copied().collect();
+    let task_project_ids: HashMap<TaskId, ProjectId> = state
+        .tasks
         .iter()
-        .map(|project| (project.name.clone(), project.id))
+        .map(|task| (task.id, task.project_id))
         .collect();
-    let existing_names: HashSet<String> = existing_ids_by_name.keys().cloned().collect();
 
-    match mode {
-        ImportMode::Fail => plan_fail(file, &existing_names),
-        ImportMode::Skip => plan_skip(file, &existing_names),
-        ImportMode::Replace => plan_replace(file, &existing_ids_by_name),
+    let mut deleted_ids: HashSet<(EntityType, Uuid)> = HashSet::new();
+    for project_id in &deleted_project_ids {
+        deleted_ids.insert((EntityType::Project, *project_id));
+    }
+    for section in &state.sections {
+        if deleted_projects.contains(&section.project_id) {
+            deleted_ids.insert((EntityType::Section, section.id));
+        }
+    }
+    for task in &state.tasks {
+        if deleted_projects.contains(&task.project_id) {
+            deleted_ids.insert((EntityType::Task, task.id));
+        }
+    }
+    for note in &state.notes {
+        if task_project_ids
+            .get(&note.task_id)
+            .is_some_and(|project_id| deleted_projects.contains(project_id))
+        {
+            deleted_ids.insert((EntityType::Note, note.id));
+        }
+    }
+
+    let is_dead = |entity_type: EntityType, id: Uuid| {
+        state.tombstones.contains(&(entity_type, id)) || deleted_ids.contains(&(entity_type, id))
+    };
+
+    let live_projects: HashMap<ProjectId, &Project> = state
+        .projects
+        .iter()
+        .filter(|project| !deleted_ids.contains(&(EntityType::Project, project.id)))
+        .map(|project| (project.id, project))
+        .collect();
+    let live_sections: HashMap<SectionId, &Section> = state
+        .sections
+        .iter()
+        .filter(|section| !deleted_ids.contains(&(EntityType::Section, section.id)))
+        .map(|section| (section.id, section))
+        .collect();
+    let live_tasks: HashMap<TaskId, &Task> = state
+        .tasks
+        .iter()
+        .filter(|task| !deleted_ids.contains(&(EntityType::Task, task.id)))
+        .map(|task| (task.id, task))
+        .collect();
+    let live_notes: HashMap<NoteId, &Note> = state
+        .notes
+        .iter()
+        .filter(|note| !deleted_ids.contains(&(EntityType::Note, note.id)))
+        .map(|note| (note.id, note))
+        .collect();
+
+    // imported entities must stay inside the project their ops target, so track
+    // the effective project of every section and task the batch will create
+    let mut section_projects: HashMap<SectionId, ProjectId> = live_sections
+        .iter()
+        .map(|(id, section)| (*id, section.project_id))
+        .collect();
+    let mut task_projects: HashMap<TaskId, ProjectId> = live_tasks
+        .iter()
+        .map(|(id, task)| (*id, task.project_id))
+        .collect();
+
+    let mut project_names: HashMap<ProjectId, String> = live_projects
+        .iter()
+        .map(|(id, project)| (*id, project.name.clone()))
+        .collect();
+    let mut section_names: HashMap<ProjectId, HashMap<SectionId, String>> = HashMap::new();
+    for section in live_sections.values() {
+        section_names
+            .entry(section.project_id)
+            .or_default()
+            .insert(section.id, section.name.clone());
+    }
+
+    let mut plan = ImportPlan {
+        operations: Vec::new(),
+        report: ImportReport::default(),
+    };
+
+    // deletions come first so the rest of the batch sees the freed names and ids
+    for project_id in &deleted_project_ids {
+        plan.operations
+            .push(operation(OperationKind::DeleteProject { id: *project_id }));
+    }
+
+    let mut section_remap: HashMap<SectionId, SectionId> = HashMap::new();
+    let mut task_remap: HashMap<TaskId, TaskId> = HashMap::new();
+
+    for document in &file.projects {
+        let incoming = &document.project;
+        let project_dead = is_dead(EntityType::Project, incoming.id);
+        let live_project = live_projects
+            .get(&incoming.id)
+            .copied()
+            .filter(|_| !project_dead);
+
+        if live_project.is_none() {
+            match mode {
+                ImportMode::Skip => {
+                    if project_name_taken(&project_names, &incoming.name, None) {
+                        continue;
+                    }
+                }
+                ImportMode::Fail => {
+                    if project_name_taken(&project_names, &incoming.name, None) {
+                        let name = &incoming.name;
+                        return Err(StorageError::Conflict(format!(
+                            "project(s) already exist: {name}"
+                        )));
+                    }
+                }
+                ImportMode::Merge | ImportMode::Replace => {}
+            }
+        }
+
+        let chosen_name = match live_project {
+            Some(live_project) => unique_name(&incoming.name, |candidate| {
+                project_name_taken(&project_names, candidate, Some(live_project.id))
+            }),
+            None if matches!(mode, ImportMode::Merge | ImportMode::Replace) => {
+                unique_name(&incoming.name, |candidate| {
+                    project_name_taken(&project_names, candidate, None)
+                })
+            }
+            None => incoming.name.clone(),
+        };
+
+        // apply-time creates drop empty descriptions, so compare the same normalized form
+        let description = incoming
+            .description
+            .clone()
+            .filter(|description| !description.is_empty());
+
+        let (target_project_id, project_reminted) = if let Some(live_project) = live_project {
+            let name = changed(&live_project.name, &chosen_name);
+            let description = changed(&live_project.description, &description);
+            let task_sorting_mode =
+                changed(&live_project.task_sorting_mode, &incoming.task_sorting_mode);
+            let show_priority = changed(&live_project.show_priority, &incoming.show_priority);
+
+            if name.is_some()
+                || description.is_some()
+                || task_sorting_mode.is_some()
+                || show_priority.is_some()
+            {
+                plan.operations
+                    .push(operation(OperationKind::UpdateProject {
+                        id: live_project.id,
+                        name,
+                        description,
+                        task_sorting_mode,
+                        show_priority,
+                    }));
+            }
+
+            (live_project.id, false)
+        } else {
+            let project_id = if project_dead {
+                let fresh = Uuid::new_v4();
+                plan.report.remapped.push(ImportIdRemap {
+                    entity_type: EntityType::Project,
+                    from: incoming.id,
+                    to: fresh,
+                });
+                fresh
+            } else {
+                incoming.id
+            };
+
+            plan.operations
+                .push(operation(OperationKind::CreateProject {
+                    id: project_id,
+                    name: chosen_name.clone(),
+                    description,
+                    task_sorting_mode: incoming.task_sorting_mode,
+                    show_priority: incoming.show_priority,
+                    created_at: incoming.created_at,
+                }));
+
+            (project_id, project_dead)
+        };
+
+        project_names.insert(target_project_id, chosen_name);
+        plan.report.projects += 1;
+
+        let names = section_names.entry(target_project_id).or_default();
+
+        for incoming_section in &document.sections {
+            let original_id = incoming_section.id;
+            let section_dead = is_dead(EntityType::Section, original_id);
+
+            if project_reminted || section_dead {
+                // a tombstoned id can merge into a live section of the same name,
+                // which is how a diverged backup rejoins its project
+                let reuse = if project_reminted {
+                    None
+                } else {
+                    live_section_by_name(
+                        &live_sections,
+                        names,
+                        target_project_id,
+                        &incoming_section.name,
+                    )
+                };
+
+                if let Some(live_section) = reuse {
+                    section_remap.insert(original_id, live_section.id);
+                    if let Some(color) =
+                        section_color_change(live_section.color, incoming_section.color)
+                    {
+                        plan.operations
+                            .push(operation(OperationKind::UpdateSection {
+                                id: live_section.id,
+                                name: None,
+                                color: Some(color),
+                            }));
+                    }
+                    plan.report.sections += 1;
+                    continue;
+                }
+
+                let section_id = Uuid::new_v4();
+                plan.report.remapped.push(ImportIdRemap {
+                    entity_type: EntityType::Section,
+                    from: original_id,
+                    to: section_id,
+                });
+                section_remap.insert(original_id, section_id);
+                section_projects.insert(section_id, target_project_id);
+
+                let name = unique_name(&incoming_section.name, |candidate| {
+                    names.values().any(|existing| existing == candidate)
+                });
+                names.insert(section_id, name.clone());
+
+                plan.operations
+                    .push(operation(OperationKind::CreateSection {
+                        id: section_id,
+                        project_id: target_project_id,
+                        name,
+                        position: incoming_section.position.clone(),
+                        color: incoming_section.color,
+                        created_at: incoming_section.created_at,
+                    }));
+                plan.report.sections += 1;
+                continue;
+            }
+
+            if let Some(live_section) = live_sections.get(&original_id).copied() {
+                if live_section.project_id != target_project_id {
+                    return Err(StorageError::Conflict(format!(
+                        "section {original_id} belongs to a different project"
+                    )));
+                }
+
+                let name = unique_name(&incoming_section.name, |candidate| {
+                    section_name_taken(names, candidate, Some(live_section.id))
+                });
+                let color = section_color_change(live_section.color, incoming_section.color);
+                let renamed = name != live_section.name;
+
+                if renamed || color.is_some() {
+                    plan.operations
+                        .push(operation(OperationKind::UpdateSection {
+                            id: live_section.id,
+                            name: renamed.then(|| name.clone()),
+                            color,
+                        }));
+                }
+
+                names.insert(live_section.id, name);
+                plan.report.sections += 1;
+                continue;
+            }
+
+            let reused = live_section_by_name(
+                &live_sections,
+                names,
+                target_project_id,
+                &incoming_section.name,
+            );
+
+            if let Some(live_section) = reused {
+                section_remap.insert(original_id, live_section.id);
+                if let Some(color) =
+                    section_color_change(live_section.color, incoming_section.color)
+                {
+                    plan.operations
+                        .push(operation(OperationKind::UpdateSection {
+                            id: live_section.id,
+                            name: None,
+                            color: Some(color),
+                        }));
+                }
+                plan.report.sections += 1;
+                continue;
+            }
+
+            let name = unique_name(&incoming_section.name, |candidate| {
+                names.values().any(|existing| existing == candidate)
+            });
+            names.insert(original_id, name.clone());
+            section_projects.insert(original_id, target_project_id);
+            plan.operations
+                .push(operation(OperationKind::CreateSection {
+                    id: original_id,
+                    project_id: target_project_id,
+                    name,
+                    position: incoming_section.position.clone(),
+                    color: incoming_section.color,
+                    created_at: incoming_section.created_at,
+                }));
+            plan.report.sections += 1;
+        }
+
+        for incoming_task in &document.tasks {
+            let original_id = incoming_task.id;
+            let task_dead = is_dead(EntityType::Task, original_id);
+
+            let section_id = incoming_task.section_id.map(|section_id| {
+                section_remap
+                    .get(&section_id)
+                    .copied()
+                    .unwrap_or(section_id)
+            });
+
+            if section_id.is_some_and(|section_id| {
+                section_projects.get(&section_id) != Some(&target_project_id)
+            }) {
+                return Err(StorageError::Conflict(format!(
+                    "task {original_id} references a section outside project {target_project_id}"
+                )));
+            }
+
+            // apply-time creates drop empty descriptions, so compare the same normalized form
+            let description = incoming_task
+                .description
+                .clone()
+                .filter(|description| !description.is_empty());
+
+            if project_reminted || task_dead {
+                let task_id = Uuid::new_v4();
+                plan.report.remapped.push(ImportIdRemap {
+                    entity_type: EntityType::Task,
+                    from: original_id,
+                    to: task_id,
+                });
+                task_remap.insert(original_id, task_id);
+                task_projects.insert(task_id, target_project_id);
+
+                plan.operations.push(operation(OperationKind::CreateTask {
+                    id: task_id,
+                    project_id: target_project_id,
+                    title: incoming_task.title.clone(),
+                    description,
+                    priority: incoming_task.priority,
+                    section_id,
+                    position: incoming_task.position.clone(),
+                    state: incoming_task.state,
+                    tags: incoming_task.tags.clone(),
+                    created_at: incoming_task.created_at,
+                }));
+                plan.report.tasks += 1;
+                continue;
+            }
+
+            if let Some(live_task) = live_tasks.get(&original_id).copied() {
+                if live_task.project_id != target_project_id {
+                    return Err(StorageError::Conflict(format!(
+                        "task {original_id} belongs to a different project"
+                    )));
+                }
+
+                let title = changed(&live_task.title, &incoming_task.title);
+                let description = changed(&live_task.description, &description);
+                let priority = changed(&live_task.priority, &incoming_task.priority);
+                let tags = tags_differ(&live_task.tags, &incoming_task.tags)
+                    .then(|| incoming_task.tags.clone());
+                let state = changed(&live_task.state, &incoming_task.state);
+
+                if title.is_some()
+                    || description.is_some()
+                    || priority.is_some()
+                    || tags.is_some()
+                    || state.is_some()
+                {
+                    plan.operations.push(operation(OperationKind::UpdateTask {
+                        id: live_task.id,
+                        title,
+                        description,
+                        priority,
+                        tags,
+                        state,
+                    }));
+                }
+
+                if live_task.section_id != section_id
+                    || live_task.position != incoming_task.position
+                {
+                    plan.operations.push(operation(OperationKind::MoveTask {
+                        id: live_task.id,
+                        section_id,
+                        position: incoming_task.position.clone(),
+                    }));
+                }
+
+                plan.report.tasks += 1;
+                continue;
+            }
+
+            task_projects.insert(original_id, target_project_id);
+            plan.operations.push(operation(OperationKind::CreateTask {
+                id: original_id,
+                project_id: target_project_id,
+                title: incoming_task.title.clone(),
+                description,
+                priority: incoming_task.priority,
+                section_id,
+                position: incoming_task.position.clone(),
+                state: incoming_task.state,
+                tags: incoming_task.tags.clone(),
+                created_at: incoming_task.created_at,
+            }));
+            plan.report.tasks += 1;
+        }
+
+        for incoming_note in &document.notes {
+            let original_id = incoming_note.id;
+            let original_task_id = incoming_note.task_id;
+            let task_remapped = task_remap.get(&original_task_id).copied();
+
+            let task_id = task_remapped.unwrap_or(original_task_id);
+
+            if task_projects.get(&task_id) != Some(&target_project_id) {
+                return Err(StorageError::Conflict(format!(
+                    "note {original_id} references a task outside project {target_project_id}"
+                )));
+            }
+
+            let note_dead = is_dead(EntityType::Note, original_id);
+            let reminted = project_reminted || note_dead || task_remapped.is_some();
+
+            let live_note = live_notes.get(&original_id).copied().filter(|_| !reminted);
+
+            if let Some(live_note) = live_note {
+                if live_note.task_id != task_id {
+                    return Err(StorageError::Conflict(format!(
+                        "note {original_id} belongs to a different task"
+                    )));
+                }
+
+                if live_note.contents != incoming_note.contents {
+                    plan.operations.push(operation(OperationKind::UpdateNote {
+                        id: live_note.id,
+                        contents: incoming_note.contents.clone(),
+                    }));
+                }
+
+                plan.report.notes += 1;
+                continue;
+            }
+
+            let note_id = if reminted {
+                let fresh = Uuid::new_v4();
+                plan.report.remapped.push(ImportIdRemap {
+                    entity_type: EntityType::Note,
+                    from: original_id,
+                    to: fresh,
+                });
+                fresh
+            } else {
+                original_id
+            };
+
+            plan.operations.push(operation(OperationKind::CreateNote {
+                id: note_id,
+                task_id,
+                contents: incoming_note.contents.clone(),
+                created_at: incoming_note.created_at,
+            }));
+            plan.report.notes += 1;
+        }
+    }
+
+    Ok(plan)
+}
+
+fn replace_deletions(file: &SnapshotFile, state: &ImportState, mode: ImportMode) -> Vec<ProjectId> {
+    if mode != ImportMode::Replace {
+        return Vec::new();
+    }
+
+    let live_ids: HashSet<ProjectId> = state.projects.iter().map(|project| project.id).collect();
+    let mut deleted = Vec::new();
+    // one live project can collide with several incoming documents
+    let mut seen = HashSet::new();
+
+    for document in &file.projects {
+        let incoming = &document.project;
+        // a live id is an upsert, so its same-named siblings must survive
+        if live_ids.contains(&incoming.id) {
+            continue;
+        }
+
+        for live in &state.projects {
+            if live.name == incoming.name && live.id != incoming.id && seen.insert(live.id) {
+                deleted.push(live.id);
+            }
+        }
+    }
+
+    deleted
+}
+
+fn operation(kind: OperationKind) -> Operation {
+    Operation {
+        operation_id: Uuid::new_v4(),
+        operation_version: OPERATION_VERSION,
+        timestamp: None,
+        kind,
     }
 }
 
-fn plan_fail(
-    file: &SnapshotFile,
-    existing_names: &HashSet<String>,
-) -> Result<ImportPlan, StorageError> {
-    let mut collisions: Vec<&str> = file
-        .projects
-        .iter()
-        .map(|entry| entry.project.name.as_str())
-        .filter(|name| existing_names.contains(*name))
-        .collect();
-
-    if !collisions.is_empty() {
-        collisions.sort_unstable();
-        return Err(StorageError::Conflict(format!(
-            "project(s) already exist: {}",
-            collisions.join(", ")
-        )));
+fn unique_name(base: &str, taken: impl Fn(&str) -> bool) -> String {
+    if !taken(base) {
+        return base.to_string();
     }
 
-    Ok(ImportPlan {
-        mode: ImportMode::Fail,
-        projects: file.projects.clone(),
-        project_ids_to_delete: Vec::new(),
-    })
+    let mut suffix = 2;
+    loop {
+        let candidate = format!("{base} ({suffix})");
+        if !taken(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
+    }
 }
 
-fn plan_skip(
-    file: &SnapshotFile,
-    existing_names: &HashSet<String>,
-) -> Result<ImportPlan, StorageError> {
-    let projects: Vec<ProjectSnapshot> = file
-        .projects
+fn project_name_taken(
+    names: &HashMap<ProjectId, String>,
+    name: &str,
+    except: Option<ProjectId>,
+) -> bool {
+    names
         .iter()
-        .filter(|entry| !existing_names.contains(&entry.project.name))
-        .cloned()
-        .collect();
-
-    Ok(ImportPlan {
-        mode: ImportMode::Skip,
-        projects,
-        project_ids_to_delete: Vec::new(),
-    })
+        .any(|(id, existing)| Some(*id) != except && existing == name)
 }
 
-fn plan_replace(
-    file: &SnapshotFile,
-    existing_ids_by_name: &HashMap<String, ProjectId>,
-) -> Result<ImportPlan, StorageError> {
-    let project_ids_to_delete = file
-        .projects
+fn section_name_taken(
+    names: &HashMap<SectionId, String>,
+    name: &str,
+    except: Option<SectionId>,
+) -> bool {
+    names
         .iter()
-        .filter_map(|entry| existing_ids_by_name.get(&entry.project.name).copied())
-        .collect();
+        .any(|(id, existing)| Some(*id) != except && existing == name)
+}
 
-    Ok(ImportPlan {
-        mode: ImportMode::Replace,
-        projects: file.projects.clone(),
-        project_ids_to_delete,
+/// The lowest-id live section in `target_project_id` whose current planned name
+/// is `name`, if one exists.
+fn live_section_by_name<'a>(
+    live_sections: &HashMap<SectionId, &'a Section>,
+    names: &HashMap<SectionId, String>,
+    target_project_id: ProjectId,
+    name: &str,
+) -> Option<&'a Section> {
+    live_sections
+        .values()
+        .copied()
+        .filter(|section| section.project_id == target_project_id)
+        .filter(|section| {
+            names
+                .get(&section.id)
+                .is_some_and(|existing| existing.as_str() == name)
+        })
+        .min_by_key(|section| section.id)
+}
+
+fn changed<T: PartialEq + Clone>(current: &T, incoming: &T) -> Option<T> {
+    (current != incoming).then(|| incoming.clone())
+}
+
+fn tags_differ(existing: &Tags, incoming: &Tags) -> bool {
+    !existing.iter().eq(incoming.iter())
+}
+
+fn section_color_change(
+    current: Option<Color>,
+    incoming: Option<Color>,
+) -> Option<OperationColorChange> {
+    if current == incoming {
+        return None;
+    }
+
+    Some(match incoming {
+        Some(color) => OperationColorChange::Set(color),
+        None => OperationColorChange::Clear,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{NoteId, SectionId, TaskId};
-    use crate::models::{Change, Entity, EntityType};
-    use crate::models::{
-        Note, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskSortingMode, TaskState,
-    };
+    use crate::models::{Note, Priority, Project, Section, Tags, Task, TaskSortingMode, TaskState};
     use crate::position::Position;
     use chrono::{DateTime, Utc};
     use serde_json::json;
-    use sqlx::{PgConnection, Postgres, Transaction};
-    use std::future::Future;
-    use std::pin::pin;
-    use std::task::{Context, Poll, Waker};
     use uuid::Uuid;
 
     const PROJECT_ID: &str = "a1b2c3d4-0000-4000-8000-000000000001";
-    const OTHER_PROJECT_ID: &str = "a1b2c3d4-0000-4000-8000-000000000002";
     const SECTION_ID: &str = "b1b2c3d4-0000-4000-8000-000000000003";
     const TASK_ID: &str = "c1b2c3d4-0000-4000-8000-000000000004";
     const NOTE_ID: &str = "d1b2c3d4-0000-4000-8000-000000000005";
-    const EXISTING_PROJECT_ID: &str = "e1b2c3d4-0000-4000-8000-000000000006";
 
     fn uuid(value: &str) -> Uuid {
         Uuid::parse_str(value).expect("test uuid should parse")
@@ -237,6 +791,10 @@ mod tests {
         Position::parse(value).expect("test position should parse")
     }
 
+    fn at() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(0, 0).expect("valid timestamp")
+    }
+
     fn project(id: &str, name: &str) -> Project {
         Project {
             id: uuid(id),
@@ -244,22 +802,22 @@ mod tests {
             description: None,
             task_sorting_mode: TaskSortingMode::Manual,
             show_priority: false,
-            created_at: Utc::now(),
+            created_at: at(),
         }
     }
 
-    fn section(id: &str, project_id: ProjectId) -> Section {
+    fn section(id: &str, project_id: Uuid) -> Section {
         Section {
             id: uuid(id),
             project_id,
             name: "section".to_string(),
             position: position("a0"),
             color: None,
-            created_at: Utc::now(),
+            created_at: at(),
         }
     }
 
-    fn task(id: &str, project_id: ProjectId, section_id: Option<SectionId>) -> Task {
+    fn task(id: &str, project_id: Uuid, section_id: Option<Uuid>) -> Task {
         Task {
             id: uuid(id),
             project_id,
@@ -270,25 +828,16 @@ mod tests {
             position: position("a0"),
             state: TaskState::Open,
             tags: Tags::default(),
-            created_at: Utc::now(),
+            created_at: at(),
         }
     }
 
-    fn note(id: &str, task_id: TaskId) -> Note {
+    fn note(id: &str, task_id: Uuid) -> Note {
         Note {
             id: uuid(id),
             task_id,
             contents: "note".to_string(),
-            created_at: Utc::now(),
-        }
-    }
-
-    fn project_doc(id: &str, name: &str) -> ProjectSnapshot {
-        ProjectSnapshot {
-            project: project(id, name),
-            sections: vec![],
-            tasks: vec![],
-            notes: vec![],
+            created_at: at(),
         }
     }
 
@@ -313,424 +862,6 @@ mod tests {
             projects,
             last_seen_seq: None,
         }
-    }
-
-    // scry-core has no async runtime dependency, and the fake store's futures
-    // resolve immediately, so polling once in a loop is enough.
-    fn block_on<F: Future>(future: F) -> F::Output {
-        let mut future = pin!(future);
-        let waker = Waker::noop();
-        let mut context = Context::from_waker(waker);
-
-        loop {
-            match future.as_mut().poll(&mut context) {
-                Poll::Ready(output) => return output,
-                Poll::Pending => std::thread::yield_now(),
-            }
-        }
-    }
-
-    struct EmptyStore;
-
-    #[async_trait::async_trait]
-    impl Store for EmptyStore {
-        async fn get_all_projects(
-            &self,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<Project>, StorageError> {
-            Ok(Vec::new())
-        }
-
-        async fn create_task(
-            &self,
-            _: Task,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Task, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_task_by_id(
-            &self,
-            _: TaskId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Option<Task>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn find_task_ids_by_handle(
-            &self,
-            _: &crate::ids::Handle,
-            _: i64,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<TaskId>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_all_task_ids(
-            &self,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<TaskId>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_all_tasks_by_project_id(
-            &self,
-            _: ProjectId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<Task>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_all_tasks_by_section_id(
-            &self,
-            _: SectionId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<Task>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn update_task(
-            &self,
-            _: Task,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Task, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn delete_task(
-            &self,
-            _: TaskId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<(), StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn create_note(
-            &self,
-            _: Note,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Note, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_note_by_id(
-            &self,
-            _: NoteId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Option<Note>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_all_notes_by_task_id(
-            &self,
-            _: TaskId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<Note>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_all_notes_by_project_id(
-            &self,
-            _: ProjectId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<Note>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn update_note(
-            &self,
-            _: Note,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Note, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn delete_note(
-            &self,
-            _: NoteId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<(), StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn find_note_ids_by_handle(
-            &self,
-            _: &crate::ids::Handle,
-            _: i64,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<NoteId>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_all_note_ids(
-            &self,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<NoteId>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn create_section(
-            &self,
-            _: Section,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Section, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_section_by_id(
-            &self,
-            _: SectionId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Option<Section>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_section_by_name(
-            &self,
-            _: ProjectId,
-            _: &str,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Option<Section>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_all_sections_by_project_id(
-            &self,
-            _: ProjectId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<Section>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn update_section(
-            &self,
-            _: Section,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Section, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn delete_section(
-            &self,
-            _: SectionId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<(), StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn create_project(
-            &self,
-            _: Project,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Project, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_project_by_id(
-            &self,
-            _: ProjectId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Option<Project>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_project_snapshot(
-            &self,
-            _: ProjectId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<ProjectSnapshot, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn get_project_by_name(
-            &self,
-            _: &str,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Option<Project>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn update_project(
-            &self,
-            _: Project,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Project, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn delete_project_by_id(
-            &self,
-            _: ProjectId,
-            _: Option<&mut PgConnection>,
-        ) -> Result<(), StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn import(
-            &self,
-            _: ImportPlan,
-            _: Option<&mut PgConnection>,
-        ) -> Result<ImportReport, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn is_operation_applied(
-            &self,
-            _: Uuid,
-            _: Option<&mut PgConnection>,
-        ) -> Result<bool, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn record_applied_operation(
-            &self,
-            _: Uuid,
-            _: DateTime<Utc>,
-            _: Option<&mut PgConnection>,
-        ) -> Result<(), StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn record_change(
-            &self,
-            _: Change,
-            _: Option<&mut PgConnection>,
-        ) -> Result<i64, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn changes_after(
-            &self,
-            _: i64,
-            _: Option<&mut PgConnection>,
-        ) -> Result<Vec<Change>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn last_change_seq(&self, _: Option<&mut PgConnection>) -> Result<i64, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn is_tombstoned(
-            &self,
-            _: EntityType,
-            _: Uuid,
-            _: Option<&mut PgConnection>,
-        ) -> Result<bool, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn create_tombstone(
-            &self,
-            _: Entity,
-            _: DateTime<Utc>,
-            _: Option<&mut PgConnection>,
-        ) -> Result<(), StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-
-        async fn begin_apply(&self) -> Result<Transaction<'static, Postgres>, StorageError> {
-            unimplemented!("plan_import only reads projects")
-        }
-    }
-
-    #[test]
-    fn plan_fail_rejects_colliding_names() {
-        let file = snapshot_file(vec![
-            project_doc(PROJECT_ID, "keep"),
-            project_doc(OTHER_PROJECT_ID, "collide"),
-        ]);
-        let existing = HashSet::from(["collide".to_string()]);
-
-        assert!(matches!(
-            plan_fail(&file, &existing),
-            Err(StorageError::Conflict(_))
-        ));
-    }
-
-    #[test]
-    fn plan_fail_preserves_every_id() {
-        let file = snapshot_file(vec![full_project_doc(PROJECT_ID, "alpha")]);
-
-        let plan =
-            plan_fail(&file, &HashSet::new()).expect("fail should succeed when no name collides");
-
-        assert_eq!(plan.mode, ImportMode::Fail);
-        assert_eq!(plan.projects.len(), 1);
-        assert!(plan.project_ids_to_delete.is_empty());
-
-        let imported = &plan.projects[0];
-        assert_eq!(imported.project.id, uuid(PROJECT_ID));
-        assert_eq!(imported.sections[0].id, uuid(SECTION_ID));
-        assert_eq!(imported.sections[0].project_id, imported.project.id);
-        assert_eq!(imported.tasks[0].id, uuid(TASK_ID));
-        assert_eq!(imported.tasks[0].project_id, imported.project.id);
-        assert_eq!(imported.tasks[0].section_id, Some(imported.sections[0].id));
-        assert_eq!(imported.notes[0].id, uuid(NOTE_ID));
-        assert_eq!(imported.notes[0].task_id, imported.tasks[0].id);
-    }
-
-    #[test]
-    fn plan_skip_drops_colliding_projects_and_preserves_other_ids() {
-        let file = snapshot_file(vec![
-            project_doc(PROJECT_ID, "keep"),
-            full_project_doc(OTHER_PROJECT_ID, "skip"),
-        ]);
-        let existing = HashSet::from(["skip".to_string()]);
-
-        let plan = plan_skip(&file, &existing).expect("skip should succeed");
-
-        assert_eq!(plan.mode, ImportMode::Skip);
-        assert_eq!(plan.projects.len(), 1);
-        assert_eq!(plan.projects[0].project.name, "keep");
-        assert_eq!(plan.projects[0].project.id, uuid(PROJECT_ID));
-        assert!(plan.project_ids_to_delete.is_empty());
-    }
-
-    #[test]
-    fn plan_replace_lists_collisions_and_preserves_incoming_ids() {
-        let file = snapshot_file(vec![
-            full_project_doc(PROJECT_ID, "alpha"),
-            project_doc(OTHER_PROJECT_ID, "beta"),
-        ]);
-        let existing_id = uuid(EXISTING_PROJECT_ID);
-        let existing = HashMap::from([("alpha".to_string(), existing_id)]);
-
-        let plan = plan_replace(&file, &existing).expect("replace should succeed");
-
-        assert_eq!(plan.mode, ImportMode::Replace);
-        assert_eq!(plan.projects.len(), 2);
-        assert_eq!(plan.projects[0].project.id, uuid(PROJECT_ID));
-        assert_eq!(plan.projects[1].project.id, uuid(OTHER_PROJECT_ID));
-        assert_eq!(plan.project_ids_to_delete, vec![existing_id]);
-    }
-
-    #[test]
-    fn plan_import_keeps_a_full_snapshot_file_unchanged() {
-        let file = snapshot_file(vec![full_project_doc(PROJECT_ID, "alpha")]);
-
-        let plan = block_on(plan_import(&EmptyStore, &file, ImportMode::Fail))
-            .expect("import planning should succeed");
-
-        assert_eq!(plan.mode, ImportMode::Fail);
-        assert!(plan.project_ids_to_delete.is_empty());
-        assert_eq!(plan.projects.len(), file.projects.len());
-
-        let imported = &plan.projects[0];
-        assert_eq!(imported.project.id, uuid(PROJECT_ID));
-        assert_eq!(imported.sections[0].id, uuid(SECTION_ID));
-        assert_eq!(imported.sections[0].project_id, imported.project.id);
-        assert_eq!(imported.tasks[0].id, uuid(TASK_ID));
-        assert_eq!(imported.tasks[0].project_id, imported.project.id);
-        assert_eq!(imported.tasks[0].section_id, Some(imported.sections[0].id));
-        assert_eq!(imported.notes[0].id, uuid(NOTE_ID));
-        assert_eq!(imported.notes[0].task_id, imported.tasks[0].id);
-
-        assert_eq!(
-            serde_json::to_value(&plan.projects).unwrap(),
-            serde_json::to_value(&file.projects).unwrap(),
-            "planning must not rewrite ids, foreign keys, or timestamps"
-        );
     }
 
     #[test]
@@ -793,5 +924,626 @@ mod tests {
         assert_eq!(parsed_with.last_seen_seq, Some(7));
         assert_eq!(parsed_without.version, SNAPSHOT_VERSION);
         assert_eq!(parsed_with.version, SNAPSHOT_VERSION);
+    }
+}
+
+#[cfg(test)]
+mod import_tests {
+    use super::*;
+    use crate::models::{Priority, ProjectSnapshot, TaskSortingMode, TaskState};
+    use crate::position::Position;
+    use chrono::{DateTime, Utc};
+
+    fn uuid(n: u128) -> Uuid {
+        Uuid::from_u128(n)
+    }
+
+    fn at() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(0, 0).expect("valid timestamp")
+    }
+
+    fn project(id: Uuid, name: &str) -> Project {
+        Project {
+            id,
+            name: name.to_string(),
+            description: None,
+            task_sorting_mode: TaskSortingMode::Alphabetical,
+            show_priority: false,
+            created_at: at(),
+        }
+    }
+
+    fn section(id: Uuid, project_id: Uuid, name: &str) -> Section {
+        Section {
+            id,
+            project_id,
+            name: name.to_string(),
+            position: Position::parse("a0").unwrap(),
+            color: None,
+            created_at: at(),
+        }
+    }
+
+    fn task(id: Uuid, project_id: Uuid, section_id: Option<Uuid>, title: &str) -> Task {
+        Task {
+            id,
+            project_id,
+            title: title.to_string(),
+            description: None,
+            priority: Priority::Medium,
+            section_id,
+            position: Position::parse("a0").unwrap(),
+            state: TaskState::Open,
+            tags: Tags::default(),
+            created_at: at(),
+        }
+    }
+
+    fn note(id: Uuid, task_id: Uuid, contents: &str) -> Note {
+        Note {
+            id,
+            task_id,
+            contents: contents.to_string(),
+            created_at: at(),
+        }
+    }
+
+    fn document(
+        project: Project,
+        sections: Vec<Section>,
+        tasks: Vec<Task>,
+        notes: Vec<Note>,
+    ) -> ProjectSnapshot {
+        ProjectSnapshot {
+            project,
+            sections,
+            tasks,
+            notes,
+        }
+    }
+
+    fn file(projects: Vec<ProjectSnapshot>) -> SnapshotFile {
+        SnapshotFile {
+            version: SNAPSHOT_VERSION,
+            app_version: String::new(),
+            projects,
+            last_seen_seq: None,
+        }
+    }
+
+    fn import_state(
+        projects: Vec<Project>,
+        sections: Vec<Section>,
+        tasks: Vec<Task>,
+        notes: Vec<Note>,
+    ) -> ImportState {
+        ImportState {
+            projects,
+            sections,
+            tasks,
+            notes,
+            tombstones: HashSet::new(),
+        }
+    }
+
+    fn create_count(plan: &ImportPlan) -> usize {
+        plan.operations
+            .iter()
+            .filter(|operation| {
+                matches!(
+                    &operation.kind,
+                    OperationKind::CreateProject { .. }
+                        | OperationKind::CreateSection { .. }
+                        | OperationKind::CreateTask { .. }
+                        | OperationKind::CreateNote { .. }
+                )
+            })
+            .count()
+    }
+
+    #[test]
+    fn tombstoned_project_remints_project_and_every_child() {
+        let project_id = uuid(1);
+        let section_id = uuid(2);
+        let task_id = uuid(3);
+        let note_id = uuid(4);
+
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![section(section_id, project_id, "todo")],
+            vec![task(task_id, project_id, Some(section_id), "task")],
+            vec![note(note_id, task_id, "contents")],
+        )]);
+
+        let mut state = import_state(vec![], vec![], vec![], vec![]);
+        state.tombstones.insert((EntityType::Project, project_id));
+
+        let plan = plan_import(&incoming, &state, ImportMode::Merge).unwrap();
+
+        assert_eq!(plan.operations.len(), 4);
+
+        let OperationKind::CreateProject {
+            id: new_project, ..
+        } = &plan.operations[0].kind
+        else {
+            panic!("expected CreateProject, got {:?}", plan.operations[0].kind);
+        };
+        assert_ne!(*new_project, project_id);
+
+        let OperationKind::CreateSection {
+            id: new_section,
+            project_id: section_project,
+            ..
+        } = &plan.operations[1].kind
+        else {
+            panic!("expected CreateSection, got {:?}", plan.operations[1].kind);
+        };
+        assert_ne!(*new_section, section_id);
+        assert_eq!(*section_project, *new_project);
+
+        let OperationKind::CreateTask {
+            id: new_task,
+            project_id: task_project,
+            section_id: task_section,
+            ..
+        } = &plan.operations[2].kind
+        else {
+            panic!("expected CreateTask, got {:?}", plan.operations[2].kind);
+        };
+        assert_ne!(*new_task, task_id);
+        assert_eq!(*task_project, *new_project);
+        assert_eq!(*task_section, Some(*new_section));
+
+        let OperationKind::CreateNote {
+            id: new_note,
+            task_id: note_task,
+            ..
+        } = &plan.operations[3].kind
+        else {
+            panic!("expected CreateNote, got {:?}", plan.operations[3].kind);
+        };
+        assert_ne!(*new_note, note_id);
+        assert_eq!(*note_task, *new_task);
+
+        let remaps: Vec<(EntityType, Uuid)> = plan
+            .report
+            .remapped
+            .iter()
+            .map(|remap| (remap.entity_type, remap.from))
+            .collect();
+        assert_eq!(
+            remaps,
+            vec![
+                (EntityType::Project, project_id),
+                (EntityType::Section, section_id),
+                (EntityType::Task, task_id),
+                (EntityType::Note, note_id),
+            ]
+        );
+
+        assert_eq!(plan.report.projects, 1);
+        assert_eq!(plan.report.sections, 1);
+        assert_eq!(plan.report.tasks, 1);
+        assert_eq!(plan.report.notes, 1);
+    }
+
+    #[test]
+    fn live_project_is_upserted_without_creates() {
+        let project_id = uuid(1);
+        let section_id = uuid(2);
+        let task_id = uuid(3);
+        let note_id = uuid(4);
+
+        let live_state = import_state(
+            vec![Project {
+                description: Some("old".to_string()),
+                ..project(project_id, "p")
+            }],
+            vec![section(section_id, project_id, "todo")],
+            vec![task(task_id, project_id, Some(section_id), "old")],
+            vec![note(note_id, task_id, "old")],
+        );
+
+        let incoming = file(vec![document(
+            Project {
+                description: Some("new".to_string()),
+                ..project(project_id, "p")
+            },
+            vec![Section {
+                name: "renamed".to_string(),
+                color: Some(Color::Red),
+                ..section(section_id, project_id, "todo")
+            }],
+            vec![Task {
+                title: "new".to_string(),
+                position: Position::parse("a1").unwrap(),
+                ..task(task_id, project_id, Some(section_id), "old")
+            }],
+            vec![note(note_id, task_id, "new")],
+        )]);
+
+        let plan = plan_import(&incoming, &live_state, ImportMode::Merge).unwrap();
+
+        assert_eq!(create_count(&plan), 0);
+
+        let description = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::UpdateProject { description, .. } => Some(description),
+                _ => None,
+            })
+            .expect("expected UpdateProject");
+        assert_eq!(description, &Some(Some("new".to_string())));
+
+        let (name, color) = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::UpdateSection { name, color, .. } => Some((name, color)),
+                _ => None,
+            })
+            .expect("expected UpdateSection");
+        assert_eq!(name, &Some("renamed".to_string()));
+        match color {
+            Some(OperationColorChange::Set(Color::Red)) => {}
+            other => panic!("expected the section color set to red, got {other:?}"),
+        }
+
+        let title = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::UpdateTask { title, .. } => Some(title),
+                _ => None,
+            })
+            .expect("expected UpdateTask");
+        assert_eq!(title, &Some("new".to_string()));
+
+        let position = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::MoveTask { position, .. } => Some(position),
+                _ => None,
+            })
+            .expect("expected MoveTask");
+        assert_eq!(position, &Position::parse("a1").unwrap());
+
+        let contents = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::UpdateNote { contents, .. } => Some(contents),
+                _ => None,
+            })
+            .expect("expected UpdateNote");
+        assert_eq!(contents.as_str(), "new");
+
+        assert!(plan.report.remapped.is_empty());
+        assert_eq!(plan.report.projects, 1);
+        assert_eq!(plan.report.sections, 1);
+        assert_eq!(plan.report.tasks, 1);
+        assert_eq!(plan.report.notes, 1);
+    }
+
+    #[test]
+    fn colliding_project_name_is_renamed() {
+        let incoming = file(vec![document(
+            project(uuid(20), "alpha"),
+            vec![],
+            vec![],
+            vec![],
+        )]);
+
+        let state = import_state(vec![project(uuid(10), "alpha")], vec![], vec![], vec![]);
+        let plan = plan_import(&incoming, &state, ImportMode::Merge).unwrap();
+        let name = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::CreateProject { name, .. } => Some(name.as_str()),
+                _ => None,
+            })
+            .expect("expected CreateProject");
+        assert_eq!(name, "alpha (2)");
+
+        let state = import_state(
+            vec![project(uuid(10), "alpha"), project(uuid(11), "alpha (2)")],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let plan = plan_import(&incoming, &state, ImportMode::Merge).unwrap();
+        let name = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::CreateProject { name, .. } => Some(name.as_str()),
+                _ => None,
+            })
+            .expect("expected CreateProject");
+        assert_eq!(name, "alpha (3)");
+    }
+
+    #[test]
+    fn skip_mode_drops_colliding_projects() {
+        let incoming = file(vec![document(
+            project(uuid(20), "alpha"),
+            vec![],
+            vec![],
+            vec![],
+        )]);
+        let state = import_state(vec![project(uuid(10), "alpha")], vec![], vec![], vec![]);
+
+        let plan = plan_import(&incoming, &state, ImportMode::Skip).unwrap();
+
+        assert!(plan.operations.is_empty());
+        assert_eq!(plan.report.projects, 0);
+    }
+
+    #[test]
+    fn fail_mode_rejects_colliding_project_names() {
+        let incoming = file(vec![document(
+            project(uuid(20), "alpha"),
+            vec![],
+            vec![],
+            vec![],
+        )]);
+        let state = import_state(vec![project(uuid(10), "alpha")], vec![], vec![], vec![]);
+
+        let result = plan_import(&incoming, &state, ImportMode::Fail);
+
+        assert!(matches!(result, Err(StorageError::Conflict(_))));
+    }
+
+    #[test]
+    fn replace_mode_deletes_then_creates() {
+        let live_id = uuid(10);
+        let incoming_id = uuid(20);
+        let incoming = file(vec![document(
+            project(incoming_id, "alpha"),
+            vec![],
+            vec![],
+            vec![],
+        )]);
+        let state = import_state(vec![project(live_id, "alpha")], vec![], vec![], vec![]);
+
+        let plan = plan_import(&incoming, &state, ImportMode::Replace).unwrap();
+
+        let OperationKind::DeleteProject { id: deleted } = &plan.operations[0].kind else {
+            panic!("expected DeleteProject, got {:?}", plan.operations[0].kind);
+        };
+        assert_eq!(*deleted, live_id);
+
+        let OperationKind::CreateProject { id, name, .. } = &plan.operations[1].kind else {
+            panic!("expected CreateProject, got {:?}", plan.operations[1].kind);
+        };
+        assert_eq!(*id, incoming_id);
+        assert_eq!(name, "alpha");
+    }
+
+    #[test]
+    fn live_section_with_same_name_is_reused() {
+        let project_id = uuid(1);
+        let live_section_id = uuid(2);
+        let incoming_section_id = uuid(3);
+        let task_id = uuid(4);
+
+        let live_state = import_state(
+            vec![project(project_id, "p")],
+            vec![section(live_section_id, project_id, "Todo")],
+            vec![],
+            vec![],
+        );
+
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![section(incoming_section_id, project_id, "Todo")],
+            vec![task(task_id, project_id, Some(incoming_section_id), "task")],
+            vec![],
+        )]);
+
+        let plan = plan_import(&incoming, &live_state, ImportMode::Merge).unwrap();
+
+        assert!(
+            plan.operations
+                .iter()
+                .all(|operation| !matches!(&operation.kind, OperationKind::CreateSection { .. }))
+        );
+
+        let section_id = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::CreateTask { section_id, .. } => Some(section_id),
+                _ => None,
+            })
+            .expect("expected CreateTask");
+        assert_eq!(*section_id, Some(live_section_id));
+
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![Section {
+                color: Some(Color::Red),
+                ..section(incoming_section_id, project_id, "Todo")
+            }],
+            vec![task(task_id, project_id, Some(incoming_section_id), "task")],
+            vec![],
+        )]);
+
+        let plan = plan_import(&incoming, &live_state, ImportMode::Merge).unwrap();
+
+        let (name, color) = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::UpdateSection {
+                    id, name, color, ..
+                } if *id == live_section_id => Some((name, color)),
+                _ => None,
+            })
+            .expect("expected UpdateSection for the reused section");
+        assert!(name.is_none());
+        match color {
+            Some(OperationColorChange::Set(Color::Red)) => {}
+            other => panic!("expected the section color set to red, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tombstoned_section_with_same_name_is_reused() {
+        let project_id = uuid(1);
+        let live_section_id = uuid(2);
+        let incoming_section_id = uuid(3);
+        let task_id = uuid(4);
+
+        let mut live_state = import_state(
+            vec![project(project_id, "p")],
+            vec![section(live_section_id, project_id, "Todo")],
+            vec![],
+            vec![],
+        );
+        live_state
+            .tombstones
+            .insert((EntityType::Section, incoming_section_id));
+
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![section(incoming_section_id, project_id, "Todo")],
+            vec![task(task_id, project_id, Some(incoming_section_id), "task")],
+            vec![],
+        )]);
+
+        let plan = plan_import(&incoming, &live_state, ImportMode::Merge).unwrap();
+
+        assert!(
+            plan.operations
+                .iter()
+                .all(|operation| !matches!(&operation.kind, OperationKind::CreateSection { .. }))
+        );
+        assert!(
+            plan.report
+                .remapped
+                .iter()
+                .all(|remap| remap.from != incoming_section_id)
+        );
+
+        let section_id = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::CreateTask { section_id, .. } => Some(section_id),
+                _ => None,
+            })
+            .expect("expected CreateTask");
+        assert_eq!(*section_id, Some(live_section_id));
+    }
+
+    #[test]
+    fn identical_document_plans_no_operations() {
+        let project_id = uuid(1);
+        let section_id = uuid(2);
+        let task_id = uuid(3);
+        let note_id = uuid(4);
+
+        let live_state = import_state(
+            vec![project(project_id, "p")],
+            vec![section(section_id, project_id, "todo")],
+            vec![task(task_id, project_id, Some(section_id), "task")],
+            vec![note(note_id, task_id, "contents")],
+        );
+
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![section(section_id, project_id, "todo")],
+            vec![task(task_id, project_id, Some(section_id), "task")],
+            vec![note(note_id, task_id, "contents")],
+        )]);
+
+        let plan = plan_import(&incoming, &live_state, ImportMode::Merge).unwrap();
+
+        assert!(plan.operations.is_empty());
+        assert_eq!(plan.report.projects, 1);
+        assert_eq!(plan.report.sections, 1);
+        assert_eq!(plan.report.tasks, 1);
+        assert_eq!(plan.report.notes, 1);
+    }
+
+    #[test]
+    fn cross_project_section_id_is_a_conflict() {
+        let live_project_id = uuid(1);
+        let incoming_project_id = uuid(10);
+        let section_id = uuid(2);
+
+        let live_state = import_state(
+            vec![project(live_project_id, "a")],
+            vec![section(section_id, live_project_id, "Todo")],
+            vec![],
+            vec![],
+        );
+
+        let incoming = file(vec![document(
+            project(incoming_project_id, "b"),
+            vec![section(section_id, incoming_project_id, "Todo")],
+            vec![],
+            vec![],
+        )]);
+
+        let result = plan_import(&incoming, &live_state, ImportMode::Merge);
+
+        assert!(matches!(result, Err(StorageError::Conflict(_))));
+    }
+
+    #[test]
+    fn task_section_from_another_project_is_a_conflict() {
+        let other_project_id = uuid(1);
+        let project_id = uuid(10);
+        let section_id = uuid(2);
+        let task_id = uuid(3);
+
+        let live_state = import_state(
+            vec![project(other_project_id, "other")],
+            vec![section(section_id, other_project_id, "Todo")],
+            vec![],
+            vec![],
+        );
+
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![],
+            vec![task(task_id, project_id, Some(section_id), "task")],
+            vec![],
+        )]);
+
+        let result = plan_import(&incoming, &live_state, ImportMode::Merge);
+
+        assert!(matches!(result, Err(StorageError::Conflict(_))));
+    }
+
+    #[test]
+    fn note_task_from_another_project_is_a_conflict() {
+        let other_project_id = uuid(1);
+        let project_id = uuid(10);
+        let task_id = uuid(2);
+        let note_id = uuid(3);
+
+        let live_state = import_state(
+            vec![project(other_project_id, "other")],
+            vec![],
+            vec![task(task_id, other_project_id, None, "task")],
+            vec![],
+        );
+
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![],
+            vec![],
+            vec![note(note_id, task_id, "contents")],
+        )]);
+
+        let result = plan_import(&incoming, &live_state, ImportMode::Merge);
+
+        assert!(matches!(result, Err(StorageError::Conflict(_))));
     }
 }

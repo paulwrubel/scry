@@ -199,22 +199,22 @@ Snapshot and restore projects as a single JSON document. `export` always writes 
 | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `scry export`                             | Write all projects (with sections, tasks, and notes) as JSON to stdout                     |
 | `scry -p <name> export`                   | Write a single project as JSON to stdout (`-p` is the global flag, placed before `export`) |
-| `scry import`                             | Read a JSON snapshot from stdin and add its projects (fails if any name already exists)    |
-| `scry import --replace-existing-projects` | Add new projects, replacing existing projects whose names collide                          |
+| `scry import`                             | Read a JSON snapshot from stdin and merge it into the server                               |
+| `scry import --replace-existing-projects` | Add new projects, deleting existing projects whose names collide                           |
 | `scry import --skip-existing-projects`    | Add new projects, keeping existing projects whose names collide                            |
 
-A plain `scry import` is strict: it adds the incoming projects but fails, writing nothing, if any name already exists. Because scry always ships a built-in `default` project, a full snapshot file (which contains `default`) conflicts on a plain import — restoring one therefore requires `scry import --replace-existing-projects`. `--replace-existing-projects` adds new projects and replaces any existing project whose name collides, while `--skip-existing-projects` adds new projects and keeps the existing ones on collision; the two flags are mutually exclusive. `scry -p <name> export` is handy for sharing a single project that doesn't collide.
+A plain `scry import` merges: entities whose ids already exist are updated field by field with the snapshot's values, and ids that are absent are created. An incoming id that matches a tombstone is reminted with a fresh UUID and child references are rewritten to point at it. A different project whose name collides with a live project is renamed `name (2)`, `name (3)`, and so on; a section with a new id whose name matches a live section in the same project is merged into that live section rather than duplicated. `--replace-existing-projects` adds new projects and deletes existing projects whose names collide before applying the incoming ones, while `--skip-existing-projects` adds new projects and keeps the existing ones, skipping the incoming project on collision; the two flags are mutually exclusive. Because scry always ships a built-in `default` project, a full snapshot file (which contains `default`) restores with a plain import or with `scry import --replace-existing-projects`.
 
 The typical round trip pipes one into the other:
 
 ```sh
 scry export > scry-snapshot.json
-scry import --replace-existing-projects < scry-snapshot.json
+scry import < scry-snapshot.json
 ```
 
 The snapshot file is a single object, `{ "version": 1, "app_version": "0.24.0", "projects": [ ... ] }`. `version` is the format version checked on import, and `app_version` is informational, recording the binary that produced the snapshot. Each element of `projects` is a project document: the project's own fields (`id`, `name`, `description`, `task_sorting_mode`, `show_priority`, `created_at`) sit at the top level alongside its `sections`, `tasks`, and `notes` arrays. That object is exactly what `GET /projects/{id}/snapshot` returns, so a project snapshot and a snapshot file entry are the same document, and `scry -p <name> export` is that same object wrapped in a one-project envelope. Every id (`id`, `project_id`, `section_id`, `task_id`) is a UUID string. Every task and section carries a `position` string key: ordering is lexicographic, unresolved ties break by id, and the key itself is opaque. Every task carries a nullable `section_id` and a `state` string, either `"open"` or `"closed"`. Field names are snake_case, enum values are kebab-case strings — for example `"priority": "high"` — matching the values the CLI accepts and the `--json` output, and timestamps are RFC3339 strings.
 
-Import preserves the UUIDs carried by the snapshot file and inserts or updates by id, keeping the other fields and timestamps. Only version 1 is accepted: a document carrying any other `version` is rejected rather than upgraded. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `sections`, `tasks`, and `notes`.
+Only version 1 is accepted: a document carrying any other `version` is rejected rather than upgraded. Under `--json`, `scry import` prints a report object with the integer fields `projects`, `sections`, `tasks`, and `notes`, plus `remapped`, an array of `{ entity_type, from, to }` entries for each id that was reassigned. Plain output is unchanged.
 
 ### Documentation
 
@@ -346,7 +346,7 @@ Endpoints, all under `/api/v1`:
 
 Task paths accept a full UUID or a short handle. `/projects/{id}?detailed=true` adds `sections`, `tasks`, and per-task `notes`; `include_handles=true` adds a `handle` to each task. `/tasks/{handle}?detailed=true` adds `notes`, and `include_handle=true` adds the display `handle`.
 
-`POST /tasks/{handle}/move` takes `{ "section_id": <id-or-null> }`; null moves the task to No section, and either way the task appends to the destination group. `POST /tasks/close` takes `{ "handles": [...] }`; `POST /tasks/open` takes `{ "handles": [...] }`. Both return one result per handle, with failures reported per item. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`. Deletions return the removed object. `POST /import` takes `{ "snapshot": <snapshot JSON>, "mode": "Fail" | "Replace" | "Skip" }` and plans the import on the server.
+`POST /tasks/{handle}/move` takes `{ "section_id": <id-or-null> }`; null moves the task to No section, and either way the task appends to the destination group. `POST /tasks/close` takes `{ "handles": [...] }`; `POST /tasks/open` takes `{ "handles": [...] }`. Both return one result per handle, with failures reported per item. `POST /sections/{id}/merge` takes `{ "target_id": <section-id> }`. Deletions return the removed object. `POST /import` takes `{ "snapshot": <snapshot JSON>, "mode": "Merge" | "Fail" | "Replace" | "Skip" }` and applies the import on the server through the operation pipeline, with `Merge` as the CLI default; the returned report includes any remapped ids.
 
 `POST /sync` takes `{ "op_version": 1, "last_seen_seq": <seq>, "ops": [...] }` and returns `{ "acks": [...], "changes": [...], "next_seq": <seq> }`. Each change carries the resulting field values for one entity: `create` carries the full row, `update` only the changed fields, and `delete` carries `{}`. `next_seq` is the cursor to send on the next request. `GET /max_seq` returns the server's current cursor without syncing. `GET /snapshot` returns the bare `{ "projects": [...], "last_seen_seq": <seq> }` document, and `GET /export?include_seq=true` adds that cursor to the importable snapshot file.
 

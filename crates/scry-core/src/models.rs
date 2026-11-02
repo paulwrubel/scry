@@ -11,7 +11,7 @@ use uuid::Uuid;
 pub use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Color {
     Black,
@@ -331,7 +331,7 @@ pub struct Note {
 /// the operation, as recorded in the changes log.
 pub type FieldValues = serde_json::Value;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EntityType {
     Project,

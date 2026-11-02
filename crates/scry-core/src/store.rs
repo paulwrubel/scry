@@ -1,7 +1,6 @@
 use crate::error::StorageError;
 use crate::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
 use crate::models::{Change, Entity, EntityType, Note, Project, ProjectSnapshot, Section, Task};
-use crate::snapshot::{ImportPlan, ImportReport};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{PgConnection, Postgres, Transaction};
@@ -253,20 +252,6 @@ pub trait Store: Send + Sync {
         id: ProjectId,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError>;
-
-    /// Apply an import plan atomically.
-    ///
-    /// In `Replace` mode the existing projects listed in `plan.project_ids_to_delete`
-    /// are removed (along with their sections, tasks, and notes) before the plan's
-    /// projects are inserted; in `Skip` and `Fail` mode no existing data is
-    /// removed. Rows are inserted or updated by the UUID ids and carry the
-    /// timestamps held by the plan, so callers must resolve project-name
-    /// collisions beforehand (see `crate::snapshot::plan_import`).
-    async fn import(
-        &self,
-        plan: ImportPlan,
-        tx: Option<&mut PgConnection>,
-    ) -> Result<ImportReport, StorageError>;
 
     /// Whether the id is already in `applied_operations`, which makes the
     /// operation a retransmission to acknowledge rather than apply.
