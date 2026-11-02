@@ -1617,6 +1617,7 @@ dependencies = [
  "tokio",
  "toml",
  "tower-http",
+ "ts-rs",
  "twox-hash",
  "uuid",
 ]

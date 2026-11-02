@@ -16,6 +16,7 @@ use crate::server::ScryState;
 /// One push/pull request. `last_seen_seq` is the cursor the client has
 /// already applied, and `ops` defaults to empty so a pull-only request can
 /// omit it.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize)]
 pub struct SyncRequest {
     pub op_version: u16,
@@ -27,6 +28,7 @@ pub struct SyncRequest {
 
 /// One push/pull response. `next_seq` is the last `seq` included in
 /// `changes`, or the request's `last_seen_seq` when nothing new was found.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct SyncResponse {
     pub acks: Vec<OperationAcknowledgment>,

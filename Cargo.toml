@@ -3,6 +3,9 @@ name = "scry"
 version = "0.24.0"
 edition = "2024"
 
+[features]
+ts = ["dep:ts-rs", "scry-core/ts"]
+
 [dependencies]
 anstream = "1"
 anstyle = "1"
@@ -34,6 +37,10 @@ axum-extra = { version = "0.12.6", features = ["typed-header"] }
 tower-http = { version = "0.6", features = ["cors"] }
 subtle = "2"
 scry-core = { path = "crates/scry-core" }
+ts-rs = { version = "12", optional = true, features = [
+    "chrono-impl",
+    "uuid-impl",
+] }
 
 [workspace]
 members = ["crates/scry-core"]
