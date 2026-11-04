@@ -1,7 +1,7 @@
 //! Router assembly and HTTP startup for the REST API.
 
 use crate::error::AppError;
-use crate::http_auth::require_token;
+use crate::http_auth::{AuthState, require_auth};
 use crate::service::ProjectService;
 use axum::Router;
 use axum::http::{HeaderName, Method, StatusCode, header};
@@ -185,9 +185,10 @@ fn build_ui_router() -> Router<ScryState> {
 }
 
 /// Assemble the full router: the versioned API behind the optional bearer-token
-/// gate, CORS, shared state, and the public UI.
+/// or session-cookie gate, CORS, shared state, and the public UI.
 pub fn build_router(state: ScryState, token: Option<String>) -> Router {
-    let api = require_token(build_api_router(), token);
+    let auth = AuthState::new(token);
+    let api = require_auth(build_api_router(), auth);
     let router = Router::new().nest("/api/v1", api).layer(get_cors_layer());
 
     #[cfg(feature = "embed-ui")]
