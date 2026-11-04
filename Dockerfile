@@ -1,24 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# Build the release binary. The Postgres TLS stack still compiles C, so the
-# builder needs a C toolchain and the runtime needs nothing beyond glibc.
-ARG RUST_VERSION=1.95
-FROM rust:${RUST_VERSION}-slim-bookworm AS builder
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# The committed Postgres .sqlx offline cache lets the sqlx macros compile
-# without a live database.
-ENV SQLX_OFFLINE=true
-
-COPY . .
-RUN cargo build --release
-
-FROM debian:bookworm-slim AS runtime
+# The binary is built on the host with `just build`, which also builds the web
+# UI and embeds it at compile time. `just run-docker` builds it first; plain
+# `docker build .` requires `target/release/scry` to exist.
+FROM debian:bookworm-slim
 
 # Run as a non-root user. Native-root TLS validates against the operating
 # system trust store, so the image needs ca-certificates present or every
@@ -32,7 +17,7 @@ RUN apt-get update \
 # config there (see compose.yaml).
 WORKDIR /app
 
-COPY --from=builder /app/target/release/scry /usr/local/bin/scry
+COPY target/release/scry /usr/local/bin/scry
 
 USER scry
 EXPOSE 8000

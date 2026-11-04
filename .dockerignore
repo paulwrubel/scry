@@ -1,7 +1,9 @@
-target
-.git
-.gitignore
-scry.db
-.env
-todo.txt
-.vscode
+# Ignore everything by default
+*
+
+# Allow only the compiled binary (the only file the Dockerfile copies)
+!target/
+!target/release/
+!target/release/scry
+
+# Config is mounted at runtime by compose.yaml, not needed in the build context.
