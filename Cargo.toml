@@ -35,9 +35,15 @@ sqlx = { version = "0.9", features = [
 twox-hash = "2.1.4"
 num_enum = "0.7.6"
 axum = "0.8.9"
-axum-extra = { version = "0.12.6", features = ["typed-header"] }
+axum-extra = { version = "0.12.6", features = [
+    "cookie-key-expansion",
+    "cookie-signed",
+    "typed-header",
+] }
 tower-http = { version = "0.6", features = ["cors"] }
 subtle = "2"
+sha2 = "0.10"
+time = "0.3"
 scry-core = { path = "crates/scry-core" }
 ts-rs = { version = "12", optional = true, features = [
     "chrono-impl",
@@ -51,3 +57,4 @@ resolver = "3"
 
 [dev-dependencies]
 assert_fs = "1.1.4"
+tower = { version = "0.5", features = ["util"] }

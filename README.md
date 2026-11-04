@@ -327,9 +327,26 @@ The container image runs it the same way:
 docker run -d -p 8000:8000 -v "$PWD/scry.docker.toml:/app/scry.toml:ro" scry serve --http 0.0.0.0:8000
 ```
 
-Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) requires an
-`Authorization: Bearer <token>` header on every `/api/v1` request
-(compared in constant time); the app shell and its assets stay public. Responses are JSON; errors carry the same stable `kind`
+Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) enables authentication.
+CLI and other non-browser clients send `Authorization: Bearer <token>` on every
+`/api/v1` request; the comparison is constant time. Browsers exchange the token for an
+interim session cookie:
+
+```sh
+curl -c cookies.txt -X POST http://127.0.0.1:8000/api/v1/auth/session \
+  -H 'content-type: application/json' -d '{"token":"<token>"}'
+```
+
+The `scry_session` cookie is `HttpOnly`, `SameSite=Strict`, scoped to `/`, and expires
+after 30 days. It is `Secure` when the request carries
+`X-Forwarded-Proto: https`, so terminate TLS at a proxy and forward that header.
+`DELETE /api/v1/auth/session` clears it. Rotating `api_token` changes the signing key
+and invalidates every outstanding cookie. With no token configured, creating a session
+returns 400 and the API is unauthenticated. CORS stays uncredentialed: the wildcard
+policy never emits `Access-Control-Allow-Credentials`, so cookie access is same-origin
+only. The app shell and its assets stay public.
+
+Responses are JSON; errors carry the same stable `kind`
 vocabulary as `--json` (`not_found`, `conflict`, `invalid`, `internal`, `config`)
 and map to the matching HTTP status (404, 409, 400, 500). There is no TLS, so put the
 server behind a TLS-terminating proxy or a private network if it leaves the host.
@@ -339,6 +356,7 @@ Endpoints, all under `/api/v1`:
 | Method                   | Path                                     | Purpose                                                                      |
 | ------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------- |
 | `GET`                    | `/`                                      | Server info                                                                  |
+| `POST` / `DELETE`        | `/auth/session`                          | Set / clear the browser session cookie                                       |
 | `GET` / `POST`           | `/projects`                              | List / create projects (create accepts `template`)                           |
 | `GET`                    | `/projects/by-name/{name}`               | Fetch a project by name                                                      |
 | `PUT` / `DELETE`         | `/projects/by-name/{name}`               | Update / delete a project by name                                            |
@@ -414,7 +432,7 @@ The active project is **not** stored here or in the database — it lives in the
 Credentials belong in a separate `scry.secret.toml`, discovered the same way (`./scry.secret.toml`, then `$XDG_CONFIG_HOME/scry/scry.secret.toml`), or loaded explicitly with `--secrets <path>`. It is never created automatically and is listed in `.gitignore`, so keep it out of version control. Its values take precedence over both `scry.toml` and the environment variables:
 
 - `database_url` — override `scry.toml`'s `database_url` for `scry serve`.
-- `api_token` — the REST API bearer token used by both the client and the server, overriding `SCRY_API_TOKEN`. It gates `/api/v1`; the app shell and assets are public.
+- `api_token` — the REST API bearer token used by both the client and the server, overriding `SCRY_API_TOKEN`. It gates `/api/v1`; browsers can exchange it for a session cookie, and the app shell and assets are public.
 
 ## Database
 

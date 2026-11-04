@@ -1,7 +1,7 @@
 //! Router assembly and HTTP startup for the REST API.
 
 use crate::error::AppError;
-use crate::http_auth::require_token;
+use crate::http_auth::{AuthState, require_auth};
 use crate::service::ProjectService;
 use axum::Router;
 use axum::http::{HeaderName, Method, StatusCode, header};
@@ -185,9 +185,14 @@ fn build_ui_router() -> Router<ScryState> {
 }
 
 /// Assemble the full router: the versioned API behind the optional bearer-token
-/// gate, CORS, shared state, and the public UI.
+/// or session-cookie gate, the ungated session endpoints, CORS, shared state,
+/// and the public UI.
 pub fn build_router(state: ScryState, token: Option<String>) -> Router {
-    let api = require_token(build_api_router(), token);
+    let auth = AuthState::new(token);
+    let resources = require_auth(build_api_router(), auth.clone());
+    let api = Router::new()
+        .merge(resources)
+        .nest("/auth", super::auth::build_auth_router(auth));
     let router = Router::new().nest("/api/v1", api).layer(get_cors_layer());
 
     #[cfg(feature = "embed-ui")]
@@ -218,4 +223,39 @@ pub async fn serve_http(
         .map_err(|error| AppError::Internal(format!("REST server error: {error}")))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, header};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn cors_does_not_allow_credentials() {
+        let app = Router::new()
+            .route("/", get(|| async { "ok" }))
+            .layer(get_cors_layer());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/")
+                    .header(header::ORIGIN, "https://example.com")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+        assert!(
+            response
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS)
+                .is_none()
+        );
+    }
 }
