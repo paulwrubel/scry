@@ -7,7 +7,7 @@ alias run := run-docker
 
 # build and start the app and database stack in Docker
 [group('run')]
-run-docker:
+run-docker: build
     docker compose up -d --build
 
 # build the release binary and run the REST server against the dev postgres
@@ -51,13 +51,12 @@ sqlx-prepare: sqlx-prepare-postgres
 
 # build an optimized release binary
 [group('build')]
-build:
+build: build-ui
     cargo build --release
 
 # build and install to ~/.local/bin
 [group('build')]
-install:
-    cargo build --release
+install: build
     mkdir -p {{"${HOME}"}}/.local/bin
     cp target/release/scry {{"${HOME}"}}/.local/bin/scry
 
@@ -68,7 +67,7 @@ build-ui: setup-ui-env
 
 # run all validation checks: Rust, generated output, fixtures, and the UI suite
 [group('validate')]
-validate: cargo-test cargo-check cargo-clippy check-bindings check-fixtures
+validate: build-ui cargo-test cargo-check cargo-clippy check-bindings check-fixtures
     cd ui && . "$HOME/.nvm/nvm.sh" && nvm use \
     && npm run lint \
     && npm run prettier-check \
@@ -81,17 +80,32 @@ alias test := cargo-test
 cargo-test:
     cargo test --workspace
 
+# run the test suite without default features (CI)
+[group('validate')]
+cargo-test-ci:
+    cargo test --workspace --no-default-features
+
 # type-check without compiling (fast feedback)
 alias check := cargo-check
 [group('validate')]
 cargo-check:
     cargo check --workspace
 
+# type-check without default features (CI)
+[group('validate')]
+cargo-check-ci:
+    cargo check --workspace --no-default-features
+
 # lint for common mistakes and style issues
 alias clippy := cargo-clippy
 [group('validate')]
 cargo-clippy:
     cargo clippy --workspace -- -D warnings
+
+# lint without default features (CI)
+[group('validate')]
+cargo-clippy-ci:
+    cargo clippy --workspace --no-default-features -- -D warnings
 
 # lint the ui
 [group('validate')]
@@ -119,7 +133,7 @@ sqlx-prepare-postgres: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
-    SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+    SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry -- --no-default-features
 
 # verify the Postgres offline query cache is up to date (used in CI)
 [group('validate')]
@@ -127,12 +141,12 @@ sqlx-prepare-check: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
-    SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry
+    SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry -- --no-default-features
 
 # regenerate the TypeScript bindings for the sync wire types
 [group('validate')]
 generate-bindings:
-    cargo test -p scry --features ts export_bindings
+    cargo test -p scry --no-default-features --features ts export_bindings
 
 # verify the generated TypeScript bindings are committed and up to date
 [group('validate')]
@@ -208,7 +222,7 @@ _release type do_push="":
         *) echo "Aborted."; exit 1 ;; \
     esac; \
     sed -i.bak "s/^version = \"$current\"/version = \"$next\"/" Cargo.toml && rm -f Cargo.toml.bak; \
-    cargo check; \
+    cargo check --no-default-features; \
     git add Cargo.toml Cargo.lock; \
     git commit -m "v$next"; \
     git tag "v$next"; \

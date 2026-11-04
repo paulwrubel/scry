@@ -4,9 +4,11 @@ use crate::error::AppError;
 use crate::http_auth::require_token;
 use crate::service::ProjectService;
 use axum::Router;
-use axum::http::{HeaderName, Method, header};
+use axum::http::{HeaderName, Method, StatusCode, header};
 use axum::routing::{get, post};
 use axum::serve;
+#[cfg(feature = "embed-ui")]
+use include_dir::{Dir, include_dir};
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -44,6 +46,13 @@ fn build_api_router() -> Router<ScryState> {
         .nest("/sections", build_sections_router())
         .nest("/tasks", build_tasks_router())
         .nest("/notes", build_notes_router())
+        .fallback(not_found)
+}
+
+/// Answer unmatched API paths with a bare 404 instead of falling through to the
+/// UI, which would otherwise serve the app shell for a missing endpoint.
+async fn not_found() -> StatusCode {
+    StatusCode::NOT_FOUND
 }
 
 /// Routes nested under `/projects`.
@@ -129,14 +138,62 @@ fn build_notes_router() -> Router<ScryState> {
     )
 }
 
-/// Assemble the full router: the versioned API, CORS, shared state, and the
-/// optional bearer-token gate.
+#[cfg(feature = "embed-ui")]
+static UI_DIST_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/ui/dist");
+
+#[cfg(feature = "embed-ui")]
+fn get_content_type(path: &str) -> &'static str {
+    match path.split('.').next_back().unwrap_or("") {
+        "html" => "text/html",
+        "js" => "application/javascript",
+        "css" => "text/css",
+        "json" => "application/json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        _ => "text/plain",
+    }
+}
+
+#[cfg(feature = "embed-ui")]
+fn build_ui_router() -> Router<ScryState> {
+    Router::new().fallback(|req: axum::http::Request<axum::body::Body>| async move {
+        let path = req.uri().path().trim_start_matches('/');
+        let path = if path.is_empty() { "index.html" } else { path };
+
+        if let Some(file) = UI_DIST_DIR.get_file(path) {
+            axum::response::Response::builder()
+                .header("content-type", get_content_type(path))
+                .body(axum::body::Body::from(file.contents()))
+                .unwrap()
+        } else {
+            // If file not found, return index.html for client-side routing
+            if let Some(index_file) = UI_DIST_DIR.get_file("index.html") {
+                axum::response::Response::builder()
+                    .header("content-type", "text/html")
+                    .body(axum::body::Body::from(index_file.contents()))
+                    .unwrap()
+            } else {
+                axum::response::Response::builder()
+                    .status(404)
+                    .body(axum::body::Body::from("Not found"))
+                    .unwrap()
+            }
+        }
+    })
+}
+
+/// Assemble the full router: the versioned API behind the optional bearer-token
+/// gate, CORS, shared state, and the public UI.
 pub fn build_router(state: ScryState, token: Option<String>) -> Router {
-    let router = Router::new()
-        .nest("/api/v1", build_api_router())
-        .layer(get_cors_layer())
-        .with_state(state);
-    require_token(router, token)
+    let api = require_token(build_api_router(), token);
+    let router = Router::new().nest("/api/v1", api).layer(get_cors_layer());
+
+    #[cfg(feature = "embed-ui")]
+    let router = router.merge(build_ui_router());
+
+    router.with_state(state)
 }
 
 /// Serve the REST API over HTTP on `addr`.

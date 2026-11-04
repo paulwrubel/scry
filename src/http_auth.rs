@@ -17,7 +17,7 @@ struct TokenState {
 
 /// Extractor that admits a request only when it presents the configured bearer token.
 ///
-/// Deployed as a router-wide layer through [`require_token`], mirroring luxide's
+/// Deployed on the API router through [`require_token`], mirroring luxide's
 /// `Claims` extractor. The presented token is compared in constant time.
 struct RequireToken;
 
@@ -55,8 +55,11 @@ fn unauthorized() -> Response {
 /// Gate `router` behind the bearer token when one is configured.
 ///
 /// Returns the router unchanged when no token is configured; otherwise every
-/// request must present the token or be rejected.
-pub(crate) fn require_token(router: Router, token: Option<String>) -> Router {
+/// API request must present the token or be rejected.
+pub(crate) fn require_token<S>(router: Router<S>, token: Option<String>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     match token {
         Some(token) => router.layer(from_extractor_with_state::<RequireToken, _>(TokenState {
             token,

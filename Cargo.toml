@@ -4,7 +4,9 @@ version = "0.24.0"
 edition = "2024"
 
 [features]
+default = ["embed-ui"]
 ts = ["dep:ts-rs", "scry-core/ts"]
+embed-ui = ["dep:include_dir"]
 
 [dependencies]
 anstream = "1"
@@ -41,6 +43,7 @@ ts-rs = { version = "12", optional = true, features = [
     "chrono-impl",
     "uuid-impl",
 ] }
+include_dir = { version = "0.7.4", optional = true }
 
 [workspace]
 members = ["crates/scry-core"]
