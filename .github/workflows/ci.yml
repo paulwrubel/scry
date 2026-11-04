@@ -54,7 +54,7 @@ jobs:
         run: just check-fixtures
 
       - name: Validate Rust (test -> check -> clippy)
-        run: just cargo-test cargo-check cargo-clippy
+        run: just cargo-test-ci cargo-check-ci cargo-clippy-ci
 
       - name: Lint UI
         run: cd ui && npm run lint

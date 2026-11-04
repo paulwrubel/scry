@@ -67,7 +67,7 @@ build-ui: setup-ui-env
 
 # run all validation checks: Rust, generated output, fixtures, and the UI suite
 [group('validate')]
-validate: cargo-test cargo-check cargo-clippy check-bindings check-fixtures
+validate: build-ui cargo-test cargo-check cargo-clippy check-bindings check-fixtures
     cd ui && . "$HOME/.nvm/nvm.sh" && nvm use \
     && npm run lint \
     && npm run prettier-check \
@@ -78,18 +78,33 @@ validate: cargo-test cargo-check cargo-clippy check-bindings check-fixtures
 alias test := cargo-test
 [group('validate')]
 cargo-test:
+    cargo test --workspace
+
+# run the test suite without default features (CI)
+[group('validate')]
+cargo-test-ci:
     cargo test --workspace --no-default-features
 
 # type-check without compiling (fast feedback)
 alias check := cargo-check
 [group('validate')]
 cargo-check:
+    cargo check --workspace
+
+# type-check without default features (CI)
+[group('validate')]
+cargo-check-ci:
     cargo check --workspace --no-default-features
 
 # lint for common mistakes and style issues
 alias clippy := cargo-clippy
 [group('validate')]
 cargo-clippy:
+    cargo clippy --workspace -- -D warnings
+
+# lint without default features (CI)
+[group('validate')]
+cargo-clippy-ci:
     cargo clippy --workspace --no-default-features -- -D warnings
 
 # lint the ui
