@@ -2,19 +2,21 @@
 
 use axum::Router;
 use axum::extract::FromRequestParts;
-use axum::http::{StatusCode, request::Parts};
+use axum::http::{HeaderMap, StatusCode, request::Parts};
 use axum::middleware::from_extractor_with_state;
 use axum::response::{IntoResponse, Response};
 use axum_extra::TypedHeader;
 use axum_extra::extract::SignedCookieJar;
-use axum_extra::extract::cookie::Key;
+use axum_extra::extract::cookie::{Cookie, Key, SameSite};
 use axum_extra::headers::{Authorization, authorization::Bearer};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
+use time::Duration;
 
 /// Name of the interim browser session cookie.
 pub(crate) const SESSION_COOKIE: &str = "scry_session";
 const SESSION_VALUE: &str = "authenticated";
+const SESSION_MAX_AGE_DAYS: i64 = 30;
 
 /// Credentials shared by the API gate and the session endpoints.
 #[derive(Clone)]
@@ -101,6 +103,31 @@ where
     }
 }
 
+/// The session cookie set by `POST /api/v1/auth/session`.
+pub(crate) fn session_cookie(secure: bool) -> Cookie<'static> {
+    Cookie::build((SESSION_COOKIE, SESSION_VALUE))
+        .path("/")
+        .http_only(true)
+        .same_site(SameSite::Strict)
+        .secure(secure)
+        .max_age(Duration::days(SESSION_MAX_AGE_DAYS))
+        .build()
+}
+
+/// The expired cookie used to clear a session.
+pub(crate) fn cleared_session_cookie() -> Cookie<'static> {
+    Cookie::build(SESSION_COOKIE).path("/").build()
+}
+
+/// Whether the request reached the server over TLS, as reported by the proxy.
+pub(crate) fn request_is_secure(headers: &HeaderMap) -> bool {
+    headers
+        .get("x-forwarded-proto")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .is_some_and(|proto| proto.trim().eq_ignore_ascii_case("https"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,5 +212,36 @@ mod tests {
     #[test]
     fn no_token_disables_auth() {
         assert!(!AuthState::new(None).enabled());
+    }
+
+    #[test]
+    fn session_cookie_has_the_agreed_attributes() {
+        let cookie = session_cookie(false);
+
+        assert_eq!(cookie.name(), SESSION_COOKIE);
+        assert_eq!(cookie.value(), "authenticated");
+        assert_eq!(cookie.path(), Some("/"));
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.same_site(), Some(SameSite::Strict));
+        assert_eq!(cookie.max_age(), Some(Duration::days(30)));
+        assert_eq!(cookie.secure(), Some(false));
+        assert_eq!(session_cookie(true).secure(), Some(true));
+    }
+
+    #[test]
+    fn secure_detection_uses_forwarded_proto() {
+        assert!(!request_is_secure(&HeaderMap::new()));
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", "https".parse().unwrap());
+        assert!(request_is_secure(&headers));
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", "HTTPS, http".parse().unwrap());
+        assert!(request_is_secure(&headers));
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", "http".parse().unwrap());
+        assert!(!request_is_secure(&headers));
     }
 }
