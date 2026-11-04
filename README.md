@@ -4,7 +4,7 @@ A task manager for the terminal.
 
 ## Overview
 
-scry has two sides. `scry serve` owns the PostgreSQL database and exposes a REST API; the `scry` CLI is an HTTP client for that API and keeps no local copy of the data. Point the client at a server with `server_url`, `SCRY_SERVER_URL`, or `--server`.
+scry has two sides. `scry serve` owns the PostgreSQL database and exposes a REST API and the built web UI; the `scry` CLI is an HTTP client for that API and keeps no local copy of the data. Point the client at a server with `server_url`, `SCRY_SERVER_URL`, or `--server`.
 
 scry organizes work into **projects**. Every task is either **open** or **closed**; a closed task records why it closed (`completed` or `cancelled`) and when. Tasks may also belong to an optional, ordered **section** within their project, and tasks with no section appear under **No section**. A built-in "default" project with no sections provides a simple out-of-box todo list experience — no setup required.
 
@@ -24,21 +24,25 @@ Download the latest binary from the [Releases page](https://github.com/paulwrube
 
 ### Build from source
 
-Requires [Rust](https://www.rust-lang.org/tools/install). The optional UI package also requires Node 26 (see `ui/.nvmrc`).
+Requires [Rust](https://www.rust-lang.org/tools/install). The default build embeds the web UI, so it also needs Node 26 (see `ui/.nvmrc`); `just build` installs the UI dependencies, builds `ui/dist`, then compiles the binary with it embedded.
 
 ```sh
 git clone https://github.com/paulwrubel/scry.git
 cd scry
-cargo build --release
+just build
 ./target/release/scry --help
+
+# API-only binary without the embedded web UI
+cargo build --release --no-default-features
 ```
 
 ### Web UI
 
-The React/TypeScript frontend lives in `ui/` and is built with Vite, oxlint, Prettier, and Vitest. It is a separate npm package; the Rust server does not serve it yet (#50 builds the PWA).
+The React/TypeScript frontend lives in `ui/` and is built with Vite, oxlint, Prettier, and Vitest. It is a separate npm package. `just build` builds `ui/dist` and embeds it in the Rust binary; `scry serve` then serves the app at `/`, with client-side routes falling back to `index.html`. Build with `--no-default-features` for an API-only binary without the UI.
 
 ```sh
 just setup-ui-env   # install Node 26 through nvm and npm dependencies
+just build-ui       # build ui/dist for embedding in the Rust binary
 just run-ui         # Docker API/Postgres plus the Vite dev server on :5173
 just lint-ui        # oxlint
 just typecheck-ui   # tsc
@@ -51,9 +55,12 @@ The Rust wire types are the source of truth for the generated declarations in `u
 
 Prebuilt images are published to GitHub Container Registry on each release as
 `ghcr.io/paulwrubel/scry` (see [Published images](#published-images)). The image's default
-command serves the REST API on port 8000. To build an image from source instead, use:
+command serves the REST API and web UI on port 8000. The image is runtime-only and
+copies `target/release/scry`, so build the binary first; `just run` does both. To build
+an image from source, use:
 
 ```sh
+just build
 docker build -t scry .
 ```
 
@@ -62,7 +69,7 @@ docker build -t scry .
 Each release publishes the image tagged with its version (e.g.
 `ghcr.io/paulwrubel/scry:0.22.0`) and with `latest`; pin a specific version rather than
 tracking `latest`. Pull it and run the image with its default command, which serves the REST
-API on port 8000:
+API and web UI on port 8000:
 
 ```sh
 docker pull ghcr.io/paulwrubel/scry:0.22.0
@@ -79,8 +86,8 @@ See [Running a server](#running-a-server) for the host-side REST API setup.
 
 - A reachable PostgreSQL server configured via `scry.toml` is required when you run the published image, or an image you built yourself, against a database of your choosing.
 - Point the CLI at the container with `server_url = "http://127.0.0.1:8000"` or `--server http://127.0.0.1:8000`.
-- `just run` builds the image and starts it together with its own Postgres container, so no host database is needed; see [Database](#database) for that workflow and the other local helpers.
-- The REST API has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
+- `just run` builds the web UI and release binary, builds the image, and starts it together with its own Postgres container, so no host database is needed; see [Database](#database) for that workflow and the other local helpers.
+- The server has no TLS; put it behind a TLS-terminating proxy or a private network if it leaves the host.
 
 ## Core Concepts
 
@@ -274,11 +281,13 @@ covers opencode too. Do not install twice: skill names must be unique across dis
 
 ### REST API
 
-Serve scry's operations as a versioned JSON REST API. `scry serve` is the only process that talks to PostgreSQL; the `scry` CLI and other clients talk to this API over HTTP.
+Serve scry's operations as a versioned JSON REST API alongside the embedded web UI. `scry serve` is the only process that talks to PostgreSQL; the `scry` CLI and other clients talk to this API over HTTP.
 
-| Command                    | Description                                  |
-| -------------------------- | -------------------------------------------- |
-| `scry serve --http <addr>` | Serve the REST API at `http://<addr>/api/v1` |
+| Command                    | Description                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| `scry serve --http <addr>` | Serve the REST API at `http://<addr>/api/v1` and the UI at `/` |
+
+`GET /` serves the embedded app shell. Any path outside `/api/v1` that does not match a bundled asset returns `index.html`, so client-side routes survive a reload. Unmatched `/api/v1/*` paths return 404 and are never handed the shell. A binary built with `--no-default-features` has no UI, so `/` returns 404.
 
 #### Running a server
 
@@ -319,8 +328,8 @@ docker run -d -p 8000:8000 -v "$PWD/scry.docker.toml:/app/scry.toml:ro" scry ser
 ```
 
 Setting `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) requires an
-`Authorization: Bearer <token>` header on every request
-(compared in constant time). Responses are JSON; errors carry the same stable `kind`
+`Authorization: Bearer <token>` header on every `/api/v1` request
+(compared in constant time); the app shell and its assets stay public. Responses are JSON; errors carry the same stable `kind`
 vocabulary as `--json` (`not_found`, `conflict`, `invalid`, `internal`, `config`)
 and map to the matching HTTP status (404, 409, 400, 500). There is no TLS, so put the
 server behind a TLS-terminating proxy or a private network if it leaves the host.
@@ -405,7 +414,7 @@ The active project is **not** stored here or in the database — it lives in the
 Credentials belong in a separate `scry.secret.toml`, discovered the same way (`./scry.secret.toml`, then `$XDG_CONFIG_HOME/scry/scry.secret.toml`), or loaded explicitly with `--secrets <path>`. It is never created automatically and is listed in `.gitignore`, so keep it out of version control. Its values take precedence over both `scry.toml` and the environment variables:
 
 - `database_url` — override `scry.toml`'s `database_url` for `scry serve`.
-- `api_token` — the REST API bearer token used by both the client and the server, overriding `SCRY_API_TOKEN`.
+- `api_token` — the REST API bearer token used by both the client and the server, overriding `SCRY_API_TOKEN`. It gates `/api/v1`; the app shell and assets are public.
 
 ## Database
 
@@ -423,6 +432,6 @@ The CLI does not connect to PostgreSQL. It sends every command to `server_url` o
 
 For local development against Postgres, the repo ships a single `compose.yaml` that brings up the app and a `postgres:18` database together, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and `scry.compose.toml`, the config the container mounts as `/app/scry.toml`.
 
-`just run` builds the image and starts the whole stack in Docker with no host Postgres required, and `just view-logs` tails the app container. `just run-local` builds the release binary and runs the REST server on the host against the same Postgres, while `just run-postgres` starts only Postgres and applies the migrations. `just pg-down` stops Postgres while keeping its data, `just pg-reset` tears the stack down and wipes the data volume, and `just clean` runs `cargo clean` and `docker compose down`.
+`just run` builds the web UI and release binary, builds the image, and starts the whole stack in Docker with no host Postgres required, and `just view-logs` tails the app container. `just run-local` builds the web UI and release binary and runs the REST server on the host against the same Postgres, while `just run-postgres` starts only Postgres and applies the migrations. `just pg-down` stops Postgres while keeping its data, `just pg-reset` tears the stack down and wipes the data volume, and `just clean` runs `cargo clean` and `docker compose down`.
 
 `scry.docker.toml` stays the config for running the published image against a database of your choosing. After changing SQL inside a `sqlx::query!` macro, regenerate the committed offline query cache with `just sqlx-prepare`, which rebuilds only the Postgres cache.

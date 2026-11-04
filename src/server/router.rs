@@ -184,17 +184,16 @@ fn build_ui_router() -> Router<ScryState> {
     })
 }
 
-/// Assemble the full router: the versioned API, CORS, shared state, and the
-/// optional bearer-token gate.
+/// Assemble the full router: the versioned API behind the optional bearer-token
+/// gate, CORS, shared state, and the public UI.
 pub fn build_router(state: ScryState, token: Option<String>) -> Router {
-    let router = Router::new()
-        .nest("/api/v1", build_api_router())
-        .layer(get_cors_layer());
+    let api = require_token(build_api_router(), token);
+    let router = Router::new().nest("/api/v1", api).layer(get_cors_layer());
 
     #[cfg(feature = "embed-ui")]
     let router = router.merge(build_ui_router());
 
-    require_token(router.with_state(state), token)
+    router.with_state(state)
 }
 
 /// Serve the REST API over HTTP on `addr`.
