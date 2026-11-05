@@ -45,6 +45,36 @@ export function ReplicaProvider(props: ReplicaProviderProps) {
     };
   }, [attempt, open]);
 
+  useEffect(() => {
+    if (replica === undefined) {
+      return;
+    }
+
+    const active = replica;
+
+    function refresh() {
+      void active.reload().catch(() => {
+        // the provider status surfaces storage failures
+      });
+    }
+
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    }
+
+    window.addEventListener('focus', refresh);
+    window.addEventListener('pageshow', refresh);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [replica]);
+
   const retry = useCallback(() => {
     setStatus('loading');
     setError(undefined);

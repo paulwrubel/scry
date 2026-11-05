@@ -21,6 +21,8 @@ const AUTH_VALUE: AuthContextType = {
   logout: async () => undefined,
 };
 
+const SIGNED_OUT_AUTH: AuthContextType = { ...AUTH_VALUE, isAuthenticated: false };
+
 function createClient(sync: SyncClient['sync']): SyncClient {
   return {
     sync,
@@ -56,11 +58,6 @@ function Probe() {
   );
 }
 
-function LeaderProbe() {
-  const { isLeader } = useSync();
-  return <span data-testid="leader">{isLeader ? 'Leader' : 'Follower'}</span>;
-}
-
 let name = '';
 
 beforeEach(() => {
@@ -72,12 +69,12 @@ afterEach(async () => {
   await deleteDatabase(name);
 });
 
-function renderApp(client: SyncClient) {
+function renderApp(client: SyncClient, auth: AuthContextType = AUTH_VALUE) {
   return render(
-    <AuthContext.Provider value={AUTH_VALUE}>
+    <AuthContext.Provider value={auth}>
       <ReplicaProvider open={() => openReplica({ databaseName: name })}>
         <ReadyGate>
-          <SyncProvider client={client} lockManager={null} channel={null}>
+          <SyncProvider client={client}>
             <Probe />
           </SyncProvider>
         </ReadyGate>
@@ -130,25 +127,12 @@ describe('SyncProvider', () => {
     unmount();
   });
 
-  it('reports leadership through context', async () => {
+  it('does not sync while signed out', () => {
     const sync = vi.fn().mockResolvedValue(undefined);
-    const client = createClient(sync);
 
-    render(
-      <AuthContext.Provider value={AUTH_VALUE}>
-        <ReplicaProvider open={() => openReplica({ databaseName: name })}>
-          <ReadyGate>
-            <SyncProvider client={client} lockManager={null} channel={null}>
-              <LeaderProbe />
-            </SyncProvider>
-          </ReadyGate>
-        </ReplicaProvider>
-      </AuthContext.Provider>,
-    );
+    renderApp(createClient(sync), SIGNED_OUT_AUTH);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('leader').textContent).toBe('Leader');
-    });
+    expect(sync).not.toHaveBeenCalled();
   });
 });
 

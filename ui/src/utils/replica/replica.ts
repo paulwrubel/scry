@@ -1,16 +1,16 @@
 import type { ClientState } from '@/contract/op-replay';
-import { applyChanges as applyConfirmedChanges, replayOperations } from '@/contract/op-replay';
+import { replayOperations } from '@/contract/op-replay';
 import type { Change } from '@/generated/Change';
 import type { Operation } from '@/generated/Operation';
 import { requestPersistence } from './persistence';
 import {
+  applyConfirmedChangesIfNewer,
   deleteOutboxOperations,
   enqueueOperation,
   loadConfirmed,
   loadOutbox,
   openReplicaDatabase,
   saveConfirmed,
-  saveLastSeenSeq,
 } from './storage';
 import { REPLICA_DATABASE } from './types';
 import type { ReplicaOptions, ReplicaSnapshot } from './types';
@@ -24,11 +24,14 @@ export type Replica = {
   readonly lastSeenSeq: number;
   getSnapshot(): ReplicaSnapshot;
   subscribe(listener: () => void): () => void;
-  bootstrap(state: ClientState, lastSeenSeq?: number): Promise<void>;
-  applyChanges(changes: readonly Change[]): Promise<void>;
+  bootstrap(
+    state: ClientState,
+    lastSeenSeq?: number,
+    options?: { onlyIfNeeded?: boolean },
+  ): Promise<void>;
+  applySyncResult(changes: readonly Change[], nextSeq: number): Promise<{ applied: boolean }>;
   enqueue(operation: Operation): Promise<void>;
   acknowledge(operationIds: readonly string[]): Promise<void>;
-  setLastSeenSeq(lastSeenSeq: number): Promise<void>;
   reload(): Promise<void>;
   close(): void;
 };
@@ -51,6 +54,16 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
       for (const listener of [...listeners]) {
         listener();
       }
+    }
+
+    async function reloadFromDisk(): Promise<void> {
+      const nextConfirmed = await loadConfirmed(db);
+      const nextOutbox = await loadOutbox(db);
+      state = nextConfirmed.state;
+      outbox = nextOutbox;
+      needsBootstrap = nextConfirmed.needsBootstrap;
+      lastSeenSeq = nextConfirmed.lastSeenSeq;
+      notify();
     }
 
     return {
@@ -81,19 +94,24 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
           listeners.delete(listener);
         };
       },
-      async bootstrap(next, lastSeenSeqValue = 0) {
+      async bootstrap(next, lastSeenSeqValue = 0, bootstrapOptions = {}) {
         const clone = structuredClone(next);
-        await saveConfirmed(db, clone, lastSeenSeqValue);
+        const wrote = await saveConfirmed(db, clone, lastSeenSeqValue, bootstrapOptions);
+        if (!wrote) {
+          await reloadFromDisk();
+          return;
+        }
         state = clone;
         lastSeenSeq = lastSeenSeqValue;
         needsBootstrap = false;
         notify();
       },
-      async applyChanges(changes) {
-        const next = applyConfirmedChanges(state, changes);
-        await saveConfirmed(db, next);
-        state = next;
+      async applySyncResult(changes, nextSeq) {
+        const result = await applyConfirmedChangesIfNewer(db, changes, nextSeq);
+        state = result.state;
+        lastSeenSeq = result.lastSeenSeq;
         notify();
+        return { applied: result.applied };
       },
       async enqueue(operation) {
         await enqueueOperation(db, operation);
@@ -106,19 +124,8 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
         outbox = outbox.filter((operation) => !acknowledged.has(operation.operation_id));
         notify();
       },
-      async setLastSeenSeq(next) {
-        await saveLastSeenSeq(db, next);
-        lastSeenSeq = next;
-        notify();
-      },
       async reload() {
-        const nextConfirmed = await loadConfirmed(db);
-        const nextOutbox = await loadOutbox(db);
-        state = nextConfirmed.state;
-        outbox = nextOutbox;
-        needsBootstrap = nextConfirmed.needsBootstrap;
-        lastSeenSeq = nextConfirmed.lastSeenSeq;
-        notify();
+        await reloadFromDisk();
       },
       close() {
         db.close();
