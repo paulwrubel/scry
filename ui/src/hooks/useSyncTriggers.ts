@@ -20,6 +20,7 @@ export type UseSyncTriggersOptions = {
   client: SyncClient;
   outboxLength: number;
   timing?: Partial<SyncTiming>;
+  enabled?: boolean;
 };
 
 // Startup sync is application initialization, not per-mount state. Tracking
@@ -27,11 +28,17 @@ export type UseSyncTriggersOptions = {
 const startedClients = new WeakSet<SyncClient>();
 
 export function useSyncTriggers(options: UseSyncTriggersOptions): () => Promise<void> {
-  const { client, outboxLength, timing } = options;
-  const editDebounceMs = timing?.editDebounceMs ?? SYNC_TIMING_DEFAULTS.editDebounceMs;
-  const pollIntervalMs = timing?.pollIntervalMs ?? SYNC_TIMING_DEFAULTS.pollIntervalMs;
-  const retryBaseMs = timing?.retryBaseMs ?? SYNC_TIMING_DEFAULTS.retryBaseMs;
-  const retryMaxMs = timing?.retryMaxMs ?? SYNC_TIMING_DEFAULTS.retryMaxMs;
+  const {
+    client,
+    outboxLength,
+    enabled = true,
+    timing: {
+      editDebounceMs = SYNC_TIMING_DEFAULTS.editDebounceMs,
+      pollIntervalMs = SYNC_TIMING_DEFAULTS.pollIntervalMs,
+      retryBaseMs = SYNC_TIMING_DEFAULTS.retryBaseMs,
+      retryMaxMs = SYNC_TIMING_DEFAULTS.retryMaxMs,
+    } = {},
+  } = options;
 
   const retryTimer = useRef<number | null>(null);
   const retryDelay = useRef(retryBaseMs);
@@ -60,7 +67,7 @@ export function useSyncTriggers(options: UseSyncTriggersOptions): () => Promise<
   }, [retryMaxMs]);
 
   const runSync = useCallback(async () => {
-    if (!navigator.onLine) {
+    if (!enabled || !navigator.onLine) {
       return;
     }
     try {
@@ -76,13 +83,16 @@ export function useSyncTriggers(options: UseSyncTriggersOptions): () => Promise<
       }
       scheduleRetry();
     }
-  }, [client, clearRetry, retryBaseMs, scheduleRetry]);
+  }, [client, clearRetry, enabled, retryBaseMs, scheduleRetry]);
 
   useEffect(() => {
     runRef.current = runSync;
   }, [runSync]);
 
   const syncNow = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     clearRetry();
     retryDelay.current = retryBaseMs;
     try {
@@ -90,33 +100,36 @@ export function useSyncTriggers(options: UseSyncTriggersOptions): () => Promise<
     } catch {
       // the sync client exposes the failure in its snapshot
     }
-  }, [client, clearRetry, retryBaseMs]);
+  }, [client, clearRetry, enabled, retryBaseMs]);
 
   // startup: once per client, not once per component mount
   useEffect(() => {
-    if (startedClients.has(client)) {
+    if (!enabled || startedClients.has(client)) {
       return;
     }
     startedClients.add(client);
     void runSync();
-  }, [client, runSync]);
+  }, [client, enabled, runSync]);
 
   // edit debounce: only when the outbox grows
   const previousOutboxLength = useRef(outboxLength);
   useEffect(() => {
     const previous = previousOutboxLength.current;
     previousOutboxLength.current = outboxLength;
-    if (outboxLength <= previous) {
+    if (!enabled || outboxLength <= previous) {
       return;
     }
     const timer = window.setTimeout(() => {
       void runSync();
     }, editDebounceMs);
     return () => window.clearTimeout(timer);
-  }, [editDebounceMs, outboxLength, runSync]);
+  }, [editDebounceMs, enabled, outboxLength, runSync]);
 
   // visibility: sync immediately when the tab becomes visible
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     function handleVisibilityChange() {
       const nextVisible = document.visibilityState === 'visible';
       setVisible(nextVisible);
@@ -126,21 +139,24 @@ export function useSyncTriggers(options: UseSyncTriggersOptions): () => Promise<
     }
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [runSync]);
+  }, [enabled, runSync]);
 
   // visible polling; hidden tabs do not poll
   useEffect(() => {
-    if (!visible) {
+    if (!visible || !enabled) {
       return;
     }
     const timer = window.setInterval(() => {
       void runSync();
     }, pollIntervalMs);
     return () => window.clearInterval(timer);
-  }, [pollIntervalMs, runSync, visible]);
+  }, [enabled, pollIntervalMs, runSync, visible]);
 
   // online/offline
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     function handleOnline() {
       retryDelay.current = retryBaseMs;
       clearRetry();
@@ -155,7 +171,14 @@ export function useSyncTriggers(options: UseSyncTriggersOptions): () => Promise<
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [clearRetry, retryBaseMs, runSync]);
+  }, [clearRetry, enabled, retryBaseMs, runSync]);
+
+  // a tab that loses leadership must not keep a retry queued
+  useEffect(() => {
+    if (!enabled) {
+      clearRetry();
+    }
+  }, [clearRetry, enabled]);
 
   // cleanup any pending retry on unmount
   useEffect(() => () => clearRetry(), [clearRetry]);

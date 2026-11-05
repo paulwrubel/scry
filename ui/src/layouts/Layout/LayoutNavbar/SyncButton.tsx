@@ -2,7 +2,7 @@ import { Button } from 'flowbite-react';
 import { useSync, useSyncSnapshot } from '@/providers/Sync';
 
 export function SyncButton() {
-  const { syncNow } = useSync();
+  const { isLeader, syncNow } = useSync();
   const snapshot = useSyncSnapshot();
   const syncing = snapshot.status === 'syncing';
   const failed = snapshot.status === 'error';
@@ -15,8 +15,8 @@ export function SyncButton() {
     <Button
       size="xs"
       color={failed ? 'failure' : 'alternative'}
-      disabled={syncing}
-      title={snapshot.error?.message ?? 'Sync now'}
+      disabled={!isLeader || syncing}
+      title={!isLeader ? 'Sync is handled by another tab' : (snapshot.error?.message ?? 'Sync now')}
       onClick={handleClick}
     >
       {syncing ? 'Syncing...' : 'Sync'}

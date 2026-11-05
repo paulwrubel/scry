@@ -60,9 +60,11 @@ Failures retry with exponential backoff, clamped at a configurable maximum; succ
 
 React composition lives in `ui/src/providers/Sync/`: `SyncProvider` creates one client per ready Replica, `useSyncTriggers` supplies scheduling, and `useSync`/`useSyncSnapshot` expose the client and its snapshot. `LayoutNavbar/SyncButton` uses those hooks to show syncing/failure state and call `syncNow`.
 
+Multi-tab coordination lives in `ui/src/hooks/useSyncLeadership.ts`. One tab holds an exclusive `scry-sync-leader` Web Lock for its lifetime; only that tab runs the triggers. The leader broadcasts `replica-updated` after a sync attempt, and followers reload from IndexedDB. A follower that queues an edit broadcasts `outbox-changed`; the leader reloads the outbox and syncs. Messages carry no state. When Web Locks or BroadcastChannel is unavailable, every tab leads; the server’s operation-id dedupe and idempotent replay keep that safe, at the cost of duplicate requests. Leadership transfers through the lock queue when the leader closes or unmounts.
+
 ## Out of scope
 
-Multi-tab leadership and fan-out are #128. The sync client is still a non-React store; the provider is the only React layer.
+Cross-device coordination and server-side session/connection management. The client remains a non-React store; the provider is the only React layer.
 
 ## Testing
 

@@ -248,6 +248,22 @@ describe('replica outbox and visible state', () => {
     expect(findTask(reopened.visible, TASK_A_ID)?.title).toBe('Persisted title');
     reopened.close();
   });
+
+  it("reload sees another replica's confirmed state and outbox", async () => {
+    const first = await openReplica({ databaseName: name });
+    const second = await openReplica({ databaseName: name });
+
+    await first.bootstrap(sampleState(), 5);
+    await first.enqueue(updateTaskOperation('op-update', TASK_A_ID, 'Another tab title'));
+    await second.reload();
+
+    expect(second.confirmed).toEqual(first.confirmed);
+    expect(second.outbox).toEqual(first.outbox);
+    expect(second.lastSeenSeq).toBe(first.lastSeenSeq);
+    expect(findTask(second.visible, TASK_A_ID)?.title).toBe('Another tab title');
+    first.close();
+    second.close();
+  });
 });
 
 describe('replica sync cursor', () => {
@@ -279,6 +295,37 @@ describe('replica sync cursor', () => {
     const reopened = await openReplica({ databaseName: name });
     expect(reopened.lastSeenSeq).toBe(9);
     reopened.close();
+  });
+
+  it('reload updates the cursor', async () => {
+    const first = await openReplica({ databaseName: name });
+    const second = await openReplica({ databaseName: name });
+
+    await first.bootstrap(sampleState(), 0);
+    await first.setLastSeenSeq(12);
+    await second.reload();
+
+    expect(second.lastSeenSeq).toBe(12);
+    expect(second.getSnapshot().lastSeenSeq).toBe(12);
+    first.close();
+    second.close();
+  });
+
+  it('reload updates needsBootstrap', async () => {
+    const state = sampleState();
+    const first = await openReplica({ databaseName: name });
+    const second = await openReplica({ databaseName: name });
+
+    expect(second.confirmed).toEqual({ projects: [] });
+    expect(second.needsBootstrap).toBe(true);
+
+    await first.bootstrap(state);
+    await second.reload();
+
+    expect(second.confirmed).toEqual(state);
+    expect(second.needsBootstrap).toBe(false);
+    first.close();
+    second.close();
   });
 
   it('schema bump resets the cursor', async () => {
