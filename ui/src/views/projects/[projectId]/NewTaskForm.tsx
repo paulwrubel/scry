@@ -7,7 +7,7 @@ type NewTaskFormProps = {
 
 export function NewTaskForm(props: NewTaskFormProps) {
   const { onCreate } = props;
-  
+
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);

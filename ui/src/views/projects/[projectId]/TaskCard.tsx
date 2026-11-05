@@ -10,7 +10,7 @@ type TaskCardProps = {
 
 export function TaskCard(props: TaskCardProps) {
   const { projectId, task, showPriority } = props;
-  
+
   const closed = task.state === 'closed';
 
   return (
