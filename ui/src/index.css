@@ -1,5 +1,7 @@
 @import 'tailwindcss';
-@variant dark (&:where(.dark, .dark *));
+@source '../node_modules/flowbite-react';
+@import 'flowbite-react/plugin/tailwindcss';
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   html {

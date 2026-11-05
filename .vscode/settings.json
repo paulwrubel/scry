@@ -1,4 +1,5 @@
 {
     "rust-analyzer.check.command": "clippy",
+    "css.lint.unknownAtRules": "ignore",
     "editor.formatOnSave": true,
 }

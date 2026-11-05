@@ -15,6 +15,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "flowbite-react": "^0.12.17",
     "fractional-indexing": "^3.4.0",
     "idb": "^8.0.4",
     "react": "^19.3.1",
