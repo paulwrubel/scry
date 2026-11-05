@@ -29,6 +29,7 @@ export type Replica = {
   enqueue(operation: Operation): Promise<void>;
   acknowledge(operationIds: readonly string[]): Promise<void>;
   setLastSeenSeq(lastSeenSeq: number): Promise<void>;
+  reload(): Promise<void>;
   close(): void;
 };
 
@@ -108,6 +109,15 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
       async setLastSeenSeq(next) {
         await saveLastSeenSeq(db, next);
         lastSeenSeq = next;
+        notify();
+      },
+      async reload() {
+        const nextConfirmed = await loadConfirmed(db);
+        const nextOutbox = await loadOutbox(db);
+        state = nextConfirmed.state;
+        outbox = nextOutbox;
+        needsBootstrap = nextConfirmed.needsBootstrap;
+        lastSeenSeq = nextConfirmed.lastSeenSeq;
         notify();
       },
       close() {
