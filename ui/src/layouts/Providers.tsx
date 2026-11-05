@@ -1,5 +1,13 @@
+import { ThemeProvider } from 'flowbite-react';
 import { Outlet } from 'react-router-dom';
+import { ReplicaProvider } from '@/providers/Replica';
 
 export function Providers() {
-  return <Outlet />;
+  return (
+    <ThemeProvider>
+      <ReplicaProvider>
+        <Outlet />
+      </ReplicaProvider>
+    </ThemeProvider>
+  );
 }
