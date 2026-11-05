@@ -16,6 +16,7 @@ export type ReplicaSnapshot = {
   outbox: readonly Operation[];
   needsBootstrap: boolean;
   persisted: boolean;
+  lastSeenSeq: number;
 };
 
 export type ReplicaErrorKind = 'blocked' | 'quota' | 'storage';

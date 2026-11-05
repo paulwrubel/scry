@@ -134,6 +134,7 @@ mod export_bindings {
         Tags, Task, TaskSortingMode, TaskState,
     };
     use scry_core::position::Position;
+    use scry_core::snapshot::Snapshot;
     use scry_core::sync::ack::{AcknowledgmentStatus, OperationAcknowledgment, RejectionReason};
     use scry_core::sync::operations::{ColorChange, Operation, OperationKind};
     use ts_rs::{Config, TS};
@@ -150,6 +151,7 @@ mod export_bindings {
         SyncRequest::export_all(&config).expect("failed to export SyncRequest");
         SyncResponse::export_all(&config).expect("failed to export SyncResponse");
         ProjectSnapshot::export_all(&config).expect("failed to export ProjectSnapshot");
+        Snapshot::export_all(&config).expect("failed to export Snapshot");
         Change::export_all(&config).expect("failed to export Change");
         Operation::export_all(&config).expect("failed to export Operation");
         OperationKind::export_all(&config).expect("failed to export OperationKind");

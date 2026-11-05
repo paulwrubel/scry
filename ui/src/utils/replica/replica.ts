@@ -10,6 +10,7 @@ import {
   loadOutbox,
   openReplicaDatabase,
   saveConfirmed,
+  saveLastSeenSeq,
 } from './storage';
 import { REPLICA_DATABASE } from './types';
 import type { ReplicaOptions, ReplicaSnapshot } from './types';
@@ -20,12 +21,14 @@ export type Replica = {
   readonly outbox: readonly Operation[];
   readonly needsBootstrap: boolean;
   readonly persisted: boolean;
+  readonly lastSeenSeq: number;
   getSnapshot(): ReplicaSnapshot;
   subscribe(listener: () => void): () => void;
-  bootstrap(state: ClientState): Promise<void>;
+  bootstrap(state: ClientState, lastSeenSeq?: number): Promise<void>;
   applyChanges(changes: readonly Change[]): Promise<void>;
   enqueue(operation: Operation): Promise<void>;
   acknowledge(operationIds: readonly string[]): Promise<void>;
+  setLastSeenSeq(lastSeenSeq: number): Promise<void>;
   close(): void;
 };
 
@@ -37,12 +40,13 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
     const persisted = await requestPersistence();
     let state = loaded.state;
     let needsBootstrap = loaded.needsBootstrap;
+    let lastSeenSeq = loaded.lastSeenSeq;
     let outbox = await loadOutbox(db);
-    let snapshot = snapshotOf(state, outbox, needsBootstrap, persisted);
+    let snapshot = snapshotOf(state, outbox, needsBootstrap, persisted, lastSeenSeq);
     const listeners = new Set<() => void>();
 
     function notify(): void {
-      snapshot = snapshotOf(state, outbox, needsBootstrap, persisted);
+      snapshot = snapshotOf(state, outbox, needsBootstrap, persisted, lastSeenSeq);
       for (const listener of [...listeners]) {
         listener();
       }
@@ -64,6 +68,9 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
       get persisted() {
         return persisted;
       },
+      get lastSeenSeq() {
+        return lastSeenSeq;
+      },
       getSnapshot() {
         return snapshot;
       },
@@ -73,10 +80,11 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
           listeners.delete(listener);
         };
       },
-      async bootstrap(next) {
+      async bootstrap(next, lastSeenSeqValue = 0) {
         const clone = structuredClone(next);
-        await saveConfirmed(db, clone);
+        await saveConfirmed(db, clone, lastSeenSeqValue);
         state = clone;
+        lastSeenSeq = lastSeenSeqValue;
         needsBootstrap = false;
         notify();
       },
@@ -97,6 +105,11 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
         outbox = outbox.filter((operation) => !acknowledged.has(operation.operation_id));
         notify();
       },
+      async setLastSeenSeq(next) {
+        await saveLastSeenSeq(db, next);
+        lastSeenSeq = next;
+        notify();
+      },
       close() {
         db.close();
       },
@@ -112,6 +125,7 @@ function snapshotOf(
   outbox: readonly Operation[],
   needsBootstrap: boolean,
   persisted: boolean,
+  lastSeenSeq: number,
 ): ReplicaSnapshot {
   return {
     confirmed: state,
@@ -119,5 +133,6 @@ function snapshotOf(
     outbox: [...outbox],
     needsBootstrap,
     persisted,
+    lastSeenSeq,
   };
 }

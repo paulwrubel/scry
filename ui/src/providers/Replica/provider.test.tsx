@@ -140,6 +140,7 @@ describe('ReplicaProvider', () => {
       outbox: [],
       needsBootstrap: false,
       persisted: false,
+      lastSeenSeq: 0,
     };
     const close = vi.fn();
     const replica = {
