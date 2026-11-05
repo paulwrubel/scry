@@ -19,26 +19,30 @@ export function AuthProvider(props: AuthProviderProps) {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Auth state is shared across tabs: a login or logout in one tab should not
-  // leave another tab showing a stale screen.
-  const [sharedChannel] = useState<BroadcastChannel | null>(() => {
+  // leave another tab showing a stale screen. The channel is created in an
+  // effect so StrictMode's setup/cleanup cycle leaves a working one.
+  const [hasChannel] = useState(() => {
     if (channel !== undefined) {
-      return channel;
+      return channel !== null;
     }
-    return typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(AUTH_CHANNEL_NAME);
+    return typeof BroadcastChannel !== 'undefined';
   });
-  const channelRef = useRef<BroadcastChannel | null>(sharedChannel);
-  useEffect(() => {
-    channelRef.current = sharedChannel;
-  }, [sharedChannel]);
+  const channelRef = useRef<BroadcastChannel | null>(null);
 
   const notifyTabs = useCallback((type: 'signed-in' | 'signed-out') => {
     channelRef.current?.postMessage({ type });
   }, []);
 
   useEffect(() => {
-    if (sharedChannel === null) {
+    if (!hasChannel) {
       return;
     }
+
+    const active = channel !== undefined ? channel : new BroadcastChannel(AUTH_CHANNEL_NAME);
+    if (active === null) {
+      return;
+    }
+    channelRef.current = active;
 
     function handleMessage(event: MessageEvent) {
       const data = event.data as unknown;
@@ -49,14 +53,17 @@ export function AuthProvider(props: AuthProviderProps) {
       setIsAuthLoading(false);
     }
 
-    sharedChannel.addEventListener('message', handleMessage);
+    active.addEventListener('message', handleMessage);
     return () => {
-      sharedChannel.removeEventListener('message', handleMessage);
+      active.removeEventListener('message', handleMessage);
+      if (channelRef.current === active) {
+        channelRef.current = null;
+      }
       if (channel === undefined) {
-        sharedChannel.close();
+        active.close();
       }
     };
-  }, [channel, sharedChannel]);
+  }, [channel, hasChannel]);
 
   useEffect(() => {
     let cancelled = false;

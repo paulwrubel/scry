@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { StrictMode, useState } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { notifyUnauthorized } from '@/utils/authEvents';
 import { useAuth } from './hook';
 import { AuthProvider } from './provider';
@@ -117,10 +117,36 @@ function storageContains(storage: Storage, needle: string): boolean {
   return false;
 }
 
+class ClosableChannel {
+  readonly messages: unknown[] = [];
+  closed = false;
+  private listeners = new Set<(event: MessageEvent) => void>();
+
+  addEventListener(_type: 'message', listener: (event: MessageEvent) => void) {
+    this.listeners.add(listener);
+  }
+
+  removeEventListener(_type: 'message', listener: (event: MessageEvent) => void) {
+    this.listeners.delete(listener);
+  }
+
+  postMessage(data: unknown) {
+    if (this.closed) {
+      throw new DOMException('the channel is closed', 'InvalidStateError');
+    }
+    this.messages.push(data);
+  }
+
+  close() {
+    this.closed = true;
+  }
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
   sessionStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 describe('AuthProvider', () => {
@@ -248,6 +274,42 @@ describe('AuthProvider', () => {
     });
 
     expect(screen.getByTestId('authenticated').textContent).toBe('true');
+  });
+
+  it('keeps broadcasting after the StrictMode cleanup', async () => {
+    const channels: ClosableChannel[] = [];
+    vi.stubGlobal(
+      'BroadcastChannel',
+      class {
+        constructor() {
+          const channel = new ClosableChannel();
+          channels.push(channel);
+          return channel;
+        }
+      },
+    );
+
+    const { fetcher } = createFetcher({ probeStatus: 204 });
+
+    render(
+      <StrictMode>
+        <AuthProvider fetcher={fetcher} baseUrl="http://test/api/v1">
+          <Probe />
+        </AuthProvider>
+      </StrictMode>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('authenticated').textContent).toBe('true');
+    });
+
+    act(() => {
+      notifyUnauthorized();
+    });
+
+    expect(channels.length).toBeGreaterThan(1);
+    expect(channels[0].closed).toBe(true);
+    expect(channels[channels.length - 1].messages).toContainEqual({ type: 'signed-out' });
   });
 
   it('unauthorized event signs out', async () => {

@@ -47,24 +47,21 @@ export function useSyncLeadership(options: UseSyncLeadershipOptions): SyncLeader
     onMessageRef.current = onMessage;
   }, [onMessage]);
 
-  // The channel is created once per hook. An injected channel belongs to the
-  // caller and is left open; one created here is closed on unmount.
-  const [sharedChannel] = useState<BroadcastChannel | null>(() => {
+  // Created in an effect so StrictMode's setup/cleanup cycle leaves a working
+  // channel instead of reusing the one the previous cleanup closed.
+  const [hasChannel] = useState(() => {
     if (channel !== undefined) {
-      return channel;
+      return channel !== null;
     }
-    return typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(SYNC_CHANNEL_NAME);
+    return typeof BroadcastChannel !== 'undefined';
   });
-  const channelRef = useRef<BroadcastChannel | null>(sharedChannel);
-  useEffect(() => {
-    channelRef.current = sharedChannel;
-  }, [sharedChannel]);
+  const channelRef = useRef<BroadcastChannel | null>(null);
 
   // Without both APIs every tab leads. That is less efficient, but the server
   // dedupes operation ids and replay is idempotent, so it remains correct.
   const [isLeader, setIsLeader] = useState(() => {
     const locks = lockManager !== undefined ? lockManager : navigator.locks;
-    return !locks || sharedChannel === null;
+    return !locks || !hasChannel;
   });
 
   const notify = useCallback((message: SyncChannelMessage) => {
@@ -72,9 +69,15 @@ export function useSyncLeadership(options: UseSyncLeadershipOptions): SyncLeader
   }, []);
 
   useEffect(() => {
-    if (sharedChannel === null) {
+    if (!hasChannel) {
       return;
     }
+
+    const active = channel !== undefined ? channel : new BroadcastChannel(SYNC_CHANNEL_NAME);
+    if (active === null) {
+      return;
+    }
+    channelRef.current = active;
 
     function handleMessage(event: MessageEvent) {
       const data = event.data as unknown;
@@ -84,21 +87,24 @@ export function useSyncLeadership(options: UseSyncLeadershipOptions): SyncLeader
       }
     }
 
-    sharedChannel.addEventListener('message', handleMessage);
+    active.addEventListener('message', handleMessage);
     return () => {
-      sharedChannel.removeEventListener('message', handleMessage);
+      active.removeEventListener('message', handleMessage);
+      if (channelRef.current === active) {
+        channelRef.current = null;
+      }
       if (channel === undefined) {
-        sharedChannel.close();
+        active.close();
       }
     };
-  }, [channel, sharedChannel]);
+  }, [channel, hasChannel]);
 
   useEffect(() => {
     const locks = lockManager !== undefined ? lockManager : navigator.locks;
 
     // No coordination is available. Elect this tab immediately; the previous
     // state initialization already marked it leader.
-    if (!locks || sharedChannel === null) {
+    if (!locks || !hasChannel) {
       onLeaderRef.current();
       return;
     }
@@ -137,7 +143,7 @@ export function useSyncLeadership(options: UseSyncLeadershipOptions): SyncLeader
       cancelled = true;
       release?.();
     };
-  }, [lockManager, sharedChannel]);
+  }, [hasChannel, lockManager]);
 
   return { isLeader, notify };
 }
