@@ -14,6 +14,7 @@ pub const SNAPSHOT_VERSION: u32 = 1;
 
 /// The bare server-wide snapshot: every project document plus the cursor a
 /// client should pull from next.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Snapshot {
     pub projects: Vec<ProjectSnapshot>,

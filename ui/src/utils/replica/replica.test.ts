@@ -250,6 +250,56 @@ describe('replica outbox and visible state', () => {
   });
 });
 
+describe('replica sync cursor', () => {
+  it('cursor persists across reopen', async () => {
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(sampleState(), 12);
+    replica.close();
+
+    const reopened = await openReplica({ databaseName: name });
+    expect(reopened.lastSeenSeq).toBe(12);
+    expect(reopened.getSnapshot().lastSeenSeq).toBe(12);
+    reopened.close();
+  });
+
+  it('bootstrap sets the cursor', async () => {
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(sampleState(), 7);
+
+    expect(replica.lastSeenSeq).toBe(7);
+    replica.close();
+  });
+
+  it('setLastSeenSeq persists', async () => {
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(sampleState());
+    await replica.setLastSeenSeq(9);
+    replica.close();
+
+    const reopened = await openReplica({ databaseName: name });
+    expect(reopened.lastSeenSeq).toBe(9);
+    reopened.close();
+  });
+
+  it('schema bump resets the cursor', async () => {
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(sampleState(), 12);
+    await replica.enqueue(updateTaskOperation('op-update', TASK_A_ID, 'Persisted title'));
+    replica.close();
+
+    const db = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
+    await db.put('meta', 0, 'schema_version');
+    db.close();
+
+    const reopened = await openReplica({ databaseName: name });
+    expect(reopened.confirmed).toEqual({ projects: [] });
+    expect(reopened.needsBootstrap).toBe(true);
+    expect(reopened.lastSeenSeq).toBe(0);
+    expect(reopened.outbox.map((operation) => operation.operation_id)).toEqual(['op-update']);
+    reopened.close();
+  });
+});
+
 describe('replica schema migration', () => {
   it('schema bump clears confirmed state but preserves the outbox', async () => {
     const state = sampleState();

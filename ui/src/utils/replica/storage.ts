@@ -33,6 +33,7 @@ export type ReplicaDB = {
 export type LoadedConfirmed = {
   state: ClientState;
   needsBootstrap: boolean;
+  lastSeenSeq: number;
 };
 
 const SCHEMA_VERSION_KEY = 'schema_version';
@@ -41,6 +42,7 @@ const PROJECT_ORDER_KEY = 'project_order';
 const SECTION_ORDER_KEY = 'section_order';
 const TASK_ORDER_KEY = 'task_order';
 const NOTE_ORDER_KEY = 'note_order';
+const LAST_SEEN_SEQ_KEY = 'last_seen_seq';
 
 export async function openReplicaDatabase(
   name: string,
@@ -111,6 +113,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
       taskOrder,
       noteOrder,
       needsBootstrap,
+      lastSeenSeq,
     ] = await Promise.all([
       tx.objectStore('projects').getAll(),
       tx.objectStore('sections').getAll(),
@@ -122,6 +125,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
       meta.get(TASK_ORDER_KEY),
       meta.get(NOTE_ORDER_KEY),
       meta.get(NEEDS_BOOTSTRAP_KEY),
+      meta.get(LAST_SEEN_SEQ_KEY),
     ]);
     await tx.done;
 
@@ -141,9 +145,10 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
       ]);
       await migrationMeta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY);
       await migrationMeta.put(true, NEEDS_BOOTSTRAP_KEY);
+      await migrationMeta.put(0, LAST_SEEN_SEQ_KEY);
       await migration.done;
 
-      return { state: { projects: [] }, needsBootstrap: true };
+      return { state: { projects: [] }, needsBootstrap: true, lastSeenSeq: 0 };
     }
 
     return {
@@ -156,6 +161,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
         ),
       },
       needsBootstrap: needsBootstrap === true,
+      lastSeenSeq: typeof lastSeenSeq === 'number' ? lastSeenSeq : 0,
     };
   } catch (error) {
     throw storageError(error);
@@ -165,6 +171,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
 export async function saveConfirmed(
   db: IDBPDatabase<ReplicaDB>,
   state: ClientState,
+  lastSeenSeq?: number,
 ): Promise<void> {
   try {
     const tx = db.transaction(['projects', 'sections', 'tasks', 'notes', 'meta'], 'readwrite');
@@ -204,14 +211,31 @@ export async function saveConfirmed(
       }
     }
 
-    await Promise.all([
+    const metaWrites = [
       meta.put(projectOrder, PROJECT_ORDER_KEY),
       meta.put(sectionOrder, SECTION_ORDER_KEY),
       meta.put(taskOrder, TASK_ORDER_KEY),
       meta.put(noteOrder, NOTE_ORDER_KEY),
       meta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY),
       meta.put(false, NEEDS_BOOTSTRAP_KEY),
-    ]);
+    ];
+    if (lastSeenSeq !== undefined) {
+      metaWrites.push(meta.put(lastSeenSeq, LAST_SEEN_SEQ_KEY));
+    }
+    await Promise.all(metaWrites);
+    await tx.done;
+  } catch (error) {
+    throw storageError(error);
+  }
+}
+
+export async function saveLastSeenSeq(
+  db: IDBPDatabase<ReplicaDB>,
+  lastSeenSeq: number,
+): Promise<void> {
+  try {
+    const tx = db.transaction('meta', 'readwrite');
+    await tx.store.put(lastSeenSeq, LAST_SEEN_SEQ_KEY);
     await tx.done;
   } catch (error) {
     throw storageError(error);
