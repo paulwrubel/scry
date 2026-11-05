@@ -1,8 +1,10 @@
 import 'fake-indexeddb/auto';
 import { openDB } from 'idb';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientState } from '@/contract/op-replay';
+import type { Change } from '@/generated/Change';
 import type { Note } from '@/generated/Note';
+import type { Operation } from '@/generated/Operation';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import { openReplica } from './replica';
@@ -114,6 +116,200 @@ describe('replica confirmed state', () => {
     reopened.close();
   });
 });
+
+describe('replica outbox and visible state', () => {
+  it('outbox is fifo and survives reload', async () => {
+    const state = sampleState();
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(state);
+
+    const created = extraTask('task-c', 'Created task');
+    await replica.enqueue(createTaskOperation('op-create', created));
+    await replica.enqueue(updateTaskOperation('op-update', TASK_A_ID, 'Renamed task A'));
+    await replica.enqueue(deleteTaskOperation('op-delete', TASK_A_ID));
+
+    expect(replica.outbox.map((operation) => operation.operation_id)).toEqual([
+      'op-create',
+      'op-update',
+      'op-delete',
+    ]);
+    expect(findTask(replica.visible, 'task-c')).toEqual(created);
+    expect(findTask(replica.visible, TASK_A_ID)).toBeUndefined();
+    replica.close();
+
+    const reopened = await openReplica({ databaseName: name });
+    expect(reopened.outbox.map((operation) => operation.operation_id)).toEqual([
+      'op-create',
+      'op-update',
+      'op-delete',
+    ]);
+    expect(findTask(reopened.visible, TASK_A_ID)).toBeUndefined();
+    reopened.close();
+  });
+
+  it('offline edits update visible state immediately', async () => {
+    const state = sampleState();
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(state);
+
+    const created = extraTask('task-c', 'Created task');
+    await replica.enqueue(createTaskOperation('op-create', created));
+    expect(findTask(replica.visible, 'task-c')).toEqual(created);
+
+    await replica.enqueue(updateTaskOperation('op-update', 'task-c', 'Updated task'));
+    expect(findTask(replica.visible, 'task-c')?.title).toBe('Updated task');
+
+    await replica.enqueue(deleteTaskOperation('op-delete', 'task-c'));
+    expect(findTask(replica.visible, 'task-c')).toBeUndefined();
+
+    expect(replica.confirmed).toEqual(state);
+    replica.close();
+  });
+
+  it('acknowledged operations leave the outbox', async () => {
+    const state = sampleState();
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(state);
+
+    const created = extraTask('task-c', 'Created task');
+    await replica.enqueue(createTaskOperation('op-create', created));
+    expect(findTask(replica.visible, 'task-c')).toEqual(created);
+
+    await replica.acknowledge(['op-create']);
+    expect(replica.outbox).toEqual([]);
+    expect(replica.visible).toEqual(replica.confirmed);
+    replica.close();
+  });
+
+  it('apply changes updates confirmed and visible', async () => {
+    const state = sampleState();
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(state);
+
+    const applied = extraTask('task-applied', 'Applied task');
+    const change: Change = {
+      seq: 1,
+      entity_type: 'task',
+      entity_id: applied.id,
+      kind: 'create',
+      operation_id: 'op-applied',
+      client_timestamp: null,
+      field_values: applied,
+      created_at: '2026-01-01T00:00:06Z',
+    };
+
+    await replica.applyChanges([change]);
+    expect(findTask(replica.confirmed, 'task-applied')).toEqual(applied);
+    expect(findTask(replica.visible, 'task-applied')).toEqual(applied);
+    replica.close();
+
+    const reopened = await openReplica({ databaseName: name });
+    expect(findTask(reopened.confirmed, 'task-applied')).toEqual(applied);
+    reopened.close();
+  });
+
+  it('snapshots are stable until mutation and notify subscribers', async () => {
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(sampleState());
+
+    const first = replica.getSnapshot();
+    expect(replica.getSnapshot()).toBe(first);
+
+    const listener = vi.fn();
+    const unsubscribe = replica.subscribe(listener);
+
+    const created = extraTask('task-c', 'Created task');
+    await replica.enqueue(createTaskOperation('op-create', created));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const second = replica.getSnapshot();
+    expect(second).not.toBe(first);
+    expect(findTask(second.visible, 'task-c')).toEqual(created);
+
+    unsubscribe();
+    await replica.enqueue(updateTaskOperation('op-update', 'task-c', 'Updated task'));
+    expect(listener).toHaveBeenCalledTimes(1);
+    replica.close();
+  });
+
+  it('reload preserves pending outbox and visible state', async () => {
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(sampleState());
+    await replica.enqueue(updateTaskOperation('op-update', TASK_A_ID, 'Persisted title'));
+    replica.close();
+
+    const reopened = await openReplica({ databaseName: name });
+    expect(reopened.outbox.map((operation) => operation.operation_id)).toEqual(['op-update']);
+    expect(findTask(reopened.visible, TASK_A_ID)?.title).toBe('Persisted title');
+    reopened.close();
+  });
+});
+
+function createTaskOperation(operationId: string, task: Task): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'create_task',
+    id: task.id,
+    project_id: task.project_id,
+    title: task.title,
+    description: task.description,
+    priority: task.priority,
+    section_id: task.section_id,
+    position: task.position,
+    state: task.state,
+    tags: task.tags,
+    created_at: task.created_at,
+  };
+}
+
+function updateTaskOperation(operationId: string, taskId: string, title: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'update_task',
+    id: taskId,
+    title,
+    description: null,
+    priority: null,
+    tags: null,
+    state: null,
+  };
+}
+
+function deleteTaskOperation(operationId: string, taskId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'delete_task',
+    id: taskId,
+  };
+}
+
+function extraTask(id: string, title: string): Task {
+  return {
+    id,
+    project_id: PROJECT_ID,
+    title,
+    description: null,
+    priority: 'medium',
+    section_id: null,
+    position: 'a2',
+    state: 'open',
+    tags: [],
+    created_at: '2026-01-01T00:00:05Z',
+  };
+}
+
+function findTask(state: ClientState, id: string): Task | undefined {
+  for (const project of state.projects) {
+    const task = project.tasks.find((candidate) => candidate.id === id);
+    if (task !== undefined) {
+      return task;
+    }
+  }
+  return undefined;
+}
 
 function deleteDatabase(databaseName: string): Promise<void> {
   return new Promise((resolve) => {

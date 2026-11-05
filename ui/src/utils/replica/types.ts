@@ -1,3 +1,6 @@
+import type { ClientState } from '@/contract/op-replay';
+import type { Operation } from '@/generated/Operation';
+
 export const REPLICA_DATABASE = 'scry-replica';
 export const REPLICA_DATABASE_VERSION = 1;
 export const CONFIRMED_SCHEMA_VERSION = 1;
@@ -5,6 +8,12 @@ export const CONFIRMED_SCHEMA_VERSION = 1;
 export type ReplicaOptions = {
   databaseName?: string;
   onBlocked?: () => void;
+};
+
+export type ReplicaSnapshot = {
+  confirmed: ClientState;
+  visible: ClientState;
+  outbox: readonly Operation[];
 };
 
 export type ReplicaErrorKind = 'blocked' | 'quota' | 'storage';

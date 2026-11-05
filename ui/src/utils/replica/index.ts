@@ -7,4 +7,4 @@ export {
   isReplicaError,
   replicaError,
 } from './types';
-export type { ReplicaError, ReplicaErrorKind, ReplicaOptions } from './types';
+export type { ReplicaError, ReplicaErrorKind, ReplicaOptions, ReplicaSnapshot } from './types';

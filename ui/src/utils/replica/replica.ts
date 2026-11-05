@@ -1,11 +1,28 @@
 import type { ClientState } from '@/contract/op-replay';
-import { loadConfirmed, openReplicaDatabase, saveConfirmed } from './storage';
+import { applyChanges as applyConfirmedChanges, replayOperations } from '@/contract/op-replay';
+import type { Change } from '@/generated/Change';
+import type { Operation } from '@/generated/Operation';
+import {
+  deleteOutboxOperations,
+  enqueueOperation,
+  loadConfirmed,
+  loadOutbox,
+  openReplicaDatabase,
+  saveConfirmed,
+} from './storage';
 import { REPLICA_DATABASE } from './types';
-import type { ReplicaOptions } from './types';
+import type { ReplicaOptions, ReplicaSnapshot } from './types';
 
 export type Replica = {
   readonly confirmed: ClientState;
+  readonly visible: ClientState;
+  readonly outbox: readonly Operation[];
+  getSnapshot(): ReplicaSnapshot;
+  subscribe(listener: () => void): () => void;
   bootstrap(state: ClientState): Promise<void>;
+  applyChanges(changes: readonly Change[]): Promise<void>;
+  enqueue(operation: Operation): Promise<void>;
+  acknowledge(operationIds: readonly string[]): Promise<void>;
   close(): void;
 };
 
@@ -14,15 +31,58 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
 
   try {
     let state = await loadConfirmed(db);
+    let outbox = await loadOutbox(db);
+    let snapshot = snapshotOf(state, outbox);
+    const listeners = new Set<() => void>();
+
+    function notify(): void {
+      snapshot = snapshotOf(state, outbox);
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    }
 
     return {
       get confirmed() {
         return state;
       },
+      get visible() {
+        return snapshot.visible;
+      },
+      get outbox() {
+        return snapshot.outbox;
+      },
+      getSnapshot() {
+        return snapshot;
+      },
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
       async bootstrap(next) {
         const clone = structuredClone(next);
         await saveConfirmed(db, clone);
         state = clone;
+        notify();
+      },
+      async applyChanges(changes) {
+        const next = applyConfirmedChanges(state, changes);
+        await saveConfirmed(db, next);
+        state = next;
+        notify();
+      },
+      async enqueue(operation) {
+        await enqueueOperation(db, operation);
+        outbox = [...outbox, structuredClone(operation)];
+        notify();
+      },
+      async acknowledge(operationIds) {
+        await deleteOutboxOperations(db, operationIds);
+        const acknowledged = new Set(operationIds);
+        outbox = outbox.filter((operation) => !acknowledged.has(operation.operation_id));
+        notify();
       },
       close() {
         db.close();
@@ -32,4 +92,12 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
     db.close();
     throw error;
   }
+}
+
+function snapshotOf(state: ClientState, outbox: readonly Operation[]): ReplicaSnapshot {
+  return {
+    confirmed: state,
+    visible: replayOperations(state, outbox),
+    outbox: [...outbox],
+  };
 }

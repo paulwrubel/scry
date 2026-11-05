@@ -15,7 +15,7 @@ import {
   replicaError,
 } from './types';
 
-type StoredOutboxEntry = { seq: number; operation: Operation };
+type StoredOutboxEntry = { seq?: number; operation: Operation };
 
 export type ReplicaDB = {
   projects: { key: string; value: Project };
@@ -184,6 +184,49 @@ export async function saveConfirmed(
       meta.put(noteOrder, NOTE_ORDER_KEY),
       meta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY),
     ]);
+    await tx.done;
+  } catch (error) {
+    throw storageError(error);
+  }
+}
+
+export async function loadOutbox(db: IDBPDatabase<ReplicaDB>): Promise<Operation[]> {
+  try {
+    const tx = db.transaction('outbox', 'readonly');
+    const entries = await tx.store.getAll();
+    await tx.done;
+    return entries.map((entry) => entry.operation);
+  } catch (error) {
+    throw storageError(error);
+  }
+}
+
+export async function enqueueOperation(
+  db: IDBPDatabase<ReplicaDB>,
+  operation: Operation,
+): Promise<void> {
+  try {
+    const tx = db.transaction('outbox', 'readwrite');
+    await tx.store.add({ operation });
+    await tx.done;
+  } catch (error) {
+    throw storageError(error);
+  }
+}
+
+export async function deleteOutboxOperations(
+  db: IDBPDatabase<ReplicaDB>,
+  operationIds: readonly string[],
+): Promise<void> {
+  try {
+    const tx = db.transaction('outbox', 'readwrite');
+    const index = tx.store.index('operation_id');
+    for (const operationId of operationIds) {
+      const key = await index.getKey(operationId);
+      if (key !== undefined) {
+        await tx.store.delete(key);
+      }
+    }
     await tx.done;
   } catch (error) {
     throw storageError(error);
