@@ -1,20 +1,12 @@
-//! Interim browser session endpoints.
+//! Browser session routes.
 
-use axum::Json;
 use axum::Router;
 use axum::extract::Extension;
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
-use axum::routing::post;
-use axum_extra::extract::SignedCookieJar;
-use serde::Deserialize;
+use axum::routing::get;
 
-use crate::http_auth::{AuthState, cleared_session_cookie, request_is_secure, session_cookie};
+use crate::http_auth::AuthState;
 
-#[derive(Deserialize)]
-struct SessionRequest {
-    token: String,
-}
+use super::handlers::{create_session, delete_session, session_status};
 
 /// Routes under `/api/v1/auth`.
 pub(super) fn build_auth_router<S>(auth: AuthState) -> Router<S>
@@ -22,45 +14,21 @@ where
     S: Clone + Send + Sync + 'static,
 {
     Router::new()
-        .route("/session", post(create_session).delete(delete_session))
-        .layer(Extension(auth))
-}
-
-async fn create_session(
-    Extension(auth): Extension<AuthState>,
-    headers: HeaderMap,
-    Json(body): Json<SessionRequest>,
-) -> Response {
-    if !auth.enabled() {
-        return (
-            StatusCode::BAD_REQUEST,
-            "authentication is disabled; no api_token is configured",
+        .route(
+            "/session",
+            get(session_status)
+                .post(create_session)
+                .delete(delete_session),
         )
-            .into_response();
-    }
-
-    if !auth.check_token(&body.token) {
-        return (StatusCode::UNAUTHORIZED, "missing or invalid token").into_response();
-    }
-
-    let jar = SignedCookieJar::from_headers(&headers, auth.key());
-    (
-        StatusCode::NO_CONTENT,
-        jar.add(session_cookie(request_is_secure(&headers))),
-    )
-        .into_response()
-}
-
-async fn delete_session(Extension(auth): Extension<AuthState>, headers: HeaderMap) -> Response {
-    let jar = SignedCookieJar::from_headers(&headers, auth.key());
-    (StatusCode::NO_CONTENT, jar.remove(cleared_session_cookie())).into_response()
+        .layer(Extension(auth))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{Request, header};
+    use axum::http::{Request, StatusCode, header};
+    use axum::response::Response;
     use axum_extra::extract::cookie::Cookie;
     use tower::ServiceExt;
 
@@ -86,6 +54,14 @@ mod tests {
     fn delete_request() -> Request<Body> {
         Request::builder()
             .method("DELETE")
+            .uri("/session")
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    fn status_request() -> Request<Body> {
+        Request::builder()
+            .method("GET")
             .uri("/session")
             .body(Body::empty())
             .unwrap()
@@ -172,6 +148,43 @@ mod tests {
     async fn disabled_auth_still_clears() {
         let app = session_app(AuthState::new(None));
         let response = app.oneshot(delete_request()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn session_status_rejects_without_a_cookie() {
+        let app = session_app(AuthState::new(Some("secret".into())));
+        let response = app.oneshot(status_request()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn session_status_accepts_a_created_session() {
+        let auth = AuthState::new(Some("secret".into()));
+        let created = session_app(auth.clone())
+            .oneshot(session_request("secret"))
+            .await
+            .unwrap();
+        let cookie = cookie_from(&created);
+
+        let request = Request::builder()
+            .method("GET")
+            .uri("/session")
+            .header(header::COOKIE, cookie)
+            .body(Body::empty())
+            .unwrap();
+
+        let response = session_app(auth).oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn session_status_accepts_when_auth_is_disabled() {
+        let app = session_app(AuthState::new(None));
+        let response = app.oneshot(status_request()).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
     }
