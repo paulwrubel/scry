@@ -1,13 +1,17 @@
 import { Label, Select } from 'flowbite-react';
+import { useNavigate } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
 
 export function ProjectSelect() {
   const snapshot = useReplicaSnapshot();
   const { activeProjectId, setActiveProjectId } = useActiveProject();
+  const navigate = useNavigate();
 
   function handleChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    setActiveProjectId(event.target.value);
+    const projectId = event.target.value;
+    setActiveProjectId(projectId);
+    navigate(`/projects/${projectId}`);
   }
 
   return (
