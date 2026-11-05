@@ -33,11 +33,11 @@ export function BoardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-6 py-4">
+      <div className="border-line flex items-center justify-between gap-4 border-b px-6 py-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold">{project.name}</h1>
           {project.description === null ? null : (
-            <p className="text-sm text-zinc-400">{project.description}</p>
+            <p className="text-muted text-sm">{project.description}</p>
           )}
         </div>
         <ToggleSwitch

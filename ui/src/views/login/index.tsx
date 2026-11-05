@@ -42,7 +42,7 @@ export function LoginPage() {
     <div className="flex flex-1 items-center justify-center p-8">
       <Card className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold">Sign in</h1>
-        <p className="text-sm text-zinc-400">
+        <p className="text-muted text-sm">
           Enter the API token configured on the server. It is exchanged for a session cookie and is
           never stored in the browser.
         </p>

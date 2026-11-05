@@ -23,9 +23,6 @@ services:
     # Bind all interfaces inside the container so the published port can reach
     # it; the host-side mapping below restricts exposure to loopback.
     command: ["serve", "--http", "0.0.0.0:8000"]
-    environment:
-      # When set, HTTP requests must send `Authorization: Bearer <token>`.
-      SCRY_API_TOKEN: ${SCRY_API_TOKEN:-}
     ports:
       # Publish on the host loopback only. Use `8000:8000` to expose it further.
       - "127.0.0.1:8000:8000"
@@ -37,6 +34,8 @@ services:
       # Config the container reads from its working directory (WORKDIR /app);
       # `postgres` is the compose service above, reachable on the compose network.
       - ./scry.compose.toml:/app/scry.toml:ro
+      # Dev credentials, mounted at the name the server discovers by default.
+      - ./scry.dev-secrets.toml:/app/scry.secret.toml:ro
 
 volumes:
   # Explicit name so the data survives compose project renames and stays the

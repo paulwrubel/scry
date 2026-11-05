@@ -3,11 +3,33 @@
 @import 'flowbite-react/plugin/tailwindcss';
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --color-canvas: var(--color-zinc-950);
+  --color-surface: var(--color-zinc-900);
+  --color-line: var(--color-zinc-800);
+  --color-line-strong: var(--color-zinc-700);
+  --color-line-hover: var(--color-zinc-600);
+  --color-muted: var(--color-zinc-400);
+  --color-faint: var(--color-zinc-500);
+  --color-danger: var(--color-red-400);
+}
+
 @layer base {
   html {
     color: var(--color-zinc-200);
   }
   body {
-    background-color: var(--color-zinc-950);
+    background-color: var(--color-canvas);
   }
+}
+
+button:focus-visible {
+  outline: 2px solid var(--color-line-hover);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
 }

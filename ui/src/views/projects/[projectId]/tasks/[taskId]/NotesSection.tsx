@@ -71,9 +71,12 @@ export function NotesSection(props: NotesSectionProps) {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold">Notes</h2>
-      {ordered.length === 0 ? <p className="text-sm text-zinc-500">No notes yet.</p> : null}
+      {ordered.length === 0 ? <p className="text-faint text-sm">No notes yet.</p> : null}
       {ordered.map((note) => (
-        <div key={note.id} className="flex flex-col gap-2 rounded-lg border border-zinc-800 p-3">
+        <div
+          key={note.id}
+          className="border-line-strong bg-surface flex flex-col gap-2 rounded-lg border p-3"
+        >
           {editingId === note.id ? (
             <form
               onSubmit={(event) => void handleUpdate(event, note)}
@@ -102,13 +105,13 @@ export function NotesSection(props: NotesSectionProps) {
           ) : (
             <>
               <p className="text-sm whitespace-pre-wrap">{note.contents}</p>
-              <p className="text-xs text-zinc-500">{new Date(note.created_at).toLocaleString()}</p>
+              <p className="text-faint text-xs">{new Date(note.created_at).toLocaleString()}</p>
               {confirmingId === note.id ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-zinc-400">Delete this note?</span>
+                  <span className="text-muted text-sm">Delete this note?</span>
                   <Button
                     size="xs"
-                    color="failure"
+                    color="red"
                     aria-label="Confirm delete note"
                     onClick={() => void handleDelete(note)}
                   >
@@ -130,7 +133,7 @@ export function NotesSection(props: NotesSectionProps) {
                   </Button>
                   <Button
                     size="xs"
-                    color="alternative"
+                    color="red"
                     aria-label="Delete note"
                     onClick={() => setConfirmingId(note.id)}
                   >
@@ -157,7 +160,7 @@ export function NotesSection(props: NotesSectionProps) {
         </div>
       </form>
       {error === null ? null : (
-        <p className="text-sm text-red-400" role="alert">
+        <p className="text-danger text-sm" role="alert">
           {error}
         </p>
       )}

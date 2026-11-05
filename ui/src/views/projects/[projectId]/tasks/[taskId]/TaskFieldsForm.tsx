@@ -93,7 +93,7 @@ export function TaskFieldsForm(props: TaskFieldsFormProps) {
         placeholder="comma, separated"
       />
       {error === null ? null : (
-        <p className="text-sm text-red-400" role="alert">
+        <p className="text-danger text-sm" role="alert">
           {error}
         </p>
       )}

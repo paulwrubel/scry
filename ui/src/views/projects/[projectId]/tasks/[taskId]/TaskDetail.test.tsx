@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Note } from '@/generated/Note';
 import type { Operation } from '@/generated/Operation';
@@ -10,7 +10,7 @@ import type { Task } from '@/generated/Task';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
 import type { Replica } from '@/utils/replica';
-import { TaskPage } from './index';
+import { TaskDetail } from './TaskDetail';
 
 const PROJECT_ID = 'project-1';
 const TASK_ID = 'task-1';
@@ -74,10 +74,15 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
   };
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="path">{location.pathname}</span>;
+}
+
 function renderTask(
   project: ProjectSnapshot,
   enqueue: (operation: Operation) => Promise<void>,
-  path = `/projects/${PROJECT_ID}/tasks/${TASK_ID}`,
+  onClose = vi.fn(),
 ) {
   const snapshot = {
     confirmed: { projects: [project] },
@@ -101,11 +106,9 @@ function renderTask(
 
   render(
     <ReplicaContext.Provider value={context}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/projects/:projectId" element={<div>board</div>} />
-          <Route path="/projects/:projectId/tasks/:taskId" element={<TaskPage />} />
-        </Routes>
+      <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}`]}>
+        <LocationProbe />
+        <TaskDetail project={project} task={project.tasks[0]} onClose={onClose} />
       </MemoryRouter>
     </ReplicaContext.Provider>,
   );
@@ -113,7 +116,7 @@ function renderTask(
 
 afterEach(cleanup);
 
-describe('TaskPage', () => {
+describe('TaskDetail', () => {
   it('shows the task fields and notes', () => {
     renderTask(
       projectSnapshot(),
@@ -222,7 +225,8 @@ describe('TaskPage', () => {
 
   it('deletes the task after confirmation', async () => {
     const enqueue = vi.fn(async () => undefined);
-    renderTask(projectSnapshot(), enqueue);
+    const onClose = vi.fn();
+    renderTask(projectSnapshot(), enqueue, onClose);
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete task' }));
@@ -233,7 +237,7 @@ describe('TaskPage', () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByText('board')).toBeDefined();
+      expect(onClose).toHaveBeenCalled();
     });
   });
 
@@ -290,15 +294,5 @@ describe('TaskPage', () => {
         expect.objectContaining({ kind: 'delete_note', id: 'note-1' }),
       );
     });
-  });
-
-  it('shows the not-found alert', () => {
-    renderTask(
-      projectSnapshot(),
-      vi.fn(async () => undefined),
-      `/projects/${PROJECT_ID}/tasks/missing`,
-    );
-
-    expect(screen.getByText(/Task not found/)).toBeDefined();
   });
 });

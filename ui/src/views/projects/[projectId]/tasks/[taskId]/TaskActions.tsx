@@ -16,7 +16,7 @@ export function TaskActions(props: TaskActionsProps) {
       <Button size="xs" color="alternative" onClick={() => void onToggleState()}>
         {closed ? 'Reopen task' : 'Close task'}
       </Button>
-      <Button size="xs" color="failure" onClick={onRequestDelete}>
+      <Button size="xs" color="red" onClick={onRequestDelete}>
         Delete
       </Button>
     </div>

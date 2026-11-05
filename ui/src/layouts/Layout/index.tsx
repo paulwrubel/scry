@@ -34,7 +34,7 @@ export function Layout() {
           Offline. Changes are saved locally and will sync when the connection returns.
         </Alert>
       ) : null}
-      <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-zinc-950 text-zinc-200">
+      <main className="bg-canvas relative flex min-h-0 flex-1 flex-col overflow-hidden text-zinc-200">
         <div className="relative z-0 flex min-h-0 flex-1 flex-col">
           <Outlet />
         </div>

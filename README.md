@@ -459,7 +459,7 @@ Migrations run automatically on startup, so no manual setup is needed.
 
 The CLI does not connect to PostgreSQL. It sends every command to `server_url` over HTTP; only `scry serve` opens the database.
 
-For local development against Postgres, the repo ships a single `compose.yaml` that brings up the app and a `postgres:18` database together, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and `scry.compose.toml`, the config the container mounts as `/app/scry.toml`.
+For local development against Postgres, the repo ships a single `compose.yaml` that brings up the app and a `postgres:18` database together, the committed `scry.dev.toml` and `scry.dev-secrets.toml`, and `scry.compose.toml`, the config the container mounts as `/app/scry.toml`. The dev secrets set `api_token = "admin"`; the container mounts that file as `/app/scry.secret.toml`. Sign in to the web app with `admin`, and pass `--secrets scry.dev-secrets.toml` to CLI commands that talk to the dev server.
 
 `just run` builds the web UI and release binary, builds the image, and starts the whole stack in Docker with no host Postgres required, and `just view-logs` tails the app container. `just run-local` builds the web UI and release binary and runs the REST server on the host against the same Postgres, while `just run-postgres` starts only Postgres and applies the migrations. `just pg-down` stops Postgres while keeping its data, `just pg-reset` tears the stack down and wipes the data volume, and `just clean` runs `cargo clean` and `docker compose down`.
 
