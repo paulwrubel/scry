@@ -3,6 +3,7 @@ import type { NavbarTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { Link } from 'react-router-dom';
 import { ProjectSelect } from './ProjectSelect';
+import { SignOutButton } from './SignOutButton';
 import { SyncButton } from './SyncButton';
 
 export function LayoutNavbar() {
@@ -23,6 +24,7 @@ export function LayoutNavbar() {
       </NavbarBrand>
       <div className="flex items-center gap-2 md:order-2">
         <ProjectSelect />
+        <SignOutButton />
         <SyncButton />
         <NavbarToggle />
       </div>

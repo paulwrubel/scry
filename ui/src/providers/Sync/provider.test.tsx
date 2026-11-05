@@ -2,6 +2,8 @@
 import 'fake-indexeddb/auto';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthContext } from '@/providers/Auth/context';
+import type { AuthContextType } from '@/providers/Auth/context';
 import { ReplicaProvider, useReplicaStatus } from '@/providers/Replica';
 import { openReplica } from '@/utils/replica';
 import type { SyncClient, SyncSnapshot } from '@/utils/sync';
@@ -11,6 +13,13 @@ import { SyncProvider } from './provider';
 // useSyncExternalStore compares snapshots by identity, so the fake client must
 // return the same object rather than building a new one on each call.
 const IDLE_SNAPSHOT: SyncSnapshot = { status: 'idle', error: null, rejected: [] };
+
+const AUTH_VALUE: AuthContextType = {
+  isAuthenticated: true,
+  isAuthLoading: false,
+  login: async () => ({ ok: true }),
+  logout: async () => undefined,
+};
 
 function createClient(sync: SyncClient['sync']): SyncClient {
   return {
@@ -65,13 +74,15 @@ afterEach(async () => {
 
 function renderApp(client: SyncClient) {
   return render(
-    <ReplicaProvider open={() => openReplica({ databaseName: name })}>
-      <ReadyGate>
-        <SyncProvider client={client} lockManager={null} channel={null}>
-          <Probe />
-        </SyncProvider>
-      </ReadyGate>
-    </ReplicaProvider>,
+    <AuthContext.Provider value={AUTH_VALUE}>
+      <ReplicaProvider open={() => openReplica({ databaseName: name })}>
+        <ReadyGate>
+          <SyncProvider client={client} lockManager={null} channel={null}>
+            <Probe />
+          </SyncProvider>
+        </ReadyGate>
+      </ReplicaProvider>
+    </AuthContext.Provider>,
   );
 }
 
@@ -124,13 +135,15 @@ describe('SyncProvider', () => {
     const client = createClient(sync);
 
     render(
-      <ReplicaProvider open={() => openReplica({ databaseName: name })}>
-        <ReadyGate>
-          <SyncProvider client={client} lockManager={null} channel={null}>
-            <LeaderProbe />
-          </SyncProvider>
-        </ReadyGate>
-      </ReplicaProvider>,
+      <AuthContext.Provider value={AUTH_VALUE}>
+        <ReplicaProvider open={() => openReplica({ databaseName: name })}>
+          <ReadyGate>
+            <SyncProvider client={client} lockManager={null} channel={null}>
+              <LeaderProbe />
+            </SyncProvider>
+          </ReadyGate>
+        </ReplicaProvider>
+      </AuthContext.Provider>,
     );
 
     await waitFor(() => {
