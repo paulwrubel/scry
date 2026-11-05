@@ -208,6 +208,23 @@ describe('useSyncTriggers', () => {
     expect(sync).toHaveBeenCalledTimes(1);
   });
 
+  it('does not sync while disabled', async () => {
+    const sync = vi.fn().mockResolvedValue(undefined);
+    const client = createClient(sync);
+
+    const { rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useSyncTriggers({ client, outboxLength: 0, timing: TIMING, enabled }),
+      { initialProps: { enabled: false } },
+    );
+    await flush();
+    expect(sync).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+    await flush();
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+
   it('exposes a manual sync that resolves even when syncing fails', async () => {
     const sync = vi.fn().mockRejectedValue(new Error('boom'));
     const client = createClient(sync);

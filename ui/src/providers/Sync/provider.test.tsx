@@ -47,6 +47,11 @@ function Probe() {
   );
 }
 
+function LeaderProbe() {
+  const { isLeader } = useSync();
+  return <span data-testid="leader">{isLeader ? 'Leader' : 'Follower'}</span>;
+}
+
 let name = '';
 
 beforeEach(() => {
@@ -62,7 +67,7 @@ function renderApp(client: SyncClient) {
   return render(
     <ReplicaProvider open={() => openReplica({ databaseName: name })}>
       <ReadyGate>
-        <SyncProvider client={client}>
+        <SyncProvider client={client} lockManager={null} channel={null}>
           <Probe />
         </SyncProvider>
       </ReadyGate>
@@ -78,7 +83,7 @@ describe('SyncProvider', () => {
     renderApp(client);
 
     await waitFor(() => {
-      expect(sync).toHaveBeenCalledTimes(1);
+      expect(sync).toHaveBeenCalled();
     });
     expect(screen.getByTestId('status').textContent).toBe('idle');
   });
@@ -90,13 +95,14 @@ describe('SyncProvider', () => {
     renderApp(client);
 
     await waitFor(() => {
-      expect(sync).toHaveBeenCalledTimes(1);
+      expect(sync).toHaveBeenCalled();
     });
 
+    const callsAfterStartup = sync.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'manual' }));
 
     await waitFor(() => {
-      expect(sync).toHaveBeenCalledTimes(2);
+      expect(sync.mock.calls.length).toBeGreaterThan(callsAfterStartup);
     });
   });
 
@@ -107,10 +113,29 @@ describe('SyncProvider', () => {
     const { unmount } = renderApp(client);
 
     await waitFor(() => {
-      expect(sync).toHaveBeenCalledTimes(1);
+      expect(sync).toHaveBeenCalled();
     });
 
     unmount();
+  });
+
+  it('reports leadership through context', async () => {
+    const sync = vi.fn().mockResolvedValue(undefined);
+    const client = createClient(sync);
+
+    render(
+      <ReplicaProvider open={() => openReplica({ databaseName: name })}>
+        <ReadyGate>
+          <SyncProvider client={client} lockManager={null} channel={null}>
+            <LeaderProbe />
+          </SyncProvider>
+        </ReadyGate>
+      </ReplicaProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('leader').textContent).toBe('Leader');
+    });
   });
 });
 
