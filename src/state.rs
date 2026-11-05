@@ -4,6 +4,7 @@ use scry_core::models::{
     Note, Priority, Project, ProjectId, ProjectSnapshot, Section, SectionId, Tags, Task, TaskId,
     TaskSortingMode, TaskState,
 };
+use scry_core::ordering::compare_tasks;
 use scry_core::position::Position;
 use serde::Serialize;
 
@@ -99,44 +100,38 @@ impl ProjectState {
         let mut sections_with_tasks: Vec<SectionWithTasks> = sections
             .iter()
             .map(|section| {
-                let mut tasks_with_notes: Vec<_> = tasks
+                let mut section_tasks: Vec<&Task> = tasks
                     .iter()
                     .filter(|task| {
                         task.state == TaskState::Open && task.section_id == Some(section.id)
                     })
-                    .map(task_with_notes)
                     .collect();
-                sort_open_tasks(&mut tasks_with_notes, project.task_sorting_mode);
+                sort_tasks(&mut section_tasks, project.task_sorting_mode);
                 SectionWithTasks {
                     section: Some(section.clone()),
-                    tasks_with_notes,
+                    tasks_with_notes: section_tasks.into_iter().map(task_with_notes).collect(),
                 }
             })
             .collect();
 
-        let mut unsectioned: Vec<_> = tasks
+        let mut unsectioned_tasks: Vec<&Task> = tasks
             .iter()
             .filter(|task| task.state == TaskState::Open && task.section_id.is_none())
-            .map(task_with_notes)
             .collect();
-        sort_open_tasks(&mut unsectioned, project.task_sorting_mode);
-        if !unsectioned.is_empty() {
+        sort_tasks(&mut unsectioned_tasks, project.task_sorting_mode);
+        if !unsectioned_tasks.is_empty() {
             sections_with_tasks.push(SectionWithTasks {
                 section: None,
-                tasks_with_notes: unsectioned,
+                tasks_with_notes: unsectioned_tasks.into_iter().map(task_with_notes).collect(),
             });
         }
 
-        let mut closed_tasks: Vec<_> = tasks
+        let mut closed: Vec<&Task> = tasks
             .iter()
             .filter(|task| task.state == TaskState::Closed)
-            .map(task_with_notes)
             .collect();
-        closed_tasks.sort_by(|a, b| {
-            b.created_at
-                .cmp(&a.created_at)
-                .then_with(|| b.id.cmp(&a.id))
-        });
+        sort_tasks(&mut closed, project.task_sorting_mode);
+        let closed_tasks = closed.into_iter().map(task_with_notes).collect();
 
         Self {
             project,
@@ -198,20 +193,8 @@ impl ProjectState {
     }
 }
 
-fn sort_open_tasks(tasks: &mut [TaskWithNotes], mode: TaskSortingMode) {
-    tasks.sort_by(|a, b| {
-        let ordering = match mode {
-            TaskSortingMode::Alphabetical => a.title.cmp(&b.title),
-            TaskSortingMode::AlphabeticalCaseInsensitive => {
-                a.title.to_lowercase().cmp(&b.title.to_lowercase())
-            }
-            TaskSortingMode::Created => a.created_at.cmp(&b.created_at),
-            TaskSortingMode::Manual => a.position.cmp(&b.position),
-            TaskSortingMode::Priority => a.priority.cmp(&b.priority),
-        };
-        // tie-break by id so every mode is deterministic
-        ordering.then_with(|| a.id.cmp(&b.id))
-    });
+fn sort_tasks(tasks: &mut [&Task], mode: TaskSortingMode) {
+    tasks.sort_by(|left, right| compare_tasks(mode, left, right));
 }
 
 #[cfg(test)]
@@ -296,12 +279,12 @@ mod tests {
         task(id, title, section_id, position, priority, TaskState::Open)
     }
 
-    fn closed_task(id: TaskId, title: &str, section_id: Option<SectionId>) -> Task {
+    fn closed_task(id: TaskId, title: &str, section_id: Option<SectionId>, position: &str) -> Task {
         task(
             id,
             title,
             section_id,
-            "a0",
+            position,
             Priority::Medium,
             TaskState::Closed,
         )
@@ -397,7 +380,7 @@ mod tests {
                     "a0",
                     Priority::Medium,
                 ),
-                closed_task(task_id(2), "closed unsectioned", None),
+                closed_task(task_id(2), "closed unsectioned", None, "a0"),
             ],
             notes: vec![],
         };
@@ -412,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn closed_tasks_are_kept_out_of_sections_and_sorted_by_created_at_then_id() {
+    fn closed_tasks_are_kept_out_of_sections_and_follow_the_sorting_mode() {
         let snapshot = ProjectSnapshot {
             project: project(TaskSortingMode::Manual),
             sections: vec![section(section_id(10), "a0")],
@@ -424,9 +407,9 @@ mod tests {
                     "a0",
                     Priority::Medium,
                 ),
-                closed_task(task_id(3), "closed early", Some(section_id(10))),
-                closed_task(task_id(4), "closed late a", Some(section_id(10))),
-                closed_task(task_id(5), "closed late b", None),
+                closed_task(task_id(3), "closed early", Some(section_id(10)), "a2"),
+                closed_task(task_id(4), "closed late a", Some(section_id(10)), "a0"),
+                closed_task(task_id(5), "closed late b", None, "a1"),
             ],
             notes: vec![],
         };
@@ -443,7 +426,7 @@ mod tests {
                 .iter()
                 .map(|task| task.id)
                 .collect::<Vec<_>>(),
-            vec![task_id(5), task_id(4), task_id(3)]
+            vec![task_id(4), task_id(5), task_id(3)]
         );
     }
 
