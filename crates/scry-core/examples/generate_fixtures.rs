@@ -1173,6 +1173,52 @@ fn task_order_cases() -> Vec<Value> {
                 ORDER_TASK_1,
             ],
         ),
+        sort_case(
+            "created-orders-by-sub-millisecond-time",
+            "created",
+            vec![
+                order_task(
+                    ORDER_TASK_1,
+                    "later",
+                    "medium",
+                    "a0",
+                    "2026-01-01T00:00:00.000456Z",
+                    "open",
+                ),
+                order_task(
+                    ORDER_TASK_2,
+                    "earlier",
+                    "medium",
+                    "a0",
+                    "2026-01-01T00:00:00.000123Z",
+                    "open",
+                ),
+            ],
+            &[ORDER_TASK_2, ORDER_TASK_1],
+        ),
+        sort_case(
+            "alphabetical-orders-by-code-point",
+            "alphabetical",
+            vec![
+                order_task(
+                    ORDER_TASK_1,
+                    "\u{1F600}",
+                    "medium",
+                    "a0",
+                    "2026-01-01T00:00:00Z",
+                    "open",
+                ),
+                order_task(
+                    ORDER_TASK_2,
+                    "\u{F900}",
+                    "medium",
+                    "a0",
+                    "2026-01-01T00:00:00Z",
+                    "open",
+                ),
+            ],
+            &[ORDER_TASK_2, ORDER_TASK_1],
+        ),
     ];
 
     cases.sort_by(|left, right| {
