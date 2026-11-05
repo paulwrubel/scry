@@ -52,9 +52,17 @@ Errors are tagged `SyncError` values with a `kind` of:
 
 The outbox is preserved on every failure except for ids the server explicitly acknowledged in that response. In the per-operation unsupported-version case, applied operations are still acknowledged and the cursor still advances before the client reports the error.
 
+## Triggers
+
+`ui/src/hooks/useSyncTriggers.ts` owns scheduling and calls the client; the client itself does not schedule anything. It syncs once at startup per client (guarded against StrictMode remounts), debounces growth of the outbox, polls only while the document is visible, syncs on `visibilitychange` when the tab becomes visible, syncs on `online`, and exposes a manual `syncNow`. A hidden tab does not poll.
+
+Failures retry with exponential backoff, clamped at a configurable maximum; success resets the delay. 401 and `unsupported_version` stop automatic retries because they need a login or a client upgrade. Timing values are configurable through `SyncTiming`; the defaults are 500 ms edit debounce, 15 s polling, 1 s initial retry, and 30 s cap.
+
+React composition lives in `ui/src/providers/Sync/`: `SyncProvider` creates one client per ready Replica, `useSyncTriggers` supplies scheduling, and `useSync`/`useSyncSnapshot` expose the client and its snapshot. `LayoutNavbar/SyncButton` uses those hooks to show syncing/failure state and call `syncNow`.
+
 ## Out of scope
 
-Triggers, retry/backoff, and multi-tab leadership (#127/#128) are not implemented here. The client is a non-React store exposing `status`, `error`, `rejected`, `getSnapshot`, and `subscribe`; React wiring belongs in a provider or hook elsewhere.
+Multi-tab leadership and fan-out are #128. The sync client is still a non-React store; the provider is the only React layer.
 
 ## Testing
 
