@@ -1,33 +1,10 @@
 import { Alert, ToggleSwitch } from 'flowbite-react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import type { Operation } from '@/generated/Operation';
-import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
+import { createTaskOperation } from '@/utils/taskOperations';
 import { BoardColumn } from './BoardColumn';
-import { buildBoard, nextTaskPosition } from './board';
-
-function createTaskOperation(
-  project: ProjectSnapshot,
-  sectionId: string,
-  title: string,
-): Operation {
-  return {
-    operation_id: crypto.randomUUID(),
-    operation_version: 1,
-    kind: 'create_task',
-    id: crypto.randomUUID(),
-    project_id: project.id,
-    title,
-    description: null,
-    priority: 'medium',
-    section_id: sectionId,
-    position: nextTaskPosition(project.tasks, sectionId),
-    state: 'open',
-    tags: [],
-    created_at: new Date().toISOString(),
-  };
-}
+import { buildBoard } from './board';
 
 export function BoardPage() {
   const { projectId } = useParams();
