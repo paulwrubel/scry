@@ -48,6 +48,8 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
     notify();
 
     try {
+      await replica.reload();
+
       if (replica.needsBootstrap) {
         const response = await send(() => getSnapshot(fetcher, baseUrl));
         if (response.status === 401) {
@@ -61,6 +63,7 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
         await replica.bootstrap(
           { projects: snapshotDocument.projects },
           snapshotDocument.last_seen_seq,
+          { onlyIfNeeded: true },
         );
       }
 
@@ -95,7 +98,7 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
         throw syncError('server', 'invalid sync response', cause);
       }
 
-      await replica.applyChanges(syncResponse.changes);
+      await replica.applySyncResult(syncResponse.changes, syncResponse.next_seq);
 
       const acknowledged: string[] = [];
       const nextRejected: RejectedOperation[] = [];
@@ -118,7 +121,6 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
       if (acknowledged.length > 0) {
         await replica.acknowledge(acknowledged);
       }
-      await replica.setLastSeenSeq(syncResponse.next_seq);
 
       if (unsupportedVersion) {
         status = 'error';

@@ -1,6 +1,8 @@
-import type { DBSchema, IDBPDatabase } from 'idb';
+import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
 import { openDB } from 'idb';
 import type { ClientState } from '@/contract/op-replay';
+import { applyChanges as applyConfirmedChanges } from '@/contract/op-replay';
+import type { Change } from '@/generated/Change';
 import type { Note } from '@/generated/Note';
 import type { Operation } from '@/generated/Operation';
 import type { Project } from '@/generated/Project';
@@ -35,6 +37,16 @@ export type LoadedConfirmed = {
   needsBootstrap: boolean;
   lastSeenSeq: number;
 };
+
+export type AppliedSyncResult = {
+  applied: boolean;
+  state: ClientState;
+  lastSeenSeq: number;
+};
+
+const CONFIRMED_STORES = ['projects', 'sections', 'tasks', 'notes', 'meta'] as const;
+type ConfirmedStoreName = (typeof CONFIRMED_STORES)[number];
+type ConfirmedTransaction = IDBPTransaction<ReplicaDB, ConfirmedStoreName[], 'readwrite'>;
 
 const SCHEMA_VERSION_KEY = 'schema_version';
 const NEEDS_BOOTSTRAP_KEY = 'needs_bootstrap';
@@ -100,7 +112,7 @@ export async function openReplicaDatabase(
 
 export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<LoadedConfirmed> {
   try {
-    const tx = db.transaction(['projects', 'sections', 'tasks', 'notes', 'meta'], 'readonly');
+    const tx = db.transaction([...CONFIRMED_STORES], 'readonly');
     const meta = tx.objectStore('meta');
     const [
       projects,
@@ -132,10 +144,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
     if (schemaVersion !== CONFIRMED_SCHEMA_VERSION) {
       // a stale confirmed schema is discarded, but the outbox is left untouched so pending
       // operations can still replay once the client re-bootstraps.
-      const migration = db.transaction(
-        ['projects', 'sections', 'tasks', 'notes', 'meta'],
-        'readwrite',
-      );
+      const migration = db.transaction([...CONFIRMED_STORES], 'readwrite');
       const migrationMeta = migration.objectStore('meta');
       await Promise.all([
         migration.objectStore('projects').clear(),
@@ -152,14 +161,16 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
     }
 
     return {
-      state: {
-        projects: buildSnapshots(
-          orderById(projects, asStringArray(projectOrder)),
-          orderById(sections, asStringArray(sectionOrder)),
-          orderById(tasks, asStringArray(taskOrder)),
-          orderById(notes, asStringArray(noteOrder)),
-        ),
-      },
+      state: buildClientState(
+        projects,
+        sections,
+        tasks,
+        notes,
+        projectOrder,
+        sectionOrder,
+        taskOrder,
+        noteOrder,
+      ),
       needsBootstrap: needsBootstrap === true,
       lastSeenSeq: typeof lastSeenSeq === 'number' ? lastSeenSeq : 0,
     };
@@ -172,71 +183,136 @@ export async function saveConfirmed(
   db: IDBPDatabase<ReplicaDB>,
   state: ClientState,
   lastSeenSeq?: number,
-): Promise<void> {
+  options: { onlyIfNeeded?: boolean } = {},
+): Promise<boolean> {
   try {
-    const tx = db.transaction(['projects', 'sections', 'tasks', 'notes', 'meta'], 'readwrite');
-    const projects = tx.objectStore('projects');
-    const sections = tx.objectStore('sections');
-    const tasks = tx.objectStore('tasks');
-    const notes = tx.objectStore('notes');
-    const meta = tx.objectStore('meta');
+    const tx = db.transaction([...CONFIRMED_STORES], 'readwrite');
 
-    await Promise.all([projects.clear(), sections.clear(), tasks.clear(), notes.clear()]);
-
-    const projectOrder: string[] = [];
-    const sectionOrder: string[] = [];
-    const taskOrder: string[] = [];
-    const noteOrder: string[] = [];
-
-    for (const snapshot of state.projects) {
-      const {
-        sections: snapshotSections,
-        tasks: snapshotTasks,
-        notes: snapshotNotes,
-        ...project
-      } = snapshot;
-      projectOrder.push(project.id);
-      await projects.put(project);
-      for (const section of snapshotSections) {
-        sectionOrder.push(section.id);
-        await sections.put(section);
-      }
-      for (const task of snapshotTasks) {
-        taskOrder.push(task.id);
-        await tasks.put(task);
-      }
-      for (const note of snapshotNotes) {
-        noteOrder.push(note.id);
-        await notes.put(note);
+    if (options.onlyIfNeeded) {
+      const needed = await tx.objectStore('meta').get(NEEDS_BOOTSTRAP_KEY);
+      if (needed !== true) {
+        await tx.done;
+        return false;
       }
     }
 
-    const metaWrites = [
-      meta.put(projectOrder, PROJECT_ORDER_KEY),
-      meta.put(sectionOrder, SECTION_ORDER_KEY),
-      meta.put(taskOrder, TASK_ORDER_KEY),
-      meta.put(noteOrder, NOTE_ORDER_KEY),
-      meta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY),
-      meta.put(false, NEEDS_BOOTSTRAP_KEY),
-    ];
-    if (lastSeenSeq !== undefined) {
-      metaWrites.push(meta.put(lastSeenSeq, LAST_SEEN_SEQ_KEY));
-    }
-    await Promise.all(metaWrites);
+    await writeConfirmed(tx, state, lastSeenSeq);
     await tx.done;
+    return true;
   } catch (error) {
     throw storageError(error);
   }
 }
 
-export async function saveLastSeenSeq(
-  db: IDBPDatabase<ReplicaDB>,
-  lastSeenSeq: number,
+async function writeConfirmed(
+  tx: ConfirmedTransaction,
+  state: ClientState,
+  lastSeenSeq?: number,
 ): Promise<void> {
+  const projects = tx.objectStore('projects');
+  const sections = tx.objectStore('sections');
+  const tasks = tx.objectStore('tasks');
+  const notes = tx.objectStore('notes');
+  const meta = tx.objectStore('meta');
+
+  await Promise.all([projects.clear(), sections.clear(), tasks.clear(), notes.clear()]);
+
+  const projectOrder: string[] = [];
+  const sectionOrder: string[] = [];
+  const taskOrder: string[] = [];
+  const noteOrder: string[] = [];
+
+  for (const snapshot of state.projects) {
+    const {
+      sections: snapshotSections,
+      tasks: snapshotTasks,
+      notes: snapshotNotes,
+      ...project
+    } = snapshot;
+    projectOrder.push(project.id);
+    await projects.put(project);
+    for (const section of snapshotSections) {
+      sectionOrder.push(section.id);
+      await sections.put(section);
+    }
+    for (const task of snapshotTasks) {
+      taskOrder.push(task.id);
+      await tasks.put(task);
+    }
+    for (const note of snapshotNotes) {
+      noteOrder.push(note.id);
+      await notes.put(note);
+    }
+  }
+
+  const metaWrites = [
+    meta.put(projectOrder, PROJECT_ORDER_KEY),
+    meta.put(sectionOrder, SECTION_ORDER_KEY),
+    meta.put(taskOrder, TASK_ORDER_KEY),
+    meta.put(noteOrder, NOTE_ORDER_KEY),
+    meta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY),
+    meta.put(false, NEEDS_BOOTSTRAP_KEY),
+  ];
+  if (lastSeenSeq !== undefined) {
+    metaWrites.push(meta.put(lastSeenSeq, LAST_SEEN_SEQ_KEY));
+  }
+  await Promise.all(metaWrites);
+}
+
+export async function applyConfirmedChangesIfNewer(
+  db: IDBPDatabase<ReplicaDB>,
+  changes: readonly Change[],
+  nextSeq: number,
+): Promise<AppliedSyncResult> {
   try {
-    const tx = db.transaction('meta', 'readwrite');
-    await tx.store.put(lastSeenSeq, LAST_SEEN_SEQ_KEY);
+    const tx = db.transaction([...CONFIRMED_STORES], 'readwrite');
+    const meta = tx.objectStore('meta');
+    const [
+      projects,
+      sections,
+      tasks,
+      notes,
+      projectOrder,
+      sectionOrder,
+      taskOrder,
+      noteOrder,
+      lastSeenSeq,
+    ] = await Promise.all([
+      tx.objectStore('projects').getAll(),
+      tx.objectStore('sections').getAll(),
+      tx.objectStore('tasks').getAll(),
+      tx.objectStore('notes').getAll(),
+      meta.get(PROJECT_ORDER_KEY),
+      meta.get(SECTION_ORDER_KEY),
+      meta.get(TASK_ORDER_KEY),
+      meta.get(NOTE_ORDER_KEY),
+      meta.get(LAST_SEEN_SEQ_KEY),
+    ]);
+
+    const state = buildClientState(
+      projects,
+      sections,
+      tasks,
+      notes,
+      projectOrder,
+      sectionOrder,
+      taskOrder,
+      noteOrder,
+    );
+    const current = typeof lastSeenSeq === 'number' ? lastSeenSeq : 0;
+
+    if (nextSeq <= current) {
+      await tx.done;
+      return { applied: false, state, lastSeenSeq: current };
+    }
+
+    const next = applyConfirmedChanges(
+      state,
+      changes.filter((change) => change.seq > current),
+    );
+    await writeConfirmed(tx, next, nextSeq);
     await tx.done;
+    return { applied: true, state: next, lastSeenSeq: nextSeq };
   } catch (error) {
     throw storageError(error);
   }
@@ -283,6 +359,26 @@ export async function deleteOutboxOperations(
   } catch (error) {
     throw storageError(error);
   }
+}
+
+function buildClientState(
+  projects: readonly Project[],
+  sections: readonly Section[],
+  tasks: readonly Task[],
+  notes: readonly Note[],
+  projectOrder: unknown,
+  sectionOrder: unknown,
+  taskOrder: unknown,
+  noteOrder: unknown,
+): ClientState {
+  return {
+    projects: buildSnapshots(
+      orderById(projects, asStringArray(projectOrder)),
+      orderById(sections, asStringArray(sectionOrder)),
+      orderById(tasks, asStringArray(taskOrder)),
+      orderById(notes, asStringArray(noteOrder)),
+    ),
+  };
 }
 
 function buildSnapshots(

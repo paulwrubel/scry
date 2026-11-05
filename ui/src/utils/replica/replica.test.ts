@@ -203,7 +203,7 @@ describe('replica outbox and visible state', () => {
       created_at: '2026-01-01T00:00:06Z',
     };
 
-    await replica.applyChanges([change]);
+    await replica.applySyncResult([change], 1);
     expect(findTask(replica.confirmed, 'task-applied')).toEqual(applied);
     expect(findTask(replica.visible, 'task-applied')).toEqual(applied);
     replica.close();
@@ -286,10 +286,10 @@ describe('replica sync cursor', () => {
     replica.close();
   });
 
-  it('setLastSeenSeq persists', async () => {
+  it('applySyncResult persists the cursor', async () => {
     const replica = await openReplica({ databaseName: name });
     await replica.bootstrap(sampleState());
-    await replica.setLastSeenSeq(9);
+    await replica.applySyncResult([], 9);
     replica.close();
 
     const reopened = await openReplica({ databaseName: name });
@@ -302,7 +302,7 @@ describe('replica sync cursor', () => {
     const second = await openReplica({ databaseName: name });
 
     await first.bootstrap(sampleState(), 0);
-    await first.setLastSeenSeq(12);
+    await first.applySyncResult([], 12);
     await second.reload();
 
     expect(second.lastSeenSeq).toBe(12);
@@ -326,6 +326,37 @@ describe('replica sync cursor', () => {
     expect(second.needsBootstrap).toBe(false);
     first.close();
     second.close();
+  });
+
+  it('a stale response does not regress the cursor or the state', async () => {
+    const first = await openReplica({ databaseName: name });
+    const second = await openReplica({ databaseName: name });
+
+    await first.bootstrap(sampleState(), 0);
+    await second.reload();
+
+    await second.applySyncResult([taskTitleChange(10, 'newer')], 10);
+    const result = await first.applySyncResult([taskTitleChange(5, 'older')], 5);
+
+    expect(result.applied).toBe(false);
+    expect(first.lastSeenSeq).toBe(10);
+    expect(findTask(first.confirmed, TASK_A_ID)?.title).toBe('newer');
+    first.close();
+    second.close();
+  });
+
+  it('applies only changes after the stored cursor', async () => {
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(sampleState(), 0);
+
+    await replica.applySyncResult(
+      [taskTitleChange(5, 'five'), taskTitleChange(14, 'fourteen')],
+      14,
+    );
+
+    expect(findTask(replica.confirmed, TASK_A_ID)?.title).toBe('fourteen');
+    expect(replica.lastSeenSeq).toBe(14);
+    replica.close();
   });
 
   it('schema bump resets the cursor', async () => {
@@ -465,6 +496,19 @@ function deleteTaskOperation(operationId: string, taskId: string): Operation {
     operation_version: 1,
     kind: 'delete_task',
     id: taskId,
+  };
+}
+
+function taskTitleChange(seq: number, title: string): Change {
+  return {
+    seq,
+    entity_type: 'task',
+    entity_id: TASK_A_ID,
+    kind: 'update',
+    operation_id: `op-${seq}`,
+    client_timestamp: null,
+    field_values: { title },
+    created_at: '2026-01-01T00:00:06Z',
   };
 }
 
