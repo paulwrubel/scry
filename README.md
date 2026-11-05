@@ -49,6 +49,17 @@ just typecheck-ui   # tsc
 just test-ui        # Vitest
 ```
 
+The production build is an installable PWA. After the first successful visit the service
+worker precaches the app shell, so reloads and client-side deep links work offline. Install
+it from the browser's install control; on iOS use Share → Add to Home Screen. Updates apply
+automatically on the next load. The service worker is disabled in Vite dev, so test install
+and offline behaviour against `just build-ui` and `scry serve`, not `just run-ui`.
+
+Caching stays narrow: `index.html`, `sw.js`, `registerSW.js`, the manifest, and the icons are
+served `no-cache` so a new binary is picked up, while hashed `/assets/*` are immutable.
+`/api/*`, including `/api/v1/auth/*`, and `/sync` are never precached or answered from the
+service-worker cache; they always go to the network.
+
 The Rust wire types are the source of truth for the generated declarations in `ui/src/generated/`; never edit those files by hand. Rules implemented in both languages are pinned by the committed JSON fixtures under `fixtures/<area>/cases.json`, which both Rust and Vitest must consume. `just generate-bindings` and `just generate-fixtures` rewrite the committed output, while `just check-bindings` and `just check-fixtures` fail if it is stale. Add a new fixture area whenever a rule gains a second implementation.
 
 ## Docker

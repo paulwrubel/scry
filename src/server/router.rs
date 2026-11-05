@@ -148,11 +148,23 @@ fn get_content_type(path: &str) -> &'static str {
         "js" => "application/javascript",
         "css" => "text/css",
         "json" => "application/json",
+        "webmanifest" => "application/manifest+json",
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "svg" => "image/svg+xml",
         "ico" => "image/x-icon",
         _ => "text/plain",
+    }
+}
+
+/// Hashed Vite assets never change; everything else must be revalidated so the
+/// service worker and index can update.
+#[cfg(feature = "embed-ui")]
+fn cache_control(path: &str) -> &'static str {
+    if path.starts_with("assets/") {
+        "public, max-age=31536000, immutable"
+    } else {
+        "no-cache"
     }
 }
 
@@ -165,6 +177,7 @@ fn build_ui_router() -> Router<ScryState> {
         if let Some(file) = UI_DIST_DIR.get_file(path) {
             axum::response::Response::builder()
                 .header("content-type", get_content_type(path))
+                .header("cache-control", cache_control(path))
                 .body(axum::body::Body::from(file.contents()))
                 .unwrap()
         } else {
@@ -172,6 +185,7 @@ fn build_ui_router() -> Router<ScryState> {
             if let Some(index_file) = UI_DIST_DIR.get_file("index.html") {
                 axum::response::Response::builder()
                     .header("content-type", "text/html")
+                    .header("cache-control", "no-cache")
                     .body(axum::body::Body::from(index_file.contents()))
                     .unwrap()
             } else {
@@ -257,5 +271,34 @@ mod tests {
                 .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS)
                 .is_none()
         );
+    }
+}
+
+#[cfg(all(test, feature = "embed-ui"))]
+mod ui_asset_tests {
+    use super::*;
+
+    #[test]
+    fn webmanifest_uses_the_manifest_mime_type() {
+        assert_eq!(
+            get_content_type("manifest.webmanifest"),
+            "application/manifest+json"
+        );
+    }
+
+    #[test]
+    fn hashed_assets_are_cached_immutably() {
+        assert_eq!(
+            cache_control("assets/index-B954sXMp.js"),
+            "public, max-age=31536000, immutable"
+        );
+    }
+
+    #[test]
+    fn shell_files_are_revalidated() {
+        assert_eq!(cache_control("index.html"), "no-cache");
+        assert_eq!(cache_control("sw.js"), "no-cache");
+        assert_eq!(cache_control("manifest.webmanifest"), "no-cache");
+        assert_eq!(cache_control("pwa-192x192.png"), "no-cache");
     }
 }
