@@ -1,6 +1,7 @@
 pub mod error;
 pub mod ids;
 pub mod models;
+pub mod ordering;
 pub mod position;
 pub mod snapshot;
 pub mod store;

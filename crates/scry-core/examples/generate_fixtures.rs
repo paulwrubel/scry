@@ -38,6 +38,12 @@ fn main() {
         "Client replay: confirmed state, pulled changes, unacknowledged outbox operations, and the resulting visible state.",
         op_replay_cases(),
     );
+    write_area(
+        &root,
+        "task-order",
+        "Task ordering: project sorting modes, deterministic ties, and closed tasks.",
+        task_order_cases(),
+    );
 }
 
 fn write_area(root: &Path, area: &str, description: &str, cases: Vec<Value>) {
@@ -425,6 +431,11 @@ const SECTION_C: &str = "99999999-9999-4999-8999-999999999999";
 const TASK_1: &str = "44444444-4444-4444-8444-444444444444";
 const TASK_2: &str = "55555555-5555-4555-8555-555555555555";
 const TASK_3: &str = "88888888-8888-4888-8888-888888888888";
+const ORDER_TASK_1: &str = "e0000000-0000-4000-8000-000000000001";
+const ORDER_TASK_2: &str = "e0000000-0000-4000-8000-000000000002";
+const ORDER_TASK_3: &str = "e0000000-0000-4000-8000-000000000003";
+const ORDER_TASK_4: &str = "e0000000-0000-4000-8000-000000000004";
+const ORDER_TASK_5: &str = "e0000000-0000-4000-8000-000000000005";
 const NOTE_1: &str = "66666666-6666-4666-8666-666666666666";
 const NOTE_2: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CREATED_AT: &str = "2026-01-01T00:00:00Z";
@@ -1035,5 +1046,222 @@ fn note_1_value() -> Value {
         "task_id": TASK_1,
         "contents": "note one",
         "created_at": CREATED_AT,
+    })
+}
+
+fn task_order_cases() -> Vec<Value> {
+    let tasks = || {
+        vec![
+            order_task(
+                ORDER_TASK_1,
+                "alpha",
+                "minimal",
+                "a1",
+                "2026-01-01T00:00:00Z",
+                "open",
+            ),
+            order_task(
+                ORDER_TASK_2,
+                "Beta",
+                "high",
+                "a0",
+                "2026-01-03T00:00:00Z",
+                "open",
+            ),
+            order_task(
+                ORDER_TASK_3,
+                "ALPHA",
+                "critical",
+                "a2",
+                "2026-01-02T00:00:00Z",
+                "open",
+            ),
+            order_task(
+                ORDER_TASK_4,
+                "beta",
+                "low",
+                "a0",
+                "2026-01-02T00:00:00Z",
+                "open",
+            ),
+            order_task(
+                ORDER_TASK_5,
+                "Beta",
+                "high",
+                "a0",
+                "2026-01-01T00:00:00Z",
+                "open",
+            ),
+        ]
+    };
+
+    let closed = tasks()
+        .into_iter()
+        .map(|task| with_state(task, "closed"))
+        .collect();
+
+    let mut cases = vec![
+        sort_case(
+            "manual-orders-by-position-then-id",
+            "manual",
+            tasks(),
+            &[
+                ORDER_TASK_2,
+                ORDER_TASK_4,
+                ORDER_TASK_5,
+                ORDER_TASK_1,
+                ORDER_TASK_3,
+            ],
+        ),
+        sort_case(
+            "alphabetical-orders-by-title-then-id",
+            "alphabetical",
+            tasks(),
+            &[
+                ORDER_TASK_3,
+                ORDER_TASK_2,
+                ORDER_TASK_5,
+                ORDER_TASK_1,
+                ORDER_TASK_4,
+            ],
+        ),
+        sort_case(
+            "alphabetical-case-insensitive-orders-by-lowercased-title-then-id",
+            "alphabetical-case-insensitive",
+            tasks(),
+            &[
+                ORDER_TASK_1,
+                ORDER_TASK_3,
+                ORDER_TASK_2,
+                ORDER_TASK_4,
+                ORDER_TASK_5,
+            ],
+        ),
+        sort_case(
+            "created-orders-by-created-at-then-id",
+            "created",
+            tasks(),
+            &[
+                ORDER_TASK_1,
+                ORDER_TASK_5,
+                ORDER_TASK_3,
+                ORDER_TASK_4,
+                ORDER_TASK_2,
+            ],
+        ),
+        sort_case(
+            "priority-orders-by-priority-then-id",
+            "priority",
+            tasks(),
+            &[
+                ORDER_TASK_3,
+                ORDER_TASK_2,
+                ORDER_TASK_5,
+                ORDER_TASK_4,
+                ORDER_TASK_1,
+            ],
+        ),
+        sort_case(
+            "closed-tasks-use-the-same-order",
+            "priority",
+            closed,
+            &[
+                ORDER_TASK_3,
+                ORDER_TASK_2,
+                ORDER_TASK_5,
+                ORDER_TASK_4,
+                ORDER_TASK_1,
+            ],
+        ),
+        sort_case(
+            "created-orders-by-sub-millisecond-time",
+            "created",
+            vec![
+                order_task(
+                    ORDER_TASK_1,
+                    "later",
+                    "medium",
+                    "a0",
+                    "2026-01-01T00:00:00.000456Z",
+                    "open",
+                ),
+                order_task(
+                    ORDER_TASK_2,
+                    "earlier",
+                    "medium",
+                    "a0",
+                    "2026-01-01T00:00:00.000123Z",
+                    "open",
+                ),
+            ],
+            &[ORDER_TASK_2, ORDER_TASK_1],
+        ),
+        sort_case(
+            "alphabetical-orders-by-code-point",
+            "alphabetical",
+            vec![
+                order_task(
+                    ORDER_TASK_1,
+                    "\u{1F600}",
+                    "medium",
+                    "a0",
+                    "2026-01-01T00:00:00Z",
+                    "open",
+                ),
+                order_task(
+                    ORDER_TASK_2,
+                    "\u{F900}",
+                    "medium",
+                    "a0",
+                    "2026-01-01T00:00:00Z",
+                    "open",
+                ),
+            ],
+            &[ORDER_TASK_2, ORDER_TASK_1],
+        ),
+    ];
+
+    cases.sort_by(|left, right| {
+        left["name"]
+            .as_str()
+            .unwrap_or_default()
+            .cmp(right["name"].as_str().unwrap_or_default())
+    });
+    cases
+}
+
+fn order_task(
+    id: &str,
+    title: &str,
+    priority: &str,
+    position: &str,
+    created_at: &str,
+    state: &str,
+) -> Value {
+    json!({
+        "id": id,
+        "project_id": PROJECT_ID,
+        "title": title,
+        "description": null,
+        "priority": priority,
+        "section_id": null,
+        "position": position,
+        "state": state,
+        "tags": [],
+        "created_at": created_at,
+    })
+}
+
+fn with_state(mut task: Value, state: &str) -> Value {
+    task["state"] = json!(state);
+    task
+}
+
+fn sort_case(name: &str, mode: &str, tasks: Vec<Value>, expected: &[&str]) -> Value {
+    json!({
+        "name": name,
+        "kind": "sort",
+        "input": { "mode": mode, "tasks": tasks },
+        "expected": { "ids": expected },
     })
 }
