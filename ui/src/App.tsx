@@ -2,8 +2,8 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { Providers } from './layouts/Providers';
 import { AuthenticatedRouteLayout } from './layouts/AuthenticatedRouteLayout';
 import { Layout } from './layouts/Layout';
+import { ProjectLayout } from './layouts/ProjectLayout';
 import { ProjectRedirect } from './layouts/ProjectRedirect';
-import { BoardPage } from './views/projects/[projectId]';
 import { LoginPage } from './views/login';
 import { ProjectsPage } from './views/projects';
 import { SettingsPage } from './views/settings';
@@ -22,8 +22,11 @@ const routes = [
             children: [
               { index: true, element: <ProjectRedirect /> },
               { path: 'projects', element: <ProjectsPage /> },
-              { path: 'projects/:projectId', element: <BoardPage /> },
-              { path: 'projects/:projectId/tasks/:taskId', element: <TaskPage /> },
+              {
+                path: 'projects/:projectId',
+                element: <ProjectLayout />,
+                children: [{ path: 'tasks/:taskId', element: <TaskPage /> }],
+              },
               { path: 'settings', element: <SettingsPage /> },
               { path: '*', element: <Navigate to="/" replace /> },
             ],

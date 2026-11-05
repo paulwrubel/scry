@@ -3,7 +3,7 @@ import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { BoardGroup } from './board';
-import { buildBoard, nextTaskPosition } from './board';
+import { buildBoard } from './board';
 
 const CREATED_AT = '2026-01-01T00:00:00Z';
 
@@ -154,36 +154,5 @@ describe('buildBoard', () => {
     });
 
     expect(shape(buildBoard(project, true))).toEqual([['backlog', ['closed', 'open']]]);
-  });
-});
-
-describe('nextTaskPosition', () => {
-  it('appends after the last task in the section', () => {
-    const tasks = [
-      task({ id: 'one', title: 'One', section_id: 'backlog', position: 'a0' }),
-      task({ id: 'two', title: 'Two', section_id: 'backlog', position: 'a1' }),
-    ];
-
-    expect(nextTaskPosition(tasks, 'backlog')).toBe('a2');
-  });
-
-  it('ignores other sections and includes closed tasks', () => {
-    const tasks = [
-      task({ id: 'one', title: 'One', section_id: 'backlog', position: 'a0' }),
-      task({
-        id: 'closed',
-        title: 'Closed',
-        section_id: 'backlog',
-        position: 'a2',
-        state: 'closed',
-      }),
-      task({ id: 'other', title: 'Other', section_id: 'doing', position: 'a9' }),
-    ];
-
-    expect(nextTaskPosition(tasks, 'backlog')).toBe('a3');
-  });
-
-  it('starts at a0 for an empty section', () => {
-    expect(nextTaskPosition([], 'backlog')).toBe('a0');
   });
 });
