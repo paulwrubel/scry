@@ -2,6 +2,7 @@ import type { ClientState } from '@/contract/op-replay';
 import { applyChanges as applyConfirmedChanges, replayOperations } from '@/contract/op-replay';
 import type { Change } from '@/generated/Change';
 import type { Operation } from '@/generated/Operation';
+import { requestPersistence } from './persistence';
 import {
   deleteOutboxOperations,
   enqueueOperation,
@@ -17,6 +18,8 @@ export type Replica = {
   readonly confirmed: ClientState;
   readonly visible: ClientState;
   readonly outbox: readonly Operation[];
+  readonly needsBootstrap: boolean;
+  readonly persisted: boolean;
   getSnapshot(): ReplicaSnapshot;
   subscribe(listener: () => void): () => void;
   bootstrap(state: ClientState): Promise<void>;
@@ -30,13 +33,16 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
   const db = await openReplicaDatabase(options.databaseName ?? REPLICA_DATABASE, options.onBlocked);
 
   try {
-    let state = await loadConfirmed(db);
+    const loaded = await loadConfirmed(db);
+    const persisted = await requestPersistence();
+    let state = loaded.state;
+    let needsBootstrap = loaded.needsBootstrap;
     let outbox = await loadOutbox(db);
-    let snapshot = snapshotOf(state, outbox);
+    let snapshot = snapshotOf(state, outbox, needsBootstrap, persisted);
     const listeners = new Set<() => void>();
 
     function notify(): void {
-      snapshot = snapshotOf(state, outbox);
+      snapshot = snapshotOf(state, outbox, needsBootstrap, persisted);
       for (const listener of [...listeners]) {
         listener();
       }
@@ -52,6 +58,12 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
       get outbox() {
         return snapshot.outbox;
       },
+      get needsBootstrap() {
+        return needsBootstrap;
+      },
+      get persisted() {
+        return persisted;
+      },
       getSnapshot() {
         return snapshot;
       },
@@ -65,6 +77,7 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
         const clone = structuredClone(next);
         await saveConfirmed(db, clone);
         state = clone;
+        needsBootstrap = false;
         notify();
       },
       async applyChanges(changes) {
@@ -94,10 +107,17 @@ export async function openReplica(options: ReplicaOptions = {}): Promise<Replica
   }
 }
 
-function snapshotOf(state: ClientState, outbox: readonly Operation[]): ReplicaSnapshot {
+function snapshotOf(
+  state: ClientState,
+  outbox: readonly Operation[],
+  needsBootstrap: boolean,
+  persisted: boolean,
+): ReplicaSnapshot {
   return {
     confirmed: state,
     visible: replayOperations(state, outbox),
     outbox: [...outbox],
+    needsBootstrap,
+    persisted,
   };
 }

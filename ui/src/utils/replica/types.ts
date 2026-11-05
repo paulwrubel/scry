@@ -14,6 +14,8 @@ export type ReplicaSnapshot = {
   confirmed: ClientState;
   visible: ClientState;
   outbox: readonly Operation[];
+  needsBootstrap: boolean;
+  persisted: boolean;
 };
 
 export type ReplicaErrorKind = 'blocked' | 'quota' | 'storage';

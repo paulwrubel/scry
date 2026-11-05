@@ -30,7 +30,13 @@ export type ReplicaDB = {
   meta: { key: string; value: unknown };
 } & DBSchema;
 
+export type LoadedConfirmed = {
+  state: ClientState;
+  needsBootstrap: boolean;
+};
+
 const SCHEMA_VERSION_KEY = 'schema_version';
+const NEEDS_BOOTSTRAP_KEY = 'needs_bootstrap';
 const PROJECT_ORDER_KEY = 'project_order';
 const SECTION_ORDER_KEY = 'section_order';
 const TASK_ORDER_KEY = 'task_order';
@@ -90,7 +96,7 @@ export async function openReplicaDatabase(
   }
 }
 
-export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<ClientState> {
+export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<LoadedConfirmed> {
   try {
     const tx = db.transaction(['projects', 'sections', 'tasks', 'notes', 'meta'], 'readonly');
     const meta = tx.objectStore('meta');
@@ -104,6 +110,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Client
       sectionOrder,
       taskOrder,
       noteOrder,
+      needsBootstrap,
     ] = await Promise.all([
       tx.objectStore('projects').getAll(),
       tx.objectStore('sections').getAll(),
@@ -114,21 +121,41 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Client
       meta.get(SECTION_ORDER_KEY),
       meta.get(TASK_ORDER_KEY),
       meta.get(NOTE_ORDER_KEY),
+      meta.get(NEEDS_BOOTSTRAP_KEY),
     ]);
     await tx.done;
 
     if (schemaVersion !== CONFIRMED_SCHEMA_VERSION) {
-      // A version mismatch is treated as uninitialized until the migration step lands.
-      return { projects: [] };
+      // a stale confirmed schema is discarded, but the outbox is left untouched so pending
+      // operations can still replay once the client re-bootstraps.
+      const migration = db.transaction(
+        ['projects', 'sections', 'tasks', 'notes', 'meta'],
+        'readwrite',
+      );
+      const migrationMeta = migration.objectStore('meta');
+      await Promise.all([
+        migration.objectStore('projects').clear(),
+        migration.objectStore('sections').clear(),
+        migration.objectStore('tasks').clear(),
+        migration.objectStore('notes').clear(),
+      ]);
+      await migrationMeta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY);
+      await migrationMeta.put(true, NEEDS_BOOTSTRAP_KEY);
+      await migration.done;
+
+      return { state: { projects: [] }, needsBootstrap: true };
     }
 
     return {
-      projects: buildSnapshots(
-        orderById(projects, asStringArray(projectOrder)),
-        orderById(sections, asStringArray(sectionOrder)),
-        orderById(tasks, asStringArray(taskOrder)),
-        orderById(notes, asStringArray(noteOrder)),
-      ),
+      state: {
+        projects: buildSnapshots(
+          orderById(projects, asStringArray(projectOrder)),
+          orderById(sections, asStringArray(sectionOrder)),
+          orderById(tasks, asStringArray(taskOrder)),
+          orderById(notes, asStringArray(noteOrder)),
+        ),
+      },
+      needsBootstrap: needsBootstrap === true,
     };
   } catch (error) {
     throw storageError(error);
@@ -183,6 +210,7 @@ export async function saveConfirmed(
       meta.put(taskOrder, TASK_ORDER_KEY),
       meta.put(noteOrder, NOTE_ORDER_KEY),
       meta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY),
+      meta.put(false, NEEDS_BOOTSTRAP_KEY),
     ]);
     await tx.done;
   } catch (error) {

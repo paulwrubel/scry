@@ -9,7 +9,12 @@ import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import { openReplica } from './replica';
 import type { ReplicaDB } from './storage';
-import { CONFIRMED_SCHEMA_VERSION, REPLICA_DATABASE_VERSION } from './types';
+import {
+  CONFIRMED_SCHEMA_VERSION,
+  REPLICA_DATABASE_VERSION,
+  isReplicaError,
+  replicaError,
+} from './types';
 
 const PROJECT_ID = 'project-1';
 const SECTION_A_ID = 'section-a';
@@ -242,6 +247,86 @@ describe('replica outbox and visible state', () => {
     expect(reopened.outbox.map((operation) => operation.operation_id)).toEqual(['op-update']);
     expect(findTask(reopened.visible, TASK_A_ID)?.title).toBe('Persisted title');
     reopened.close();
+  });
+});
+
+describe('replica schema migration', () => {
+  it('schema bump clears confirmed state but preserves the outbox', async () => {
+    const state = sampleState();
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(state);
+    await replica.enqueue(updateTaskOperation('op-update', TASK_A_ID, 'Persisted title'));
+    replica.close();
+
+    const db = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
+    await db.put('meta', 0, 'schema_version');
+    db.close();
+
+    const reopened = await openReplica({ databaseName: name });
+    expect(reopened.confirmed).toEqual({ projects: [] });
+    expect(reopened.needsBootstrap).toBe(true);
+    expect(reopened.outbox.map((operation) => operation.operation_id)).toEqual(['op-update']);
+    reopened.close();
+
+    const check = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
+    expect(await check.getAll('projects')).toEqual([]);
+    expect(await check.getAll('tasks')).toEqual([]);
+    expect(await check.getAll('outbox')).toHaveLength(1);
+    check.close();
+
+    const bootstrapped = await openReplica({ databaseName: name });
+    await bootstrapped.bootstrap(state);
+    expect(bootstrapped.needsBootstrap).toBe(false);
+    expect(bootstrapped.outbox.map((operation) => operation.operation_id)).toEqual(['op-update']);
+    bootstrapped.close();
+  });
+
+  it('old operation versions survive reopen', async () => {
+    const replica = await openReplica({ databaseName: name });
+    await replica.bootstrap(sampleState());
+    await replica.enqueue({
+      ...updateTaskOperation('op-old', TASK_A_ID, 'Old operation'),
+      operation_version: 1,
+    });
+    replica.close();
+
+    const reopened = await openReplica({ databaseName: name });
+    expect(reopened.outbox[0].operation_version).toBe(1);
+    reopened.close();
+  });
+});
+
+describe('replica persistence', () => {
+  it('persistence denial is non-fatal', async () => {
+    const persist = vi.fn(async () => false);
+    vi.stubGlobal('navigator', { storage: { persist } });
+
+    const replica = await openReplica({ databaseName: name });
+    expect(persist).toHaveBeenCalled();
+    expect(replica.persisted).toBe(false);
+    expect(replica.confirmed).toEqual({ projects: [] });
+    replica.close();
+    vi.unstubAllGlobals();
+  });
+
+  it('persistence grant is reported', async () => {
+    const persist = vi.fn(async () => true);
+    vi.stubGlobal('navigator', { storage: { persist } });
+
+    const replica = await openReplica({ databaseName: name });
+    expect(persist).toHaveBeenCalled();
+    expect(replica.persisted).toBe(true);
+    replica.close();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('replica errors', () => {
+  it('replica errors are tagged', () => {
+    const error = replicaError('quota', 'full');
+    expect(isReplicaError(error)).toBe(true);
+    expect(error.kind).toBe('quota');
+    expect(error).toBeInstanceOf(Error);
   });
 });
 
