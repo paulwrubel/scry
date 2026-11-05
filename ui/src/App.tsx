@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
 import { Providers } from './layouts/Providers';
+import { AuthenticatedRouteLayout } from './layouts/AuthenticatedRouteLayout';
 import { Layout } from './layouts/Layout';
 import { ProjectRedirect } from './layouts/ProjectRedirect';
 import { BoardPage } from './views/projects/[projectId]';
@@ -15,13 +16,18 @@ const routes = [
       {
         element: <Layout />,
         children: [
-          { index: true, element: <ProjectRedirect /> },
-          { path: 'projects', element: <ProjectsPage /> },
-          { path: 'projects/:projectId', element: <BoardPage /> },
-          { path: 'projects/:projectId/tasks/:taskId', element: <TaskPage /> },
-          { path: 'settings', element: <SettingsPage /> },
           { path: 'login', element: <LoginPage /> },
-          { path: '*', element: <Navigate to="/" replace /> },
+          {
+            element: <AuthenticatedRouteLayout />,
+            children: [
+              { index: true, element: <ProjectRedirect /> },
+              { path: 'projects', element: <ProjectsPage /> },
+              { path: 'projects/:projectId', element: <BoardPage /> },
+              { path: 'projects/:projectId/tasks/:taskId', element: <TaskPage /> },
+              { path: 'settings', element: <SettingsPage /> },
+              { path: '*', element: <Navigate to="/" replace /> },
+            ],
+          },
         ],
       },
     ],

@@ -52,6 +52,13 @@ impl AuthState {
             .as_deref()
             .is_some_and(|token| presented.as_bytes().ct_eq(token.as_bytes()).into())
     }
+
+    /// Whether the request carries a valid signed session cookie.
+    pub(crate) fn has_valid_session(&self, headers: &HeaderMap) -> bool {
+        let jar = SignedCookieJar::from_headers(headers, self.key());
+        jar.get(SESSION_COOKIE)
+            .is_some_and(|cookie| cookie.value() == SESSION_VALUE)
+    }
 }
 
 /// Extractor that admits a request with the configured bearer token or a valid

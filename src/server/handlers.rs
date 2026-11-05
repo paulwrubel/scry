@@ -25,6 +25,9 @@ pub use create_project::create_project;
 mod create_section;
 pub use create_section::create_section;
 
+mod create_session;
+pub use create_session::create_session;
+
 mod create_task;
 pub use create_task::create_task;
 
@@ -39,6 +42,9 @@ pub use delete_project_by_name::delete_project_by_name;
 
 mod delete_section;
 pub use delete_section::delete_section;
+
+mod delete_session;
+pub use delete_session::delete_session;
 
 mod delete_task;
 pub use delete_task::delete_task;
@@ -99,6 +105,9 @@ pub use max_seq::max_seq;
 
 mod merge_section;
 pub use merge_section::merge_section;
+
+mod session_status;
+pub use session_status::session_status;
 
 mod move_task;
 pub use move_task::move_task;

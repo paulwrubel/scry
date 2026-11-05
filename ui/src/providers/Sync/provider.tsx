@@ -3,6 +3,7 @@ import { useSyncLeadership } from '@/hooks/useSyncLeadership';
 import type { SyncChannelMessage } from '@/hooks/useSyncLeadership';
 import { useSyncTriggers } from '@/hooks/useSyncTriggers';
 import type { SyncTiming } from '@/hooks/useSyncTriggers';
+import { useAuth } from '@/providers/Auth';
 import { useReplica, useReplicaSnapshot, useReplicaStatus } from '@/providers/Replica';
 import { createSyncClient } from '@/utils/sync';
 import type { SyncClient } from '@/utils/sync';
@@ -28,14 +29,22 @@ export function SyncProvider(props: SyncProviderProps) {
 function ReadySyncProvider(props: SyncProviderProps) {
   const { children, client: providedClient, timing, lockManager, channel } = props;
 
+  const { isAuthenticated } = useAuth();
   const replica = useReplica();
   const [client] = useState<SyncClient>(() => providedClient ?? createSyncClient({ replica }));
   const clientSnapshot = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const replicaSnapshot = useReplicaSnapshot();
 
   const isLeaderRef = useRef(false);
+  const isAuthenticatedRef = useRef(false);
+  useEffect(() => {
+    isAuthenticatedRef.current = isAuthenticated;
+  }, [isAuthenticated]);
 
   const reloadAndSync = useCallback(() => {
+    if (!isAuthenticatedRef.current) {
+      return;
+    }
     void replica
       .reload()
       .then(() => client.sync())
@@ -72,8 +81,17 @@ function ReadySyncProvider(props: SyncProviderProps) {
     client,
     outboxLength: replicaSnapshot.outbox.length,
     timing,
-    enabled: isLeader,
+    enabled: isLeader && isAuthenticated,
   });
+
+  // drain the outbox queued while signed out as soon as auth returns
+  useEffect(() => {
+    if (isAuthenticated) {
+      void client.sync().catch(() => {
+        // the client snapshot surfaces the failure
+      });
+    }
+  }, [client, isAuthenticated]);
 
   // a follower's edit belongs to the leader, so announce it instead of syncing
   const previousOutboxLength = useRef(replicaSnapshot.outbox.length);
