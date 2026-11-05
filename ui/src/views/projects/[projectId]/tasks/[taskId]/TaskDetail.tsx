@@ -1,6 +1,5 @@
 import { Alert, Card } from 'flowbite-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { useTaskMutations } from '@/hooks/useTaskMutations';
@@ -12,11 +11,11 @@ import { TaskHeader } from './TaskHeader';
 type TaskDetailProps = {
   project: ProjectSnapshot;
   task: Task;
+  onClose: () => void;
 };
 
 export function TaskDetail(props: TaskDetailProps) {
-  const { project, task } = props;
-  const navigate = useNavigate();
+  const { project, task, onClose } = props;
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +38,7 @@ export function TaskDetail(props: TaskDetailProps) {
     try {
       await deleteTask();
       setConfirmingDelete(false);
-      navigate(`/projects/${project.id}`);
+      onClose();
     } catch {
       setError('Could not delete this task.');
     }
@@ -53,6 +52,7 @@ export function TaskDetail(props: TaskDetailProps) {
           task={task}
           onToggleState={handleToggleState}
           onRequestDelete={() => setConfirmingDelete(true)}
+          onBack={onClose}
         />
         {error === null ? null : <Alert color="failure">{error}</Alert>}
         <Card>

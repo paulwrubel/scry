@@ -7,7 +7,6 @@ import { ProjectRedirect } from './layouts/ProjectRedirect';
 import { LoginPage } from './views/login';
 import { ProjectsPage } from './views/projects';
 import { SettingsPage } from './views/settings';
-import { TaskPage } from './views/projects/[projectId]/tasks/[taskId]';
 
 const routes = [
   {
@@ -25,7 +24,7 @@ const routes = [
               {
                 path: 'projects/:projectId',
                 element: <ProjectLayout />,
-                children: [{ path: 'tasks/:taskId', element: <TaskPage /> }],
+                children: [{ path: 'tasks/:taskId' }],
               },
               { path: 'settings', element: <SettingsPage /> },
               { path: '*', element: <Navigate to="/" replace /> },

@@ -20,7 +20,7 @@ export function DeleteTaskModal(props: DeleteTaskModalProps) {
         </p>
       </ModalBody>
       <ModalFooter>
-        <Button color="failure" onClick={() => void onDelete()}>
+        <Button color="red" onClick={() => void onDelete()}>
           Delete task
         </Button>
         <Button color="alternative" onClick={onClose}>
