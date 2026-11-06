@@ -15,6 +15,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dnd-kit/abstract": "^0.5.3",
+    "@dnd-kit/helpers": "^0.5.3",
+    "@dnd-kit/react": "^0.5.3",
     "flowbite-react": "^0.12.17",
     "fractional-indexing": "^3.4.0",
     "idb": "^8.0.4",

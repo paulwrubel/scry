@@ -194,33 +194,38 @@ describe('updateTaskOperation', () => {
 });
 
 describe('moveTaskOperation', () => {
-  it('returns null when the section is unchanged', () => {
-    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog' });
+  it('returns null when the section and position are unchanged', () => {
+    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog', position: 'a1' });
 
-    expect(moveTaskOperation(existing, projectSnapshot(), 'backlog')).toBeNull();
+    expect(moveTaskOperation(existing, 'backlog', 'a1')).toBeNull();
   });
 
-  it('appends the task to the target section', () => {
-    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog' });
-    const project = projectSnapshot({
-      tasks: [
-        existing,
-        task({ id: 'target', title: 'Target', section_id: 'doing', position: 'a4' }),
-      ],
-    });
+  it('reorders within a section', () => {
+    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog', position: 'a1' });
 
-    expect(moveTaskOperation(existing, project, 'doing')).toMatchObject({
+    expect(moveTaskOperation(existing, 'backlog', 'a0V')).toMatchObject({
+      kind: 'move_task',
+      id: TASK_ID,
+      section_id: 'backlog',
+      position: 'a0V',
+    });
+  });
+
+  it('moves to another section', () => {
+    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog', position: 'a1' });
+
+    expect(moveTaskOperation(existing, 'doing', 'a0')).toMatchObject({
       kind: 'move_task',
       id: TASK_ID,
       section_id: 'doing',
-      position: 'a5',
+      position: 'a0',
     });
   });
 
-  it('moves a task to No section', () => {
-    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog' });
+  it('moves to No section', () => {
+    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog', position: 'a1' });
 
-    expect(moveTaskOperation(existing, projectSnapshot(), null)).toMatchObject({
+    expect(moveTaskOperation(existing, null, 'a0')).toMatchObject({
       kind: 'move_task',
       section_id: null,
       position: 'a0',

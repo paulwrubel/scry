@@ -9,6 +9,7 @@ import {
   deleteNoteOperation,
   deleteTaskOperation,
   moveTaskOperation,
+  nextTaskPosition,
   setTaskStateOperation,
   updateNoteOperation,
   updateTaskOperation,
@@ -24,9 +25,11 @@ export function useTaskMutations(task: Task, project: ProjectSnapshot) {
         await replica.enqueue(update);
       }
 
-      const move = moveTaskOperation(task, project, sectionId);
-      if (move !== null) {
-        await replica.enqueue(move);
+      if (sectionId !== task.section_id) {
+        const move = moveTaskOperation(task, sectionId, nextTaskPosition(project.tasks, sectionId));
+        if (move !== null) {
+          await replica.enqueue(move);
+        }
       }
     },
     [project, replica, task],
