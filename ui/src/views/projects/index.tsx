@@ -9,14 +9,18 @@ import {
   TableHeadCell,
   TableRow,
 } from 'flowbite-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
+import { ProjectSettingsModal } from './ProjectSettingsModal';
 
 export function ProjectsPage() {
   const snapshot = useReplicaSnapshot();
   const { activeProjectId, setActiveProjectId } = useActiveProject();
   const navigate = useNavigate();
+  const [settingsProject, setSettingsProject] = useState<ProjectSnapshot | null>(null);
 
   const projects = snapshot.visible.projects;
 
@@ -61,14 +65,23 @@ export function ProjectsPage() {
                     <TableCell>{project.tasks.length}</TableCell>
                     <TableCell>{new Date(project.created_at).toLocaleDateString()}</TableCell>
                     <TableCell>
-                      <Button
-                        size="xs"
-                        color="default"
-                        disabled={project.id === activeProjectId}
-                        onClick={() => handleUse(project.id)}
-                      >
-                        Use
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="xs"
+                          color="default"
+                          disabled={project.id === activeProjectId}
+                          onClick={() => handleUse(project.id)}
+                        >
+                          Use
+                        </Button>
+                        <Button
+                          size="xs"
+                          color="alternative"
+                          onClick={() => setSettingsProject(project)}
+                        >
+                          Settings
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -77,6 +90,13 @@ export function ProjectsPage() {
           </div>
         )}
       </section>
+      {settingsProject === null ? null : (
+        <ProjectSettingsModal
+          key={settingsProject.id}
+          project={settingsProject}
+          onClose={() => setSettingsProject(null)}
+        />
+      )}
     </div>
   );
 }

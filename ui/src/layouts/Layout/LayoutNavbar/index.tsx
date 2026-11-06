@@ -49,8 +49,8 @@ export function LayoutNavbar() {
           Projects
         </NavbarLink>
         {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
-        <NavbarLink as={Link} to="/settings">
-          Settings
+        <NavbarLink as={Link} to="/stats">
+          Stats
         </NavbarLink>
       </NavbarCollapse>
     </Navbar>
