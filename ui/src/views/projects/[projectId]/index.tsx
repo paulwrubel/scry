@@ -4,6 +4,7 @@ import type { DragEndEvent, DragOverEvent } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
 import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
+import { HiCog6Tooth } from 'react-icons/hi2';
 import { useParams } from 'react-router-dom';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
@@ -11,6 +12,7 @@ import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
 import { updateProjectOperation } from '@/utils/projectOperations';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
+import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
 import { buildBoard, dropPosition, groupKey, itemsFromGroups, sectionIdFromGroup } from './board';
 
@@ -33,6 +35,7 @@ export function BoardPage() {
   const snapshot = useReplicaSnapshot();
   const replica = useReplica();
   const [showClosed, setShowClosed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
 
@@ -151,14 +154,23 @@ export function BoardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-line flex flex-wrap items-center justify-between gap-4 border-b px-6 py-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">{project.name}</h1>
-          {project.description === null ? null : (
-            <p className="text-muted text-sm">{project.description}</p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
+      <div className="border-line flex flex-wrap items-center gap-2 border-b px-6 py-4">
+        <h1
+          className="flex h-8 items-center text-2xl font-semibold"
+          title={project.description ?? undefined}
+        >
+          {project.name}
+        </h1>
+        <button
+          type="button"
+          aria-label="Project settings"
+          title="Project settings"
+          onClick={() => setSettingsOpen(true)}
+          className="text-muted inline-flex h-8 w-8 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none"
+        >
+          <HiCog6Tooth aria-hidden="true" className="h-4 w-4" />
+        </button>
+        <div className="ml-auto flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-sm">
             <span className="text-muted">Sort</span>
             <Select
@@ -184,12 +196,14 @@ export function BoardPage() {
             onChange={(showPriority) => void handleProjectUpdate({ show_priority: showPriority })}
             label="Show priority"
             sizing="sm"
+            className="h-8 items-center [&>span]:mt-0"
           />
           <ToggleSwitch
             checked={showClosed}
             onChange={setShowClosed}
             label="Show closed"
             sizing="sm"
+            className="h-8 items-center [&>span]:mt-0"
           />
         </div>
       </div>
@@ -231,6 +245,13 @@ export function BoardPage() {
           </div>
         </DragDropProvider>
       )}
+      {settingsOpen ? (
+        <ProjectSettingsModal
+          key={project.id}
+          project={project}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
