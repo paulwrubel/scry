@@ -11,10 +11,15 @@ import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
 import { updateProjectOperation } from '@/utils/projectOperations';
-import { updateSectionOperation } from '@/utils/sectionOperations';
+import {
+  createSectionOperation,
+  deleteSectionOperation,
+  updateSectionOperation,
+} from '@/utils/sectionOperations';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
 import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
+import { NewSectionCard } from './NewSectionCard';
 import { buildBoard, dropPosition, groupKey, itemsFromGroups, sectionIdFromGroup } from './board';
 
 const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
@@ -101,6 +106,17 @@ export function BoardPage() {
     if (operation !== null) {
       await replica.enqueue(operation);
     }
+  }
+
+  function handleAddSection(name: string) {
+    const operation = createSectionOperation(project, name);
+    if (operation !== null) {
+      void replica.enqueue(operation);
+    }
+  }
+
+  function handleSectionDelete(sectionId: string) {
+    void replica.enqueue(deleteSectionOperation(sectionId));
   }
 
   async function handleReorder(task: Task, sectionId: string | null, position: string) {
@@ -215,50 +231,42 @@ export function BoardPage() {
           />
         </div>
       </div>
-      {groups.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center p-8">
-          <Alert color="info" className="max-w-md">
-            Nothing to show yet.
-          </Alert>
-        </div>
-      ) : (
-        <DragDropProvider
-          // The default sensor ignores links so clicks work; allow the title
-          // link to start a card drag too, and let the click guard suppress
-          // navigation after an actual drag.
-          sensors={[PointerSensor.configure({ preventActivation: () => false }), KeyboardSensor]}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-6">
-            {groups.map((group) => {
-              const section = group.section;
+      <DragDropProvider
+        // The default sensor ignores links so clicks work; allow the title
+        // link to start a card drag too, and let the click guard suppress
+        // navigation after an actual drag.
+        sensors={[PointerSensor.configure({ preventActivation: () => false }), KeyboardSensor]}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-6">
+          {groups.map((group) => {
+            const section = group.section;
 
-              return (
-                <BoardColumn
-                  key={section?.id ?? 'no-section'}
-                  projectId={project.id}
-                  sectionId={section?.id ?? null}
-                  title={section?.name ?? 'No section'}
-                  color={section?.color ?? null}
-                  tasks={group.tasks}
-                  showPriority={project.show_priority}
-                  canReorder={canReorder}
-                  onRename={
-                    section === null
-                      ? undefined
-                      : (name) => void handleSectionRename(section.id, name)
-                  }
-                  onCreate={
-                    section === null ? undefined : (title) => handleCreate(section.id, title)
-                  }
-                />
-              );
-            })}
-          </div>
-        </DragDropProvider>
-      )}
+            return (
+              <BoardColumn
+                key={section?.id ?? 'no-section'}
+                projectId={project.id}
+                sectionId={section?.id ?? null}
+                title={section?.name ?? 'No section'}
+                color={section?.color ?? null}
+                tasks={group.tasks}
+                showPriority={project.show_priority}
+                canReorder={canReorder}
+                onRename={
+                  section === null
+                    ? undefined
+                    : (name) => void handleSectionRename(section.id, name)
+                }
+                onDelete={section === null ? undefined : () => handleSectionDelete(section.id)}
+                onCreate={section === null ? undefined : (title) => handleCreate(section.id, title)}
+              />
+            );
+          })}
+          <NewSectionCard onAdd={handleAddSection} />
+        </div>
+      </DragDropProvider>
       {settingsOpen ? (
         <ProjectSettingsModal
           key={project.id}

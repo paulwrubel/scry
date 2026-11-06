@@ -224,12 +224,12 @@ describe('BoardPage', () => {
     expect(screen.getByText(/Project not found/)).toBeDefined();
   });
 
-  it('shows the empty state for a project with no content', () => {
+  it('offers to add a section for a project with no content', () => {
     renderBoard(
       projectSnapshot(),
       vi.fn(async () => undefined),
     );
 
-    expect(screen.getByText('Nothing to show yet.')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Add section' })).toBeDefined();
   });
 });
