@@ -80,10 +80,10 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
 
 export function moveTaskOperation(
   task: Task,
-  project: ProjectSnapshot,
   sectionId: string | null,
+  position: string,
 ): Operation | null {
-  if (task.section_id === sectionId) {
+  if (task.section_id === sectionId && task.position === position) {
     return null;
   }
 
@@ -93,7 +93,7 @@ export function moveTaskOperation(
     kind: 'move_task',
     id: task.id,
     section_id: sectionId,
-    position: nextTaskPosition(project.tasks, sectionId),
+    position,
   };
 }
 
