@@ -22,3 +22,6 @@ scry.db-journal
 
 # Local secret config (database credentials, API tokens)
 scry.secret.toml
+
+# reference files
+/reference
