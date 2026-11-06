@@ -1,7 +1,6 @@
-use anstyle::{AnsiColor, Color as AnsiStyleColor, RgbColor, Style};
+use anstyle::{AnsiColor, Style};
 use clap::ValueEnum;
 use scry_core::models::{Color, Priority};
-use twox_hash::XxHash32;
 
 /// When to colorize CLI output.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -59,34 +58,3 @@ pub fn priority_long(priority: Priority) -> String {
     )
 }
 
-/// A tag, colored with the deterministic hash-based palette.
-pub fn tag(tag: &str) -> String {
-    let (r, g, b) = tag_rgb(tag);
-    let style = Style::new().fg_color(Some(AnsiStyleColor::Rgb(RgbColor(r, g, b))));
-    paint(style, tag)
-}
-
-// The deterministic tag palette, so CLI tags render consistently.
-const TAG_HASH_SEED: u32 = 1870435234;
-const TAG_PALETTE: [(u8, u8, u8); 14] = [
-    (0xFF, 0xD6, 0xE0),
-    (0xFF, 0xC9, 0xB9),
-    (0xFF, 0xE0, 0xBD),
-    (0xFB, 0xF0, 0xA8),
-    (0xDC, 0xED, 0xC1),
-    (0xB8, 0xE6, 0xD2),
-    (0xAE, 0xE3, 0xE8),
-    (0xBB, 0xDC, 0xF7),
-    (0xC6, 0xCB, 0xF5),
-    (0xD9, 0xC7, 0xF0),
-    (0xEF, 0xC7, 0xE8),
-    (0xFA, 0xF7, 0xF2),
-    (0xD6, 0xD0, 0xC8),
-    (0x5C, 0x54, 0x70),
-];
-
-/// The deterministic tag color.
-pub fn tag_rgb(tag: &str) -> (u8, u8, u8) {
-    let index = XxHash32::oneshot(TAG_HASH_SEED, tag.as_bytes()) as usize % TAG_PALETTE.len();
-    TAG_PALETTE[index]
-}
