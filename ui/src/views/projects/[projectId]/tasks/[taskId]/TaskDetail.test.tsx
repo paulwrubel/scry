@@ -108,7 +108,7 @@ function renderTask(
     <ReplicaContext.Provider value={context}>
       <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}`]}>
         <LocationProbe />
-        <TaskDetail project={project} task={project.tasks[0]} onClose={onClose} />
+        <TaskDetail project={project} task={project.tasks[0]} handle="abcd" onClose={onClose} />
       </MemoryRouter>
     </ReplicaContext.Provider>,
   );
@@ -128,6 +128,7 @@ describe('TaskDetail', () => {
     expect((screen.getByLabelText('Priority') as HTMLSelectElement).value).toBe('high');
     expect((screen.getByLabelText('Section') as HTMLSelectElement).value).toBe('backlog');
     expect((screen.getByLabelText('Tags') as HTMLInputElement).value).toBe('one, two');
+    expect(screen.getByText('abcd')).toBeDefined();
     expect(screen.getByText('A note')).toBeDefined();
   });
 

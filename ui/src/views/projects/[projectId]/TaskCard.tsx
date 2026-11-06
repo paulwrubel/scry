@@ -57,7 +57,13 @@ export function TaskCard(props: TaskCardProps) {
         draggable={false}
         className="w-fit max-w-full"
       >
-        <span className={closed ? 'text-faint text-sm line-through' : 'text-sm'}>{task.title}</span>
+        <span
+          className={`text-sm hover:text-blue-400 hover:underline ${
+            closed ? 'text-faint line-through' : ''
+          }`}
+        >
+          {task.title}
+        </span>
       </Link>
       {hasBadges ? (
         <div className="flex flex-wrap items-center gap-1">

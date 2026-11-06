@@ -36,11 +36,7 @@ export function buildBoard(project: ProjectSnapshot, showClosed: boolean): Board
     project.task_sorting_mode,
   );
 
-  if (unsectioned.length > 0) {
-    groups.push({ section: null, tasks: unsectioned });
-  }
-
-  return groups;
+  return unsectioned.length === 0 ? groups : [{ section: null, tasks: unsectioned }, ...groups];
 }
 
 export function itemsFromGroups(groups: BoardGroup[]): Record<string, string[]> {

@@ -21,13 +21,16 @@ export function LayoutNavbar() {
 
   return (
     <Navbar fluid theme={navbarTheme}>
-      <div className="flex flex-1 items-center">
+      <div className="flex flex-1 items-baseline gap-4">
         {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
         <NavbarBrand as={Link} to="/">
           <span className="self-center text-xl font-semibold whitespace-nowrap text-white">
             Scry
           </span>
         </NavbarBrand>
+        <span className="cursor-default self-baseline text-sm text-zinc-500 select-none">
+          {__APP_VERSION__}
+        </span>
       </div>
       <div className="flex flex-1 items-center justify-end gap-2 md:order-2">
         <SignOutButton />
