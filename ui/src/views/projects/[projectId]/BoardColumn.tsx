@@ -21,7 +21,7 @@ type BoardColumnProps = {
 
 const columnTheme: DeepPartial<CardTheme> = {
   root: {
-    children: 'flex h-full flex-col justify-start gap-2 p-2',
+    children: 'flex h-full min-h-0 flex-col justify-start gap-2 p-2',
   },
 };
 
@@ -39,15 +39,15 @@ export function BoardColumn(props: BoardColumnProps) {
   return (
     <Card
       theme={columnTheme}
-      className={`flex w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''}`}
+      className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''}`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         <Badge color="gray">{tasks.length}</Badge>
       </div>
       <div
         ref={ref}
-        className={`flex min-h-10 flex-1 flex-col gap-2 rounded-md ${
+        className={`flex min-h-10 flex-1 flex-col gap-2 overflow-y-auto rounded-md pr-1 ${
           isDropTarget ? 'ring-line-hover ring-1' : ''
         }`}
       >

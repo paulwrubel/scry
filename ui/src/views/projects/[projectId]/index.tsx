@@ -155,7 +155,7 @@ export function BoardPage() {
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex min-h-0 flex-1 gap-4 overflow-auto p-6">
+          <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-6">
             {groups.map((group) => {
               const section = group.section;
 

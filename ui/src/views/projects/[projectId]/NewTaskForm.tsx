@@ -14,7 +14,7 @@ export function NewTaskForm(props: NewTaskFormProps) {
 
   if (!open) {
     return (
-      <Button size="xs" color="alternative" onClick={() => setOpen(true)}>
+      <Button size="xs" color="alternative" className="shrink-0" onClick={() => setOpen(true)}>
         Add task
       </Button>
     );
@@ -43,7 +43,7 @@ export function NewTaskForm(props: NewTaskFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+    <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-2">
       <TextInput
         sizing="sm"
         value={title}
