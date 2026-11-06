@@ -9,6 +9,7 @@ import { SyncProvider } from '@/providers/Sync';
 const theme: CustomFlowbiteTheme = {
   card: {
     root: {
+      base: 'flex rounded-lg border border-line bg-panel shadow-md dark:bg-panel',
       children: 'flex h-full flex-col justify-start gap-3 p-4',
     },
   },

@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAuth } from '@/providers/Auth';
 import { useReplicaSnapshot } from '@/providers/Replica';
 import type { SyncError, SyncSnapshot } from '@/utils/sync';
 import { useSyncSnapshot } from './hook';
 
 export type SyncDisplayStatus =
-  'checking' | 'unauthenticated' | 'offline' | 'syncing' | 'error' | 'pending' | 'synced';
+  'checking' | 'unauthenticated' | 'syncing' | 'error' | 'pending' | 'synced';
 
 export type SyncStatusView = {
   status: SyncDisplayStatus;
@@ -23,7 +22,6 @@ export type DeriveSyncStatusInput = {
   snapshot: SyncSnapshot;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
-  online: boolean;
   pending: number;
   syncingVisible: boolean;
   persisted: boolean;
@@ -58,8 +56,7 @@ export function formatLastSyncedAt(value: string | null): string {
 }
 
 export function deriveSyncStatus(input: DeriveSyncStatusInput): SyncStatusView {
-  const { snapshot, isAuthenticated, isAuthLoading, online, pending, syncingVisible, persisted } =
-    input;
+  const { snapshot, isAuthenticated, isAuthLoading, pending, syncingVisible, persisted } = input;
   const lastSyncedLabel = formatLastSyncedAt(snapshot.lastSyncedAt);
   const rejected = snapshot.rejected.length;
   const base = {
@@ -79,14 +76,6 @@ export function deriveSyncStatus(input: DeriveSyncStatusInput): SyncStatusView {
       status: 'unauthenticated',
       label: 'Signed out',
       detail: 'Sign in to sync changes.',
-    };
-  }
-  if (!online) {
-    return {
-      ...base,
-      status: 'offline',
-      label: 'Offline',
-      detail: 'Changes are saved locally and will sync when you reconnect.',
     };
   }
   if (syncingVisible) {
@@ -139,21 +128,19 @@ export function useSyncStatus(): SyncStatusView {
   const snapshot = useSyncSnapshot();
   const replica = useReplicaSnapshot();
   const { isAuthenticated, isAuthLoading } = useAuth();
-  const online = useOnlineStatus();
   const syncingVisible = useSyncingVisible(snapshot.status === 'syncing');
 
   return deriveSyncStatus({
     snapshot,
     isAuthenticated,
     isAuthLoading,
-    online,
     pending: replica.outbox.length,
     syncingVisible,
     persisted: replica.persisted,
   });
 }
 
-function useSyncingVisible(active: boolean, delayMs = 300): boolean {
+export function useSyncingVisible(active: boolean, delayMs = 300): boolean {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {

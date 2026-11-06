@@ -1,12 +1,10 @@
 import { Alert, Button, Spinner } from 'flowbite-react';
 import { Outlet } from 'react-router-dom';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useReplicaStatus } from '@/providers/Replica';
 import { LayoutNavbar } from './LayoutNavbar';
 
 export function Layout() {
   const { status, error, retry } = useReplicaStatus();
-  const online = useOnlineStatus();
 
   if (status === 'loading') {
     return (
@@ -29,11 +27,6 @@ export function Layout() {
   return (
     <div className="flex h-screen flex-col">
       <LayoutNavbar />
-      {!online ? (
-        <Alert color="warning" className="rounded-none border-x-0">
-          Offline. Changes are saved locally and will sync when the connection returns.
-        </Alert>
-      ) : null}
       <main className="bg-canvas relative flex min-h-0 flex-1 flex-col overflow-hidden text-zinc-200">
         <div className="relative z-0 flex min-h-0 flex-1 flex-col">
           <Outlet />

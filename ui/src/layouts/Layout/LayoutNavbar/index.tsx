@@ -3,6 +3,7 @@ import type { NavbarTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { Link } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
+import { ConnectionStatus } from './ConnectionStatus';
 import { SignOutButton } from './SignOutButton';
 import { SyncButton } from './SyncButton';
 import { SyncStatus } from './SyncStatus';
@@ -13,9 +14,9 @@ export function LayoutNavbar() {
 
   const navbarTheme: DeepPartial<NavbarTheme> = {
     root: {
-      base: 'border-b border-line bg-surface px-4',
+      base: 'border-b border-line bg-panel px-4 dark:border-line dark:bg-panel',
       inner: {
-        base: 'mx-auto flex h-16 flex-wrap items-center justify-between',
+        base: 'mx-auto flex h-8 flex-wrap items-center justify-between',
       },
     },
   };
@@ -34,6 +35,7 @@ export function LayoutNavbar() {
         </span>
       </div>
       <div className="flex flex-1 items-center justify-end gap-2 md:order-2">
+        <ConnectionStatus />
         <SyncStatus />
         <SignOutButton />
         <SyncButton />
