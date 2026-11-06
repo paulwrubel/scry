@@ -181,15 +181,15 @@ describe('updateTaskOperation', () => {
     expect(operation).toMatchObject({ description: null, title: null, priority: null });
   });
 
-  it('trims and filters tags', () => {
+  it('trims, lowercases, dedupes, and sorts tags', () => {
     const operation = updateTaskOperation(existing, {
       title: 'Title',
       description: 'Description',
       priority: 'low',
-      tags: [' two ', '', 'three'],
+      tags: [' Two ', 'three', '', 'two'],
     });
 
-    expect(operation).toMatchObject({ tags: ['two', 'three'], title: null });
+    expect(operation).toMatchObject({ tags: ['three', 'two'], title: null });
   });
 });
 

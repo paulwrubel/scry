@@ -46,6 +46,12 @@ export function createTaskOperation(
   };
 }
 
+function normalizeTags(tags: string[]): string[] {
+  return [
+    ...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0)),
+  ].sort();
+}
+
 export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operation | null {
   const title = patch.title.trim();
   if (title.length === 0) {
@@ -54,7 +60,7 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
 
   const description = patch.description.trim();
   const nextDescription = description.length === 0 ? null : description;
-  const tags = patch.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0);
+  const tags = normalizeTags(patch.tags);
 
   const titleChanged = title !== task.title;
   const descriptionChanged = nextDescription !== task.description;
