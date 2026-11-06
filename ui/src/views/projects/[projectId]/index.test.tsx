@@ -122,7 +122,7 @@ describe('BoardPage', () => {
       vi.fn(async () => undefined),
     );
 
-    expect(screen.getByText('No tasks.')).toBeDefined();
+    expect(screen.queryByText('No tasks.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Add task' })).toBeDefined();
   });
 

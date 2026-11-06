@@ -18,9 +18,9 @@ export function SelectControl(props: SelectControlProps) {
   const id = useId();
 
   return (
-    <Label htmlFor={id} className="flex flex-col items-start gap-1.5">
+    <Label htmlFor={id} className="flex w-full flex-col items-stretch gap-1.5">
       <span>{label}</span>
-      <Select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select id={id} sizing="sm" value={value} onChange={(event) => onChange(event.target.value)}>
         {items.map((item) => (
           <option key={item.value} value={item.value}>
             {item.label}

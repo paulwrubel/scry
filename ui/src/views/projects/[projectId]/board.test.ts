@@ -98,7 +98,7 @@ describe('buildBoard', () => {
     ]);
   });
 
-  it('appends tasks without a section last', () => {
+  it('puts tasks without a section first', () => {
     const project = projectSnapshot({
       sections: [section('backlog', 'a0')],
       tasks: [
@@ -108,8 +108,8 @@ describe('buildBoard', () => {
     });
 
     expect(shape(buildBoard(project, false))).toEqual([
-      ['backlog', ['sectioned']],
       [null, ['loose']],
+      ['backlog', ['sectioned']],
     ]);
   });
 

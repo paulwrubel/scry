@@ -11,11 +11,12 @@ import { TaskHeader } from './TaskHeader';
 type TaskDetailProps = {
   project: ProjectSnapshot;
   task: Task;
+  handle: string;
   onClose: () => void;
 };
 
 export function TaskDetail(props: TaskDetailProps) {
-  const { project, task, onClose } = props;
+  const { project, task, handle, onClose } = props;
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,7 @@ export function TaskDetail(props: TaskDetailProps) {
         <TaskHeader
           project={project}
           task={task}
+          handle={handle}
           onToggleState={handleToggleState}
           onRequestDelete={() => setConfirmingDelete(true)}
           onBack={onClose}

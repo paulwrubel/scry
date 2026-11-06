@@ -1,8 +1,9 @@
 import { Drawer } from 'flowbite-react';
 import type { DrawerTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { MIN_HANDLE_LENGTH, shortestHandles } from '@/contract/handles';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { useReplicaSnapshot } from '@/providers/Replica';
@@ -30,6 +31,14 @@ export function ProjectLayout() {
 
   const project = snapshot.visible.projects.find((candidate) => candidate.id === projectId);
   const task = project?.tasks.find((candidate) => candidate.id === taskId);
+  const handles = useMemo(
+    () =>
+      shortestHandles(
+        snapshot.visible.projects.flatMap((candidate) => candidate.tasks.map((item) => item.id)),
+        MIN_HANDLE_LENGTH,
+      ),
+    [snapshot],
+  );
   const open = project !== undefined && task !== undefined;
   const live = open ? { project, task } : null;
   const panel = live ?? lastPanel;
@@ -61,10 +70,15 @@ export function ProjectLayout() {
         onClose={close}
         aria-hidden={!open}
         inert={!open}
-        className="md:border-line w-full md:inset-y-4 md:right-4 md:h-auto md:w-[36rem] md:rounded-xl md:border md:shadow-2xl"
+        className="md:border-line w-full md:inset-y-4 md:right-4 md:h-auto md:w-xl md:rounded-xl md:border md:shadow-2xl"
       >
         {panel === null ? null : (
-          <TaskDetail project={panel.project} task={panel.task} onClose={close} />
+          <TaskDetail
+            project={panel.project}
+            task={panel.task}
+            handle={handles.get(panel.task.id) ?? panel.task.id}
+            onClose={close}
+          />
         )}
       </Drawer>
     </div>

@@ -6,13 +6,14 @@ import { TaskActions } from './TaskActions';
 export type TaskHeaderProps = {
   project: ProjectSnapshot;
   task: Task;
+  handle: string;
   onToggleState: () => Promise<void>;
   onRequestDelete: () => void;
   onBack: () => void;
 };
 
 export function TaskHeader(props: TaskHeaderProps) {
-  const { project, task, onToggleState, onRequestDelete, onBack } = props;
+  const { project, task, handle, onToggleState, onRequestDelete, onBack } = props;
 
   return (
     <div className="flex flex-col gap-3">
@@ -43,7 +44,10 @@ export function TaskHeader(props: TaskHeaderProps) {
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">{task.title}</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-2xl font-semibold">{task.title}</h1>
+            <span className="text-faint font-mono text-sm">{handle}</span>
+          </div>
           <p className="text-muted text-sm">{project.name}</p>
         </div>
         <TaskActions task={task} onToggleState={onToggleState} onRequestDelete={onRequestDelete} />

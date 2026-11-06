@@ -13,7 +13,7 @@ export function TextInputControl(props: TextInputControlProps) {
   const id = useId();
 
   return (
-    <Label htmlFor={id} className="flex flex-col items-start gap-1.5">
+    <Label htmlFor={id} className="flex w-full flex-col items-stretch gap-1.5">
       <span>{label}</span>
       <TextInput
         id={id}

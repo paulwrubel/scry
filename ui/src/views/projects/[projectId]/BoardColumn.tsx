@@ -37,7 +37,10 @@ export function BoardColumn(props: BoardColumnProps) {
   });
 
   return (
-    <Card theme={columnTheme} className="flex w-96 shrink-0 flex-col">
+    <Card
+      theme={columnTheme}
+      className={`flex w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         <Badge color="gray">{tasks.length}</Badge>
@@ -48,24 +51,27 @@ export function BoardColumn(props: BoardColumnProps) {
           isDropTarget ? 'ring-line-hover ring-1' : ''
         }`}
       >
-        {tasks.length === 0 ? (
-          <p className="text-faint text-xs">No tasks.</p>
-        ) : canReorder ? (
-          tasks.map((task, index) => (
-            <SortableTaskCard
-              key={task.id}
-              projectId={projectId}
-              task={task}
-              index={index}
-              group={group}
-              showPriority={showPriority}
-            />
-          ))
-        ) : (
-          tasks.map((task) => (
-            <TaskCard key={task.id} projectId={projectId} task={task} showPriority={showPriority} />
-          ))
-        )}
+        {tasks.length === 0
+          ? null
+          : canReorder
+            ? tasks.map((task, index) => (
+                <SortableTaskCard
+                  key={task.id}
+                  projectId={projectId}
+                  task={task}
+                  index={index}
+                  group={group}
+                  showPriority={showPriority}
+                />
+              ))
+            : tasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  projectId={projectId}
+                  task={task}
+                  showPriority={showPriority}
+                />
+              ))}
       </div>
       {onCreate === undefined ? null : <NewTaskForm onCreate={onCreate} />}
     </Card>
