@@ -3,9 +3,12 @@ import { useDroppable } from '@dnd-kit/react';
 import { Badge, Card } from 'flowbite-react';
 import type { CardTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
+import { useState } from 'react';
+import { HiTrash } from 'react-icons/hi2';
 import { RenamableLabel } from '@/components/RenamableLabel';
 import type { Color } from '@/generated/Color';
 import type { Task } from '@/generated/Task';
+import { DeleteSectionModal } from './DeleteSectionModal';
 import { NewTaskForm } from './NewTaskForm';
 import { SortableTaskCard } from './SortableTaskCard';
 import { TaskCard } from './TaskCard';
@@ -20,7 +23,10 @@ type BoardColumnProps = {
   showPriority: boolean;
   canReorder: boolean;
   onRename?: (name: string) => void;
+  onDelete?: () => void;
   onCreate?: (title: string) => Promise<void>;
+  nodeRef?: (element: HTMLDivElement | null) => void;
+  isDragging?: boolean;
 };
 
 const SECTION_COLOR_HEX: Record<Color, string> = {
@@ -58,9 +64,13 @@ export function BoardColumn(props: BoardColumnProps) {
     showPriority,
     canReorder,
     onRename,
+    onDelete,
     onCreate,
+    nodeRef,
+    isDragging,
   } = props;
   const group = groupKey(sectionId);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const { ref, isDropTarget } = useDroppable({
     id: group,
@@ -70,57 +80,84 @@ export function BoardColumn(props: BoardColumnProps) {
   });
 
   return (
-    <Card
-      theme={columnTheme}
-      className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''}`}
-    >
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {color === null ? null : (
-            <span
-              aria-hidden="true"
-              className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20"
-              style={{ backgroundColor: SECTION_COLOR_HEX[color] }}
-            />
-          )}
-          <RenamableLabel
-            label={title}
-            onRename={onRename}
-            labelAs="h2"
-            inputAriaLabel="Section name"
-          />
-        </div>
-        <Badge color="gray">{tasks.length}</Badge>
-      </div>
-      <div
-        ref={ref}
-        className={`flex min-h-10 flex-1 flex-col gap-2 overflow-y-auto rounded-md pr-1 ${
-          isDropTarget ? 'ring-line-hover ring-1' : ''
-        }`}
+    <>
+      <Card
+        ref={nodeRef}
+        theme={columnTheme}
+        className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''} ${isDragging ? 'opacity-80' : ''}`}
       >
-        {tasks.length === 0
-          ? null
-          : canReorder
-            ? tasks.map((task, index) => (
-                <SortableTaskCard
-                  key={task.id}
-                  projectId={projectId}
-                  task={task}
-                  index={index}
-                  group={group}
-                  showPriority={showPriority}
-                />
-              ))
-            : tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  projectId={projectId}
-                  task={task}
-                  showPriority={showPriority}
-                />
-              ))}
-      </div>
-      {onCreate === undefined ? null : <NewTaskForm onCreate={onCreate} />}
-    </Card>
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            {color === null ? null : (
+              <span
+                aria-hidden="true"
+                className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20"
+                style={{ backgroundColor: SECTION_COLOR_HEX[color] }}
+              />
+            )}
+            <RenamableLabel
+              label={title}
+              onRename={onRename}
+              labelAs="h2"
+              inputAriaLabel="Section name"
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Badge color="gray">{tasks.length}</Badge>
+            {onDelete === undefined ? null : (
+              <button
+                type="button"
+                aria-label={`Delete ${title}`}
+                title={`Delete ${title}`}
+                onClick={() => setConfirmingDelete(true)}
+                className="text-muted inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-red-400 focus:outline-none focus-visible:outline-none"
+              >
+                <HiTrash aria-hidden="true" className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+        <div
+          ref={ref}
+          className={`flex min-h-10 flex-1 flex-col gap-2 overflow-y-auto rounded-md pr-1 ${
+            isDropTarget ? 'ring-line-hover ring-1' : ''
+          }`}
+        >
+          {tasks.length === 0
+            ? null
+            : canReorder
+              ? tasks.map((task, index) => (
+                  <SortableTaskCard
+                    key={task.id}
+                    projectId={projectId}
+                    task={task}
+                    index={index}
+                    group={group}
+                    showPriority={showPriority}
+                  />
+                ))
+              : tasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    projectId={projectId}
+                    task={task}
+                    showPriority={showPriority}
+                  />
+                ))}
+        </div>
+        {onCreate === undefined ? null : <NewTaskForm onCreate={onCreate} />}
+      </Card>
+      {onDelete === undefined ? null : (
+        <DeleteSectionModal
+          sectionName={title}
+          show={confirmingDelete}
+          onClose={() => setConfirmingDelete(false)}
+          onDelete={() => {
+            setConfirmingDelete(false);
+            onDelete();
+          }}
+        />
+      )}
+    </>
   );
 }

@@ -5,7 +5,7 @@ import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { useAppForm } from '@/hooks/useAppForm';
-import type { TaskFieldPatch } from '@/utils/taskOperations';
+import { normalizeTags, type TaskFieldPatch } from '@/utils/taskOperations';
 
 const PRIORITIES: { label: string; value: Priority }[] = [
   { label: 'Critical', value: 'critical' },
@@ -47,7 +47,7 @@ export function TaskFieldsForm(props: TaskFieldsFormProps) {
       description: task.description ?? '',
       priority: String(task.priority),
       sectionId: task.section_id ?? '',
-      tags: task.tags.join(', '),
+      tags: normalizeTags(task.tags).join(', '),
     },
     validators: { onChange: schema },
     onSubmit: async ({ value }) => {
@@ -55,16 +55,19 @@ export function TaskFieldsForm(props: TaskFieldsFormProps) {
       setError(null);
       setSaved(false);
 
+      const tags = normalizeTags(value.tags.split(','));
+
       try {
         await onSave(
           {
             title: value.title,
             description: value.description,
             priority: value.priority as Priority,
-            tags: value.tags.split(','),
+            tags,
           },
           value.sectionId.length === 0 ? null : value.sectionId,
         );
+        form.setFieldValue('tags', tags.join(', '));
         setSaved(true);
       } catch {
         setError('Could not save this task.');

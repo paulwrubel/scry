@@ -116,6 +116,13 @@ function applyOperation(state: ClientState, operation: Operation): void {
       }
       return;
     }
+    case 'move_section': {
+      const section = findSection(state, operation.id);
+      if (section) {
+        section.position = operation.position;
+      }
+      return;
+    }
     case 'delete_section': {
       removeSection(state, operation.id);
       return;

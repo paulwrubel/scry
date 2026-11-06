@@ -46,6 +46,7 @@ export type OperationKind =
       created_at: string;
     }
   | { kind: 'update_section'; id: string; name: string | null; color: ColorChange | null }
+  | { kind: 'move_section'; id: string; position: Position }
   | { kind: 'delete_section'; id: string }
   | {
       kind: 'create_task';

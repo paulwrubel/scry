@@ -961,11 +961,12 @@ impl Store for PostgresStore {
         match sqlx::query!(
             r#"
                 UPDATE sections
-                SET name = $1, color = $2
-                WHERE id = $3
+                SET name = $1, color = $2, position = $3
+                WHERE id = $4
             "#,
             &section.name,
             section.color.map(|c| c.to_string()),
+            section.position.as_str(),
             section.id,
         )
         .execute(&mut *conn)

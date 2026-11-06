@@ -6,12 +6,12 @@ import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
 import { tagBadgeStyle } from '@/utils/tagColor';
 
-const priorityBadgeColor: Record<Priority, string> = {
-  critical: 'priority-critical',
-  high: 'priority-high',
-  medium: 'priority-medium',
-  low: 'priority-low',
-  minimal: 'priority-minimal',
+const PRIORITY_DOT_CLASS: Record<Priority, string> = {
+  critical: 'bg-red-600',
+  high: 'bg-orange-500',
+  medium: 'bg-yellow-300',
+  low: 'bg-purple-500',
+  minimal: 'bg-white',
 };
 
 export type TaskCardProps = {
@@ -31,11 +31,12 @@ export function TaskCard(props: TaskCardProps) {
   const moved = useRef(false);
 
   const closed = task.state === 'closed';
-  const hasBadges = showPriority || closed || task.tags.length > 0;
+  const hasBadges = task.tags.length > 0;
 
   return (
     <div
       ref={nodeRef}
+      data-column-drag-ignore
       style={style}
       onPointerDownCapture={(event) => {
         moved.current = false;
@@ -65,10 +66,18 @@ export function TaskCard(props: TaskCardProps) {
       <Link
         to={`/projects/${projectId}/tasks/${task.id}`}
         draggable={false}
-        className="w-fit max-w-full"
+        className="flex w-fit max-w-full items-center gap-2"
       >
+        {showPriority ? (
+          <span
+            role="img"
+            aria-label={`${task.priority} priority`}
+            title={task.priority}
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20 ${PRIORITY_DOT_CLASS[task.priority]}`}
+          />
+        ) : null}
         <span
-          className={`text-sm hover:text-blue-400 hover:underline ${
+          className={`min-w-0 text-sm hover:text-blue-400 hover:underline ${
             closed ? 'text-faint line-through' : ''
           }`}
         >
@@ -77,10 +86,6 @@ export function TaskCard(props: TaskCardProps) {
       </Link>
       {hasBadges ? (
         <div className="flex flex-wrap items-center gap-1">
-          {showPriority ? (
-            <Badge color={priorityBadgeColor[task.priority]}>{task.priority}</Badge>
-          ) : null}
-          {closed ? <Badge color="gray">Closed</Badge> : null}
           {task.tags.map((tag) => (
             <Badge key={tag} color="gray" style={tagBadgeStyle(tag)}>
               {tag}

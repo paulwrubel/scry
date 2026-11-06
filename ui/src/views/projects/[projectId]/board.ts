@@ -23,7 +23,17 @@ export function sectionIdFromGroup(key: string): string | null {
 export function buildBoard(project: ProjectSnapshot, showClosed: boolean): BoardGroup[] {
   const visible = project.tasks.filter((task) => showClosed || task.state === 'open');
 
-  const groups: BoardGroup[] = project.sections.map((section) => ({
+  const sections = [...project.sections].sort((left, right) => {
+    if (left.position < right.position) {
+      return -1;
+    }
+    if (left.position > right.position) {
+      return 1;
+    }
+    return 0;
+  });
+
+  const groups: BoardGroup[] = sections.map((section) => ({
     section,
     tasks: orderTasks(
       visible.filter((task) => task.section_id === section.id),

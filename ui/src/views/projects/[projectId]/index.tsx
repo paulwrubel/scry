@@ -1,21 +1,36 @@
 import { move } from '@dnd-kit/helpers';
 import { DragDropProvider, KeyboardSensor, PointerSensor } from '@dnd-kit/react';
-import type { DragEndEvent, DragOverEvent } from '@dnd-kit/react';
-import { isSortable } from '@dnd-kit/react/sortable';
+import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react';
+import { isSortable, useSortable } from '@dnd-kit/react/sortable';
 import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
 import { HiCog6Tooth } from 'react-icons/hi2';
 import { useParams } from 'react-router-dom';
+import { keyBetween } from '@/contract/positions';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
 import { updateProjectOperation } from '@/utils/projectOperations';
-import { updateSectionOperation } from '@/utils/sectionOperations';
+import {
+  createSectionOperation,
+  deleteSectionOperation,
+  moveSectionOperation,
+  updateSectionOperation,
+} from '@/utils/sectionOperations';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
 import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
-import { buildBoard, dropPosition, groupKey, itemsFromGroups, sectionIdFromGroup } from './board';
+import { NewSectionCard } from './NewSectionCard';
+import {
+  buildBoard,
+  dropPosition,
+  groupKey,
+  itemsFromGroups,
+  sectionIdFromGroup,
+  type BoardGroup,
+} from './board';
 
 const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
   { label: 'Alphabetical', value: 'alphabetical' },
@@ -30,6 +45,8 @@ type PendingMove = {
   sectionId: string | null;
   position: string;
 };
+
+type SectionBoardGroup = BoardGroup & { section: Section };
 
 export function BoardPage() {
   const { projectId } = useParams();
@@ -76,6 +93,11 @@ export function BoardPage() {
     };
   });
 
+  const noSectionGroup = groups.find((group) => group.section === null) ?? null;
+  const sectionGroups = groups.filter(
+    (group): group is SectionBoardGroup => group.section !== null,
+  );
+
   async function handleCreate(sectionId: string, title: string) {
     await replica.enqueue(createTaskOperation(project, sectionId, title));
   }
@@ -103,6 +125,21 @@ export function BoardPage() {
     }
   }
 
+  function handleAddSection(name: string) {
+    const operation = createSectionOperation(project, name);
+    if (operation !== null) {
+      void replica.enqueue(operation);
+    }
+  }
+
+  function handleSectionDelete(sectionId: string) {
+    void replica.enqueue(deleteSectionOperation(sectionId));
+  }
+
+  function handleSectionMove(sectionId: string, position: string) {
+    void replica.enqueue(moveSectionOperation(sectionId, position));
+  }
+
   async function handleReorder(task: Task, sectionId: string | null, position: string) {
     const operation = moveTaskOperation(task, sectionId, position);
     if (operation !== null) {
@@ -110,8 +147,8 @@ export function BoardPage() {
     }
   }
 
-  function handleDragStart() {
-    if (!canReorder) {
+  function handleDragStart(event: DragStartEvent) {
+    if (!canReorder || event.operation.source?.type === 'column') {
       return;
     }
     setDragItems(itemsFromGroups(baseGroups));
@@ -125,14 +162,37 @@ export function BoardPage() {
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const finalItems = dragItems;
-    setDragItems(null);
+    const { source, target } = event.operation;
 
-    if (!canReorder || event.canceled || finalItems === null) {
+    if (event.canceled) {
+      setDragItems(null);
       return;
     }
 
-    const { source } = event.operation;
+    if (source?.type === 'column') {
+      if (!isSortable(source) || !isSortable(target) || source.index === target.index) {
+        return;
+      }
+
+      const reordered = moveArray(sectionGroups, source.index, target.index);
+      const moved = reordered[target.index]?.section;
+      if (moved === undefined) {
+        return;
+      }
+
+      const before = reordered[target.index - 1]?.section.position ?? null;
+      const after = reordered[target.index + 1]?.section.position ?? null;
+      handleSectionMove(moved.id, keyBetween(before, after));
+      return;
+    }
+
+    const finalItems = dragItems;
+    setDragItems(null);
+
+    if (!canReorder || finalItems === null) {
+      return;
+    }
+
     if (
       source === null ||
       !isSortable(source) ||
@@ -215,50 +275,57 @@ export function BoardPage() {
           />
         </div>
       </div>
-      {groups.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center p-8">
-          <Alert color="info" className="max-w-md">
-            Nothing to show yet.
-          </Alert>
-        </div>
-      ) : (
-        <DragDropProvider
-          // The default sensor ignores links so clicks work; allow the title
-          // link to start a card drag too, and let the click guard suppress
-          // navigation after an actual drag.
-          sensors={[PointerSensor.configure({ preventActivation: () => false }), KeyboardSensor]}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-6">
-            {groups.map((group) => {
-              const section = group.section;
-
+      <DragDropProvider
+        // The default sensor ignores links so clicks work; allow the title
+        // link to start a card drag too, and let the click guard suppress
+        // navigation after an actual drag.
+        sensors={[
+          PointerSensor.configure({
+            preventActivation: (event, source) => {
+              if (source.type !== 'column') {
+                return false;
+              }
+              const target = event.target;
               return (
-                <BoardColumn
-                  key={section?.id ?? 'no-section'}
-                  projectId={project.id}
-                  sectionId={section?.id ?? null}
-                  title={section?.name ?? 'No section'}
-                  color={section?.color ?? null}
-                  tasks={group.tasks}
-                  showPriority={project.show_priority}
-                  canReorder={canReorder}
-                  onRename={
-                    section === null
-                      ? undefined
-                      : (name) => void handleSectionRename(section.id, name)
-                  }
-                  onCreate={
-                    section === null ? undefined : (title) => handleCreate(section.id, title)
-                  }
-                />
+                target instanceof Element &&
+                target.closest('[data-column-drag-ignore], button, input, textarea, select, a') !==
+                  null
               );
-            })}
-          </div>
-        </DragDropProvider>
-      )}
+            },
+          }),
+          KeyboardSensor,
+        ]}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-6">
+          {noSectionGroup === null ? null : (
+            <BoardColumn
+              projectId={project.id}
+              sectionId={null}
+              title="No section"
+              color={null}
+              tasks={noSectionGroup.tasks}
+              showPriority={project.show_priority}
+              canReorder={canReorder}
+            />
+          )}
+          {sectionGroups.map((group, index) => (
+            <SortableBoardColumn
+              key={group.section.id}
+              group={group}
+              index={index}
+              project={project}
+              canReorder={canReorder}
+              onCreate={handleCreate}
+              onRename={(sectionId, name) => void handleSectionRename(sectionId, name)}
+              onDelete={handleSectionDelete}
+            />
+          ))}
+          <NewSectionCard onAdd={handleAddSection} />
+        </div>
+      </DragDropProvider>
       {settingsOpen ? (
         <ProjectSettingsModal
           key={project.id}
@@ -267,6 +334,52 @@ export function BoardPage() {
         />
       ) : null}
     </div>
+  );
+}
+
+function moveArray<T>(items: T[], from: number, to: number): T[] {
+  const next = [...items];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+type SortableBoardColumnProps = {
+  group: SectionBoardGroup;
+  index: number;
+  project: ProjectSnapshot;
+  canReorder: boolean;
+  onCreate: (sectionId: string, title: string) => Promise<void>;
+  onRename: (sectionId: string, name: string) => void;
+  onDelete: (sectionId: string) => void;
+};
+
+function SortableBoardColumn(props: SortableBoardColumnProps) {
+  const { group, index, project, canReorder, onCreate, onRename, onDelete } = props;
+  const section = group.section;
+  const { ref, isDragging } = useSortable({
+    id: section.id,
+    index,
+    group: 'columns',
+    type: 'column',
+    accept: 'column',
+  });
+
+  return (
+    <BoardColumn
+      nodeRef={(element) => ref(element)}
+      isDragging={isDragging}
+      projectId={project.id}
+      sectionId={section.id}
+      title={section.name}
+      color={section.color}
+      tasks={group.tasks}
+      showPriority={project.show_priority}
+      canReorder={canReorder}
+      onRename={(name) => onRename(section.id, name)}
+      onDelete={() => onDelete(section.id)}
+      onCreate={(title) => onCreate(section.id, title)}
+    />
   );
 }
 

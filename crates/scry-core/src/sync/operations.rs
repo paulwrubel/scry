@@ -153,6 +153,10 @@ pub enum OperationKind {
         name: Option<String>,
         color: Option<ColorChange>,
     },
+    MoveSection {
+        id: SectionId,
+        position: Position,
+    },
     DeleteSection {
         id: SectionId,
     },

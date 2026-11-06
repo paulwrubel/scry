@@ -46,7 +46,7 @@ export function createTaskOperation(
   };
 }
 
-function normalizeTags(tags: string[]): string[] {
+export function normalizeTags(tags: string[]): string[] {
   return [
     ...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0)),
   ].sort();
