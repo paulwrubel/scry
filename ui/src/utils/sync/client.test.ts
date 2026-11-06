@@ -8,6 +8,7 @@ import type { Task } from '@/generated/Task';
 import { openReplica } from '@/utils/replica';
 import type { Replica } from '@/utils/replica';
 import { createSyncClient } from './client';
+import { SYNC_STATE_KEY } from './persistence';
 
 const PROJECT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TASK_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -16,14 +17,44 @@ const BASE_URL = 'http://test/api/v1';
 let name = '';
 let replica: Replica | null = null;
 
+class MemoryStorage implements Storage {
+  private readonly data = new Map<string, string>();
+
+  get length(): number {
+    return this.data.size;
+  }
+
+  clear(): void {
+    this.data.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.data.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.data.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.data.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.data.set(key, value);
+  }
+}
+
 beforeEach(() => {
   name = `scry-sync-test-${crypto.randomUUID()}`;
+  vi.stubGlobal('localStorage', new MemoryStorage());
 });
 
 afterEach(async () => {
   replica?.close();
   replica = null;
   await deleteDatabase(name);
+  vi.unstubAllGlobals();
 });
 
 describe('sync client', () => {
@@ -47,6 +78,7 @@ describe('sync client', () => {
     expect(testReplica.lastSeenSeq).toBe(5);
     expect(testReplica.needsBootstrap).toBe(false);
     expect(client.getSnapshot().status).toBe('idle');
+    expect(client.getSnapshot().lastSyncedAt).toEqual(expect.any(String));
     expect(requests[0]).toBe(`${BASE_URL}/snapshot`);
     expect(requests[1]).toBe(`${BASE_URL}/sync`);
   });
@@ -246,6 +278,89 @@ describe('sync client', () => {
 
     expect(client.getSnapshot().error?.kind).toBe('network');
     expect(testReplica.outbox.map((operation) => operation.operation_id)).toEqual(['op-network']);
+  });
+
+  it('keeps the last successful sync time when a later sync fails', async () => {
+    const testReplica = await openTestReplica();
+    await testReplica.bootstrap({ projects: [] }, 0);
+
+    const fetcher = createFetcher({
+      sync: [
+        jsonResponse({ acks: [], changes: [], next_seq: 0 }),
+        new Response('unauthorized', { status: 401 }),
+      ],
+    });
+    const client = createSyncClient({ replica: testReplica, fetcher, baseUrl: BASE_URL });
+
+    await client.sync();
+    const lastSyncedAt = client.getSnapshot().lastSyncedAt;
+    expect(lastSyncedAt).toEqual(expect.any(String));
+
+    await expect(client.sync()).rejects.toMatchObject({ kind: 'unauthorized' });
+    expect(client.getSnapshot().lastSyncedAt).toBe(lastSyncedAt);
+  });
+
+  it('persists rejections until dismissed', async () => {
+    const testReplica = await openTestReplica();
+    await testReplica.bootstrap({ projects: [] }, 0);
+
+    await testReplica.enqueue(createProjectOperation('op-rejected', 'project-rejected'));
+
+    const fetcher = createFetcher({
+      sync: [
+        jsonResponse({
+          acks: [{ operation_id: 'op-rejected', status: 'rejected', reason: 'conflict' }],
+          changes: [],
+          next_seq: 0,
+        }),
+        jsonResponse({ acks: [], changes: [], next_seq: 0 }),
+      ],
+    });
+    const client = createSyncClient({ replica: testReplica, fetcher, baseUrl: BASE_URL });
+
+    await client.sync();
+    expect(client.getSnapshot().rejected).toEqual([
+      { operation_id: 'op-rejected', reason: 'conflict' },
+    ]);
+
+    // A clean sync must not erase the record.
+    await client.sync();
+    expect(client.getSnapshot().rejected).toEqual([
+      { operation_id: 'op-rejected', reason: 'conflict' },
+    ]);
+
+    const reloaded = createSyncClient({
+      replica: testReplica,
+      fetcher: createFetcher({}),
+      baseUrl: BASE_URL,
+    });
+    expect(reloaded.getSnapshot().rejected).toEqual([
+      { operation_id: 'op-rejected', reason: 'conflict' },
+    ]);
+    expect(reloaded.getSnapshot().lastSyncedAt).toEqual(expect.any(String));
+
+    reloaded.clearRejectedOperation('op-rejected');
+    expect(reloaded.getSnapshot().rejected).toEqual([]);
+
+    const afterDismiss = createSyncClient({
+      replica: testReplica,
+      fetcher: createFetcher({}),
+      baseUrl: BASE_URL,
+    });
+    expect(afterDismiss.getSnapshot().rejected).toEqual([]);
+  });
+
+  it('falls back when the persisted state is malformed', async () => {
+    localStorage.setItem(SYNC_STATE_KEY, '{not json');
+    const testReplica = await openTestReplica();
+    const client = createSyncClient({
+      replica: testReplica,
+      fetcher: createFetcher({}),
+      baseUrl: BASE_URL,
+    });
+
+    expect(client.getSnapshot().rejected).toEqual([]);
+    expect(client.getSnapshot().lastSyncedAt).toBeNull();
   });
 
   it('getSnapshot is stable and notifies', async () => {

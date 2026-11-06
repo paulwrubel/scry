@@ -33,6 +33,7 @@ export type SyncSnapshot = {
   status: SyncStatus;
   error: SyncError | null;
   rejected: readonly RejectedOperation[];
+  lastSyncedAt: string | null;
 };
 
 export type SyncClientOptions = {
@@ -45,4 +46,6 @@ export type SyncClient = {
   getSnapshot(): SyncSnapshot;
   subscribe(listener: () => void): () => void;
   sync(): Promise<void>;
+  clearRejectedOperation(operationId: string): void;
+  clearAllRejectedOperations(): void;
 };

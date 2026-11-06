@@ -3,6 +3,7 @@ import type { Snapshot } from '@/generated/Snapshot';
 import type { SyncResponse } from '@/generated/SyncResponse';
 import { getAPIURL, getSnapshot, postSync } from '@/utils/api';
 import { isReplicaError } from '@/utils/replica';
+import { loadSyncState, saveSyncState } from './persistence';
 import { isSyncError, syncError } from './types';
 import type {
   RejectedOperation,
@@ -18,18 +19,33 @@ const OPERATION_VERSION = 1;
 export function createSyncClient(options: SyncClientOptions): SyncClient {
   const { replica, fetcher = fetch, baseUrl = getAPIURL() } = options;
 
+  const persisted = loadSyncState();
   let status: SyncStatus = 'idle';
   let error: SyncError | null = null;
-  let rejected: readonly RejectedOperation[] = [];
-  let snapshot: SyncSnapshot = { status, error, rejected };
+  let rejected: readonly RejectedOperation[] = persisted.rejected;
+  let lastSyncedAt: string | null = persisted.lastSyncedAt;
+  let snapshot: SyncSnapshot = { status, error, rejected, lastSyncedAt };
   const listeners = new Set<() => void>();
   let inFlight: Promise<void> | null = null;
 
   function notify(): void {
-    snapshot = { status, error, rejected };
+    snapshot = { status, error, rejected, lastSyncedAt };
     for (const listener of [...listeners]) {
       listener();
     }
+  }
+
+  function persist(): void {
+    saveSyncState({ lastSyncedAt, rejected: [...rejected] });
+  }
+
+  function mergeRejected(incoming: readonly RejectedOperation[]): void {
+    const byId = new Map(rejected.map((item) => [item.operation_id, item]));
+    for (const item of incoming) {
+      byId.set(item.operation_id, item);
+    }
+    rejected = [...byId.values()];
+    persist();
   }
 
   // fetch rejects only on transport failures; tag those as network so the
@@ -117,7 +133,7 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
         }
       }
 
-      rejected = nextRejected;
+      mergeRejected(nextRejected);
       if (acknowledged.length > 0) {
         await replica.acknowledge(acknowledged);
       }
@@ -129,6 +145,8 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
         throw error;
       }
 
+      lastSyncedAt = new Date().toISOString();
+      persist();
       status = 'idle';
       error = null;
       notify();
@@ -171,6 +189,16 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
       });
       inFlight = pending;
       return pending;
+    },
+    clearRejectedOperation(operationId) {
+      rejected = rejected.filter((item) => item.operation_id !== operationId);
+      persist();
+      notify();
+    },
+    clearAllRejectedOperations() {
+      rejected = [];
+      persist();
+      notify();
     },
   };
 }
