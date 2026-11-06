@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { SignOutButton } from './SignOutButton';
 import { SyncButton } from './SyncButton';
+import { SyncStatus } from './SyncStatus';
 
 export function LayoutNavbar() {
   const { activeProjectId } = useActiveProject();
@@ -33,6 +34,7 @@ export function LayoutNavbar() {
         </span>
       </div>
       <div className="flex flex-1 items-center justify-end gap-2 md:order-2">
+        <SyncStatus />
         <SignOutButton />
         <SyncButton />
         <NavbarToggle />
@@ -47,8 +49,8 @@ export function LayoutNavbar() {
           Projects
         </NavbarLink>
         {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
-        <NavbarLink as={Link} to="/settings">
-          Settings
+        <NavbarLink as={Link} to="/stats">
+          Stats
         </NavbarLink>
       </NavbarCollapse>
     </Navbar>

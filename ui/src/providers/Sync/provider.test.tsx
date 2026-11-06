@@ -12,7 +12,12 @@ import { SyncProvider } from './provider';
 
 // useSyncExternalStore compares snapshots by identity, so the fake client must
 // return the same object rather than building a new one on each call.
-const IDLE_SNAPSHOT: SyncSnapshot = { status: 'idle', error: null, rejected: [] };
+const IDLE_SNAPSHOT: SyncSnapshot = {
+  status: 'idle',
+  error: null,
+  rejected: [],
+  lastSyncedAt: null,
+};
 
 const AUTH_VALUE: AuthContextType = {
   isAuthenticated: true,
@@ -28,6 +33,8 @@ function createClient(sync: SyncClient['sync']): SyncClient {
     sync,
     getSnapshot: () => IDLE_SNAPSHOT,
     subscribe: () => () => undefined,
+    clearRejectedOperation: () => undefined,
+    clearAllRejectedOperations: () => undefined,
   };
 }
 

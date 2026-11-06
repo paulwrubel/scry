@@ -16,8 +16,10 @@ const TIMING = {
 function createClient(sync: SyncClient['sync']): SyncClient {
   return {
     sync,
-    getSnapshot: () => ({ status: 'idle', error: null, rejected: [] }),
+    getSnapshot: () => ({ status: 'idle', error: null, rejected: [], lastSyncedAt: null }),
     subscribe: () => () => undefined,
+    clearRejectedOperation: () => undefined,
+    clearAllRejectedOperations: () => undefined,
   };
 }
 
