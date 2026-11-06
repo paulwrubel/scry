@@ -20,7 +20,7 @@ Download the latest binary from the [releases page](https://github.com/paulwrube
 
 ### Build from source
 
-Building requires [Rust](https://www.rust-lang.org/tools/install) and Node 26 (see `ui/.nvmrc`). `just build` installs the UI dependencies, builds the web UI, and embeds it in the binary:
+Building requires [Rust](https://www.rust-lang.org/tools/install), [just](https://github.com/casey/just), and Node 26 installed through nvm (see `ui/.nvmrc`). `just build` installs the UI dependencies, builds the web UI, and embeds it in the binary:
 
 ```sh
 git clone https://github.com/paulwrubel/scry.git
@@ -43,9 +43,9 @@ Point the CLI at a running server, then use it like a local task manager:
 export SCRY_SERVER_URL=http://127.0.0.1:8000
 # Alternatively: pass --server <url> or set server_url in scry.toml.
 
-scry add "buy groceries"
+scry add "buy groceries"   # prints the new task's handle
 scry list
-scry close 4f3a
+scry close <handle>        # use the handle printed by add
 
 scry project create myapp
 scry -p myapp section add "in progress"
@@ -54,6 +54,10 @@ scry -p myapp list --section "in progress"
 ```
 
 Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
+
+## Backup and restore
+
+`scry export > backup.json` writes every project, with its sections, tasks, and notes, as JSON; `scry import < backup.json` merges it back. Put `-p <name>` before `export` to back up a single project.
 
 ## Core concepts
 
@@ -67,16 +71,21 @@ Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
 
 ## Docker
 
-Each release publishes `ghcr.io/paulwrubel/scry`, tagged with its version and `latest`. The runtime-only image serves the API and web UI on port 8000:
+Each release publishes `ghcr.io/paulwrubel/scry`, tagged with its version and `latest`. The runtime-only image serves the API and web UI on port 8000. Create a `scry.toml` pointing at your PostgreSQL server:
+
+```toml
+database_url = "postgres://user:pass@host:5432/scry"
+```
+
+Then run:
 
 ```sh
-docker pull ghcr.io/paulwrubel/scry:latest
 docker run --rm -p 8000:8000 \
-  -v "$PWD/scry.docker.toml:/app/scry.toml:ro" \
+  -v "$PWD/scry.toml:/app/scry.toml:ro" \
   ghcr.io/paulwrubel/scry:latest
 ```
 
-Pin a released version tag in production rather than tracking `latest`. The container needs a reachable PostgreSQL configured through the mounted `scry.toml`. GHCR packages are private by default: make the package public or give the host an image pull secret. The server has no TLS, so terminate TLS at a proxy or keep it on a private network.
+Pin a released version tag in production rather than tracking `latest`. Use `host.docker.internal` in place of `host` to reach a database on the Docker host. GHCR packages are private by default: make the package public or give the host an image pull secret.
 
 ## Configuration
 
