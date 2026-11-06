@@ -1,4 +1,5 @@
 export { createSyncClient } from './client';
+export { describeRejectionReason } from './rejections';
 export { isSyncError, syncError } from './types';
 export type {
   RejectedOperation,

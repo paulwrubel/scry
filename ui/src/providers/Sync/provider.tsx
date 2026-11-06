@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSyncTriggers } from '@/hooks/useSyncTriggers';
 import type { SyncTiming } from '@/hooks/useSyncTriggers';
 import { useAuth } from '@/providers/Auth';
@@ -46,7 +46,19 @@ function ReadySyncProvider(props: SyncProviderProps) {
     }
   }, [client, isAuthenticated]);
 
-  const value = useMemo<SyncContextValue>(() => ({ client, syncNow }), [client, syncNow]);
+  const clearRejectedOperation = useCallback(
+    (operationId: string) => client.clearRejectedOperation(operationId),
+    [client],
+  );
+  const clearAllRejectedOperations = useCallback(
+    () => client.clearAllRejectedOperations(),
+    [client],
+  );
+
+  const value = useMemo<SyncContextValue>(
+    () => ({ client, syncNow, clearRejectedOperation, clearAllRejectedOperations }),
+    [client, syncNow, clearRejectedOperation, clearAllRejectedOperations],
+  );
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
 }

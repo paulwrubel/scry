@@ -29,6 +29,23 @@ export type DeriveSyncStatusInput = {
   persisted: boolean;
 };
 
+export function syncStatusColor(
+  status: SyncDisplayStatus,
+): 'success' | 'info' | 'warning' | 'failure' | 'gray' {
+  switch (status) {
+    case 'syncing':
+      return 'info';
+    case 'pending':
+      return 'warning';
+    case 'error':
+      return 'failure';
+    case 'synced':
+      return 'success';
+    default:
+      return 'gray';
+  }
+}
+
 export function formatLastSyncedAt(value: string | null): string {
   if (value === null) {
     return 'Never';

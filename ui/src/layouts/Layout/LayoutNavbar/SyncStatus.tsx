@@ -1,16 +1,5 @@
 import { Badge, Tooltip } from 'flowbite-react';
-import { useSyncStatus } from '@/providers/Sync';
-import type { SyncDisplayStatus } from '@/providers/Sync';
-
-const COLORS: Record<SyncDisplayStatus, 'success' | 'info' | 'warning' | 'failure' | 'gray'> = {
-  checking: 'gray',
-  unauthenticated: 'gray',
-  offline: 'gray',
-  syncing: 'info',
-  error: 'failure',
-  pending: 'warning',
-  synced: 'success',
-};
+import { syncStatusColor, useSyncStatus } from '@/providers/Sync';
 
 export function SyncStatus() {
   const status = useSyncStatus();
@@ -25,7 +14,11 @@ export function SyncStatus() {
 
   return (
     <Tooltip content={details}>
-      <Badge color={COLORS[status.status]} size="sm" className="cursor-default select-none">
+      <Badge
+        color={syncStatusColor(status.status)}
+        size="sm"
+        className="cursor-default select-none"
+      >
         {status.label}
       </Badge>
     </Tooltip>
