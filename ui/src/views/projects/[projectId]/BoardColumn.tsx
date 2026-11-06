@@ -3,6 +3,8 @@ import { useDroppable } from '@dnd-kit/react';
 import { Badge, Card } from 'flowbite-react';
 import type { CardTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
+import { RenamableLabel } from '@/components/RenamableLabel';
+import type { Color } from '@/generated/Color';
 import type { Task } from '@/generated/Task';
 import { NewTaskForm } from './NewTaskForm';
 import { SortableTaskCard } from './SortableTaskCard';
@@ -13,10 +15,31 @@ type BoardColumnProps = {
   projectId: string;
   sectionId: string | null;
   title: string;
+  color: Color | null;
   tasks: Task[];
   showPriority: boolean;
   canReorder: boolean;
+  onRename?: (name: string) => void;
   onCreate?: (title: string) => Promise<void>;
+};
+
+const SECTION_COLOR_HEX: Record<Color, string> = {
+  black: '#000000',
+  red: '#ef4444',
+  green: '#22c55e',
+  yellow: '#eab308',
+  blue: '#3b82f6',
+  magenta: '#d946ef',
+  cyan: '#06b6d4',
+  gray: '#9ca3af',
+  'dark-gray': '#4b5563',
+  'light-red': '#fca5a5',
+  'light-green': '#86efac',
+  'light-yellow': '#fde047',
+  'light-blue': '#93c5fd',
+  'light-magenta': '#f0abfc',
+  'light-cyan': '#67e8f9',
+  white: '#ffffff',
 };
 
 const columnTheme: DeepPartial<CardTheme> = {
@@ -26,7 +49,17 @@ const columnTheme: DeepPartial<CardTheme> = {
 };
 
 export function BoardColumn(props: BoardColumnProps) {
-  const { projectId, sectionId, title, tasks, showPriority, canReorder, onCreate } = props;
+  const {
+    projectId,
+    sectionId,
+    title,
+    color,
+    tasks,
+    showPriority,
+    canReorder,
+    onRename,
+    onCreate,
+  } = props;
   const group = groupKey(sectionId);
 
   const { ref, isDropTarget } = useDroppable({
@@ -42,7 +75,21 @@ export function BoardColumn(props: BoardColumnProps) {
       className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''}`}
     >
       <div className="flex shrink-0 items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          {color === null ? null : (
+            <span
+              aria-hidden="true"
+              className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20"
+              style={{ backgroundColor: SECTION_COLOR_HEX[color] }}
+            />
+          )}
+          <RenamableLabel
+            label={title}
+            onRename={onRename}
+            labelAs="h2"
+            inputAriaLabel="Section name"
+          />
+        </div>
         <Badge color="gray">{tasks.length}</Badge>
       </div>
       <div

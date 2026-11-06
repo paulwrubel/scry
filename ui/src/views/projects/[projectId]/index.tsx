@@ -11,6 +11,7 @@ import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
 import { updateProjectOperation } from '@/utils/projectOperations';
+import { updateSectionOperation } from '@/utils/sectionOperations';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
 import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
@@ -90,6 +91,13 @@ export function BoardPage() {
       show_priority: project.show_priority,
       ...patch,
     });
+    if (operation !== null) {
+      await replica.enqueue(operation);
+    }
+  }
+
+  async function handleSectionRename(sectionId: string, name: string) {
+    const operation = updateSectionOperation(sectionId, name);
     if (operation !== null) {
       await replica.enqueue(operation);
     }
@@ -233,9 +241,15 @@ export function BoardPage() {
                   projectId={project.id}
                   sectionId={section?.id ?? null}
                   title={section?.name ?? 'No section'}
+                  color={section?.color ?? null}
                   tasks={group.tasks}
                   showPriority={project.show_priority}
                   canReorder={canReorder}
+                  onRename={
+                    section === null
+                      ? undefined
+                      : (name) => void handleSectionRename(section.id, name)
+                  }
                   onCreate={
                     section === null ? undefined : (title) => handleCreate(section.id, title)
                   }
