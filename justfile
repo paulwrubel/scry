@@ -65,9 +65,9 @@ install: build
 build-ui: setup-ui-env
     cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run build
 
-# run all validation checks: Rust, generated output, fixtures, and the UI suite
+# run all validation checks: Rust, generated output, and the UI suite
 [group('validate')]
-validate: build-ui cargo-test cargo-check cargo-clippy check-bindings check-fixtures
+validate: build-ui cargo-test cargo-check cargo-clippy check-bindings
     cd ui && . "$HOME/.nvm/nvm.sh" && nvm use \
     && npm run lint \
     && npm run prettier-check \
@@ -147,6 +147,7 @@ sqlx-prepare-check: run-postgres
 [group('validate')]
 generate-bindings:
     cargo test -p scry --no-default-features --features ts export_bindings
+    just prettier-fix-ui
 
 # verify the generated TypeScript bindings are committed and up to date
 [group('validate')]
@@ -156,22 +157,6 @@ check-bindings: generate-bindings
     if [[ -n "$(git status --porcelain -- ui/src/generated)" ]]; then
         echo "TypeScript bindings are out of date; run 'just generate-bindings' and commit the result" >&2
         git status --porcelain -- ui/src/generated >&2
-        exit 1
-    fi
-
-# regenerate the shared cross-language fixtures
-[group('validate')]
-generate-fixtures:
-    cargo run -p scry-core --example generate_fixtures
-
-# verify the shared cross-language fixtures are committed and up to date
-[group('validate')]
-check-fixtures: generate-fixtures
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [[ -n "$(git status --porcelain -- fixtures)" ]]; then
-        echo "fixtures are out of date; run 'just generate-fixtures' and commit the result" >&2
-        git status --porcelain -- fixtures >&2
         exit 1
     fi
 

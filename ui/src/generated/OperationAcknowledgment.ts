@@ -4,4 +4,12 @@
  * The server's acknowledgement of one operation, keyed by the id the client
  * assigned to it.
  */
-export type OperationAcknowledgment = { operation_id: string, } & ({ "status": "applied" } | { "status": "rejected", } & ({ "reason": "tombstoned" } | { "reason": "not_found" } | { "reason": "conflict" } | { "reason": "unsupported_version" }));
+export type OperationAcknowledgment = { operation_id: string } & (
+  | { status: 'applied' }
+  | ({ status: 'rejected' } & (
+      | { reason: 'tombstoned' }
+      | { reason: 'not_found' }
+      | { reason: 'conflict' }
+      | { reason: 'unsupported_version' }
+    ))
+);

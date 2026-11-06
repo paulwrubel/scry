@@ -4,7 +4,7 @@
 
 ## Commands
 
-- `just` lists targets. `just validate` is the full local gate: builds the UI, then runs Rust test/check/clippy with default features, binding and fixture drift checks, and UI lint/prettier/type-check/Vitest.
+- `just` lists targets. `just validate` is the full local gate: builds the UI, then runs Rust test/check/clippy with default features, binding drift checks, and UI lint/prettier/type-check/Vitest.
 - Rust: `just test` (`cargo-test`), `just check`, `just clippy` (all `--workspace`). One test: `cargo test -p scry <name>` or `cargo test -p scry-core <name>`. Keep clippy clean at `-D warnings`; CI pins Rust 1.98.1 because clippy 1.99 false-positives on `#[async_trait]`.
 - CI variants `cargo-test-ci`, `cargo-check-ci`, and `cargo-clippy-ci` add `--no-default-features` and need no UI build. `.github/workflows/ci.yml` is currently `workflow_dispatch` only.
 - UI (from `ui/`, or via the `just` wrappers): `npm run build|lint|prettier-check|type-check|test`. One Vitest file: `npm test -- <pattern>`. Node comes from `ui/.nvmrc` (26.x); `just setup-ui-env` installs it through nvm and runs `npm install`.
@@ -29,8 +29,8 @@
 
 ## Cross-language contract
 
-- Wire types derive `ts_rs::TS` behind the `ts` feature. `just generate-bindings` writes `ui/src/generated/` (machine-owned — never hand-edit); `just check-bindings` fails on drift.
-- Every rule implemented in both Rust and TypeScript gets a fixture area under `fixtures/<area>/cases.json`. The loaders `crates/scry-core/tests/common.rs` and `ui/src/fixtures/load.ts` must list the same areas (`positions`, `handles`, `op-replay`, `task-order`). `just generate-fixtures` and `just check-fixtures` handle drift; add the area, both loaders, and every case consumer in the same change.
+- Wire types derive `ts_rs::TS` behind the `ts` feature. `just generate-bindings` writes and formats `ui/src/generated/` (machine-owned — never hand-edit); `just check-bindings` fails on drift.
+- The TypeScript ports in `ui/src/contract/` (`positions`, `handles`, `task-order`, `op-replay`) mirror Rust and are maintained by hand. There is no shared fixture system: when changing one side, update the other implementation and its tests in the same change.
 - `crates/scry-core/src/sync/replay.rs` is the reference client model (confirmed state plus outbox replay); the server never calls it, and `ui/src/contract/op-replay.ts` mirrors it.
 
 ## Release

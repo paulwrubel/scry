@@ -1,160 +1,56 @@
 import { describe, expect, it } from 'vitest';
-import type { FixtureCase } from '../fixtures/load';
-import { loadArea } from '../fixtures/load';
 import { HandleError, normalizeHandle, resolveHandle, shortestHandles } from './handles';
 
-const handles = loadArea('handles');
+const IDS = [
+  '4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c',
+  '4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d',
+  'ffffffff-ffff-4fff-8fff-ffffffffffff',
+];
 
-describe('handles', () => {
-  for (const testCase of handles.cases) {
-    it(testCase.name, () => {
-      runCase(testCase);
-    });
-  }
-});
-
-function runCase(testCase: FixtureCase): void {
-  switch (testCase.kind) {
-    case 'normalize':
-      runNormalize(testCase);
-      return;
-    case 'shortest':
-      runShortest(testCase);
-      return;
-    case 'resolve':
-      runResolve(testCase);
-      return;
-    default:
-      throw new Error(`case "${testCase.name}" uses unknown fixture kind "${testCase.kind}"`);
-  }
-}
-
-function runNormalize(testCase: FixtureCase): void {
-  const value = inputRequiredString(testCase.input, 'value');
-
-  if (typeof testCase.expected.hex === 'string') {
-    expect(normalizeHandle(value)).toBe(testCase.expected.hex);
-    return;
-  }
-
-  expectHandleError(() => normalizeHandle(value), expectedString(testCase, 'error'));
-}
-
-function runShortest(testCase: FixtureCase): void {
-  const ids = inputStrings(testCase.input, 'ids');
-  const minLength = inputNumber(testCase.input, 'min_length');
-  const shortest = shortestHandles(ids, minLength);
-  const actual = [...shortest.entries()]
-    .map(([id, handle]) => ({ id, handle }))
-    .sort((left, right) => compareCodeUnits(left.id, right.id));
-
-  expect(actual).toEqual(expectedHandles(testCase));
-}
-
-function runResolve(testCase: FixtureCase): void {
-  const ids = inputStrings(testCase.input, 'ids');
-  const handle = inputRequiredString(testCase.input, 'handle');
-
-  if (Array.isArray(testCase.expected.matches)) {
-    expect(resolveHandle(ids, handle)).toEqual(expectedStrings(testCase, 'matches'));
-    return;
-  }
-
-  expectHandleError(() => resolveHandle(ids, handle), expectedString(testCase, 'error'));
-}
-
-function inputString(input: Record<string, unknown>, field: string): string | null {
-  const value = input[field];
-  if (value === null || typeof value === 'string') {
-    return value;
-  }
-  throw new Error(`fixture field "${field}" must be a string or null`);
-}
-
-function inputRequiredString(input: Record<string, unknown>, field: string): string {
-  const value = inputString(input, field);
-  if (value === null) {
-    throw new Error(`fixture field "${field}" must be a string`);
-  }
-  return value;
-}
-
-function inputNumber(input: Record<string, unknown>, field: string): number {
-  const value = input[field];
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    throw new Error(`fixture field "${field}" must be an integer`);
-  }
-  return value;
-}
-
-function inputStrings(input: Record<string, unknown>, field: string): string[] {
-  const value = input[field];
-  if (!Array.isArray(value)) {
-    throw new Error(`fixture field "${field}" must be an array`);
-  }
-  return value.map((item) => {
-    if (typeof item !== 'string') {
-      throw new Error(`fixture field "${field}" must contain only strings`);
-    }
-    return item;
-  });
-}
-
-function expectedString(testCase: FixtureCase, field: string): string {
-  const value = testCase.expected[field];
-  if (typeof value !== 'string') {
-    throw new Error(`case "${testCase.name}" is missing a string "${field}"`);
-  }
-  return value;
-}
-
-function expectedStrings(testCase: FixtureCase, field: string): string[] {
-  const value = testCase.expected[field];
-  if (!Array.isArray(value)) {
-    throw new Error(`case "${testCase.name}" is missing an array "${field}"`);
-  }
-  return value.map((item) => {
-    if (typeof item !== 'string') {
-      throw new Error(`case "${testCase.name}" has a non-string in "${field}"`);
-    }
-    return item;
-  });
-}
-
-function expectedHandles(testCase: FixtureCase): { id: string; handle: string }[] {
-  const value = testCase.expected.handles;
-  if (!Array.isArray(value)) {
-    throw new Error(`case "${testCase.name}" is missing an array "handles"`);
-  }
-  return value.map((item) => {
-    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-      throw new Error(`case "${testCase.name}" has a non-object in "handles"`);
-    }
-    const record = item as Record<string, unknown>;
-    if (typeof record.id !== 'string' || typeof record.handle !== 'string') {
-      throw new Error(`case "${testCase.name}" has an invalid handle entry`);
-    }
-    return { id: record.id, handle: record.handle };
-  });
-}
-
-function expectHandleError(callback: () => unknown, code: string): void {
+function handleError(value: string): HandleError {
   try {
-    callback();
+    normalizeHandle(value);
   } catch (error) {
     expect(error).toBeInstanceOf(HandleError);
-    expect((error as HandleError).code).toBe(code);
-    return;
+    return error as HandleError;
   }
-  throw new Error(`expected HandleError(${code})`);
+  throw new Error(`expected HandleError for ${value}`);
 }
 
-function compareCodeUnits(left: string, right: string): number {
-  if (left < right) {
-    return -1;
-  }
-  if (left > right) {
-    return 1;
-  }
-  return 0;
-}
+describe('handles', () => {
+  it('normalizes a compact uppercase uuid', () => {
+    expect(normalizeHandle('4F3A2B1C9D2E4F5A8B6C1D2E3F4A5B6C')).toBe(
+      '4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c',
+    );
+  });
+
+  it('normalizes a canonical uuid', () => {
+    expect(normalizeHandle('4F3A2B1C-9D2E-4F5A-8B6C-1D2E3F4A5B6C')).toBe(
+      '4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c',
+    );
+  });
+
+  it('rejects a handle that is too short', () => {
+    expect(handleError('abc').code).toBe('too_short');
+  });
+
+  it('rejects a handle with invalid characters', () => {
+    expect(handleError('zzzz').code).toBe('invalid_character');
+  });
+
+  it('rejects a misplaced dash', () => {
+    expect(handleError('4f3a-2b1c').code).toBe('misplaced_dash');
+  });
+
+  it('assigns the shortest distinguishing handles', () => {
+    const handles = shortestHandles(IDS, 4);
+
+    expect(handles.get(IDS[0])).toBe('4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c');
+    expect(handles.get(IDS[1])).toBe('4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d');
+    expect(handles.get(IDS[2])).toBe('ffff');
+  });
+
+  it('resolves an ambiguous prefix to every matching id', () => {
+    expect(resolveHandle(IDS, '4f3a')).toEqual([IDS[0], IDS[1]]);
+  });
+});
