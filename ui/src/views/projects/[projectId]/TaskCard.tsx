@@ -2,7 +2,17 @@ import { Badge } from 'flowbite-react';
 import { useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
+import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
+import { tagBadgeStyle } from '@/utils/tagColor';
+
+const priorityBadgeColor: Record<Priority, string> = {
+  critical: 'priority-critical',
+  high: 'priority-high',
+  medium: 'priority-medium',
+  low: 'priority-low',
+  minimal: 'priority-minimal',
+};
 
 export type TaskCardProps = {
   projectId: string;
@@ -67,10 +77,12 @@ export function TaskCard(props: TaskCardProps) {
       </Link>
       {hasBadges ? (
         <div className="flex flex-wrap items-center gap-1">
-          {showPriority ? <Badge color="info">{task.priority}</Badge> : null}
+          {showPriority ? (
+            <Badge color={priorityBadgeColor[task.priority]}>{task.priority}</Badge>
+          ) : null}
           {closed ? <Badge color="gray">Closed</Badge> : null}
           {task.tags.map((tag) => (
-            <Badge key={tag} color="gray">
+            <Badge key={tag} color="gray" style={tagBadgeStyle(tag)}>
               {tag}
             </Badge>
           ))}

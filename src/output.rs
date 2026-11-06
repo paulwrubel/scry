@@ -47,7 +47,7 @@ pub fn task_line(
     let tags = task
         .tags
         .iter()
-        .map(|tag| color::tag(tag))
+        .map(|tag| tag.as_str())
         .collect::<Vec<_>>()
         .join(" ");
     if !tags.is_empty() {

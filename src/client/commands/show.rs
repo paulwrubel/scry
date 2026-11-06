@@ -59,7 +59,7 @@ pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<()
     let tags = task
         .tags
         .iter()
-        .map(|tag| color::tag(tag))
+        .map(|tag| tag.as_str())
         .collect::<Vec<_>>()
         .join(" ");
     anstream::println!("Tags:        {}", tags);
