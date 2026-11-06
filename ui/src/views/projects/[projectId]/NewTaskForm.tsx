@@ -1,5 +1,5 @@
 import { Button, TextInput } from 'flowbite-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 type NewTaskFormProps = {
   onCreate: (title: string) => Promise<void>;
@@ -11,6 +11,7 @@ export function NewTaskForm(props: NewTaskFormProps) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   if (!open) {
     return (
@@ -22,16 +23,21 @@ export function NewTaskForm(props: NewTaskFormProps) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting) {
+      return;
+    }
+
     const trimmed = title.trim();
     if (trimmed.length === 0) {
       return;
     }
 
+    const submitted = title;
     setSubmitting(true);
     try {
       await onCreate(trimmed);
-      setTitle('');
-      setOpen(false);
+      setTitle((current) => (current === submitted ? '' : current));
+      inputRef.current?.focus();
     } finally {
       setSubmitting(false);
     }
@@ -42,9 +48,22 @@ export function NewTaskForm(props: NewTaskFormProps) {
     setOpen(false);
   }
 
+  function handleKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      handleCancel();
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-2">
+    <form
+      onSubmit={handleSubmit}
+      onKeyDown={handleKeyDown}
+      className="flex shrink-0 flex-col gap-2"
+    >
       <TextInput
+        ref={inputRef}
+        autoFocus
         sizing="sm"
         value={title}
         onChange={(event) => setTitle(event.target.value)}
