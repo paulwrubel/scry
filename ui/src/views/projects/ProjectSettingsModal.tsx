@@ -1,10 +1,9 @@
-import { Button, Modal, ModalBody, ModalFooter, ModalHeader, ToggleSwitch } from 'flowbite-react';
+import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
 import { useState } from 'react';
-import { SelectControl } from '@/components/form-controls/SelectControl';
-import { TextAreaControl } from '@/components/form-controls/TextAreaControl';
-import { TextInputControl } from '@/components/form-controls/TextInputControl';
+import { z } from 'zod';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
+import { useAppForm } from '@/hooks/useAppForm';
 import { useProjectMutations } from '@/hooks/useProjectMutations';
 
 const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
@@ -15,6 +14,13 @@ const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
   { label: 'Priority', value: 'priority' },
 ];
 
+const schema = z.object({
+  name: z.string().trim().min(1, 'A project needs a name.'),
+  description: z.string(),
+  task_sorting_mode: z.string(),
+  show_priority: z.boolean(),
+});
+
 export type ProjectSettingsModalProps = {
   project: ProjectSnapshot;
   onClose: () => void;
@@ -24,38 +30,36 @@ export function ProjectSettingsModal(props: ProjectSettingsModalProps) {
   const { project, onClose } = props;
   const { saveFields } = useProjectMutations(project);
 
-  const [name, setName] = useState(project.name);
-  const [description, setDescription] = useState(project.description ?? '');
-  const [sorting, setSorting] = useState<TaskSortingMode>(project.task_sorting_mode);
-  const [showPriority, setShowPriority] = useState(project.show_priority);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const form = useAppForm({
+    defaultValues: {
+      name: project.name,
+      description: project.description ?? '',
+      task_sorting_mode: String(project.task_sorting_mode),
+      show_priority: project.show_priority,
+    },
+    validators: { onChange: schema },
+    onSubmit: async ({ value }) => {
+      setSaving(true);
+      setError(null);
 
-    if (name.trim().length === 0) {
-      setError('A project needs a name.');
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-
-    try {
-      await saveFields({
-        name,
-        description,
-        task_sorting_mode: sorting,
-        show_priority: showPriority,
-      });
-      onClose();
-    } catch {
-      setError('Could not save this project.');
-    } finally {
-      setSaving(false);
-    }
-  }
+      try {
+        await saveFields({
+          name: value.name,
+          description: value.description,
+          task_sorting_mode: value.task_sorting_mode as TaskSortingMode,
+          show_priority: value.show_priority,
+        });
+        onClose();
+      } catch {
+        setError('Could not save this project.');
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
 
   return (
     <Modal show onClose={onClose}>
@@ -63,23 +67,26 @@ export function ProjectSettingsModal(props: ProjectSettingsModalProps) {
       <ModalBody>
         <form
           id="project-settings-form"
-          onSubmit={handleSubmit}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit();
+          }}
           className="flex flex-col gap-4 text-zinc-300"
         >
-          <TextInputControl label="Name" value={name} onChange={setName} />
-          <TextAreaControl
-            label="Description"
-            value={description}
-            onChange={setDescription}
-            placeholder="Optional description"
-          />
-          <SelectControl
-            label="Sorting"
-            value={sorting}
-            items={SORTING_MODES}
-            onChange={(value) => setSorting(value as TaskSortingMode)}
-          />
-          <ToggleSwitch checked={showPriority} onChange={setShowPriority} label="Show priority" />
+          <form.AppField name="name">
+            {(field) => <field.FormTextField label="Name" />}
+          </form.AppField>
+          <form.AppField name="description">
+            {(field) => (
+              <field.FormTextAreaField label="Description" placeholder="Optional description" />
+            )}
+          </form.AppField>
+          <form.AppField name="task_sorting_mode">
+            {(field) => <field.SelectControl label="Sorting" items={SORTING_MODES} />}
+          </form.AppField>
+          <form.AppField name="show_priority">
+            {(field) => <field.ToggleControl label="Show priority" />}
+          </form.AppField>
           {error === null ? null : (
             <p className="text-danger text-sm" role="alert">
               {error}
@@ -91,7 +98,7 @@ export function ProjectSettingsModal(props: ProjectSettingsModalProps) {
         <Button color="default" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" form="project-settings-form" disabled={saving}>
+        <Button type="submit" form="project-settings-form" disabled={saving || !form.state.isValid}>
           {saving ? 'Saving...' : 'Save'}
         </Button>
       </ModalFooter>

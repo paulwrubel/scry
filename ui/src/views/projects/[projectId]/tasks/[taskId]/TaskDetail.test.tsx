@@ -132,14 +132,14 @@ describe('TaskDetail', () => {
     expect(screen.getByText('A note')).toBeDefined();
   });
 
-  it('rejects an empty title', () => {
+  it('rejects an empty title', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: '   ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(screen.getByRole('alert').textContent).toContain('A task needs a title.');
+    expect(await screen.findByText('A task needs a title.')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(enqueue).not.toHaveBeenCalled();
   });
 

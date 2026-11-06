@@ -1,5 +1,6 @@
-import { Label, Select } from 'flowbite-react';
-import { useId } from 'react';
+import { HelperText, Label, Select } from 'flowbite-react';
+import { useFieldContext } from '@/hooks/formContext';
+import { fieldErrorMessage } from './fieldErrors';
 
 export type SelectItem = {
   label: string;
@@ -8,25 +9,29 @@ export type SelectItem = {
 
 export type SelectControlProps = {
   label: string;
-  value: string;
   items: SelectItem[];
-  onChange: (value: string) => void;
 };
 
 export function SelectControl(props: SelectControlProps) {
-  const { label, value, items, onChange } = props;
-  const id = useId();
+  const { label, items } = props;
+  const field = useFieldContext<string>();
+  const error = fieldErrorMessage(field.state.meta.errors);
 
   return (
-    <Label htmlFor={id} className="flex w-full flex-col items-stretch gap-1.5">
+    <Label className="flex w-full flex-col items-stretch gap-1.5">
       <span>{label}</span>
-      <Select id={id} sizing="sm" value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select
+        sizing="sm"
+        value={field.state.value ?? ''}
+        onChange={(event) => field.handleChange(event.target.value)}
+      >
         {items.map((item) => (
           <option key={item.value} value={item.value}>
             {item.label}
           </option>
         ))}
       </Select>
+      {error === null ? null : <HelperText color="failure">{error}</HelperText>}
     </Label>
   );
 }
