@@ -36,6 +36,7 @@ export function TaskCard(props: TaskCardProps) {
   return (
     <div
       ref={nodeRef}
+      data-column-drag-ignore
       style={style}
       onPointerDownCapture={(event) => {
         moved.current = false;

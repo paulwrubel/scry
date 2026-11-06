@@ -72,14 +72,14 @@ describe('groupKey', () => {
 });
 
 describe('buildBoard', () => {
-  it('keeps sections in snapshot order and includes empty ones', () => {
+  it('orders sections by position and includes empty ones', () => {
     const project = projectSnapshot({
       sections: [section('second', 'a1'), section('first', 'a0')],
     });
 
     expect(shape(buildBoard(project, false))).toEqual([
-      ['second', []],
       ['first', []],
+      ['second', []],
     ]);
   });
 

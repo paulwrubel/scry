@@ -1316,6 +1316,31 @@ impl ProjectService {
                     .await?,
                 )
             }
+            OperationKind::MoveSection { id, .. } => {
+                let Some(mut section) = self.store.get_section_by_id(*id, Some(&mut **tx)).await?
+                else {
+                    return Ok((
+                        OperationAcknowledgment::rejected(
+                            op.operation_id,
+                            RejectionReason::NotFound,
+                        ),
+                        None,
+                    ));
+                };
+
+                let field_values = section_field_updates(&mut section, &op.kind);
+                self.store.update_section(section, Some(&mut **tx)).await?;
+                Some(
+                    self.record_change(
+                        tx,
+                        op,
+                        Entity::Section(*id),
+                        ChangeKind::Update,
+                        field_values,
+                    )
+                    .await?,
+                )
+            }
             OperationKind::DeleteSection { id } => {
                 let section = self.store.get_section_by_id(*id, Some(&mut **tx)).await?;
                 let mut seqs = Vec::new();
@@ -1822,6 +1847,7 @@ fn subject(op: &OperationKind) -> Entity {
         | OperationKind::DeleteProject { id } => Entity::Project(*id),
         OperationKind::CreateSection { id, .. }
         | OperationKind::UpdateSection { id, .. }
+        | OperationKind::MoveSection { id, .. }
         | OperationKind::DeleteSection { id } => Entity::Section(*id),
         OperationKind::CreateTask { id, .. }
         | OperationKind::UpdateTask { id, .. }
@@ -1920,26 +1946,31 @@ fn project_field_updates(project: &mut Project, op: &OperationKind) -> FieldValu
 fn section_field_updates(section: &mut Section, op: &OperationKind) -> FieldValues {
     let mut fields = Map::new();
 
-    let OperationKind::UpdateSection { name, color, .. } = op else {
-        return Value::Object(fields);
-    };
-
-    if let Some(name) = name {
-        section.name = name.clone();
-        fields.insert("name".into(), json!(name));
-    }
-    if let Some(color) = color {
-        section.color = match color {
-            OperationColorChange::Clear => None,
-            OperationColorChange::Set(color) => Some(*color),
-        };
-        // a clear records an explicit null so a reader can tell removal from
-        // "field unchanged"
-        let value = match color {
-            OperationColorChange::Clear => Value::Null,
-            OperationColorChange::Set(color) => json!(color),
-        };
-        fields.insert("color".into(), value);
+    match op {
+        OperationKind::UpdateSection { name, color, .. } => {
+            if let Some(name) = name {
+                section.name = name.clone();
+                fields.insert("name".into(), json!(name));
+            }
+            if let Some(color) = color {
+                section.color = match color {
+                    OperationColorChange::Clear => None,
+                    OperationColorChange::Set(color) => Some(*color),
+                };
+                // a clear records an explicit null so a reader can tell removal from
+                // "field unchanged"
+                let value = match color {
+                    OperationColorChange::Clear => Value::Null,
+                    OperationColorChange::Set(color) => json!(color),
+                };
+                fields.insert("color".into(), value);
+            }
+        }
+        OperationKind::MoveSection { position, .. } => {
+            section.position = position.clone();
+            fields.insert("position".into(), json!(position));
+        }
+        _ => {}
     }
 
     Value::Object(fields)

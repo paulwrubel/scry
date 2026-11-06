@@ -25,6 +25,8 @@ type BoardColumnProps = {
   onRename?: (name: string) => void;
   onDelete?: () => void;
   onCreate?: (title: string) => Promise<void>;
+  nodeRef?: (element: HTMLDivElement | null) => void;
+  isDragging?: boolean;
 };
 
 const SECTION_COLOR_HEX: Record<Color, string> = {
@@ -64,6 +66,8 @@ export function BoardColumn(props: BoardColumnProps) {
     onRename,
     onDelete,
     onCreate,
+    nodeRef,
+    isDragging,
   } = props;
   const group = groupKey(sectionId);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -78,8 +82,9 @@ export function BoardColumn(props: BoardColumnProps) {
   return (
     <>
       <Card
+        ref={nodeRef}
         theme={columnTheme}
-        className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''}`}
+        className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''} ${isDragging ? 'opacity-80' : ''}`}
       >
         <div className="flex shrink-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">

@@ -26,6 +26,16 @@ export function createSectionOperation(project: ProjectSnapshot, name: string): 
   };
 }
 
+export function moveSectionOperation(sectionId: string, position: string): Operation {
+  return {
+    operation_id: crypto.randomUUID(),
+    operation_version: 1,
+    kind: 'move_section',
+    id: sectionId,
+    position,
+  };
+}
+
 export function deleteSectionOperation(sectionId: string): Operation {
   return {
     operation_id: crypto.randomUUID(),

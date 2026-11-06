@@ -147,6 +147,11 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
             }
         }
+        OperationKind::MoveSection { id, position } => {
+            if let Some(section) = find_section_mut(state, *id) {
+                section.position = position.clone();
+            }
+        }
         OperationKind::DeleteSection { id } => {
             remove_section(state, *id);
         }
