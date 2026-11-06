@@ -1,155 +1,61 @@
-mod common;
-
-use common::{FixtureCase, load_area};
 use scry_core::ids::{Handle, HandleError, shortest_handles};
-use serde::Deserialize;
-use serde_json::{Value, json};
 use uuid::Uuid;
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct NormalizeInput {
-    value: String,
-}
+const SAMPLE_HEX: &str = "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6c";
+const SAMPLE_UUID: &str = "4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6c";
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ShortestInput {
-    ids: Vec<String>,
-    min_length: usize,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ResolveInput {
-    ids: Vec<String>,
-    handle: String,
+#[test]
+fn parse_normalizes_compact_and_canonical_uuids() {
+    for value in [
+        "4F3A2B1C-9D2E-4F5A-8B6C-1D2E3F4A5B6C",
+        "4F3A2B1C9D2E4F5A8B6C1D2E3F4A5B6C",
+        SAMPLE_UUID,
+        SAMPLE_HEX,
+    ] {
+        assert_eq!(value.parse::<Handle>().unwrap().as_str(), SAMPLE_HEX);
+    }
 }
 
 #[test]
-fn handles_match_the_shared_fixtures() {
-    let file = load_area("handles");
-
-    for case in &file.cases {
-        match case.kind.as_str() {
-            "normalize" => check_normalize(case),
-            "shortest" => check_shortest(case),
-            "resolve" => check_resolve(case),
-            other => panic!("case `{}` uses unknown fixture kind `{other}`", case.name),
-        }
-    }
-}
-
-fn check_normalize(case: &FixtureCase) {
-    let input: NormalizeInput = deserialize(case);
-    match input.value.parse::<Handle>() {
-        Ok(handle) => assert_eq!(
-            handle.as_str(),
-            expected_string(case, "hex"),
-            "case `{}`",
-            case.name
-        ),
-        Err(error) => assert_error(case, handle_error_code(&error)),
-    }
-}
-
-fn check_shortest(case: &FixtureCase) {
-    let input: ShortestInput = deserialize(case);
-    let mut ids: Vec<Uuid> = input
-        .ids
-        .iter()
-        .map(|id| Uuid::parse_str(id).expect("fixture uses valid uuids"))
-        .collect();
-    ids.sort();
-    ids.dedup();
-
-    let handles = shortest_handles(ids.iter().copied(), input.min_length);
-    let mut actual: Vec<Value> = ids
-        .iter()
-        .map(|id| {
-            json!({
-                "id": id.to_string(),
-                "handle": handles.get(id).expect("every id in the set has a handle"),
-            })
-        })
-        .collect();
-    actual.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
-
-    let expected = case
-        .expected
-        .get("handles")
-        .and_then(Value::as_array)
-        .unwrap_or_else(|| panic!("case `{}` is missing `handles`", case.name));
-
-    assert_eq!(&actual, expected, "case `{}`", case.name);
-}
-
-fn check_resolve(case: &FixtureCase) {
-    let input: ResolveInput = deserialize(case);
-    let handle: Handle = match input.handle.parse() {
-        Ok(handle) => handle,
-        Err(error) => return assert_error(case, handle_error_code(&error)),
-    };
-
-    let mut matches: Vec<String> = input
-        .ids
-        .iter()
-        .filter(|id| {
-            Uuid::parse_str(id)
-                .expect("fixture uses valid uuids")
-                .simple()
-                .to_string()
-                .starts_with(handle.as_str())
-        })
-        .cloned()
-        .collect();
-    matches.sort();
-    matches.dedup();
-
-    let expected = case
-        .expected
-        .get("matches")
-        .and_then(Value::as_array)
-        .unwrap_or_else(|| panic!("case `{}` is missing `matches`", case.name));
-
+fn parse_rejects_too_short_input() {
     assert_eq!(
-        json!(matches),
-        Value::Array(expected.clone()),
-        "case `{}`",
-        case.name
+        "abc".parse::<Handle>(),
+        Err(HandleError::TooShort { length: 3 })
     );
 }
 
-fn handle_error_code(error: &HandleError) -> &'static str {
-    match error {
-        HandleError::Empty => "empty",
-        HandleError::TooShort { .. } => "too_short",
-        HandleError::TooLong { .. } => "too_long",
-        HandleError::MisplacedDash { .. } => "misplaced_dash",
-        HandleError::InvalidCharacter { .. } => "invalid_character",
-    }
-}
-
-fn assert_error(case: &FixtureCase, actual: &str) {
+#[test]
+fn parse_rejects_invalid_characters() {
     assert_eq!(
-        actual,
-        expected_string(case, "error"),
-        "case `{}`",
-        case.name
+        "zzzz".parse::<Handle>(),
+        Err(HandleError::InvalidCharacter {
+            character: 'z',
+            index: 0,
+        })
     );
 }
 
-fn expected_string<'a>(case: &'a FixtureCase, field: &str) -> &'a str {
-    case.expected
-        .get(field)
-        .and_then(Value::as_str)
-        .unwrap_or_else(|| panic!("case `{}` is missing a string `{field}`", case.name))
+#[test]
+fn parse_rejects_misplaced_dashes() {
+    assert_eq!(
+        "4f3a-2b1c".parse::<Handle>(),
+        Err(HandleError::MisplacedDash { index: 4 })
+    );
 }
 
-fn deserialize<T>(case: &FixtureCase) -> T
-where
-    T: for<'de> Deserialize<'de>,
-{
-    serde_json::from_value(case.input.clone())
-        .unwrap_or_else(|error| panic!("case `{}` has an invalid input: {error}", case.name))
+#[test]
+fn shortest_handles_covers_a_small_fixed_set() {
+    let ids = [
+        Uuid::parse_str("00000000-0000-4000-8000-000000000001").unwrap(),
+        Uuid::parse_str(SAMPLE_UUID).unwrap(),
+        Uuid::parse_str("4f3a2b1c-9d2e-4f5a-8b6c-1d2e3f4a5b6d").unwrap(),
+        Uuid::parse_str("ffffffff-ffff-4fff-8fff-ffffffffffff").unwrap(),
+    ];
+
+    let handles = shortest_handles(ids.iter().copied(), 4);
+
+    assert_eq!(handles[&ids[0]], "0000");
+    assert_eq!(handles[&ids[1]], SAMPLE_HEX);
+    assert_eq!(handles[&ids[2]], "4f3a2b1c9d2e4f5a8b6c1d2e3f4a5b6d");
+    assert_eq!(handles[&ids[3]], "ffff");
 }

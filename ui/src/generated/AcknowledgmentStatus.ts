@@ -3,4 +3,11 @@
 /**
  * Whether an operation was applied or why it was rejected.
  */
-export type AcknowledgmentStatus = { "status": "applied" } | { "status": "rejected", } & ({ "reason": "tombstoned" } | { "reason": "not_found" } | { "reason": "conflict" } | { "reason": "unsupported_version" });
+export type AcknowledgmentStatus =
+  | { status: 'applied' }
+  | ({ status: 'rejected' } & (
+      | { reason: 'tombstoned' }
+      | { reason: 'not_found' }
+      | { reason: 'conflict' }
+      | { reason: 'unsupported_version' }
+    ));

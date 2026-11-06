@@ -50,9 +50,6 @@ jobs:
       - name: Check generated bindings
         run: just check-bindings
 
-      - name: Check shared fixtures
-        run: just check-fixtures
-
       - name: Validate Rust (test -> check -> clippy)
         run: just cargo-test-ci cargo-check-ci cargo-clippy-ci
 

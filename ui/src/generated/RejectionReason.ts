@@ -4,4 +4,8 @@
  * Why the server refused an operation. `SectionMerged` arrives with the merge
  * step in #108, which is also what produces it.
  */
-export type RejectionReason = { "reason": "tombstoned" } | { "reason": "not_found" } | { "reason": "conflict" } | { "reason": "unsupported_version" };
+export type RejectionReason =
+  | { reason: 'tombstoned' }
+  | { reason: 'not_found' }
+  | { reason: 'conflict' }
+  | { reason: 'unsupported_version' };
