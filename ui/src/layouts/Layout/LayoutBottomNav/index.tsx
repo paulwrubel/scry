@@ -22,7 +22,7 @@ export function LayoutBottomNav() {
           }
         >
           <HiSquares2X2 aria-hidden="true" className="h-5 w-5" />
-          <span>Board</span>
+          <span>View</span>
         </NavLink>
         <NavLink
           to="/projects"
