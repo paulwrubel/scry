@@ -7,10 +7,13 @@ import type { TaskFilter } from '@/utils/taskFilter';
 import type { BoardGroup } from './board';
 import {
   buildBoard,
+  CLOSED_NO_SECTION_GROUP,
   dropPosition,
   groupKey,
   insertPosition,
+  isNoSectionGroupKey,
   itemsFromGroups,
+  OPEN_NO_SECTION_GROUP,
   planSectionMove,
   sectionIdFromGroup,
   sectionTasks,
@@ -62,19 +65,27 @@ function filter(overrides: Partial<TaskFilter> = {}): TaskFilter {
   return { states: [...DEFAULT_TASK_FILTER.states], tags: [], search: '', ...overrides };
 }
 
-function shape(groups: BoardGroup[]): [string | null, string[]][] {
-  return groups.map((group) => [
-    group.section?.id ?? null,
-    group.tasks.map((candidate) => candidate.id),
-  ]);
+function shape(groups: BoardGroup[]): [string, string[]][] {
+  return groups.map((group) => [groupKey(group), group.tasks.map((candidate) => candidate.id)]);
 }
 
 describe('groupKey', () => {
-  it('uses the section id, with a sentinel for the unsectioned group', () => {
-    expect(groupKey('backlog')).toBe('backlog');
-    expect(groupKey(null)).toBe('no-section');
+  it('uses the section id for section groups', () => {
+    expect(groupKey({ section: section('backlog', 'a0'), state: null })).toBe('backlog');
+  });
+
+  it('splits section-less groups by state', () => {
+    expect(groupKey({ section: null, state: 'open' })).toBe(OPEN_NO_SECTION_GROUP);
+    expect(groupKey({ section: null, state: 'closed' })).toBe(CLOSED_NO_SECTION_GROUP);
+  });
+
+  it('maps both section-less keys back to a null section id', () => {
     expect(sectionIdFromGroup('backlog')).toBe('backlog');
-    expect(sectionIdFromGroup('no-section')).toBeNull();
+    expect(sectionIdFromGroup(OPEN_NO_SECTION_GROUP)).toBeNull();
+    expect(sectionIdFromGroup(CLOSED_NO_SECTION_GROUP)).toBeNull();
+    expect(isNoSectionGroupKey(OPEN_NO_SECTION_GROUP)).toBe(true);
+    expect(isNoSectionGroupKey(CLOSED_NO_SECTION_GROUP)).toBe(true);
+    expect(isNoSectionGroupKey('backlog')).toBe(false);
   });
 });
 
@@ -105,7 +116,7 @@ describe('buildBoard', () => {
     ]);
   });
 
-  it('puts tasks without a section first', () => {
+  it('puts open tasks without a section first', () => {
     const project = projectSnapshot({
       sections: [section('backlog', 'a0')],
       tasks: [
@@ -115,7 +126,7 @@ describe('buildBoard', () => {
     });
 
     expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
-      [null, ['loose']],
+      ['no-section-open', ['loose']],
       ['backlog', ['sectioned']],
     ]);
   });
@@ -127,6 +138,42 @@ describe('buildBoard', () => {
     });
 
     expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([['backlog', ['sectioned']]]);
+  });
+
+  it('puts closed tasks without a section last', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'a0')],
+      tasks: [
+        task({ id: 'done', title: 'Done', state: 'closed', position: 'a0' }),
+        task({ id: 'loose', title: 'Loose', position: 'a1' }),
+        task({ id: 'sectioned', title: 'Sectioned', section_id: 'backlog', position: 'a0' }),
+      ],
+    });
+
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
+      [OPEN_NO_SECTION_GROUP, ['loose']],
+      ['backlog', ['sectioned']],
+      [CLOSED_NO_SECTION_GROUP, ['done']],
+    ]);
+  });
+
+  it('drops each no-section group when the state filter hides it', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'a0')],
+      tasks: [
+        task({ id: 'done', title: 'Done', state: 'closed', position: 'a0' }),
+        task({ id: 'loose', title: 'Loose', position: 'a1' }),
+      ],
+    });
+
+    expect(shape(buildBoard(project, filter({ states: ['open'] })))).toEqual([
+      [OPEN_NO_SECTION_GROUP, ['loose']],
+      ['backlog', []],
+    ]);
+    expect(shape(buildBoard(project, filter({ states: ['closed'] })))).toEqual([
+      ['backlog', []],
+      [CLOSED_NO_SECTION_GROUP, ['done']],
+    ]);
   });
 
   const statusProject = projectSnapshot({
@@ -236,7 +283,7 @@ describe('itemsFromGroups', () => {
 
     expect(itemsFromGroups(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual({
       backlog: ['a', 'b'],
-      'no-section': ['c'],
+      [OPEN_NO_SECTION_GROUP]: ['c'],
     });
   });
 });

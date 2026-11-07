@@ -13,11 +13,11 @@ import { NewTaskForm } from './NewTaskForm';
 import { SectionColorPicker } from './SectionColorPicker';
 import { SortableTaskCard } from './SortableTaskCard';
 import { TaskCard } from './TaskCard';
-import { groupKey } from './board';
 
 type BoardColumnProps = {
   projectId: string;
-  sectionId: string | null;
+  group: string;
+  droppable?: boolean;
   title: string;
   color: Color | null;
   tasks: Task[];
@@ -40,7 +40,8 @@ const columnTheme: DeepPartial<CardTheme> = {
 export function BoardColumn(props: BoardColumnProps) {
   const {
     projectId,
-    sectionId,
+    group,
+    droppable,
     title,
     color,
     tasks,
@@ -53,7 +54,6 @@ export function BoardColumn(props: BoardColumnProps) {
     nodeRef,
     isDragging,
   } = props;
-  const group = groupKey(sectionId);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const { ref, isDropTarget } = useDroppable({
@@ -61,6 +61,7 @@ export function BoardColumn(props: BoardColumnProps) {
     type: 'column',
     accept: 'item',
     collisionPriority: CollisionPriority.Low,
+    disabled: !(droppable ?? true),
   });
 
   return (

@@ -35,10 +35,13 @@ import { BoardColumn } from './BoardColumn';
 import { NewSectionCard } from './NewSectionCard';
 import { TaskFilterPopover } from './TaskFilterPopover';
 import {
+  CLOSED_NO_SECTION_GROUP,
+  OPEN_NO_SECTION_GROUP,
   buildBoard,
   columnDragId,
   dropPosition,
   groupKey,
+  isNoSectionGroupKey,
   itemsFromGroups,
   planSectionMove,
   sectionIdFromGroup,
@@ -101,18 +104,22 @@ export function BoardPage() {
   const tasksById = new Map(project.tasks.map((task) => [task.id, task]));
 
   const groups = baseGroups.map((group) => {
-    const ids = dragItems?.[groupKey(group.section?.id ?? null)];
+    const ids = dragItems?.[groupKey(group)];
     if (ids === undefined) {
       return group;
     }
 
     return {
       section: group.section,
+      state: group.state,
       tasks: ids.map((id) => tasksById.get(id)).filter((task): task is Task => task !== undefined),
     };
   });
 
-  const noSectionGroup = groups.find((group) => group.section === null) ?? null;
+  const openNoSectionGroup =
+    groups.find((group) => group.section === null && group.state === 'open') ?? null;
+  const closedNoSectionGroup =
+    groups.find((group) => group.section === null && group.state === 'closed') ?? null;
   const sectionGroups = groups.filter(
     (group): group is SectionBoardGroup => group.section !== null,
   );
@@ -126,7 +133,7 @@ export function BoardPage() {
   }
   const dragDisabledReason = dragDisabledReasons.join(' and ');
 
-  async function handleCreate(sectionId: string, title: string) {
+  async function handleCreate(sectionId: string | null, title: string) {
     await replica.enqueue(createTaskOperation(project, sectionId, title));
   }
 
@@ -199,10 +206,31 @@ export function BoardPage() {
       return;
     }
 
+    const sourceId = event.operation.source?.id;
+    if (sourceId === undefined) {
+      return;
+    }
+
     // Match main: let React own the cross-section move; keep dnd-kit's
     // optimistic DOM sorting disabled so React is the single reorder path.
     event.preventDefault();
-    setDragItems((current) => (current === null ? current : move(current, event)));
+    setDragItems((current) => {
+      if (current === null) {
+        return current;
+      }
+
+      const next = move(current, event);
+      const origin = groupContaining(current, String(sourceId));
+      const destination = groupContaining(next, String(sourceId));
+
+      // The No Section columns are read-only targets: tasks may leave them but
+      // must not be dropped into either one from another group.
+      if (origin !== destination && destination !== null && isNoSectionGroupKey(destination)) {
+        return current;
+      }
+
+      return next;
+    });
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -243,6 +271,14 @@ export function BoardPage() {
     const taskId = String(source.id);
     const key = Object.entries(finalItems).find(([, ids]) => ids.includes(taskId))?.[0];
     if (key === undefined) {
+      return;
+    }
+
+    const startingItems = itemsFromGroups(baseGroups);
+    const originKey = groupContaining(startingItems, taskId);
+    const originIndex = originKey === null ? -1 : startingItems[originKey].indexOf(taskId);
+    const finalIndex = (finalItems[key] ?? []).indexOf(taskId);
+    if (key === originKey && finalIndex === originIndex) {
       return;
     }
 
@@ -370,15 +406,17 @@ export function BoardPage() {
         onDragEnd={handleDragEnd}
       >
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-x-auto md:overflow-y-hidden md:p-6">
-          {noSectionGroup === null ? null : (
+          {openNoSectionGroup === null ? null : (
             <BoardColumn
               projectId={project.id}
-              sectionId={null}
-              title="No section"
+              group={OPEN_NO_SECTION_GROUP}
+              droppable={false}
+              title="Open (No Section)"
               color={null}
-              tasks={noSectionGroup.tasks}
+              tasks={openNoSectionGroup.tasks}
               showPriority={project.show_priority}
               canReorder={canReorder}
+              onCreate={(title) => handleCreate(null, title)}
             />
           )}
           {sectionGroups.map((group, index) => (
@@ -395,6 +433,18 @@ export function BoardPage() {
               onDelete={handleSectionDelete}
             />
           ))}
+          {closedNoSectionGroup === null ? null : (
+            <BoardColumn
+              projectId={project.id}
+              group={CLOSED_NO_SECTION_GROUP}
+              droppable={false}
+              title="Closed (No Section)"
+              color={null}
+              tasks={closedNoSectionGroup.tasks}
+              showPriority={project.show_priority}
+              canReorder={canReorder}
+            />
+          )}
           <NewSectionCard onAdd={handleAddSection} />
         </div>
       </DragDropProvider>
@@ -448,7 +498,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
       nodeRef={(element) => ref(element)}
       isDragging={isDragging}
       projectId={project.id}
-      sectionId={section.id}
+      group={groupKey(group)}
       title={section.name}
       color={section.color}
       tasks={group.tasks}
@@ -471,4 +521,13 @@ function applyPendingMove(project: ProjectSnapshot, pending: PendingMove): Proje
         : task,
     ),
   };
+}
+
+function groupContaining(items: Record<string, string[]>, taskId: string): string | null {
+  for (const [key, ids] of Object.entries(items)) {
+    if (ids.includes(taskId)) {
+      return key;
+    }
+  }
+  return null;
 }

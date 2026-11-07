@@ -571,9 +571,13 @@ describe('BoardPage', () => {
     expect(operation.created_at).toMatch(/Z$/);
   });
 
-  it('does not offer create for tasks without a section', () => {
+  it('puts open tasks without a section first and closed ones last', () => {
     const project = projectSnapshot({
-      tasks: [task({ id: 'loose', title: 'Loose task' })],
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({ id: 'done', title: 'Done task', state: 'closed' }),
+        task({ id: 'loose', title: 'Loose task', position: 'a1' }),
+      ],
     });
 
     renderBoard(
@@ -581,7 +585,75 @@ describe('BoardPage', () => {
       vi.fn(async () => undefined),
     );
 
-    expect(screen.getByRole('heading', { name: 'No section' })).toBeDefined();
+    const open = screen.getByRole('heading', { name: 'Open (No Section)' });
+    const backlog = screen.getByRole('heading', { name: 'Backlog' });
+    const closed = screen.getByRole('heading', { name: 'Closed (No Section)' });
+
+    expect(open.compareDocumentPosition(backlog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(backlog.compareDocumentPosition(closed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('Loose task')).toBeDefined();
+    expect(screen.getByText('Done task')).toBeDefined();
+  });
+
+  it('hides each no-section column when its tasks are filtered out', () => {
+    const project = projectSnapshot({
+      tasks: [
+        task({ id: 'done', title: 'Done task', state: 'closed' }),
+        task({ id: 'loose', title: 'Loose task', position: 'a1' }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?state=open',
+    );
+
+    expect(screen.getByRole('heading', { name: 'Open (No Section)' })).toBeDefined();
+    expect(screen.queryByRole('heading', { name: 'Closed (No Section)' })).toBeNull();
+  });
+
+  it('offers create in the Open No Section column', async () => {
+    const project = projectSnapshot({
+      tasks: [task({ id: 'loose', title: 'Loose task' })],
+    });
+    const enqueue = vi.fn(async (_operation: Operation) => undefined);
+
+    renderBoard(project, enqueue);
+
+    expect(screen.getByRole('heading', { name: 'Open (No Section)' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText('Task title'), {
+      target: { value: 'New loose task' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'create_task',
+        section_id: null,
+        state: 'open',
+        title: 'New loose task',
+      }),
+    );
+  });
+
+  it('does not offer create in the Closed No Section column', () => {
+    const project = projectSnapshot({
+      tasks: [task({ id: 'done', title: 'Done task', state: 'closed' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.getByRole('heading', { name: 'Closed (No Section)' })).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Add task' })).toBeNull();
   });
 
