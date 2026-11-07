@@ -15,6 +15,7 @@ import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
 import { DeleteProjectModal } from './DeleteProjectModal';
+import { NewProjectModal } from './NewProjectModal';
 import { ProjectCard } from './ProjectCard';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
 
@@ -24,6 +25,7 @@ export function ProjectsPage() {
   const navigate = useNavigate();
   const [settingsProject, setSettingsProject] = useState<ProjectSnapshot | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSnapshot | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const projects = snapshot.visible.projects;
 
@@ -54,13 +56,31 @@ export function ProjectsPage() {
     navigate(`/projects/${nextProject.id}`);
   }
 
+  function handleCreated(projectId: string) {
+    setCreating(false);
+    setActiveProjectId(projectId);
+    navigate(`/projects/${projectId}`);
+  }
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto p-4 md:p-6">
-      <h1 className="text-2xl font-semibold text-white">Projects</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-white">Projects</h1>
+        <Button size="sm" color="default" onClick={() => setCreating(true)}>
+          New project
+        </Button>
+      </div>
       <section>
         <h2 className="mb-2 text-lg font-semibold text-zinc-300">Your Projects</h2>
         {projects.length === 0 ? (
-          <Alert color="info">No projects yet.</Alert>
+          <Alert color="info">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>No projects yet.</span>
+              <Button size="sm" color="default" onClick={() => setCreating(true)}>
+                New project
+              </Button>
+            </div>
+          </Alert>
         ) : (
           <>
             <div className="flex flex-col gap-3 md:hidden">
@@ -147,6 +167,13 @@ export function ProjectsPage() {
           onDeleted={handleDeleted}
         />
       )}
+      {creating ? (
+        <NewProjectModal
+          existingNames={projects.map((project) => project.name)}
+          onClose={() => setCreating(false)}
+          onCreated={handleCreated}
+        />
+      ) : null}
     </div>
   );
 }

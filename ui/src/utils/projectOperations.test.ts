@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
-import { deleteProjectOperation, updateProjectOperation } from './projectOperations';
+import {
+  createProjectOperation,
+  deleteProjectOperation,
+  updateProjectOperation,
+} from './projectOperations';
 
 function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
   return {
@@ -80,5 +84,39 @@ describe('deleteProjectOperation', () => {
       operation_version: 1,
     });
     expect(operation.operation_id).toEqual(expect.any(String));
+  });
+});
+
+describe('createProjectOperation', () => {
+  it('creates a blank project with trimmed fields and defaults', () => {
+    const operation = createProjectOperation({
+      name: '  New project  ',
+      description: '  Details  ',
+    });
+
+    if (operation.kind !== 'create_project') {
+      throw new Error('expected a create_project operation');
+    }
+
+    expect(operation).toMatchObject({
+      name: 'New project',
+      description: 'Details',
+      task_sorting_mode: 'manual',
+      show_priority: false,
+      operation_version: 1,
+    });
+    expect(operation.id).toEqual(expect.any(String));
+    expect(operation.operation_id).not.toBe(operation.id);
+    expect(operation.created_at).toBe(new Date(operation.created_at).toISOString());
+  });
+
+  it('stores an empty description as null', () => {
+    const operation = createProjectOperation({ name: 'New project', description: '   ' });
+
+    if (operation.kind !== 'create_project') {
+      throw new Error('expected a create_project operation');
+    }
+
+    expect(operation.description).toBeNull();
   });
 });

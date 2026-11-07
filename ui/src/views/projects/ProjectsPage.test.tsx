@@ -140,3 +140,53 @@ describe('ProjectsPage deletion', () => {
     expect(screen.getByTestId('path').textContent).toBe('/projects');
   });
 });
+
+describe('ProjectsPage creation', () => {
+  it('creates a project and opens its board', async () => {
+    const enqueue = vi.fn(async (_operation: Operation) => undefined);
+    const { setActiveProjectId, clearActiveProject } = renderPage([], null, enqueue);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'New project' })[0]);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New project' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Details' } });
+
+    const create = screen.getByRole('button', { name: 'Create' }) as HTMLButtonElement;
+    await waitFor(() => {
+      expect(create.disabled).toBe(false);
+    });
+    fireEvent.click(create);
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    const operation = enqueue.mock.calls[0][0];
+    expect(operation).toMatchObject({
+      kind: 'create_project',
+      name: 'New project',
+      description: 'Details',
+      task_sorting_mode: 'manual',
+      show_priority: false,
+    });
+    await waitFor(() => {
+      expect(setActiveProjectId).toHaveBeenCalledWith(operation.id);
+    });
+    expect(clearActiveProject).not.toHaveBeenCalled();
+    expect(screen.getByTestId('path').textContent).toBe(`/projects/${operation.id}`);
+  });
+
+  it('opens the create form from the empty state', () => {
+    renderPage(
+      [],
+      null,
+      vi.fn(async () => undefined),
+    );
+
+    const buttons = screen.getAllByRole('button', { name: 'New project' });
+    expect(buttons).toHaveLength(2);
+
+    fireEvent.click(buttons[1]);
+
+    expect(screen.getByLabelText('Name')).toBeDefined();
+  });
+});
