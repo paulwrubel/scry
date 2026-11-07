@@ -78,6 +78,31 @@ fn server_title_change(title: &str) -> Change {
     .unwrap()
 }
 
+fn server_section_position_change(position: &str) -> Change {
+    serde_json::from_value(json!({
+        "seq": 2,
+        "entity_type": "section",
+        "entity_id": SECTION_ID,
+        "kind": "update",
+        "operation_id": OPERATION_ID,
+        "client_timestamp": null,
+        "field_values": { "position": position },
+        "created_at": NOW
+    }))
+    .unwrap()
+}
+
+fn move_section_operation(position: &str) -> Operation {
+    serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "move_section",
+        "id": SECTION_ID,
+        "position": position
+    }))
+    .unwrap()
+}
+
 fn only_task(state: &ClientState) -> &Task {
     &state.projects[0].tasks[0]
 }
@@ -128,4 +153,24 @@ fn acknowledged_local_edit_loses_to_server_change() {
     );
 
     assert_eq!(only_task(&state).title, "server");
+}
+
+#[test]
+fn apply_changes_applies_section_position() {
+    let state = apply_changes(&confirmed(), &[server_section_position_change("a1")]);
+
+    assert_eq!(state.projects[0].sections[0].position.as_str(), "a1");
+}
+
+#[test]
+fn acknowledged_section_move_keeps_server_position() {
+    let acknowledged = [Uuid::parse_str(OPERATION_ID).unwrap()];
+    let state = visible_state(
+        &confirmed(),
+        &[server_section_position_change("a1")],
+        &acknowledged,
+        &[move_section_operation("a1")],
+    );
+
+    assert_eq!(state.projects[0].sections[0].position.as_str(), "a1");
 }

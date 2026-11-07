@@ -374,6 +374,11 @@ fn apply_section_values(section: &mut Section, values: &serde_json::Value) {
             serde_json::from_value::<Color>(color.clone()).ok()
         };
     }
+    if let Some(position) = values.get("position")
+        && let Ok(position) = serde_json::from_value::<Position>(position.clone())
+    {
+        section.position = position;
+    }
 }
 
 fn apply_task_values(task: &mut Task, values: &serde_json::Value) {

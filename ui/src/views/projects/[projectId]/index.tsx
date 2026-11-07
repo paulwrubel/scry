@@ -6,7 +6,6 @@ import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
 import { HiCog6Tooth } from 'react-icons/hi2';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { keyBetween } from '@/contract/positions';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
@@ -33,9 +32,11 @@ import { NewSectionCard } from './NewSectionCard';
 import { TaskFilterPopover } from './TaskFilterPopover';
 import {
   buildBoard,
+  columnDragId,
   dropPosition,
   groupKey,
   itemsFromGroups,
+  planSectionMove,
   sectionIdFromGroup,
   type BoardGroup,
 } from './board';
@@ -186,11 +187,14 @@ export function BoardPage() {
     if (!canReorder || event.operation.source?.type === 'column') {
       return;
     }
+    // React owns the reorder through dragItems; stop dnd-kit relocating the
+    // card's DOM node too, or React's deletion pass throws removeChild.
+    event.preventDefault();
     setDragItems((current) => (current === null ? current : move(current, event)));
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const { source, target } = event.operation;
+    const { source } = event.operation;
 
     if (event.canceled) {
       setDragItems(null);
@@ -198,19 +202,18 @@ export function BoardPage() {
     }
 
     if (source?.type === 'column') {
-      if (!isSortable(source) || !isSortable(target) || source.index === target.index) {
+      if (!isSortable(source)) {
         return;
       }
 
-      const reordered = moveArray(sectionGroups, source.index, target.index);
-      const moved = reordered[target.index]?.section;
-      if (moved === undefined) {
-        return;
+      const planned = planSectionMove(
+        sectionGroups.map((group) => group.section),
+        source.initialIndex,
+        source.index,
+      );
+      if (planned !== null) {
+        handleSectionMove(planned.sectionId, planned.position);
       }
-
-      const before = reordered[target.index - 1]?.section.position ?? null;
-      const after = reordered[target.index + 1]?.section.position ?? null;
-      handleSectionMove(moved.id, keyBetween(before, after));
       return;
     }
 
@@ -381,13 +384,6 @@ export function BoardPage() {
   );
 }
 
-function moveArray<T>(items: T[], from: number, to: number): T[] {
-  const next = [...items];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
-}
-
 type SortableBoardColumnProps = {
   group: SectionBoardGroup;
   index: number;
@@ -402,7 +398,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
   const { group, index, project, canReorder, onCreate, onRename, onDelete } = props;
   const section = group.section;
   const { ref, isDragging } = useSortable({
-    id: section.id,
+    id: columnDragId(section.id),
     index,
     group: 'columns',
     type: 'column',

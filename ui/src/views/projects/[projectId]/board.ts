@@ -22,6 +22,11 @@ export function sectionIdFromGroup(key: string): string | null {
   return key === NO_SECTION_GROUP ? null : key;
 }
 
+/** dnd-kit keys its registries by id, so the sortable cannot reuse the id the column's drop target owns. */
+export function columnDragId(sectionId: string): string {
+  return `column:${sectionId}`;
+}
+
 export function buildBoard(project: ProjectSnapshot, filter: TaskFilter): BoardGroup[] {
   const visible = project.tasks.filter((task) => matchesTaskFilter(task, filter));
 
@@ -71,6 +76,30 @@ export function insertPosition(tasks: readonly Task[], index: number): string {
   const before = tasks[at - 1]?.position ?? null;
   const after = tasks[at]?.position ?? null;
   return keyBetween(before, after);
+}
+
+export type SectionDrop = { sectionId: string; position: string };
+
+/**
+ * Plans where a dragged section lands. `from` is the index the drag started at
+ * and `to` is the index dnd-kit projected by the time the drag ended.
+ */
+export function planSectionMove(
+  sections: readonly Section[],
+  from: number,
+  to: number,
+): SectionDrop | null {
+  const moved = sections[from];
+  if (moved === undefined || from === to || to < 0 || to >= sections.length) {
+    return null;
+  }
+
+  const reordered = sections.filter((_, index) => index !== from);
+  reordered.splice(to, 0, moved);
+
+  const before = reordered[to - 1]?.position ?? null;
+  const after = reordered[to + 1]?.position ?? null;
+  return { sectionId: moved.id, position: keyBetween(before, after) };
 }
 
 export function dropPosition(
