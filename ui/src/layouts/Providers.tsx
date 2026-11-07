@@ -3,6 +3,7 @@ import type { CustomFlowbiteTheme } from 'flowbite-react/types';
 import { Outlet } from 'react-router-dom';
 import { ActiveProjectProvider } from '@/providers/ActiveProject';
 import { AuthProvider } from '@/providers/Auth';
+import { InstallPromptProvider } from '@/providers/InstallPrompt';
 import { ReplicaProvider } from '@/providers/Replica';
 import { SyncProvider } from '@/providers/Sync';
 
@@ -21,15 +22,17 @@ const theme: CustomFlowbiteTheme = {
 export function Providers() {
   return (
     <ThemeProvider theme={theme}>
-      <ReplicaProvider>
-        <AuthProvider>
-          <SyncProvider>
-            <ActiveProjectProvider>
-              <Outlet />
-            </ActiveProjectProvider>
-          </SyncProvider>
-        </AuthProvider>
-      </ReplicaProvider>
+      <InstallPromptProvider>
+        <ReplicaProvider>
+          <AuthProvider>
+            <SyncProvider>
+              <ActiveProjectProvider>
+                <Outlet />
+              </ActiveProjectProvider>
+            </SyncProvider>
+          </AuthProvider>
+        </ReplicaProvider>
+      </InstallPromptProvider>
     </ThemeProvider>
   );
 }
