@@ -14,20 +14,44 @@ import { useNavigate } from 'react-router-dom';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
+import { DeleteProjectModal } from './DeleteProjectModal';
 import { ProjectCard } from './ProjectCard';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
 
 export function ProjectsPage() {
   const snapshot = useReplicaSnapshot();
-  const { activeProjectId, setActiveProjectId } = useActiveProject();
+  const { activeProjectId, setActiveProjectId, clearActiveProject } = useActiveProject();
   const navigate = useNavigate();
   const [settingsProject, setSettingsProject] = useState<ProjectSnapshot | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectSnapshot | null>(null);
 
   const projects = snapshot.visible.projects;
 
   function handleUse(projectId: string) {
     setActiveProjectId(projectId);
     navigate(`/projects/${projectId}`);
+  }
+
+  function handleDeleted(projectId: string) {
+    setDeleteTarget(null);
+    if (projectId !== activeProjectId) {
+      return;
+    }
+
+    const index = projects.findIndex((project) => project.id === projectId);
+    const nextProject =
+      index === -1
+        ? (projects.find((project) => project.id !== projectId) ?? null)
+        : (projects[index + 1] ?? projects[index - 1] ?? null);
+
+    if (nextProject === null) {
+      clearActiveProject();
+      navigate('/projects');
+      return;
+    }
+
+    setActiveProjectId(nextProject.id);
+    navigate(`/projects/${nextProject.id}`);
   }
 
   return (
@@ -47,6 +71,7 @@ export function ProjectsPage() {
                   active={project.id === activeProjectId}
                   onUse={() => handleUse(project.id)}
                   onSettings={() => setSettingsProject(project)}
+                  onDelete={() => setDeleteTarget(project)}
                 />
               ))}
             </div>
@@ -94,6 +119,9 @@ export function ProjectsPage() {
                           >
                             Settings
                           </Button>
+                          <Button size="xs" color="red" onClick={() => setDeleteTarget(project)}>
+                            Delete
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -109,6 +137,14 @@ export function ProjectsPage() {
           key={settingsProject.id}
           project={settingsProject}
           onClose={() => setSettingsProject(null)}
+        />
+      )}
+      {deleteTarget === null ? null : (
+        <DeleteProjectModal
+          key={deleteTarget.id}
+          project={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={handleDeleted}
         />
       )}
     </div>

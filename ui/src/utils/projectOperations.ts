@@ -42,3 +42,12 @@ export function updateProjectOperation(
     show_priority: priorityChanged ? patch.show_priority : null,
   };
 }
+
+export function deleteProjectOperation(project: ProjectSnapshot): Operation {
+  return {
+    operation_id: newId(),
+    operation_version: 1,
+    kind: 'delete_project',
+    id: project.id,
+  };
+}

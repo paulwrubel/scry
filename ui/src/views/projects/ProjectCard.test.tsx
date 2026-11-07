@@ -53,6 +53,7 @@ describe('ProjectCard', () => {
         active={false}
         onUse={() => undefined}
         onSettings={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
@@ -70,6 +71,7 @@ describe('ProjectCard', () => {
         active
         onUse={() => undefined}
         onSettings={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
@@ -85,6 +87,7 @@ describe('ProjectCard', () => {
         active={false}
         onUse={() => undefined}
         onSettings={onSettings}
+        onDelete={() => undefined}
       />,
     );
 
@@ -101,11 +104,29 @@ describe('ProjectCard', () => {
         active={false}
         onUse={onUse}
         onSettings={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Use' }));
 
     expect(onUse).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls the delete action', () => {
+    const onDelete = vi.fn();
+    render(
+      <ProjectCard
+        project={projectSnapshot()}
+        active={false}
+        onUse={() => undefined}
+        onSettings={() => undefined}
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
   });
 });

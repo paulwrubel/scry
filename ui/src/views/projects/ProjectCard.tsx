@@ -6,10 +6,11 @@ export type ProjectCardProps = {
   active: boolean;
   onUse: () => void;
   onSettings: () => void;
+  onDelete: () => void;
 };
 
 export function ProjectCard(props: ProjectCardProps) {
-  const { project, active, onUse, onSettings } = props;
+  const { project, active, onUse, onSettings, onDelete } = props;
 
   return (
     <Card>
@@ -53,6 +54,9 @@ export function ProjectCard(props: ProjectCardProps) {
         </Button>
         <Button size="sm" color="alternative" onClick={onSettings} className="min-h-11 flex-1">
           Settings
+        </Button>
+        <Button size="sm" color="red" onClick={onDelete} className="min-h-11 flex-1">
+          Delete
         </Button>
       </div>
     </Card>

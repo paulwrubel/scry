@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
-import { updateProjectOperation } from './projectOperations';
+import { deleteProjectOperation, updateProjectOperation } from './projectOperations';
 
 function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
   return {
@@ -67,5 +67,18 @@ describe('updateProjectOperation', () => {
 
   it('rejects an empty name', () => {
     expect(updateProjectOperation(project(), { ...BASE, name: '  ' })).toBeNull();
+  });
+});
+
+describe('deleteProjectOperation', () => {
+  it('targets the project for deletion', () => {
+    const operation = deleteProjectOperation(project());
+
+    expect(operation).toMatchObject({
+      kind: 'delete_project',
+      id: 'project-1',
+      operation_version: 1,
+    });
+    expect(operation.operation_id).toEqual(expect.any(String));
   });
 });

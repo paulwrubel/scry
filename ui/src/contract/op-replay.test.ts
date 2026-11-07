@@ -112,6 +112,28 @@ function moveSection(position: string, operationId: string): Operation {
   };
 }
 
+function deleteProject(operationId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'delete_project',
+    id: PROJECT_ID,
+  };
+}
+
+function serverProjectDelete(): Change {
+  return {
+    seq: 2,
+    entity_type: 'project',
+    entity_id: PROJECT_ID,
+    kind: 'delete',
+    operation_id: 'server-change',
+    client_timestamp: null,
+    field_values: {},
+    created_at: CREATED_AT,
+  };
+}
+
 describe('op replay', () => {
   it('applyChanges applies an update_task change', () => {
     const result = applyChanges(state(), [serverChange('server')]);
@@ -162,5 +184,17 @@ describe('op replay', () => {
     );
 
     expect(result.projects[0].sections[0].position).toBe('a1');
+  });
+
+  it('replayOperations removes a project on delete_project', () => {
+    const result = replayOperations(state(), [deleteProject('op-1')]);
+
+    expect(result.projects).toHaveLength(0);
+  });
+
+  it('applyChanges removes a project on a project delete change', () => {
+    const result = applyChanges(state(), [serverProjectDelete()]);
+
+    expect(result.projects).toHaveLength(0);
   });
 });
