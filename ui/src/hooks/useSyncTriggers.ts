@@ -10,7 +10,7 @@ export type SyncTiming = {
 };
 
 export const SYNC_TIMING_DEFAULTS: SyncTiming = {
-  editDebounceMs: 500,
+  editDebounceMs: 1_000,
   pollIntervalMs: 15_000,
   retryBaseMs: 1_000,
   retryMaxMs: 30_000,

@@ -56,7 +56,7 @@ The outbox is preserved on every failure except for ids the server explicitly ac
 
 `ui/src/hooks/useSyncTriggers.ts` owns scheduling and calls the client; the client itself does not schedule anything. It syncs once at startup per client (guarded against StrictMode remounts), debounces growth of the outbox, polls only while the document is visible, syncs on `visibilitychange` when the tab becomes visible, syncs on `online`, and exposes a manual `syncNow`. A hidden tab does not poll.
 
-Failures retry with exponential backoff, clamped at a configurable maximum; success resets the delay. 401 and `unsupported_version` stop automatic retries because they need a login or a client upgrade. Timing values are configurable through `SyncTiming`; the defaults are 500 ms edit debounce, 15 s polling, 1 s initial retry, and 30 s cap.
+Failures retry with exponential backoff, clamped at a configurable maximum; success resets the delay. 401 and `unsupported_version` stop automatic retries because they need a login or a client upgrade. Timing values are configurable through `SyncTiming`; the defaults are 1 s edit debounce, 15 s polling, 1 s initial retry, and 30 s cap.
 
 React composition lives in `ui/src/providers/Sync/`: `SyncProvider` creates one client per ready Replica, `useSyncTriggers` supplies scheduling, and `useSync`/`useSyncSnapshot` expose the client and its snapshot. `LayoutNavbar/SyncButton` uses those hooks to show syncing/failure state and call `syncNow`.
 
