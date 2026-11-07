@@ -4,22 +4,32 @@ import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
+import type { TaskState } from '@/generated/TaskState';
 import type { TaskFilter } from '@/utils/taskFilter';
 import { matchesTaskFilter } from '@/utils/taskFilter';
 
 export type BoardGroup = {
   section: Section | null;
+  state: TaskState | null;
   tasks: Task[];
 };
 
-export const NO_SECTION_GROUP = 'no-section';
+export const OPEN_NO_SECTION_GROUP = 'no-section-open';
+export const CLOSED_NO_SECTION_GROUP = 'no-section-closed';
 
-export function groupKey(sectionId: string | null): string {
-  return sectionId ?? NO_SECTION_GROUP;
+export function isNoSectionGroupKey(key: string): boolean {
+  return key === OPEN_NO_SECTION_GROUP || key === CLOSED_NO_SECTION_GROUP;
+}
+
+export function groupKey(group: Pick<BoardGroup, 'section' | 'state'>): string {
+  if (group.section !== null) {
+    return group.section.id;
+  }
+  return group.state === 'closed' ? CLOSED_NO_SECTION_GROUP : OPEN_NO_SECTION_GROUP;
 }
 
 export function sectionIdFromGroup(key: string): string | null {
-  return key === NO_SECTION_GROUP ? null : key;
+  return isNoSectionGroupKey(key) ? null : key;
 }
 
 /** dnd-kit keys its registries by id, so the sortable cannot reuse the id the column's drop target owns. */
@@ -42,26 +52,41 @@ export function buildBoard(project: ProjectSnapshot, filter: TaskFilter): BoardG
 
   const groups: BoardGroup[] = sections.map((section) => ({
     section,
+    state: null,
     tasks: orderTasks(
       visible.filter((task) => task.section_id === section.id),
       project.task_sorting_mode,
     ),
   }));
 
-  const unsectioned = orderTasks(
-    visible.filter((task) => task.section_id === null),
+  const openNoSection = orderTasks(
+    visible.filter((task) => task.section_id === null && task.state === 'open'),
     project.task_sorting_mode,
   );
 
-  return unsectioned.length === 0 ? groups : [{ section: null, tasks: unsectioned }, ...groups];
+  const closedNoSection = orderTasks(
+    visible.filter((task) => task.section_id === null && task.state === 'closed'),
+    project.task_sorting_mode,
+  );
+
+  const board: BoardGroup[] = [];
+
+  if (openNoSection.length > 0) {
+    board.push({ section: null, state: 'open', tasks: openNoSection });
+  }
+
+  board.push(...groups);
+
+  if (closedNoSection.length > 0) {
+    board.push({ section: null, state: 'closed', tasks: closedNoSection });
+  }
+
+  return board;
 }
 
 export function itemsFromGroups(groups: BoardGroup[]): Record<string, string[]> {
   return Object.fromEntries(
-    groups.map((group) => [
-      groupKey(group.section?.id ?? null),
-      group.tasks.map((task) => task.id),
-    ]),
+    groups.map((group) => [groupKey(group), group.tasks.map((task) => task.id)]),
   );
 }
 
