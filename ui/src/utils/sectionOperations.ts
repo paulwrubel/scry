@@ -1,4 +1,5 @@
 import { keyBetween } from '@/contract/positions';
+import type { Color } from '@/generated/Color';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 
@@ -58,5 +59,16 @@ export function updateSectionOperation(sectionId: string, name: string): Operati
     id: sectionId,
     name: trimmed,
     color: null,
+  };
+}
+
+export function setSectionColorOperation(sectionId: string, color: Color | null): Operation {
+  return {
+    operation_id: crypto.randomUUID(),
+    operation_version: 1,
+    kind: 'update_section',
+    id: sectionId,
+    name: null,
+    color: color === null ? 'clear' : { set: color },
   };
 }

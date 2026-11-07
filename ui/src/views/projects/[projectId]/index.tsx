@@ -6,6 +6,7 @@ import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
 import { HiCog6Tooth } from 'react-icons/hi2';
 import { useParams, useSearchParams } from 'react-router-dom';
+import type { Color } from '@/generated/Color';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
@@ -16,6 +17,7 @@ import {
   createSectionOperation,
   deleteSectionOperation,
   moveSectionOperation,
+  setSectionColorOperation,
   updateSectionOperation,
 } from '@/utils/sectionOperations';
 import {
@@ -154,6 +156,10 @@ export function BoardPage() {
     }
   }
 
+  function handleSectionColorChange(sectionId: string, color: Color | null) {
+    void replica.enqueue(setSectionColorOperation(sectionId, color));
+  }
+
   function handleAddSection(name: string) {
     const operation = createSectionOperation(project, name);
     if (operation !== null) {
@@ -187,8 +193,9 @@ export function BoardPage() {
     if (!canReorder || event.operation.source?.type === 'column') {
       return;
     }
-    // React owns the reorder through dragItems; stop dnd-kit relocating the
-    // card's DOM node too, or React's deletion pass throws removeChild.
+    // React owns cross-column moves through dragItems; letting dnd-kit's
+    // optimistic sorting relocate the same node races with React's deletion
+    // pass and throws removeChild. Section drags keep the plugin (no state).
     event.preventDefault();
     setDragItems((current) => (current === null ? current : move(current, event)));
   }
@@ -367,6 +374,7 @@ export function BoardPage() {
               canReorder={canReorder}
               onCreate={handleCreate}
               onRename={(sectionId, name) => void handleSectionRename(sectionId, name)}
+              onColorChange={handleSectionColorChange}
               onDelete={handleSectionDelete}
             />
           ))}
@@ -391,11 +399,12 @@ type SortableBoardColumnProps = {
   canReorder: boolean;
   onCreate: (sectionId: string, title: string) => Promise<void>;
   onRename: (sectionId: string, name: string) => void;
+  onColorChange: (sectionId: string, color: Color | null) => void;
   onDelete: (sectionId: string) => void;
 };
 
 function SortableBoardColumn(props: SortableBoardColumnProps) {
-  const { group, index, project, canReorder, onCreate, onRename, onDelete } = props;
+  const { group, index, project, canReorder, onCreate, onRename, onColorChange, onDelete } = props;
   const section = group.section;
   const { ref, isDragging } = useSortable({
     id: columnDragId(section.id),
@@ -417,6 +426,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
       showPriority={project.show_priority}
       canReorder={canReorder}
       onRename={(name) => onRename(section.id, name)}
+      onColorChange={(color) => onColorChange(section.id, color)}
       onDelete={() => onDelete(section.id)}
       onCreate={(title) => onCreate(section.id, title)}
     />
