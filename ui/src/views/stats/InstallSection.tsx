@@ -61,8 +61,8 @@ export function InstallSection() {
             </>
           )}
         </ModalBody>
-        <ModalFooter>
-          <Button color="default" onClick={() => setShowInstructions(false)}>
+        <ModalFooter className="justify-end">
+          <Button color="alternative" onClick={() => setShowInstructions(false)}>
             Close
           </Button>
         </ModalFooter>

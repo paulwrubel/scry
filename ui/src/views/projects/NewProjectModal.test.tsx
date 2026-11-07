@@ -120,5 +120,15 @@ describe('NewProjectModal', () => {
 
     expect(await screen.findByText('Could not create this project.')).toBeDefined();
     expect(onCreated).not.toHaveBeenCalled();
+    expect(createButton().disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Renamed project' } });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Could not create this project.')).toBeNull();
+    });
+    await waitFor(() => {
+      expect(createButton().disabled).toBe(false);
+    });
   });
 });

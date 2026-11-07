@@ -28,6 +28,7 @@ export function ProjectSettingsModal(props: ProjectSettingsModalProps) {
       description: project.description ?? '',
     },
     validators: { onChange: schema },
+    listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
       setSaving(true);
       setError(null);
@@ -75,13 +76,21 @@ export function ProjectSettingsModal(props: ProjectSettingsModalProps) {
           )}
         </form>
       </ModalBody>
-      <ModalFooter>
-        <Button color="default" onClick={onClose}>
+      <ModalFooter className="justify-between">
+        <Button color="alternative" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" form="project-settings-form" disabled={saving || !form.state.isValid}>
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
+        <form.Subscribe selector={(state) => ({ name: state.values.name, isValid: state.isValid })}>
+          {({ name, isValid }) => (
+            <Button
+              type="submit"
+              form="project-settings-form"
+              disabled={saving || error !== null || name.trim().length === 0 || !isValid}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          )}
+        </form.Subscribe>
       </ModalFooter>
     </Modal>
   );

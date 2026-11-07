@@ -15,10 +15,14 @@ export function DeleteSectionModal(props: DeleteSectionModalProps) {
       <ModalHeader>Delete section</ModalHeader>
       <ModalBody>
         <p className="text-sm">
-          Delete “{sectionName}”? Tasks in this section will survive, and will be unassigned from this section.
+          Delete “{sectionName}”? Tasks in this section will survive, and will be unassigned from
+          this section.
         </p>
       </ModalBody>
-      <ModalFooter>
+      <ModalFooter className="justify-between">
+        <Button color="alternative" onClick={onClose}>
+          Cancel
+        </Button>
         <Button
           color="red"
           onClick={() => {
@@ -27,9 +31,6 @@ export function DeleteSectionModal(props: DeleteSectionModalProps) {
           }}
         >
           Delete section
-        </Button>
-        <Button color="alternative" onClick={onClose}>
-          Cancel
         </Button>
       </ModalFooter>
     </Modal>

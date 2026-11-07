@@ -34,6 +34,7 @@ export function NewProjectModal(props: NewProjectModalProps) {
       description: '',
     },
     validators: { onChange: schemaFor(existingNames) },
+    listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
       setSaving(true);
       setError(null);
@@ -76,14 +77,15 @@ export function NewProjectModal(props: NewProjectModalProps) {
           )}
         </form>
       </ModalBody>
-      <ModalFooter>
-        <Button color="default" onClick={onClose}>
+      <ModalFooter className="justify-between">
+        <Button color="alternative" onClick={onClose}>
           Cancel
         </Button>
         <form.Subscribe selector={(state) => state.values.name}>
           {(name) => {
             const trimmed = name.trim();
-            const disabled = saving || trimmed.length === 0 || existingNames.includes(trimmed);
+            const disabled =
+              saving || error !== null || trimmed.length === 0 || existingNames.includes(trimmed);
 
             return (
               <Button type="submit" form="new-project-form" disabled={disabled}>

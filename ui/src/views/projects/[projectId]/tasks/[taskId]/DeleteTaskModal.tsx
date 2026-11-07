@@ -19,12 +19,12 @@ export function DeleteTaskModal(props: DeleteTaskModalProps) {
           Delete “{task.title}”? This permanently deletes the task and its notes.
         </p>
       </ModalBody>
-      <ModalFooter>
-        <Button color="red" onClick={() => void onDelete()}>
-          Delete task
-        </Button>
+      <ModalFooter className="justify-between">
         <Button color="alternative" onClick={onClose}>
           Cancel
+        </Button>
+        <Button color="red" onClick={() => void onDelete()}>
+          Delete task
         </Button>
       </ModalFooter>
     </Modal>

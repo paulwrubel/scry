@@ -44,12 +44,12 @@ export function DeleteProjectModal(props: DeleteProjectModalProps) {
           </p>
         )}
       </ModalBody>
-      <ModalFooter>
-        <Button color="red" onClick={() => void handleDelete()} disabled={deleting}>
-          {deleting ? 'Deleting...' : 'Delete project'}
-        </Button>
+      <ModalFooter className="justify-between">
         <Button color="alternative" onClick={onClose} disabled={deleting}>
           Cancel
+        </Button>
+        <Button color="red" onClick={() => void handleDelete()} disabled={deleting}>
+          {deleting ? 'Deleting...' : 'Delete project'}
         </Button>
       </ModalFooter>
     </Modal>
