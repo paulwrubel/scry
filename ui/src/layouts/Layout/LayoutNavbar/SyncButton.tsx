@@ -17,7 +17,7 @@ export function SyncButton() {
       disabled={!isAuthenticated || syncingNow}
       title={!isAuthenticated ? 'Sign in to sync' : (snapshot.error?.message ?? 'Sync now')}
       onClick={() => void syncNow()}
-      className="min-w-20"
+      className="min-h-11 min-w-20 md:min-h-0"
     >
       {showSyncing ? 'Syncing' : 'Sync'}
     </Button>

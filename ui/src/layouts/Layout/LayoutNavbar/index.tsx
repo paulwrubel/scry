@@ -1,4 +1,4 @@
-import { Navbar, NavbarBrand, NavbarCollapse, NavbarLink, NavbarToggle } from 'flowbite-react';
+import { Navbar, NavbarBrand, NavbarCollapse, NavbarLink } from 'flowbite-react';
 import type { NavbarTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { Link } from 'react-router-dom';
@@ -16,7 +16,7 @@ export function LayoutNavbar() {
     root: {
       base: 'border-b border-line bg-panel px-4 dark:border-line dark:bg-panel',
       inner: {
-        base: 'mx-auto flex h-8 flex-wrap items-center justify-between',
+        base: 'mx-auto flex h-11 flex-wrap items-center justify-between md:h-8',
       },
     },
   };
@@ -25,21 +25,24 @@ export function LayoutNavbar() {
     <Navbar fluid theme={navbarTheme}>
       <div className="flex flex-1 items-baseline gap-4">
         {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
-        <NavbarBrand as={Link} to="/">
+        <NavbarBrand as={Link} to="/" className="min-h-11 md:min-h-0">
           <span className="self-center text-xl font-semibold whitespace-nowrap text-white">
             Scry
           </span>
         </NavbarBrand>
-        <span className="cursor-default self-baseline text-sm text-zinc-500 select-none">
+        <span className="hidden cursor-default self-baseline text-sm text-zinc-500 select-none md:inline">
           {__APP_VERSION__}
         </span>
       </div>
       <div className="flex flex-1 items-center justify-end gap-2 md:order-2">
-        <ConnectionStatus />
+        <div className="hidden md:block">
+          <ConnectionStatus />
+        </div>
         <SyncStatus />
-        <SignOutButton />
+        <div className="hidden md:block">
+          <SignOutButton />
+        </div>
         <SyncButton />
-        <NavbarToggle />
       </div>
       <NavbarCollapse>
         {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
