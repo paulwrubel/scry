@@ -196,10 +196,10 @@ export function BoardPage() {
     if (!canReorder || event.operation.source?.type === 'column') {
       return;
     }
-    // React owns cross-column moves through dragItems; letting dnd-kit's
-    // optimistic sorting relocate the same node races with React's deletion
-    // pass and throws removeChild. Section drags keep the plugin (no state).
-    event.preventDefault();
+
+    // dnd-kit's optimistic sorting and React state both move items here. Do
+    // not preventDefault: that disables the optimistic sorting and leaves the
+    // dragged card as the only moving node.
     setDragItems((current) => (current === null ? current : move(current, event)));
   }
 
@@ -234,17 +234,16 @@ export function BoardPage() {
       return;
     }
 
-    if (
-      source === null ||
-      !isSortable(source) ||
-      source.type !== 'item' ||
-      source.group === undefined
-    ) {
+    if (source === null || !isSortable(source) || source.type !== 'item') {
       return;
     }
 
     const taskId = String(source.id);
-    const key = String(source.group);
+    const key = Object.entries(finalItems).find(([, ids]) => ids.includes(taskId))?.[0];
+    if (key === undefined) {
+      return;
+    }
+
     const sectionId = sectionIdFromGroup(key);
     const groupIds = finalItems[key] ?? [];
     const located = groupIds.indexOf(taskId);

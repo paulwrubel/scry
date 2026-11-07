@@ -39,9 +39,12 @@ export class TouchLongPressSensor extends Sensor<DragDropManager> {
     let clickGuardTimer: ReturnType<typeof setTimeout> | undefined;
     let start: Point | undefined;
     let startTouchId: number | undefined;
+    let pointerId: number | undefined;
     let latestEvent: TouchEvent | undefined;
     let active = false;
-    let document: Document | undefined;
+    let eventTarget: EventTarget | undefined;
+    let ownerDocument: Document | undefined;
+    let ownerWindow: Window | undefined;
 
     const suppressClick = (event: Event) => {
       event.preventDefault();
@@ -52,17 +55,28 @@ export class TouchLongPressSensor extends Sensor<DragDropManager> {
       event.preventDefault();
     };
 
-    const removeDocumentListeners = () => {
-      if (!document) {
-        return;
+    const removeEventListeners = () => {
+      if (eventTarget) {
+        eventTarget.removeEventListener('touchmove', handleMove as EventListener, true);
+        eventTarget.removeEventListener('touchend', handleEnd as EventListener, true);
+        eventTarget.removeEventListener('touchcancel', handleCancel as EventListener, true);
+        eventTarget.removeEventListener('pointerup', handlePointerEnd as EventListener, true);
+        eventTarget.removeEventListener(
+          'pointercancel',
+          handlePointerCancel as EventListener,
+          true,
+        );
+        eventTarget.removeEventListener('contextmenu', preventContextMenu, true);
       }
 
-      document.removeEventListener('touchmove', handleMove, true);
-      document.removeEventListener('touchend', handleEnd, true);
-      document.removeEventListener('touchcancel', handleCancel, true);
-      document.removeEventListener('pointerup', handlePointerEnd, true);
-      document.removeEventListener('pointercancel', handlePointerCancel, true);
-      document.removeEventListener('contextmenu', preventContextMenu, true);
+      if (ownerWindow) {
+        ownerWindow.removeEventListener('blur', handleAbort);
+        ownerWindow.removeEventListener('pagehide', handleAbort);
+      }
+
+      if (ownerDocument) {
+        ownerDocument.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
 
     const clearTimer = () => {
@@ -73,34 +87,43 @@ export class TouchLongPressSensor extends Sensor<DragDropManager> {
     };
 
     const armClickGuard = () => {
-      if (!document) {
+      if (!ownerDocument) {
         return;
       }
 
-      document.addEventListener('click', suppressClick, true);
+      ownerDocument.addEventListener('click', suppressClick, true);
       if (clickGuardTimer !== undefined) {
         clearTimeout(clickGuardTimer);
       }
       clickGuardTimer = setTimeout(() => {
-        document?.removeEventListener('click', suppressClick, true);
+        ownerDocument?.removeEventListener('click', suppressClick, true);
         clickGuardTimer = undefined;
       }, 400);
     };
 
     const cleanup = (removeClickGuard = false) => {
       clearTimer();
-      removeDocumentListeners();
+      removeEventListeners();
 
-      if (removeClickGuard && document) {
-        document.removeEventListener('click', suppressClick, true);
+      if (removeClickGuard && ownerDocument) {
+        ownerDocument.removeEventListener('click', suppressClick, true);
         if (clickGuardTimer !== undefined) {
           clearTimeout(clickGuardTimer);
           clickGuardTimer = undefined;
         }
       }
 
+      if (pointerId !== undefined) {
+        try {
+          element.releasePointerCapture(pointerId);
+        } catch {
+          // The pointer may already have been released.
+        }
+      }
+
       start = undefined;
       startTouchId = undefined;
+      pointerId = undefined;
       latestEvent = undefined;
       active = false;
     };
@@ -124,17 +147,6 @@ export class TouchLongPressSensor extends Sensor<DragDropManager> {
       }
 
       event.preventDefault();
-
-      const hit = element.ownerDocument.elementFromPoint(next.x, next.y);
-      if (hit !== null && hit.closest('nav[aria-label="Primary"]') !== null) {
-        try {
-          this.manager.actions.stop({ event, canceled: true });
-        } finally {
-          cleanup();
-        }
-        return;
-      }
-
       latestEvent = event;
       this.manager.actions.move({ event, to: next });
     };
@@ -190,6 +202,31 @@ export class TouchLongPressSensor extends Sensor<DragDropManager> {
       cleanup();
     };
 
+    const handleAbort = () => {
+      if (active) {
+        try {
+          this.manager.actions.stop({ canceled: true });
+        } finally {
+          cleanup(true);
+        }
+        return;
+      }
+
+      cleanup(true);
+    };
+
+    const handleVisibilityChange = () => {
+      if (ownerDocument?.visibilityState === 'hidden') {
+        handleAbort();
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') {
+        pointerId = event.pointerId;
+      }
+    };
+
     const handleStart = (event: TouchEvent) => {
       if (this.disabled || source.disabled || !this.manager.dragOperation.status.idle) {
         return;
@@ -207,18 +244,32 @@ export class TouchLongPressSensor extends Sensor<DragDropManager> {
       start = pointOf(touch);
       startTouchId = touch.identifier;
       latestEvent = event;
-      const ownerDocument = element.ownerDocument;
-      document = ownerDocument;
+      ownerDocument = element.ownerDocument;
+      ownerWindow = ownerDocument.defaultView ?? undefined;
+      eventTarget = ownerWindow ?? ownerDocument;
 
-      ownerDocument.addEventListener('touchmove', handleMove, { passive: false, capture: true });
-      ownerDocument.addEventListener('touchend', handleEnd, { passive: false, capture: true });
-      ownerDocument.addEventListener('touchcancel', handleCancel, {
+      eventTarget.addEventListener('touchmove', handleMove as EventListener, {
         passive: false,
         capture: true,
       });
-      ownerDocument.addEventListener('pointerup', handlePointerEnd, { capture: true });
-      ownerDocument.addEventListener('pointercancel', handlePointerCancel, { capture: true });
-      ownerDocument.addEventListener('contextmenu', preventContextMenu, true);
+      eventTarget.addEventListener('touchend', handleEnd as EventListener, {
+        passive: false,
+        capture: true,
+      });
+      eventTarget.addEventListener('touchcancel', handleCancel as EventListener, {
+        passive: false,
+        capture: true,
+      });
+      eventTarget.addEventListener('pointerup', handlePointerEnd as EventListener, {
+        capture: true,
+      });
+      eventTarget.addEventListener('pointercancel', handlePointerCancel as EventListener, {
+        capture: true,
+      });
+      eventTarget.addEventListener('contextmenu', preventContextMenu, true);
+      ownerWindow?.addEventListener('blur', handleAbort);
+      ownerWindow?.addEventListener('pagehide', handleAbort);
+      ownerDocument.addEventListener('visibilitychange', handleVisibilityChange);
 
       clearTimer();
       timer = setTimeout(() => {
@@ -246,19 +297,33 @@ export class TouchLongPressSensor extends Sensor<DragDropManager> {
 
         active = true;
         try {
+          if (pointerId !== undefined) {
+            element.setPointerCapture(pointerId);
+          }
+        } catch {
+          // Pointer capture is only a safety net for end events.
+        }
+        try {
           navigator.vibrate?.(10);
         } catch {
           // Vibration is optional and may be blocked by the OS or browser.
         }
-        document?.addEventListener('click', suppressClick, true);
+        ownerDocument?.addEventListener('click', suppressClick, true);
       }, LONG_PRESS_DELAY);
     };
 
     element.addEventListener('touchstart', handleStart as EventListener, { passive: true });
+    element.addEventListener('pointerdown', handlePointerDown as EventListener, true);
 
     return () => {
       element.removeEventListener('touchstart', handleStart as EventListener);
-      cleanup(true);
+      element.removeEventListener('pointerdown', handlePointerDown as EventListener, true);
+
+      // React can reparent the sortable while a drag is active. Keep the
+      // window-level end listeners alive until the gesture actually ends.
+      if (!active) {
+        cleanup(true);
+      }
     };
   }
 }
