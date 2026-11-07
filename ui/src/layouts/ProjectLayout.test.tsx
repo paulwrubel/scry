@@ -40,7 +40,12 @@ function projectSnapshot(): ProjectSnapshot {
 
 function LocationProbe() {
   const location = useLocation();
-  return <span data-testid="path">{location.pathname}</span>;
+  return (
+    <span data-testid="path">
+      {location.pathname}
+      {location.search}
+    </span>
+  );
 }
 
 function renderLayout(path: string) {
@@ -104,5 +109,23 @@ describe('ProjectLayout', () => {
 
     expect(screen.getByTestId('flowbite-drawer').getAttribute('aria-hidden')).toBe('true');
     expect(screen.queryByRole('heading', { name: 'Task title' })).toBeNull();
+  });
+
+  it('preserves the active filter when closing the drawer', async () => {
+    renderLayout(`/projects/${PROJECT_ID}/tasks/task-1?state=open`);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('path').textContent).toBe(`/projects/${PROJECT_ID}?state=open`);
+    });
+  });
+
+  it('keeps the filter on the back-to-board link', () => {
+    renderLayout(`/projects/${PROJECT_ID}/tasks/task-1?state=open`);
+
+    expect(screen.getByRole('link', { name: 'Back to board' }).getAttribute('href')).toBe(
+      `/projects/${PROJECT_ID}?state=open`,
+    );
   });
 });

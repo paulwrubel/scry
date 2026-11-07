@@ -1,7 +1,7 @@
 import { Badge } from 'flowbite-react';
 import { useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
 import { tagBadgeStyle } from '@/utils/tagColor';
@@ -27,6 +27,7 @@ export type TaskCardProps = {
 export function TaskCard(props: TaskCardProps) {
   const { projectId, task, showPriority, nodeRef, style, dragging, draggable } = props;
 
+  const location = useLocation();
   const press = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
 
@@ -64,7 +65,7 @@ export function TaskCard(props: TaskCardProps) {
       } ${dragging ? 'opacity-80 shadow-lg' : ''}`}
     >
       <Link
-        to={`/projects/${projectId}/tasks/${task.id}`}
+        to={`/projects/${projectId}/tasks/${task.id}${location.search}`}
         draggable={false}
         className="flex w-fit max-w-full items-center gap-2"
       >

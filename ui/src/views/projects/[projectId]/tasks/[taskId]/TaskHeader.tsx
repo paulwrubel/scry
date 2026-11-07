@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { TaskActions } from './TaskActions';
@@ -14,11 +14,12 @@ export type TaskHeaderProps = {
 
 export function TaskHeader(props: TaskHeaderProps) {
   const { project, task, handle, onToggleState, onRequestDelete, onBack } = props;
+  const location = useLocation();
 
   return (
     <div className="flex flex-col gap-3">
       <Link
-        to={`/projects/${project.id}`}
+        to={`/projects/${project.id}${location.search}`}
         aria-label="Back to board"
         title="Back to board"
         className="border-line text-muted hover:border-line-hover inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:text-zinc-200"

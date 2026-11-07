@@ -2,7 +2,7 @@ import { Drawer } from 'flowbite-react';
 import type { DrawerTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { MIN_HANDLE_LENGTH, shortestHandles } from '@/contract/handles';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
@@ -27,6 +27,7 @@ export function ProjectLayout() {
   const { projectId, taskId } = useParams();
   const snapshot = useReplicaSnapshot();
   const navigate = useNavigate();
+  const location = useLocation();
   const [lastPanel, setLastPanel] = useState<Panel | null>(null);
 
   const project = snapshot.visible.projects.find((candidate) => candidate.id === projectId);
@@ -47,8 +48,8 @@ export function ProjectLayout() {
     if (project !== undefined && task !== undefined) {
       setLastPanel({ project, task });
     }
-    navigate(`/projects/${projectId}`);
-  }, [navigate, project, projectId, task]);
+    navigate(`/projects/${projectId}${location.search}`);
+  }, [location.search, navigate, project, projectId, task]);
 
   return (
     <div className="relative flex min-h-0 flex-1">

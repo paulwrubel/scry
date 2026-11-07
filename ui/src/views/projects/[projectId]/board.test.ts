@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
+import { DEFAULT_TASK_FILTER } from '@/utils/taskFilter';
+import type { TaskFilter } from '@/utils/taskFilter';
 import type { BoardGroup } from './board';
 import {
   buildBoard,
@@ -55,6 +57,10 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
   };
 }
 
+function filter(overrides: Partial<TaskFilter> = {}): TaskFilter {
+  return { states: [...DEFAULT_TASK_FILTER.states], tags: [], search: '', ...overrides };
+}
+
 function shape(groups: BoardGroup[]): [string | null, string[]][] {
   return groups.map((group) => [
     group.section?.id ?? null,
@@ -77,7 +83,7 @@ describe('buildBoard', () => {
       sections: [section('second', 'a1'), section('first', 'a0')],
     });
 
-    expect(shape(buildBoard(project, false))).toEqual([
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
       ['first', []],
       ['second', []],
     ]);
@@ -92,7 +98,7 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, false))).toEqual([
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
       ['backlog', ['one']],
       ['doing', ['two']],
     ]);
@@ -107,7 +113,7 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, false))).toEqual([
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
       [null, ['loose']],
       ['backlog', ['sectioned']],
     ]);
@@ -119,26 +125,39 @@ describe('buildBoard', () => {
       tasks: [task({ id: 'sectioned', title: 'Sectioned', section_id: 'backlog' })],
     });
 
-    expect(shape(buildBoard(project, false))).toEqual([['backlog', ['sectioned']]]);
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([['backlog', ['sectioned']]]);
   });
 
-  it('hides closed tasks unless asked', () => {
-    const project = projectSnapshot({
-      sections: [section('backlog', 'a0')],
-      tasks: [
-        task({ id: 'open', title: 'Open', section_id: 'backlog', position: 'a1' }),
-        task({
-          id: 'closed',
-          title: 'Closed',
-          section_id: 'backlog',
-          position: 'a0',
-          state: 'closed',
-        }),
-      ],
-    });
+  const statusProject = projectSnapshot({
+    sections: [section('backlog', 'a0')],
+    tasks: [
+      task({ id: 'open', title: 'Open', section_id: 'backlog', position: 'a1' }),
+      task({
+        id: 'closed',
+        title: 'Closed',
+        section_id: 'backlog',
+        position: 'a0',
+        state: 'closed',
+      }),
+    ],
+  });
 
-    expect(shape(buildBoard(project, false))).toEqual([['backlog', ['open']]]);
-    expect(shape(buildBoard(project, true))).toEqual([['backlog', ['closed', 'open']]]);
+  it('shows both open and closed tasks by default', () => {
+    expect(shape(buildBoard(statusProject, DEFAULT_TASK_FILTER))).toEqual([
+      ['backlog', ['closed', 'open']],
+    ]);
+  });
+
+  it('shows only open tasks when closed is deselected', () => {
+    expect(shape(buildBoard(statusProject, filter({ states: ['open'] })))).toEqual([
+      ['backlog', ['open']],
+    ]);
+  });
+
+  it('shows only closed tasks when open is deselected', () => {
+    expect(shape(buildBoard(statusProject, filter({ states: ['closed'] })))).toEqual([
+      ['backlog', ['closed']],
+    ]);
   });
 
   it('orders every group by the project sorting mode', () => {
@@ -151,7 +170,55 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, false))).toEqual([['backlog', ['critical', 'low']]]);
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
+      ['backlog', ['critical', 'low']],
+    ]);
+  });
+
+  it('matches tasks with any selected tag', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'a0')],
+      tasks: [
+        task({ id: 'bug', title: 'Bug', section_id: 'backlog', position: 'a0', tags: ['bug'] }),
+        task({
+          id: 'urgent',
+          title: 'Urgent',
+          section_id: 'backlog',
+          position: 'a1',
+          tags: ['urgent'],
+        }),
+        task({
+          id: 'feature',
+          title: 'Feature',
+          section_id: 'backlog',
+          position: 'a2',
+          tags: ['feature'],
+        }),
+      ],
+    });
+
+    expect(shape(buildBoard(project, filter({ tags: ['bug', 'urgent'] })))).toEqual([
+      ['backlog', ['bug', 'urgent']],
+    ]);
+  });
+
+  it('matches the title and description search', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'a0')],
+      tasks: [
+        task({ id: 'login', title: 'Fix login', section_id: 'backlog', position: 'a0' }),
+        task({
+          id: 'auth',
+          title: 'Session',
+          section_id: 'backlog',
+          position: 'a1',
+          description: 'Auth flow',
+        }),
+        task({ id: 'other', title: 'Docs', section_id: 'backlog', position: 'a2' }),
+      ],
+    });
+
+    expect(shape(buildBoard(project, filter({ search: 'auth' })))).toEqual([['backlog', ['auth']]]);
   });
 });
 
@@ -166,7 +233,7 @@ describe('itemsFromGroups', () => {
       ],
     });
 
-    expect(itemsFromGroups(buildBoard(project, false))).toEqual({
+    expect(itemsFromGroups(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual({
       backlog: ['a', 'b'],
       'no-section': ['c'],
     });

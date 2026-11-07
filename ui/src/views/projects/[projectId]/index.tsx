@@ -5,7 +5,7 @@ import { isSortable, useSortable } from '@dnd-kit/react/sortable';
 import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
 import { HiCog6Tooth } from 'react-icons/hi2';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { keyBetween } from '@/contract/positions';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
@@ -19,10 +19,18 @@ import {
   moveSectionOperation,
   updateSectionOperation,
 } from '@/utils/sectionOperations';
+import {
+  applyTaskFilter,
+  clearTaskFilter,
+  isTaskFilterNarrowing,
+  parseTaskFilter,
+} from '@/utils/taskFilter';
+import type { TaskFilter } from '@/utils/taskFilter';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
 import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
 import { NewSectionCard } from './NewSectionCard';
+import { TaskFilterPopover } from './TaskFilterPopover';
 import {
   buildBoard,
   dropPosition,
@@ -52,7 +60,7 @@ export function BoardPage() {
   const { projectId } = useParams();
   const snapshot = useReplicaSnapshot();
   const replica = useReplica();
-  const [showClosed, setShowClosed] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
@@ -66,6 +74,8 @@ export function BoardPage() {
     return applyPendingMove(found, pendingMove);
   }, [found, pendingMove]);
 
+  const filter = useMemo(() => parseTaskFilter(searchParams), [searchParams]);
+
   if (optimisticProject === undefined) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
@@ -77,8 +87,9 @@ export function BoardPage() {
   }
 
   const project = optimisticProject;
-  const canReorder = project.task_sorting_mode === 'manual';
-  const baseGroups = buildBoard(project, showClosed);
+  const narrowing = isTaskFilterNarrowing(filter);
+  const canReorder = project.task_sorting_mode === 'manual' && !narrowing;
+  const baseGroups = buildBoard(project, filter);
   const tasksById = new Map(project.tasks.map((task) => [task.id, task]));
 
   const groups = baseGroups.map((group) => {
@@ -97,6 +108,7 @@ export function BoardPage() {
   const sectionGroups = groups.filter(
     (group): group is SectionBoardGroup => group.section !== null,
   );
+  const visibleTaskCount = baseGroups.reduce((total, group) => total + group.tasks.length, 0);
 
   async function handleCreate(sectionId: string, title: string) {
     await replica.enqueue(createTaskOperation(project, sectionId, title));
@@ -116,6 +128,14 @@ export function BoardPage() {
     if (operation !== null) {
       await replica.enqueue(operation);
     }
+  }
+
+  function handleFilterChange(next: TaskFilter) {
+    setSearchParams(applyTaskFilter(searchParams, next), { replace: true });
+  }
+
+  function handleFilterClear() {
+    setSearchParams(applyTaskFilter(searchParams, clearTaskFilter()), { replace: true });
   }
 
   async function handleSectionRename(sectionId: string, name: string) {
@@ -259,6 +279,15 @@ export function BoardPage() {
               ))}
             </Select>
           </label>
+          <TaskFilterPopover
+            filter={filter}
+            tasks={project.tasks}
+            onChange={handleFilterChange}
+            onClear={handleFilterClear}
+          />
+          {narrowing && project.task_sorting_mode === 'manual' ? (
+            <span className="text-faint text-xs">Reordering paused</span>
+          ) : null}
           <ToggleSwitch
             checked={project.show_priority}
             onChange={(showPriority) => void handleProjectUpdate({ show_priority: showPriority })}
@@ -266,15 +295,20 @@ export function BoardPage() {
             sizing="sm"
             className="h-8 items-center [&>span]:mt-0"
           />
-          <ToggleSwitch
-            checked={showClosed}
-            onChange={setShowClosed}
-            label="Show closed"
-            sizing="sm"
-            className="h-8 items-center [&>span]:mt-0"
-          />
         </div>
       </div>
+      {narrowing && visibleTaskCount === 0 ? (
+        <div className="border-line text-muted flex items-center gap-3 border-b px-6 py-2 text-sm">
+          <span>No tasks match the active filters.</span>
+          <button
+            type="button"
+            onClick={handleFilterClear}
+            className="text-blue-400 transition-colors hover:text-blue-300"
+          >
+            Clear filters
+          </button>
+        </div>
+      ) : null}
       <DragDropProvider
         // The default sensor ignores links so clicks work; allow the title
         // link to start a card drag too, and let the click guard suppress
