@@ -4,6 +4,8 @@ import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
+import type { TaskFilter } from '@/utils/taskFilter';
+import { matchesTaskFilter } from '@/utils/taskFilter';
 
 export type BoardGroup = {
   section: Section | null;
@@ -20,8 +22,8 @@ export function sectionIdFromGroup(key: string): string | null {
   return key === NO_SECTION_GROUP ? null : key;
 }
 
-export function buildBoard(project: ProjectSnapshot, showClosed: boolean): BoardGroup[] {
-  const visible = project.tasks.filter((task) => showClosed || task.state === 'open');
+export function buildBoard(project: ProjectSnapshot, filter: TaskFilter): BoardGroup[] {
+  const visible = project.tasks.filter((task) => matchesTaskFilter(task, filter));
 
   const sections = [...project.sections].sort((left, right) => {
     if (left.position < right.position) {

@@ -126,7 +126,7 @@ describe('BoardPage', () => {
     expect(screen.getByRole('button', { name: 'Add task' })).toBeDefined();
   });
 
-  it('hides closed tasks until the filter is on', () => {
+  it('shows open and closed tasks by default', () => {
     const project = projectSnapshot({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
@@ -146,11 +146,336 @@ describe('BoardPage', () => {
       vi.fn(async () => undefined),
     );
 
-    expect(screen.queryByText('Closed task')).toBeNull();
+    expect(screen.getByText('Open task')).toBeDefined();
+    expect(screen.getByText('Closed task')).toBeDefined();
+  });
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Show closed' }));
+  it('hides closed tasks when Open only is selected', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
+        task({
+          id: 'closed',
+          title: 'Closed task',
+          section_id: 'backlog',
+          position: 'a0',
+          state: 'closed',
+        }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter tasks' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Open' }));
+
+    expect(screen.getByText('Open task')).toBeDefined();
+    expect(screen.queryByText('Closed task')).toBeNull();
+  });
+
+  it('shows only closed tasks when Closed is the only status', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
+        task({
+          id: 'closed',
+          title: 'Closed task',
+          section_id: 'backlog',
+          position: 'a0',
+          state: 'closed',
+        }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter tasks' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Closed' }));
 
     expect(screen.getByText('Closed task')).toBeDefined();
+    expect(screen.queryByText('Open task')).toBeNull();
+  });
+
+  it('defaults the status filter to All', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter tasks' }));
+
+    expect((screen.getByRole('radio', { name: 'All' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: 'Open' }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole('radio', { name: 'Closed' }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('restores every task when All is selected', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
+        task({
+          id: 'closed',
+          title: 'Closed task',
+          section_id: 'backlog',
+          position: 'a0',
+          state: 'closed',
+        }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter tasks' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Open' }));
+
+    expect(screen.queryByText('Closed task')).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'All' }));
+
+    expect(screen.getByText('Open task')).toBeDefined();
+    expect(screen.getByText('Closed task')).toBeDefined();
+  });
+
+  it('reads the closed-only status filter from the URL', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
+        task({
+          id: 'closed',
+          title: 'Closed task',
+          section_id: 'backlog',
+          position: 'a0',
+          state: 'closed',
+        }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?state=closed',
+    );
+
+    expect(screen.getByText('Closed task')).toBeDefined();
+    expect(screen.queryByText('Open task')).toBeNull();
+  });
+
+  it('filters tasks by tag', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({
+          id: 'bug',
+          title: 'Bug task',
+          section_id: 'backlog',
+          position: 'a0',
+          tags: ['bug'],
+        }),
+        task({
+          id: 'feature',
+          title: 'Feature task',
+          section_id: 'backlog',
+          position: 'a1',
+          tags: ['feature'],
+        }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter tasks' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'bug' }));
+
+    expect(screen.getByText('Bug task')).toBeDefined();
+    expect(screen.queryByText('Feature task')).toBeNull();
+  });
+
+  it('filters tasks by search', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({ id: 'tests', title: 'Write tests', section_id: 'backlog' }),
+        task({ id: 'board', title: 'Ship board', section_id: 'backlog', position: 'a1' }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter tasks' }));
+    fireEvent.change(screen.getByLabelText('Filter by text'), {
+      target: { value: 'ship' },
+    });
+
+    expect(screen.getByText('Ship board')).toBeDefined();
+    expect(screen.queryByText('Write tests')).toBeNull();
+  });
+
+  it('reads the status filter from the URL', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
+        task({
+          id: 'closed',
+          title: 'Closed task',
+          section_id: 'backlog',
+          position: 'a0',
+          state: 'closed',
+        }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?state=open',
+    );
+
+    expect(screen.getByText('Open task')).toBeDefined();
+    expect(screen.queryByText('Closed task')).toBeNull();
+  });
+
+  it('reads tag filters from the URL', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({
+          id: 'bug',
+          title: 'Bug task',
+          section_id: 'backlog',
+          position: 'a0',
+          tags: ['bug'],
+        }),
+        task({
+          id: 'feature',
+          title: 'Feature task',
+          section_id: 'backlog',
+          position: 'a1',
+          tags: ['feature'],
+        }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?tags=bug',
+    );
+
+    expect(screen.getByText('Bug task')).toBeDefined();
+    expect(screen.queryByText('Feature task')).toBeNull();
+  });
+
+  it('explains that filters disable drag-and-drop', () => {
+    const project = projectSnapshot({
+      task_sorting_mode: 'manual',
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?state=open',
+    );
+
+    expect(screen.getByText('task drag-and-drop disabled due to applied filters')).toBeDefined();
+  });
+
+  it('explains that a non-manual sort mode disables drag-and-drop', () => {
+    const project = projectSnapshot({
+      task_sorting_mode: 'priority',
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.getByText('task drag-and-drop disabled due to sort mode')).toBeDefined();
+  });
+
+  it('explains when both sort mode and filters disable drag-and-drop', () => {
+    const project = projectSnapshot({
+      task_sorting_mode: 'priority',
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?state=open',
+    );
+
+    expect(
+      screen.getByText('task drag-and-drop disabled due to sort mode and applied filters'),
+    ).toBeDefined();
+  });
+
+  it('does not show the drag-and-drop warning for manual sort with no filters', () => {
+    const project = projectSnapshot({
+      task_sorting_mode: 'manual',
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.queryByText(/task drag-and-drop disabled/)).toBeNull();
+  });
+
+  it('orders the toolbar warning before filter, sort, and show priority', () => {
+    const project = projectSnapshot({
+      task_sorting_mode: 'manual',
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?state=open',
+    );
+
+    const warning = screen.getByText('task drag-and-drop disabled due to applied filters');
+    const filter = screen.getByRole('button', { name: 'Filter tasks' });
+    const sort = screen.getByRole('combobox', { name: 'Task sorting' });
+    const priority = screen.getByRole('switch', { name: 'Show priority' });
+
+    expect(warning.compareDocumentPosition(filter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(filter.compareDocumentPosition(sort) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(sort.compareDocumentPosition(priority) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(warning.className).toContain('text-yellow-500/80');
   });
 
   it('enqueues a create_task operation in the section', async () => {
