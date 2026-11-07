@@ -260,7 +260,7 @@ export function BoardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-line flex flex-wrap items-center gap-2 border-b px-6 py-4">
+      <div className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-3 md:px-6 md:py-4">
         <h1
           className="flex h-8 items-center text-2xl font-semibold"
           title={project.description ?? undefined}
@@ -318,7 +318,7 @@ export function BoardPage() {
         </div>
       </div>
       {narrowing && visibleTaskCount === 0 ? (
-        <div className="border-line text-muted flex items-center gap-3 border-b px-6 py-2 text-sm">
+        <div className="border-line text-muted flex items-center gap-3 border-b px-4 py-2 text-sm md:px-6">
           <span>No tasks match the active filters.</span>
           <button
             type="button"
@@ -353,7 +353,7 @@ export function BoardPage() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-6">
+        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden p-3 md:gap-4 md:p-6">
           {noSectionGroup === null ? null : (
             <BoardColumn
               projectId={project.id}
