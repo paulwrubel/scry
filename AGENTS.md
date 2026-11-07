@@ -4,7 +4,7 @@
 
 ## Commands
 
-- `just` lists targets. `just validate` is the full local gate: builds the UI, then runs Rust test/check/clippy with default features, binding drift checks, and UI lint/prettier/type-check/Vitest.
+- `just` lists targets. `just validate` is the full local gate: builds the UI, then runs Rust test/check/clippy with default features, binding drift checks, and UI lint/prettier/type-check/Vitest. `check-bindings` depends on `generate-bindings`, which runs `prettier --write` over the whole `ui/` package, so the gate can rewrite working-tree formatting; only `ui/src/generated` is actually drift-checked.
 - Rust: `just test` (`cargo-test`), `just check`, `just clippy` (all `--workspace`). One test: `cargo test -p scry <name>` or `cargo test -p scry-core <name>`. Keep clippy clean at `-D warnings`; CI pins Rust 1.98.1 because clippy 1.99 false-positives on `#[async_trait]`.
 - CI variants `cargo-test-ci`, `cargo-check-ci`, and `cargo-clippy-ci` add `--no-default-features` and need no UI build. `.github/workflows/ci.yml` is currently `workflow_dispatch` only.
 - UI (from `ui/`, or via the `just` wrappers): `npm run build|lint|prettier-check|type-check|test`. One Vitest file: `npm test -- <pattern>`. Node comes from `ui/.nvmrc` (26.x); `just setup-ui-env` installs it through nvm and runs `npm install`.
@@ -23,7 +23,7 @@
 - `src/service.rs` — `ProjectService`, the only write path. Mutations build `Operation` batches and apply them through `apply_operations` in one transaction (`Atomic` for REST, `PerOperation` for `/sync`) with version, `operation_id` dedupe, and tombstone checks, writing one `changes` row per affected entity. Import also goes through this pipeline via `scry_core::snapshot::plan_import`.
 - `src/server/**` — axum router and one handler per endpoint. `src/store.rs` is the `Store` trait; `src/store/postgres.rs` is its sole implementation and the only place with SQL.
 - `crates/scry-core/` — domain models, UUID ids and short handles, Rocicorp fractional `Position` keys (stored `TEXT COLLATE "C"`), shared `compare_tasks` ordering, snapshot/import planning, and the client-side replay model in `sync/replay.rs`.
-- UI: `ui/src/utils/replica/` is the IndexedDB replica with a FIFO outbox; `ui/src/utils/sync/` is the non-React sync client (bootstrap snapshot, push outbox, apply confirmed changes); `ui/src/providers/` holds Auth, Replica, Sync, and ActiveProject; `ui/src/views/` holds routes. Forms use TanStack Form; board reordering uses dnd-kit v2.
+- UI: `ui/src/utils/replica/` is the IndexedDB replica with a FIFO outbox; `ui/src/utils/sync/` is the non-React sync client (bootstrap snapshot, push outbox, apply confirmed changes); `ui/src/providers/` holds Auth, Replica, Sync, and ActiveProject; `ui/src/views/` holds routes. Forms use TanStack Form; board reordering uses `@dnd-kit/react` 0.5.x.
 - Auth accepts a bearer token or the signed `scry_session` cookie. The cookie key is derived from SHA-256 of `api_token`, so rotating the token invalidates all sessions.
 - Call-graph detail for the service/store boundary: `docs/service-store-calls.md`.
 
