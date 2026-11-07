@@ -78,6 +78,30 @@ export function insertPosition(tasks: readonly Task[], index: number): string {
   return keyBetween(before, after);
 }
 
+export type SectionDrop = { sectionId: string; position: string };
+
+/**
+ * Plans where a dragged section lands. `from` is the index the drag started at
+ * and `to` is the index dnd-kit projected by the time the drag ended.
+ */
+export function planSectionMove(
+  sections: readonly Section[],
+  from: number,
+  to: number,
+): SectionDrop | null {
+  const moved = sections[from];
+  if (moved === undefined || from === to || to < 0 || to >= sections.length) {
+    return null;
+  }
+
+  const reordered = sections.filter((_, index) => index !== from);
+  reordered.splice(to, 0, moved);
+
+  const before = reordered[to - 1]?.position ?? null;
+  const after = reordered[to + 1]?.position ?? null;
+  return { sectionId: moved.id, position: keyBetween(before, after) };
+}
+
 export function dropPosition(
   project: ProjectSnapshot,
   sectionId: string | null,

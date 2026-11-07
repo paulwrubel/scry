@@ -89,6 +89,29 @@ function serverChange(title: string): Change {
   };
 }
 
+function serverSectionChange(position: string): Change {
+  return {
+    seq: 2,
+    entity_type: 'section',
+    entity_id: SECTION_ID,
+    kind: 'update',
+    operation_id: 'server-change',
+    client_timestamp: null,
+    field_values: { position },
+    created_at: CREATED_AT,
+  };
+}
+
+function moveSection(position: string, operationId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'move_section',
+    id: SECTION_ID,
+    position,
+  };
+}
+
 describe('op replay', () => {
   it('applyChanges applies an update_task change', () => {
     const result = applyChanges(state(), [serverChange('server')]);
@@ -122,5 +145,22 @@ describe('op replay', () => {
     );
 
     expect(result.projects[0].tasks[0].title).toBe('server');
+  });
+
+  it('applyChanges applies a section position change', () => {
+    const result = applyChanges(state(), [serverSectionChange('a1')]);
+
+    expect(result.projects[0].sections[0].position).toBe('a1');
+  });
+
+  it('visibleState keeps the server position once a section move is acknowledged', () => {
+    const result = visibleState(
+      state(),
+      [serverSectionChange('a1')],
+      ['op-1'],
+      [moveSection('a1', 'op-1')],
+    );
+
+    expect(result.projects[0].sections[0].position).toBe('a1');
   });
 });

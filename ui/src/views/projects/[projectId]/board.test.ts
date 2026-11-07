@@ -11,6 +11,7 @@ import {
   groupKey,
   insertPosition,
   itemsFromGroups,
+  planSectionMove,
   sectionIdFromGroup,
   sectionTasks,
 } from './board';
@@ -336,5 +337,34 @@ describe('dropPosition', () => {
     });
 
     expect(dropPosition(withClosed, 'backlog', 'a', 'b')).toBe('a1V');
+  });
+});
+
+describe('planSectionMove', () => {
+  const sections = [section('a', 'a0'), section('b', 'a1'), section('c', 'a2')];
+
+  it('moves a section down one slot', () => {
+    expect(planSectionMove(sections, 0, 1)).toEqual({ sectionId: 'a', position: 'a1V' });
+  });
+
+  it('moves the dragged section, not the one it was dropped on', () => {
+    expect(planSectionMove(sections, 0, 2)).toEqual({ sectionId: 'a', position: 'a3' });
+  });
+
+  it('moves a section to the front', () => {
+    expect(planSectionMove(sections, 2, 0)).toEqual({ sectionId: 'c', position: 'Zz' });
+  });
+
+  it('moves a section up one slot', () => {
+    expect(planSectionMove(sections, 2, 1)).toEqual({ sectionId: 'c', position: 'a0V' });
+  });
+
+  it('returns null when the index does not change', () => {
+    expect(planSectionMove(sections, 1, 1)).toBeNull();
+  });
+
+  it('returns null for out-of-range indexes', () => {
+    expect(planSectionMove(sections, -1, 1)).toBeNull();
+    expect(planSectionMove(sections, 0, 3)).toBeNull();
   });
 });

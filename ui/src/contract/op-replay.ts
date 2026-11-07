@@ -344,6 +344,9 @@ function applySectionValues(section: Section, values: Record<string, unknown>): 
   if ('color' in values) {
     section.color = typeof values.color === 'string' ? (values.color as Color) : null;
   }
+  if (typeof values.position === 'string') {
+    section.position = values.position;
+  }
 }
 
 function applyTaskValues(task: Task, values: Record<string, unknown>): void {

@@ -6,7 +6,6 @@ import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
 import { HiCog6Tooth } from 'react-icons/hi2';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { keyBetween } from '@/contract/positions';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
@@ -37,6 +36,7 @@ import {
   dropPosition,
   groupKey,
   itemsFromGroups,
+  planSectionMove,
   sectionIdFromGroup,
   type BoardGroup,
 } from './board';
@@ -191,7 +191,7 @@ export function BoardPage() {
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const { source, target } = event.operation;
+    const { source } = event.operation;
 
     if (event.canceled) {
       setDragItems(null);
@@ -199,19 +199,18 @@ export function BoardPage() {
     }
 
     if (source?.type === 'column') {
-      if (!isSortable(source) || !isSortable(target) || source.index === target.index) {
+      if (!isSortable(source)) {
         return;
       }
 
-      const reordered = moveArray(sectionGroups, source.index, target.index);
-      const moved = reordered[target.index]?.section;
-      if (moved === undefined) {
-        return;
+      const planned = planSectionMove(
+        sectionGroups.map((group) => group.section),
+        source.initialIndex,
+        source.index,
+      );
+      if (planned !== null) {
+        handleSectionMove(planned.sectionId, planned.position);
       }
-
-      const before = reordered[target.index - 1]?.section.position ?? null;
-      const after = reordered[target.index + 1]?.section.position ?? null;
-      handleSectionMove(moved.id, keyBetween(before, after));
       return;
     }
 
@@ -380,13 +379,6 @@ export function BoardPage() {
       ) : null}
     </div>
   );
-}
-
-function moveArray<T>(items: T[], from: number, to: number): T[] {
-  const next = [...items];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
 }
 
 type SortableBoardColumnProps = {
