@@ -60,7 +60,7 @@ export function ProjectLayout() {
   }, [location.search, navigate, project, projectId, task]);
 
   return (
-    <div className="relative flex min-h-0 flex-1">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
       <div className="flex min-w-0 flex-1" inert={open}>
         <BoardPage />
       </div>
@@ -81,18 +81,12 @@ export function ProjectLayout() {
         inert={!open}
       >
         {panel === null ? null : (
-          <>
-            <div
-              aria-hidden="true"
-              className="bg-line-strong mx-auto mt-2 h-1 w-10 rounded-full md:hidden"
-            />
-            <TaskDetail
-              project={panel.project}
-              task={panel.task}
-              handle={handles.get(panel.task.id) ?? panel.task.id}
-              onClose={close}
-            />
-          </>
+          <TaskDetail
+            project={panel.project}
+            task={panel.task}
+            handle={handles.get(panel.task.id) ?? panel.task.id}
+            onClose={close}
+          />
         )}
       </Drawer>
     </div>

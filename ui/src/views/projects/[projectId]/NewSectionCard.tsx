@@ -47,7 +47,10 @@ export function NewSectionCard(props: NewSectionCardProps) {
 
   return (
     <>
-      <Card theme={cardTheme} className="h-full w-96 shrink-0 bg-transparent dark:bg-transparent">
+      <Card
+        theme={cardTheme}
+        className="h-32 w-full shrink-0 bg-transparent md:h-full md:w-96 dark:bg-transparent"
+      >
         <button
           type="button"
           onClick={() => setOpen(true)}
