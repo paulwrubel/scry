@@ -33,6 +33,7 @@ import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
 import { NewSectionCard } from './NewSectionCard';
 import { TaskFilterPopover } from './TaskFilterPopover';
+import { TouchLongPressSensor } from './touchLongPressSensor';
 import {
   buildBoard,
   columnDragId,
@@ -43,8 +44,6 @@ import {
   sectionIdFromGroup,
   type BoardGroup,
 } from './board';
-
-const defaultActivationConstraints = PointerSensor.defaults.activationConstraints;
 
 const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
   { label: 'Alphabetical', value: 'alphabetical' },
@@ -335,25 +334,14 @@ export function BoardPage() {
         </div>
       ) : null}
       <DragDropProvider
-        // The default sensor ignores links so clicks work; allow the title
-        // link to start a card drag too, and let the click guard suppress
-        // navigation after an actual drag.
+        // Touch uses a touch-event sensor so a long press can stop scrolling
+        // after activation; Pointer events cannot do that.
         sensors={[
           PointerSensor.configure({
-            activationConstraints(event, source) {
-              if (
-                source.handle !== undefined &&
-                event.target instanceof Node &&
-                source.handle.contains(event.target)
-              ) {
-                return undefined;
-              }
-
-              return typeof defaultActivationConstraints === 'function'
-                ? defaultActivationConstraints(event, source)
-                : defaultActivationConstraints;
-            },
             preventActivation: (event, source) => {
+              if (event.pointerType === 'touch' && source.type === 'item') {
+                return true;
+              }
               if (source.type !== 'column') {
                 return false;
               }
@@ -365,6 +353,7 @@ export function BoardPage() {
               );
             },
           }),
+          TouchLongPressSensor,
           KeyboardSensor,
         ]}
         onDragStart={handleDragStart}
@@ -381,7 +370,6 @@ export function BoardPage() {
               tasks={noSectionGroup.tasks}
               showPriority={project.show_priority}
               canReorder={canReorder}
-              showDragHandle={!isDesktop}
             />
           )}
           {sectionGroups.map((group, index) => (
@@ -392,7 +380,6 @@ export function BoardPage() {
               project={project}
               canReorder={canReorder}
               sectionsSortable={isDesktop}
-              showDragHandle={!isDesktop}
               onCreate={handleCreate}
               onRename={(sectionId, name) => void handleSectionRename(sectionId, name)}
               onColorChange={handleSectionColorChange}
@@ -419,7 +406,6 @@ type SortableBoardColumnProps = {
   project: ProjectSnapshot;
   canReorder: boolean;
   sectionsSortable: boolean;
-  showDragHandle: boolean;
   onCreate: (sectionId: string, title: string) => Promise<void>;
   onRename: (sectionId: string, name: string) => void;
   onColorChange: (sectionId: string, color: Color | null) => void;
@@ -433,7 +419,6 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
     project,
     canReorder,
     sectionsSortable,
-    showDragHandle,
     onCreate,
     onRename,
     onColorChange,
@@ -460,7 +445,6 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
       tasks={group.tasks}
       showPriority={project.show_priority}
       canReorder={canReorder}
-      showDragHandle={showDragHandle}
       onRename={(name) => onRename(section.id, name)}
       onColorChange={(color) => onColorChange(section.id, color)}
       onDelete={() => onDelete(section.id)}

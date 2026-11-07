@@ -23,7 +23,6 @@ type BoardColumnProps = {
   tasks: Task[];
   showPriority: boolean;
   canReorder: boolean;
-  showDragHandle?: boolean;
   onRename?: (name: string) => void;
   onDelete?: () => void;
   onCreate?: (title: string) => Promise<void>;
@@ -47,7 +46,6 @@ export function BoardColumn(props: BoardColumnProps) {
     tasks,
     showPriority,
     canReorder,
-    showDragHandle = false,
     onRename,
     onDelete,
     onCreate,
@@ -118,7 +116,6 @@ export function BoardColumn(props: BoardColumnProps) {
                     index={index}
                     group={group}
                     showPriority={showPriority}
-                    showDragHandle={showDragHandle}
                   />
                 ))
               : tasks.map((task) => (
