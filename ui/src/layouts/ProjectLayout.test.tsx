@@ -75,8 +75,8 @@ function renderLayout(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <LocationProbe />
         <Routes>
-          <Route path="/projects/:projectId" element={<ProjectLayout />}>
-            <Route path="tasks/:taskId" />
+          <Route path="/projects/:projectId/tasks" element={<ProjectLayout />}>
+            <Route path=":taskId" />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -100,12 +100,12 @@ describe('ProjectLayout', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
 
     await waitFor(() => {
-      expect(screen.getByTestId('path').textContent).toBe(`/projects/${PROJECT_ID}`);
+      expect(screen.getByTestId('path').textContent).toBe(`/projects/${PROJECT_ID}/tasks`);
     });
   });
 
   it('keeps the drawer closed on the board route', () => {
-    renderLayout(`/projects/${PROJECT_ID}`);
+    renderLayout(`/projects/${PROJECT_ID}/tasks`);
 
     expect(screen.getByTestId('flowbite-drawer').getAttribute('aria-hidden')).toBe('true');
     expect(screen.queryByRole('heading', { name: 'Task title' })).toBeNull();
@@ -117,7 +117,9 @@ describe('ProjectLayout', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
 
     await waitFor(() => {
-      expect(screen.getByTestId('path').textContent).toBe(`/projects/${PROJECT_ID}?state=open`);
+      expect(screen.getByTestId('path').textContent).toBe(
+        `/projects/${PROJECT_ID}/tasks?state=open`,
+      );
     });
   });
 
@@ -125,7 +127,7 @@ describe('ProjectLayout', () => {
     renderLayout(`/projects/${PROJECT_ID}/tasks/task-1?state=open`);
 
     expect(screen.getByRole('link', { name: 'Back to board' }).getAttribute('href')).toBe(
-      `/projects/${PROJECT_ID}?state=open`,
+      `/projects/${PROJECT_ID}/tasks?state=open`,
     );
   });
 });

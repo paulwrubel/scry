@@ -8,5 +8,5 @@ export function ProjectRedirect() {
     return <Navigate to="/projects" replace />;
   }
 
-  return <Navigate to={`/projects/${activeProjectId}`} replace />;
+  return <Navigate to={`/projects/${activeProjectId}/tasks`} replace />;
 }

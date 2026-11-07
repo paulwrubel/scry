@@ -98,7 +98,7 @@ describe('ProjectsPage deletion', () => {
       expect(setActiveProjectId).toHaveBeenCalledWith('project-2');
     });
     expect(clearActiveProject).not.toHaveBeenCalled();
-    expect(screen.getByTestId('path').textContent).toBe('/projects/project-2');
+    expect(screen.getByTestId('path').textContent).toBe('/projects/project-2/tasks');
   });
 
   it('stays on the list when deleting a non-active project', async () => {
@@ -172,7 +172,7 @@ describe('ProjectsPage creation', () => {
       expect(setActiveProjectId).toHaveBeenCalledWith(operation.id);
     });
     expect(clearActiveProject).not.toHaveBeenCalled();
-    expect(screen.getByTestId('path').textContent).toBe(`/projects/${operation.id}`);
+    expect(screen.getByTestId('path').textContent).toBe(`/projects/${operation.id}/tasks`);
   });
 
   it('opens the create form from the empty state', () => {

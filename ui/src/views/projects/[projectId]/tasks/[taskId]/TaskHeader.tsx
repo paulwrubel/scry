@@ -19,7 +19,7 @@ export function TaskHeader(props: TaskHeaderProps) {
   return (
     <div className="flex flex-col gap-3">
       <Link
-        to={`/projects/${project.id}${location.search}`}
+        to={`/projects/${project.id}/tasks${location.search}`}
         aria-label="Back to board"
         title="Back to board"
         className="border-line text-muted hover:border-line-hover inline-flex h-11 w-11 items-center justify-center rounded-lg border transition-colors hover:text-zinc-200 md:h-8 md:w-8"

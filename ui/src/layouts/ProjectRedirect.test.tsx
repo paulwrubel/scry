@@ -12,7 +12,7 @@ function renderWithActiveProject(activeProjectId: string | null) {
     [
       { path: '/', element: <ProjectRedirect /> },
       { path: '/projects', element: <div>projects</div> },
-      { path: '/projects/:projectId', element: <div>board</div> },
+      { path: '/projects/:projectId/tasks', element: <div>board</div> },
     ],
     { initialEntries: ['/'] },
   );

@@ -56,7 +56,7 @@ export function ProjectLayout() {
     if (project !== undefined && task !== undefined) {
       setLastPanel({ project, task });
     }
-    navigate(`/projects/${projectId}${location.search}`);
+    navigate(`/projects/${projectId}/tasks${location.search}`);
   }, [location.search, navigate, project, projectId, task]);
 
   return (

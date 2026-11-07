@@ -31,7 +31,7 @@ export function ProjectsPage() {
 
   function handleUse(projectId: string) {
     setActiveProjectId(projectId);
-    navigate(`/projects/${projectId}`);
+    navigate(`/projects/${projectId}/tasks`);
   }
 
   function handleDeleted(projectId: string) {
@@ -53,13 +53,13 @@ export function ProjectsPage() {
     }
 
     setActiveProjectId(nextProject.id);
-    navigate(`/projects/${nextProject.id}`);
+    navigate(`/projects/${nextProject.id}/tasks`);
   }
 
   function handleCreated(projectId: string) {
     setCreating(false);
     setActiveProjectId(projectId);
-    navigate(`/projects/${projectId}`);
+    navigate(`/projects/${projectId}/tasks`);
   }
 
   return (
