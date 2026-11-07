@@ -31,18 +31,22 @@ Prefer this over guessing command names, flags, or values.
 - Always pass `--json` to task, project, and section commands. It returns compact,
   machine-readable JSON and disables color automatically, so never parse the
   human-readable text output.
-- Enum values in JSON are kebab-case and match the CLI's accepted arguments, so a value
-  read from JSON can be passed straight back to the CLI.
+- Enum values accepted by the CLI (priority, sort mode, and color) appear in JSON in the
+  same kebab-case spelling, so a value read from JSON can be passed straight back to the
+  CLI.
   - Examples: `scry --json list`, `scry --json show 4f3a`, `scry -p myapp --json add "design API"`.
-- `--json` always emits full UUIDs, never handles. Store and pass full UUIDs for
-  reliability: use the `id` field returned by `scry --json add` rather than a handle,
-  because handles can lengthen as more tasks and notes are created.
-- `scry --json show <handle>` includes full detail (description, priority, tags, timestamps,
-  section, state, and notes), while `scry --json list` omits descriptions, notes, and
-  timestamps. Use `scry --json show` when full detail is needed.
+- Every task object in `--json` output includes its full UUID `id`. `show`, `add`, and
+  `duplicate` also return a `handle`; store and pass the `id` for reliability, because
+  handles can lengthen as more tasks and notes are created.
+- `scry --json show <handle>` returns the full task (description, priority, tags,
+  `section_id`, state, and timestamps), its notes, and a `handle`. `scry --json list`
+  returns a flat array of full task objects (description and `created_at` included) but no
+  notes or handles; use `section_id` to associate tasks with sections. Use `show` when you
+  need notes or the handle.
 - `scry --json list` output is the stable machine format; never parse the human-readable
   text output without the `--json` flag. Closed tasks are hidden unless you pass
-  `--include-closed`.
+  `--include-closed`; when included, they follow the open tasks. The array already follows
+  section order, but it is not grouped into per-section objects.
 
 ## Active project
 
@@ -68,22 +72,27 @@ Every example below includes the global `--json` flag, which must come before th
 | `scry --json add <title> [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>]`                   | Add a task                       |
 | `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                       | List tasks grouped by section    |
 | `scry --json show <handle>`                                                                                                                      | Show full task details and notes |
-| `scry --json move <handle> [<section>] [--no-section]`                                                                                           | Move a task to a section         |
+| `scry --json move <handle> <section>`                                                                                                            | Move a task to a section         |
 | `scry --json update <handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section]` | Update task properties           |
-| `scry --json close <handle>`                                                                                                                     | Close a task                     |
-| `scry --json open <handle>`                                                                                                                      | Reopen a closed task             |
+| `scry --json close <handle>...`                                                                                                                  | Close one or more tasks          |
+| `scry --json open <handle>...`                                                                                                                   | Reopen one or more closed tasks  |
 | `scry --json duplicate <handle>`                                                                                                                 | Duplicate a task                 |
 | `scry --json note add <task-handle> <contents>`                                                                                                  | Add a note to a task             |
 | `scry --json delete <handle>`                                                                                                                    | Delete a task permanently        |
 
 `<level>` is one of `minimal`, `low`, `medium`, `high`, `critical` (aliases `p5`-`p1`).
 
-Task and note arguments take a handle: the shortest unique prefix of that task's or note's UUID, at least 4 lowercase hex characters. Dashes are optional and, when present, must sit at the canonical UUID positions (after 8, 12, 16, or 20 hex characters). A full UUID always works.
+Task arguments take a handle: any unique prefix of the task's UUID, at least 4 hex
+characters. Uppercase is accepted and normalized to lowercase, and dashes are optional but
+must sit at the canonical UUID positions (after 8, 12, 16, or 20 hex characters). A full
+UUID always works. `note add` takes a task handle, not a note handle.
 
 Sections are created explicitly: `--section <name>` must name an existing section and fails
-with the closest match suggested, while `--new-section <name>` (or `scry section add`)
-creates one. New tasks go to No section unless one of those flags is given, and `--no-section`
-on `move` or `update` moves a task back to No section. `close` and `open` change
+with a not-found error naming the section, while `--new-section <name>` (or
+`scry section add`) creates one. New tasks go to No section unless one of those flags is
+given, and `--no-section` on `move` or `update` moves a task back to No section. `move`
+requires either a section name or `--no-section` and appends the task to the end of the
+target section; it cannot place a task at a specific position. `close` and `open` change
 only the state; they never change a task's section or position.
 
 ## Project and section commands
@@ -104,10 +113,12 @@ Every example below includes the global `--json` flag, which must come before th
 | `scry --json section remove <name>`                                                                                  | Delete a section, moving its tasks to No section   |
 | `scry --json section rename <old> <new>`                                                                             | Rename a section                                   |
 | `scry --json section merge <source> <target>`                                                                        | Merge the source into the target                   |
-| `scry --json section move-up <name>`                                                                                 | Move a section up in the ordering                  |
-| `scry --json section move-down <name>`                                                                               | Move a section down in the ordering                |
 | `scry --json section set-color <name> <color>`                                                                       | Set a section's color                              |
 | `scry --json section reset-color <name>`                                                                             | Clear a section's color                            |
+
+There is no CLI command for moving a section within the ordering; reorder sections in the
+web UI. Likewise, `move` can transfer a task between sections but cannot place it at a
+specific position, so ordering tasks within a section is also web-UI-only.
 
 Project templates seed a project's sections and settings via
 `scry --json project create -t <template> <name>`:
