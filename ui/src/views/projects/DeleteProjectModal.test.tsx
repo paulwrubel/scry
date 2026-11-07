@@ -65,7 +65,7 @@ describe('DeleteProjectModal', () => {
   it('renders a confirmation that names the project', () => {
     renderModal(vi.fn(async () => undefined));
 
-    expect(screen.getByText(/cannot be undone/)).toBeDefined();
+    expect(screen.getByText(/permanently deletes the project/)).toBeDefined();
     expect(screen.getByText(/Project/)).toBeDefined();
   });
 

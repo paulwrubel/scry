@@ -15,8 +15,7 @@ export function DeleteSectionModal(props: DeleteSectionModalProps) {
       <ModalHeader>Delete section</ModalHeader>
       <ModalBody>
         <p className="text-sm">
-          Delete “{sectionName}”? Tasks in this section will move to No section. This change is
-          queued and cannot be undone.
+          Delete “{sectionName}”? Tasks in this section will survive, and will be unassigned from this section.
         </p>
       </ModalBody>
       <ModalFooter>

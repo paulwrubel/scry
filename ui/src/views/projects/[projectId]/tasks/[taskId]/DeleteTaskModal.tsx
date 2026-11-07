@@ -16,7 +16,7 @@ export function DeleteTaskModal(props: DeleteTaskModalProps) {
       <ModalHeader>Delete task</ModalHeader>
       <ModalBody>
         <p className="text-sm">
-          Delete “{task.title}”? This change is queued and cannot be undone.
+          Delete “{task.title}”? This permanently deletes the task and its notes.
         </p>
       </ModalBody>
       <ModalFooter>

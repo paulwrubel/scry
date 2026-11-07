@@ -35,8 +35,8 @@ export function DeleteProjectModal(props: DeleteProjectModalProps) {
       <ModalHeader>Delete project</ModalHeader>
       <ModalBody>
         <p className="text-sm">
-          Delete “{project.name}”? All of its sections, tasks, and notes will be deleted. This
-          change is queued and cannot be undone.
+          Delete “{project.name}”? This permanently deletes the project and all of its sections,
+          tasks, and notes.
         </p>
         {error === null ? null : (
           <p className="text-danger mt-4 text-sm" role="alert">
