@@ -187,6 +187,9 @@ export function BoardPage() {
     if (!canReorder || event.operation.source?.type === 'column') {
       return;
     }
+    // React owns the reorder through dragItems; stop dnd-kit relocating the
+    // card's DOM node too, or React's deletion pass throws removeChild.
+    event.preventDefault();
     setDragItems((current) => (current === null ? current : move(current, event)));
   }
 
