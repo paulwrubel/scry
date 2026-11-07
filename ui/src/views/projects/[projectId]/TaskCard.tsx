@@ -68,29 +68,38 @@ export function TaskCard(props: TaskCardProps) {
       } ${dragging ? 'opacity-80 shadow-lg' : ''}`}
     >
       <div className="flex min-w-0 items-start gap-2">
-        <Link
-          to={`/projects/${projectId}/tasks/${task.id}${location.search}`}
-          draggable={false}
-          className={`flex min-w-0 items-center gap-2 ${
-            dragHandleRef === undefined ? 'w-fit max-w-full' : 'flex-1'
-          }`}
-        >
-          {showPriority ? (
-            <span
-              role="img"
-              aria-label={`${task.priority} priority`}
-              title={task.priority}
-              className={`h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20 ${PRIORITY_DOT_CLASS[task.priority]}`}
-            />
-          ) : null}
-          <span
-            className={`min-w-0 text-sm hover:text-blue-400 hover:underline ${
-              closed ? 'text-faint line-through' : ''
-            }`}
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <Link
+            to={`/projects/${projectId}/tasks/${task.id}${location.search}`}
+            draggable={false}
+            className="flex w-fit max-w-full min-w-0 items-center gap-2"
           >
-            {task.title}
-          </span>
-        </Link>
+            {showPriority ? (
+              <span
+                role="img"
+                aria-label={`${task.priority} priority`}
+                title={task.priority}
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20 ${PRIORITY_DOT_CLASS[task.priority]}`}
+              />
+            ) : null}
+            <span
+              className={`min-w-0 text-sm hover:text-blue-400 hover:underline ${
+                closed ? 'text-faint line-through' : ''
+              }`}
+            >
+              {task.title}
+            </span>
+          </Link>
+          {hasBadges ? (
+            <div className="flex flex-wrap items-center gap-1">
+              {task.tags.map((tag) => (
+                <Badge key={tag} color="gray" style={tagBadgeStyle(tag)}>
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+        </div>
         {dragHandleRef === undefined ? null : (
           <button
             ref={dragHandleRef}
@@ -103,15 +112,6 @@ export function TaskCard(props: TaskCardProps) {
           </button>
         )}
       </div>
-      {hasBadges ? (
-        <div className="flex flex-wrap items-center gap-1">
-          {task.tags.map((tag) => (
-            <Badge key={tag} color="gray" style={tagBadgeStyle(tag)}>
-              {tag}
-            </Badge>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

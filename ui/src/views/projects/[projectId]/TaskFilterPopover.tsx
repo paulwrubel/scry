@@ -143,10 +143,10 @@ export function TaskFilterPopover(props: TaskFilterPopoverProps) {
         title="Filter tasks"
         color="alternative"
         size="xs"
-        className="gap-1.5"
+        className="min-h-11 min-w-11 justify-center gap-1.5 px-0 md:min-h-0 md:min-w-0 md:px-3"
       >
         <HiFunnel aria-hidden="true" className="h-4 w-4" />
-        <span>Filter</span>
+        <span className="hidden md:inline">Filter</span>
         {activeCount > 0 ? <Badge color="gray">{activeCount}</Badge> : null}
       </Button>
     </Popover>

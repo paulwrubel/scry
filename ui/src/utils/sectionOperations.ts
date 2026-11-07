@@ -1,5 +1,6 @@
 import { keyBetween } from '@/contract/positions';
 import type { Color } from '@/generated/Color';
+import { newId } from '@/utils/uuid';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 
@@ -15,10 +16,10 @@ export function createSectionOperation(project: ProjectSnapshot, name: string): 
   );
 
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'create_section',
-    id: crypto.randomUUID(),
+    id: newId(),
     project_id: project.id,
     name: trimmed,
     position: keyBetween(lastPosition, null),
@@ -29,7 +30,7 @@ export function createSectionOperation(project: ProjectSnapshot, name: string): 
 
 export function moveSectionOperation(sectionId: string, position: string): Operation {
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'move_section',
     id: sectionId,
@@ -39,7 +40,7 @@ export function moveSectionOperation(sectionId: string, position: string): Opera
 
 export function deleteSectionOperation(sectionId: string): Operation {
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'delete_section',
     id: sectionId,
@@ -53,7 +54,7 @@ export function updateSectionOperation(sectionId: string, name: string): Operati
   }
 
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'update_section',
     id: sectionId,
@@ -64,7 +65,7 @@ export function updateSectionOperation(sectionId: string, name: string): Operati
 
 export function setSectionColorOperation(sectionId: string, color: Color | null): Operation {
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'update_section',
     id: sectionId,

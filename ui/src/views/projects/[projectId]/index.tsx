@@ -262,7 +262,7 @@ export function BoardPage() {
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-3 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
+      <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <h1 className="min-w-0 truncate text-2xl font-semibold" title={project.name}>
             {project.name}
@@ -272,14 +272,14 @@ export function BoardPage() {
             aria-label="Project settings"
             title="Project settings"
             onClick={() => setSettingsOpen(true)}
-            className="text-muted inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none md:h-8 md:w-8"
+            className="text-muted hidden h-11 w-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none md:inline-flex md:h-8 md:w-8"
           >
             <HiCog6Tooth aria-hidden="true" className="h-5 w-5 md:h-4 md:w-4" />
           </button>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-4 md:ml-auto md:w-auto">
+        <div className="flex shrink-0 items-center gap-2 md:ml-auto md:gap-4">
           {dragDisabledReason !== '' ? (
-            <span className="text-xs text-yellow-500/80">
+            <span className="hidden text-xs text-yellow-500/80 md:inline">
               {`task drag-and-drop disabled due to ${dragDisabledReason}`}
             </span>
           ) : null}
@@ -290,11 +290,11 @@ export function BoardPage() {
             onClear={handleFilterClear}
           />
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-muted">Sort</span>
+            <span className="text-muted hidden md:inline">Sort</span>
             <Select
               sizing="sm"
               aria-label="Task sorting"
-              className="w-56"
+              className="w-40 md:w-56"
               value={project.task_sorting_mode}
               onChange={(event) =>
                 void handleProjectUpdate({
@@ -309,13 +309,15 @@ export function BoardPage() {
               ))}
             </Select>
           </label>
-          <ToggleSwitch
-            checked={project.show_priority}
-            onChange={(showPriority) => void handleProjectUpdate({ show_priority: showPriority })}
-            label="Show priority"
-            sizing="sm"
-            className="h-8 items-center [&>span]:mt-0"
-          />
+          <div className="hidden md:block">
+            <ToggleSwitch
+              checked={project.show_priority}
+              onChange={(showPriority) => void handleProjectUpdate({ show_priority: showPriority })}
+              label="Show priority"
+              sizing="sm"
+              className="h-8 items-center [&>span]:mt-0"
+            />
+          </div>
         </div>
       </div>
       {narrowing && visibleTaskCount === 0 ? (

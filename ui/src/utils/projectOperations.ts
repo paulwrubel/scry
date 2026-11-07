@@ -1,5 +1,6 @@
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import { newId } from '@/utils/uuid';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 
 export type ProjectFieldPatch = {
@@ -31,7 +32,7 @@ export function updateProjectOperation(
   }
 
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'update_project',
     id: project.id,
