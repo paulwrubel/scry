@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import type * as DndKitReact from '@dnd-kit/react';
+import type * as DndKitSortable from '@dnd-kit/react/sortable';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +12,33 @@ import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
 import type { Replica } from '@/utils/replica';
 import { BoardPage } from './index';
+
+const dragIds = vi.hoisted(() => ({
+  droppable: [] as string[],
+  sortable: [] as string[],
+}));
+
+vi.mock('@dnd-kit/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof DndKitReact>();
+  return {
+    ...actual,
+    useDroppable: (input: Parameters<typeof actual.useDroppable>[0]) => {
+      dragIds.droppable.push(String(input.id));
+      return actual.useDroppable(input);
+    },
+  };
+});
+
+vi.mock('@dnd-kit/react/sortable', async (importOriginal) => {
+  const actual = await importOriginal<typeof DndKitSortable>();
+  return {
+    ...actual,
+    useSortable: (input: Parameters<typeof actual.useSortable>[0]) => {
+      dragIds.sortable.push(String(input.id));
+      return actual.useSortable(input);
+    },
+  };
+});
 
 const CREATED_AT = '2026-01-01T00:00:00Z';
 
@@ -90,6 +119,25 @@ function renderBoard(
 }
 
 afterEach(cleanup);
+
+describe('drag ids', () => {
+  it('gives the section sortable an id distinct from its item drop target', () => {
+    dragIds.droppable.length = 0;
+    dragIds.sortable.length = 0;
+
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    expect(dragIds.droppable).toContain('backlog');
+    expect(dragIds.sortable).not.toContain('backlog');
+  });
+});
 
 describe('BoardPage', () => {
   it('renders a column per section and the tasks inside', () => {

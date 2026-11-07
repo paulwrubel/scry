@@ -33,6 +33,7 @@ import { NewSectionCard } from './NewSectionCard';
 import { TaskFilterPopover } from './TaskFilterPopover';
 import {
   buildBoard,
+  columnDragId,
   dropPosition,
   groupKey,
   itemsFromGroups,
@@ -402,7 +403,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
   const { group, index, project, canReorder, onCreate, onRename, onDelete } = props;
   const section = group.section;
   const { ref, isDragging } = useSortable({
-    id: section.id,
+    id: columnDragId(section.id),
     index,
     group: 'columns',
     type: 'column',

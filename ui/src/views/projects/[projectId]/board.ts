@@ -22,6 +22,11 @@ export function sectionIdFromGroup(key: string): string | null {
   return key === NO_SECTION_GROUP ? null : key;
 }
 
+/** dnd-kit keys its registries by id, so the sortable cannot reuse the id the column's drop target owns. */
+export function columnDragId(sectionId: string): string {
+  return `column:${sectionId}`;
+}
+
 export function buildBoard(project: ProjectSnapshot, filter: TaskFilter): BoardGroup[] {
   const visible = project.tasks.filter((task) => matchesTaskFilter(task, filter));
 
