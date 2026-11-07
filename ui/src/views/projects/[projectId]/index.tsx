@@ -1,3 +1,4 @@
+import { PointerActivationConstraints } from '@dnd-kit/dom';
 import { move } from '@dnd-kit/helpers';
 import { DragDropProvider, KeyboardSensor, PointerSensor } from '@dnd-kit/react';
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react';
@@ -43,6 +44,8 @@ import {
   sectionIdFromGroup,
   type BoardGroup,
 } from './board';
+
+const defaultActivationConstraints = PointerSensor.defaults.activationConstraints;
 
 const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
   { label: 'Alphabetical', value: 'alphabetical' },
@@ -195,9 +198,9 @@ export function BoardPage() {
     if (!canReorder || event.operation.source?.type === 'column') {
       return;
     }
-    // React owns cross-column moves through dragItems; letting dnd-kit's
-    // optimistic sorting relocate the same node races with React's deletion
-    // pass and throws removeChild. Section drags keep the plugin (no state).
+
+    // Match main: let React own the cross-section move; keep dnd-kit's
+    // optimistic DOM sorting disabled so React is the single reorder path.
     event.preventDefault();
     setDragItems((current) => (current === null ? current : move(current, event)));
   }
@@ -233,17 +236,16 @@ export function BoardPage() {
       return;
     }
 
-    if (
-      source === null ||
-      !isSortable(source) ||
-      source.type !== 'item' ||
-      source.group === undefined
-    ) {
+    if (source === null || !isSortable(source) || source.type !== 'item') {
       return;
     }
 
     const taskId = String(source.id);
-    const key = String(source.group);
+    const key = Object.entries(finalItems).find(([, ids]) => ids.includes(taskId))?.[0];
+    if (key === undefined) {
+      return;
+    }
+
     const sectionId = sectionIdFromGroup(key);
     const groupIds = finalItems[key] ?? [];
     const located = groupIds.indexOf(taskId);
@@ -333,11 +335,22 @@ export function BoardPage() {
         </div>
       ) : null}
       <DragDropProvider
-        // The default sensor ignores links so clicks work; allow the title
-        // link to start a card drag too, and let the click guard suppress
-        // navigation after an actual drag.
         sensors={[
           PointerSensor.configure({
+            activationConstraints(event, source) {
+              if (event.pointerType === 'touch') {
+                return [
+                  new PointerActivationConstraints.Delay({
+                    value: 300,
+                    tolerance: 8,
+                  }),
+                ];
+              }
+
+              return typeof defaultActivationConstraints === 'function'
+                ? defaultActivationConstraints(event, source)
+                : defaultActivationConstraints;
+            },
             preventActivation: (event, source) => {
               if (source.type !== 'column') {
                 return false;
@@ -366,7 +379,6 @@ export function BoardPage() {
               tasks={noSectionGroup.tasks}
               showPriority={project.show_priority}
               canReorder={canReorder}
-              showDragHandle={!isDesktop}
             />
           )}
           {sectionGroups.map((group, index) => (
@@ -377,7 +389,6 @@ export function BoardPage() {
               project={project}
               canReorder={canReorder}
               sectionsSortable={isDesktop}
-              showDragHandle={!isDesktop}
               onCreate={handleCreate}
               onRename={(sectionId, name) => void handleSectionRename(sectionId, name)}
               onColorChange={handleSectionColorChange}
@@ -404,7 +415,6 @@ type SortableBoardColumnProps = {
   project: ProjectSnapshot;
   canReorder: boolean;
   sectionsSortable: boolean;
-  showDragHandle: boolean;
   onCreate: (sectionId: string, title: string) => Promise<void>;
   onRename: (sectionId: string, name: string) => void;
   onColorChange: (sectionId: string, color: Color | null) => void;
@@ -418,7 +428,6 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
     project,
     canReorder,
     sectionsSortable,
-    showDragHandle,
     onCreate,
     onRename,
     onColorChange,
@@ -445,7 +454,6 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
       tasks={group.tasks}
       showPriority={project.show_priority}
       canReorder={canReorder}
-      showDragHandle={showDragHandle}
       onRename={(name) => onRename(section.id, name)}
       onColorChange={(color) => onColorChange(section.id, color)}
       onDelete={() => onDelete(section.id)}

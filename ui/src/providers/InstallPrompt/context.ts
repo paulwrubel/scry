@@ -4,6 +4,7 @@ export type InstallPromptContextType = {
   canInstall: boolean;
   isInstalled: boolean;
   isIos: boolean;
+  isMobile: boolean;
   promptInstall: () => Promise<void>;
 };
 

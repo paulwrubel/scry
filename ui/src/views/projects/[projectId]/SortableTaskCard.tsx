@@ -8,12 +8,11 @@ export type SortableTaskCardProps = {
   showPriority: boolean;
   index: number;
   group: string;
-  showDragHandle: boolean;
 };
 
 export function SortableTaskCard(props: SortableTaskCardProps) {
-  const { projectId, task, showPriority, index, group, showDragHandle } = props;
-  const { ref, handleRef, isDragging } = useSortable({
+  const { projectId, task, showPriority, index, group } = props;
+  const { ref, isDragging } = useSortable({
     id: task.id,
     index,
     group,
@@ -28,7 +27,6 @@ export function SortableTaskCard(props: SortableTaskCardProps) {
       showPriority={showPriority}
       nodeRef={ref}
       dragging={isDragging}
-      dragHandleRef={showDragHandle ? handleRef : undefined}
     />
   );
 }

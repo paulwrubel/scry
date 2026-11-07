@@ -3,50 +3,66 @@ import { useState } from 'react';
 import { useInstallPrompt } from '@/providers/InstallPrompt';
 
 export function InstallSection() {
-  const { canInstall, isInstalled, isIos, promptInstall } = useInstallPrompt();
-  const [showIosSteps, setShowIosSteps] = useState(false);
+  const { canInstall, isInstalled, isIos, isMobile, promptInstall } = useInstallPrompt();
+  const [showInstructions, setShowInstructions] = useState(false);
 
-  if (isInstalled || (!canInstall && !isIos)) {
+  if (isInstalled || (!canInstall && !isIos && !isMobile)) {
     return null;
   }
+
+  const description = canInstall
+    ? 'Install Scry for quicker access and a standalone experience.'
+    : isIos
+      ? 'Add Scry to your home screen to open it like an app.'
+      : 'Open your browser menu and choose Install or Add to Home Screen.';
 
   return (
     <Card>
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">Install Scry</h2>
-        <p className="text-muted text-sm">
-          {canInstall
-            ? 'Install Scry for quicker access and a standalone experience.'
-            : 'Add Scry to your home screen to open it like an app.'}
-        </p>
+        <p className="text-muted text-sm">{description}</p>
       </div>
 
-      {canInstall ? (
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {canInstall ? (
           <Button color="default" onClick={() => void promptInstall()}>
             Install Scry
           </Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button color="alternative" onClick={() => setShowIosSteps(true)}>
+        ) : (
+          <Button color="alternative" onClick={() => setShowInstructions(true)}>
             Show install steps
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
-      <Modal show={showIosSteps} onClose={() => setShowIosSteps(false)}>
-        <ModalHeader>Install on iPhone or iPad</ModalHeader>
+      <Modal show={showInstructions} onClose={() => setShowInstructions(false)}>
+        <ModalHeader>
+          {isIos ? 'Install on iPhone or iPad' : 'Install from your browser'}
+        </ModalHeader>
         <ModalBody>
-          <ol className="list-decimal space-y-2 pl-5 text-sm text-zinc-300">
-            <li>Open Scry in Safari.</li>
-            <li>Tap the Share button.</li>
-            <li>Choose Add to Home Screen.</li>
-            <li>Tap Add.</li>
-          </ol>
+          {isIos ? (
+            <ol className="list-decimal space-y-2 pl-5 text-sm text-zinc-300">
+              <li>Open Scry in Safari.</li>
+              <li>Tap the Share button.</li>
+              <li>Choose Add to Home Screen.</li>
+              <li>Tap Add.</li>
+            </ol>
+          ) : (
+            <>
+              <ol className="list-decimal space-y-2 pl-5 text-sm text-zinc-300">
+                <li>Open the browser menu.</li>
+                <li>Choose Install, or Add to Home Screen.</li>
+                <li>Confirm the installation.</li>
+              </ol>
+              <p className="text-muted mt-3 text-sm">
+                In Firefox, look for Install. If you only see Add to Home Screen, it may create a
+                shortcut rather than a standalone app.
+              </p>
+            </>
+          )}
         </ModalBody>
         <ModalFooter>
-          <Button color="default" onClick={() => setShowIosSteps(false)}>
+          <Button color="default" onClick={() => setShowInstructions(false)}>
             Close
           </Button>
         </ModalFooter>
