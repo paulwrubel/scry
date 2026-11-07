@@ -32,6 +32,7 @@ import type { TaskFilter } from '@/utils/taskFilter';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
 import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
+import { MobileAddTask } from './MobileAddTask';
 import { NewSectionCard } from './NewSectionCard';
 import { TaskFilterPopover } from './TaskFilterPopover';
 import {
@@ -299,7 +300,7 @@ export function BoardPage() {
   }
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
       <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <h1 className="min-w-0 truncate text-2xl font-semibold" title={project.name}>
@@ -405,7 +406,7 @@ export function BoardPage() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-x-auto md:overflow-y-hidden md:p-6">
+        <div className="flex w-full min-w-0 flex-none flex-col gap-3 p-3 md:min-h-0 md:flex-1 md:flex-row md:gap-4 md:overflow-x-auto md:overflow-y-hidden md:p-6">
           {openNoSectionGroup === null ? null : (
             <BoardColumn
               projectId={project.id}
@@ -416,6 +417,7 @@ export function BoardPage() {
               tasks={openNoSectionGroup.tasks}
               showPriority={project.show_priority}
               canReorder={canReorder}
+              showCreate={isDesktop}
               onCreate={(title) => handleCreate(null, title)}
             />
           )}
@@ -427,6 +429,7 @@ export function BoardPage() {
               project={project}
               canReorder={canReorder}
               sectionsSortable={isDesktop}
+              showCreate={isDesktop}
               onCreate={handleCreate}
               onRename={(sectionId, name) => void handleSectionRename(sectionId, name)}
               onColorChange={handleSectionColorChange}
@@ -448,6 +451,7 @@ export function BoardPage() {
           <NewSectionCard onAdd={handleAddSection} />
         </div>
       </DragDropProvider>
+      {isDesktop ? null : <MobileAddTask onCreate={(title) => handleCreate(null, title)} />}
       {settingsOpen ? (
         <ProjectSettingsModal
           key={project.id}
@@ -465,6 +469,7 @@ type SortableBoardColumnProps = {
   project: ProjectSnapshot;
   canReorder: boolean;
   sectionsSortable: boolean;
+  showCreate: boolean;
   onCreate: (sectionId: string, title: string) => Promise<void>;
   onRename: (sectionId: string, name: string) => void;
   onColorChange: (sectionId: string, color: Color | null) => void;
@@ -478,6 +483,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
     project,
     canReorder,
     sectionsSortable,
+    showCreate,
     onCreate,
     onRename,
     onColorChange,
@@ -504,6 +510,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
       tasks={group.tasks}
       showPriority={project.show_priority}
       canReorder={canReorder}
+      showCreate={showCreate}
       onRename={(name) => onRename(section.id, name)}
       onColorChange={(color) => onColorChange(section.id, color)}
       onDelete={() => onDelete(section.id)}

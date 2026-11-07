@@ -10,6 +10,11 @@ export type ProjectFieldPatch = {
   show_priority: boolean;
 };
 
+export type ProjectDraft = {
+  name: string;
+  description: string;
+};
+
 export function updateProjectOperation(
   project: ProjectSnapshot,
   patch: ProjectFieldPatch,
@@ -40,5 +45,31 @@ export function updateProjectOperation(
     description: descriptionChanged ? nextDescription : undefined,
     task_sorting_mode: sortingChanged ? patch.task_sorting_mode : null,
     show_priority: priorityChanged ? patch.show_priority : null,
+  };
+}
+
+export function createProjectOperation(draft: ProjectDraft): Operation {
+  const name = draft.name.trim();
+  const description = draft.description.trim();
+
+  return {
+    operation_id: newId(),
+    operation_version: 1,
+    kind: 'create_project',
+    id: newId(),
+    name,
+    description: description.length === 0 ? null : description,
+    task_sorting_mode: 'manual',
+    show_priority: false,
+    created_at: new Date().toISOString(),
+  };
+}
+
+export function deleteProjectOperation(project: ProjectSnapshot): Operation {
+  return {
+    operation_id: newId(),
+    operation_version: 1,
+    kind: 'delete_project',
+    id: project.id,
   };
 }

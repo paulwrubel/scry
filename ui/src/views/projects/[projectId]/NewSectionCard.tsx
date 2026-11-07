@@ -74,8 +74,8 @@ export function NewSectionCard(props: NewSectionCardProps) {
             />
           </form>
         </ModalBody>
-        <ModalFooter>
-          <Button color="default" onClick={close}>
+        <ModalFooter className="justify-between">
+          <Button color="alternative" onClick={close}>
             Cancel
           </Button>
           <Button type="submit" form="new-section-form" disabled={name.trim().length === 0}>

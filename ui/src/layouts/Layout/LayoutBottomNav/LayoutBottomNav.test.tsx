@@ -31,35 +31,35 @@ function link(name: string) {
 
 describe('LayoutBottomNav', () => {
   it('renders all tabs with the active project board destination', () => {
-    renderNav('/projects/p1', 'p1');
+    renderNav('/projects/p1/tasks', 'p1');
 
-    expect(link('View').getAttribute('href')).toBe('/projects/p1');
+    expect(link('Tasks').getAttribute('href')).toBe('/projects/p1/tasks');
     expect(link('Projects').getAttribute('href')).toBe('/projects');
-    expect(link('Stats').getAttribute('href')).toBe('/stats');
+    expect(link('Admin').getAttribute('href')).toBe('/admin');
   });
 
-  it('marks View as the current page on the board', () => {
-    renderNav('/projects/p1', 'p1');
+  it('marks Tasks as the current page on the board', () => {
+    renderNav('/projects/p1/tasks', 'p1');
 
-    expect(link('View').getAttribute('aria-current')).toBe('page');
+    expect(link('Tasks').getAttribute('aria-current')).toBe('page');
   });
 
-  it('keeps View current on a task route', () => {
+  it('keeps Tasks current on a task route', () => {
     renderNav('/projects/p1/tasks/t1', 'p1');
 
-    expect(link('View').getAttribute('aria-current')).toBe('page');
+    expect(link('Tasks').getAttribute('aria-current')).toBe('page');
   });
 
-  it('marks Projects as the current page on /projects and not View', () => {
+  it('marks Projects as the current page on /projects and not Tasks', () => {
     renderNav('/projects', 'p1');
 
     expect(link('Projects').getAttribute('aria-current')).toBe('page');
-    expect(link('View').getAttribute('aria-current')).toBeNull();
+    expect(link('Tasks').getAttribute('aria-current')).toBeNull();
   });
 
-  it('points View at / when no project is active', () => {
+  it('points Tasks at / when no project is active', () => {
     renderNav('/', null);
 
-    expect(link('View').getAttribute('href')).toBe('/');
+    expect(link('Tasks').getAttribute('href')).toBe('/');
   });
 });

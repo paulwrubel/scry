@@ -1,10 +1,10 @@
-import { HiChartBar, HiFolder, HiSquares2X2 } from 'react-icons/hi2';
+import { HiClipboardDocumentList, HiCog6Tooth, HiFolder } from 'react-icons/hi2';
 import { NavLink } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 
 export function LayoutBottomNav() {
   const { activeProjectId } = useActiveProject();
-  const boardPath = activeProjectId === null ? '/' : `/projects/${activeProjectId}`;
+  const boardPath = activeProjectId === null ? '/' : `/projects/${activeProjectId}/tasks`;
 
   return (
     <nav
@@ -21,8 +21,8 @@ export function LayoutBottomNav() {
             }`
           }
         >
-          <HiSquares2X2 aria-hidden="true" className="h-5 w-5" />
-          <span>View</span>
+          <HiClipboardDocumentList aria-hidden="true" className="h-5 w-5" />
+          <span>Tasks</span>
         </NavLink>
         <NavLink
           to="/projects"
@@ -37,7 +37,7 @@ export function LayoutBottomNav() {
           <span>Projects</span>
         </NavLink>
         <NavLink
-          to="/stats"
+          to="/admin"
           end
           className={({ isActive }) =>
             `flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
@@ -45,8 +45,8 @@ export function LayoutBottomNav() {
             }`
           }
         >
-          <HiChartBar aria-hidden="true" className="h-5 w-5" />
-          <span>Stats</span>
+          <HiCog6Tooth aria-hidden="true" className="h-5 w-5" />
+          <span>Admin</span>
         </NavLink>
       </div>
     </nav>

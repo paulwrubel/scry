@@ -26,6 +26,7 @@ type BoardColumnProps = {
   onRename?: (name: string) => void;
   onDelete?: () => void;
   onCreate?: (title: string) => Promise<void>;
+  showCreate?: boolean;
   onColorChange?: (color: Color | null) => void;
   nodeRef?: (element: HTMLDivElement | null) => void;
   isDragging?: boolean;
@@ -50,6 +51,7 @@ export function BoardColumn(props: BoardColumnProps) {
     onRename,
     onDelete,
     onCreate,
+    showCreate = true,
     onColorChange,
     nodeRef,
     isDragging,
@@ -128,7 +130,7 @@ export function BoardColumn(props: BoardColumnProps) {
                   />
                 ))}
         </div>
-        {onCreate === undefined ? null : <NewTaskForm onCreate={onCreate} />}
+        {onCreate === undefined || !showCreate ? null : <NewTaskForm onCreate={onCreate} />}
       </Card>
       {onDelete === undefined ? null : (
         <DeleteSectionModal

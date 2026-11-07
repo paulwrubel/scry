@@ -1,4 +1,10 @@
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
+import {
+  createBrowserRouter,
+  Navigate,
+  RouterProvider,
+  useLocation,
+  useParams,
+} from 'react-router-dom';
 import { Providers } from './layouts/Providers';
 import { AuthenticatedRouteLayout } from './layouts/AuthenticatedRouteLayout';
 import { Layout } from './layouts/Layout';
@@ -7,6 +13,17 @@ import { ProjectRedirect } from './layouts/ProjectRedirect';
 import { LoginPage } from './views/login';
 import { ProjectsPage } from './views/projects';
 import { StatsPage } from './views/stats';
+
+function ProjectTasksRedirect() {
+  const { projectId } = useParams();
+  const location = useLocation();
+
+  if (projectId === undefined) {
+    return <Navigate to="/projects" replace />;
+  }
+
+  return <Navigate to={`/projects/${projectId}/tasks${location.search}`} replace />;
+}
 
 const routes = [
   {
@@ -21,12 +38,14 @@ const routes = [
             children: [
               { index: true, element: <ProjectRedirect /> },
               { path: 'projects', element: <ProjectsPage /> },
+              { path: 'projects/:projectId', element: <ProjectTasksRedirect /> },
               {
-                path: 'projects/:projectId',
+                path: 'projects/:projectId/tasks',
                 element: <ProjectLayout />,
-                children: [{ path: 'tasks/:taskId' }],
+                children: [{ path: ':taskId' }],
               },
-              { path: 'stats', element: <StatsPage /> },
+              { path: 'admin', element: <StatsPage /> },
+              { path: 'stats', element: <Navigate to="/admin" replace /> },
               { path: '*', element: <Navigate to="/" replace /> },
             ],
           },

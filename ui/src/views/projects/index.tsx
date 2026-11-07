@@ -14,29 +14,73 @@ import { useNavigate } from 'react-router-dom';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
+import { DeleteProjectModal } from './DeleteProjectModal';
+import { NewProjectModal } from './NewProjectModal';
 import { ProjectCard } from './ProjectCard';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
 
 export function ProjectsPage() {
   const snapshot = useReplicaSnapshot();
-  const { activeProjectId, setActiveProjectId } = useActiveProject();
+  const { activeProjectId, setActiveProjectId, clearActiveProject } = useActiveProject();
   const navigate = useNavigate();
   const [settingsProject, setSettingsProject] = useState<ProjectSnapshot | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectSnapshot | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const projects = snapshot.visible.projects;
 
   function handleUse(projectId: string) {
     setActiveProjectId(projectId);
-    navigate(`/projects/${projectId}`);
+    navigate(`/projects/${projectId}/tasks`);
+  }
+
+  function handleDeleted(projectId: string) {
+    setDeleteTarget(null);
+    if (projectId !== activeProjectId) {
+      return;
+    }
+
+    const index = projects.findIndex((project) => project.id === projectId);
+    const nextProject =
+      index === -1
+        ? (projects.find((project) => project.id !== projectId) ?? null)
+        : (projects[index + 1] ?? projects[index - 1] ?? null);
+
+    if (nextProject === null) {
+      clearActiveProject();
+      navigate('/projects');
+      return;
+    }
+
+    setActiveProjectId(nextProject.id);
+    navigate(`/projects/${nextProject.id}/tasks`);
+  }
+
+  function handleCreated(projectId: string) {
+    setCreating(false);
+    setActiveProjectId(projectId);
+    navigate(`/projects/${projectId}/tasks`);
   }
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto p-4 md:p-6">
-      <h1 className="text-2xl font-semibold text-white">Projects</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-white">Projects</h1>
+        <Button size="sm" color="default" onClick={() => setCreating(true)}>
+          New project
+        </Button>
+      </div>
       <section>
         <h2 className="mb-2 text-lg font-semibold text-zinc-300">Your Projects</h2>
         {projects.length === 0 ? (
-          <Alert color="info">No projects yet.</Alert>
+          <Alert color="info">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>No projects yet.</span>
+              <Button size="sm" color="default" onClick={() => setCreating(true)}>
+                New project
+              </Button>
+            </div>
+          </Alert>
         ) : (
           <>
             <div className="flex flex-col gap-3 md:hidden">
@@ -47,6 +91,7 @@ export function ProjectsPage() {
                   active={project.id === activeProjectId}
                   onUse={() => handleUse(project.id)}
                   onSettings={() => setSettingsProject(project)}
+                  onDelete={() => setDeleteTarget(project)}
                 />
               ))}
             </div>
@@ -94,6 +139,9 @@ export function ProjectsPage() {
                           >
                             Settings
                           </Button>
+                          <Button size="xs" color="red" onClick={() => setDeleteTarget(project)}>
+                            Delete
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -111,6 +159,21 @@ export function ProjectsPage() {
           onClose={() => setSettingsProject(null)}
         />
       )}
+      {deleteTarget === null ? null : (
+        <DeleteProjectModal
+          key={deleteTarget.id}
+          project={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={handleDeleted}
+        />
+      )}
+      {creating ? (
+        <NewProjectModal
+          existingNames={projects.map((project) => project.name)}
+          onClose={() => setCreating(false)}
+          onCreated={handleCreated}
+        />
+      ) : null}
     </div>
   );
 }

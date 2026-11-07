@@ -10,7 +10,7 @@ import { SyncStatus } from './SyncStatus';
 
 export function LayoutNavbar() {
   const { activeProjectId } = useActiveProject();
-  const boardPath = activeProjectId === null ? '/projects' : `/projects/${activeProjectId}`;
+  const boardPath = activeProjectId === null ? '/projects' : `/projects/${activeProjectId}/tasks`;
 
   const navbarTheme: DeepPartial<NavbarTheme> = {
     root: {
@@ -47,15 +47,15 @@ export function LayoutNavbar() {
       <NavbarCollapse>
         {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
         <NavbarLink as={Link} to={boardPath}>
-          View
+          Tasks
         </NavbarLink>
         {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
         <NavbarLink as={Link} to="/projects">
           Projects
         </NavbarLink>
         {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
-        <NavbarLink as={Link} to="/stats">
-          Stats
+        <NavbarLink as={Link} to="/admin">
+          Admin
         </NavbarLink>
       </NavbarCollapse>
     </Navbar>
