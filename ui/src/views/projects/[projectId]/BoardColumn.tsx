@@ -10,6 +10,7 @@ import type { Color } from '@/generated/Color';
 import type { Task } from '@/generated/Task';
 import { DeleteSectionModal } from './DeleteSectionModal';
 import { NewTaskForm } from './NewTaskForm';
+import { SectionColorPicker } from './SectionColorPicker';
 import { SortableTaskCard } from './SortableTaskCard';
 import { TaskCard } from './TaskCard';
 import { groupKey } from './board';
@@ -25,27 +26,9 @@ type BoardColumnProps = {
   onRename?: (name: string) => void;
   onDelete?: () => void;
   onCreate?: (title: string) => Promise<void>;
+  onColorChange?: (color: Color | null) => void;
   nodeRef?: (element: HTMLDivElement | null) => void;
   isDragging?: boolean;
-};
-
-const SECTION_COLOR_HEX: Record<Color, string> = {
-  black: '#000000',
-  red: '#ef4444',
-  green: '#22c55e',
-  yellow: '#eab308',
-  blue: '#3b82f6',
-  magenta: '#d946ef',
-  cyan: '#06b6d4',
-  gray: '#9ca3af',
-  'dark-gray': '#4b5563',
-  'light-red': '#fca5a5',
-  'light-green': '#86efac',
-  'light-yellow': '#fde047',
-  'light-blue': '#93c5fd',
-  'light-magenta': '#f0abfc',
-  'light-cyan': '#67e8f9',
-  white: '#ffffff',
 };
 
 const columnTheme: DeepPartial<CardTheme> = {
@@ -66,6 +49,7 @@ export function BoardColumn(props: BoardColumnProps) {
     onRename,
     onDelete,
     onCreate,
+    onColorChange,
     nodeRef,
     isDragging,
   } = props;
@@ -88,12 +72,8 @@ export function BoardColumn(props: BoardColumnProps) {
       >
         <div className="flex shrink-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            {color === null ? null : (
-              <span
-                aria-hidden="true"
-                className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20"
-                style={{ backgroundColor: SECTION_COLOR_HEX[color] }}
-              />
+            {onColorChange === undefined ? null : (
+              <SectionColorPicker color={color} onChange={onColorChange} />
             )}
             <RenamableLabel
               label={title}

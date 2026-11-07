@@ -605,4 +605,25 @@ describe('BoardPage', () => {
 
     expect(screen.getByRole('button', { name: 'Add section' })).toBeDefined();
   });
+
+  it('enqueues a section color change', () => {
+    const enqueue = vi.fn(async () => undefined);
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+    });
+
+    renderBoard(project, enqueue);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set section color' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Magenta' }));
+
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'update_section',
+        id: 'backlog',
+        name: null,
+        color: { set: 'magenta' },
+      }),
+    );
+  });
 });
