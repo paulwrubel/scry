@@ -7,13 +7,14 @@ import { InstallPromptProvider } from './provider';
 afterEach(cleanup);
 
 function Probe() {
-  const { canInstall, isInstalled, isIos, promptInstall } = useInstallPrompt();
+  const { canInstall, isInstalled, isIos, isMobile, promptInstall } = useInstallPrompt();
 
   return (
     <div>
       <span data-testid="can-install">{canInstall ? 'yes' : 'no'}</span>
       <span data-testid="is-installed">{isInstalled ? 'yes' : 'no'}</span>
       <span data-testid="is-ios">{isIos ? 'yes' : 'no'}</span>
+      <span data-testid="is-mobile">{isMobile ? 'yes' : 'no'}</span>
       <button type="button" onClick={() => void promptInstall()}>
         install
       </button>
@@ -90,6 +91,27 @@ describe('InstallPromptProvider', () => {
     try {
       renderProbe();
       expect(screen.getByTestId('is-ios').textContent).toBe('yes');
+      expect(screen.getByTestId('is-mobile').textContent).toBe('yes');
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', {
+        configurable: true,
+        value: originalUserAgent,
+      });
+    }
+  });
+
+  it('detects Android as mobile', () => {
+    const originalUserAgent = navigator.userAgent;
+
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Android 14; Mobile; rv:148.0) Gecko/148.0 Firefox/148.0',
+    });
+
+    try {
+      renderProbe();
+      expect(screen.getByTestId('is-mobile').textContent).toBe('yes');
+      expect(screen.getByTestId('is-ios').textContent).toBe('no');
     } finally {
       Object.defineProperty(navigator, 'userAgent', {
         configurable: true,

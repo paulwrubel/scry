@@ -44,6 +44,8 @@ import {
   type BoardGroup,
 } from './board';
 
+const defaultActivationConstraints = PointerSensor.defaults.activationConstraints;
+
 const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
   { label: 'Alphabetical', value: 'alphabetical' },
   { label: 'Alphabetical (case-insensitive)', value: 'alphabetical-case-insensitive' },
@@ -338,6 +340,19 @@ export function BoardPage() {
         // navigation after an actual drag.
         sensors={[
           PointerSensor.configure({
+            activationConstraints(event, source) {
+              if (
+                source.handle !== undefined &&
+                event.target instanceof Node &&
+                source.handle.contains(event.target)
+              ) {
+                return undefined;
+              }
+
+              return typeof defaultActivationConstraints === 'function'
+                ? defaultActivationConstraints(event, source)
+                : defaultActivationConstraints;
+            },
             preventActivation: (event, source) => {
               if (source.type !== 'column') {
                 return false;

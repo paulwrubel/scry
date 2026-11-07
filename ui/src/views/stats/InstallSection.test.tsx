@@ -12,6 +12,7 @@ function renderSection(overrides: Partial<InstallPromptContextType> = {}) {
     canInstall: overrides.canInstall ?? false,
     isInstalled: overrides.isInstalled ?? false,
     isIos: overrides.isIos ?? false,
+    isMobile: overrides.isMobile ?? false,
     promptInstall: overrides.promptInstall ?? (async (): Promise<void> => undefined),
   };
 
@@ -43,8 +44,18 @@ describe('InstallSection', () => {
     expect(screen.getByText(/Add to Home Screen/)).toBeTruthy();
   });
 
+  it('shows browser-menu instructions for a mobile browser without a prompt', () => {
+    renderSection({ isMobile: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show install steps' }));
+
+    expect(screen.getByText('Install from your browser')).toBeTruthy();
+    expect(screen.getByText(/Open the browser menu/)).toBeTruthy();
+    expect(screen.getByText(/In Firefox, look for Install/)).toBeTruthy();
+  });
+
   it('renders nothing when the app is already installed', () => {
-    renderSection({ canInstall: true, isInstalled: true, isIos: true });
+    renderSection({ canInstall: true, isInstalled: true, isIos: true, isMobile: true });
 
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByText('Install Scry')).toBeNull();

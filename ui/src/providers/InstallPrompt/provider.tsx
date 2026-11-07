@@ -36,11 +36,25 @@ function detectIos(): boolean {
   return /iphone|ipad|ipod/i.test(userAgent) || (platform === 'MacIntel' && maxTouchPoints > 1);
 }
 
+function detectMobile(): boolean {
+  if (typeof window === 'undefined' || typeof window.navigator === 'undefined') {
+    return false;
+  }
+
+  const { userAgent, platform, maxTouchPoints } = window.navigator;
+
+  return (
+    /android|iphone|ipad|ipod|mobile|tablet/i.test(userAgent) ||
+    (platform === 'MacIntel' && maxTouchPoints > 1)
+  );
+}
+
 export function InstallPromptProvider(props: InstallPromptProviderProps) {
   const { children } = props;
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(detectInstalled);
   const [isIos] = useState(detectIos);
+  const [isMobile] = useState(detectMobile);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -80,9 +94,10 @@ export function InstallPromptProvider(props: InstallPromptProviderProps) {
       canInstall: deferredPrompt !== null,
       isInstalled,
       isIos,
+      isMobile,
       promptInstall,
     }),
-    [deferredPrompt, isInstalled, isIos, promptInstall],
+    [deferredPrompt, isInstalled, isIos, isMobile, promptInstall],
   );
 
   return <InstallPromptContext.Provider value={value}>{children}</InstallPromptContext.Provider>;
