@@ -4,6 +4,7 @@ export {
   formatLastSyncedAt,
   syncStatusColor,
   useSyncStatus,
+  useSyncingVisible,
 } from './useSyncStatus';
 export type { DeriveSyncStatusInput, SyncDisplayStatus, SyncStatusView } from './useSyncStatus';
 export { SyncProvider } from './provider';

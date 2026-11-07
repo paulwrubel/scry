@@ -84,7 +84,7 @@ export function BoardColumn(props: BoardColumnProps) {
       <Card
         ref={nodeRef}
         theme={columnTheme}
-        className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${sectionId === null ? 'dark:bg-gray-900' : ''} ${isDragging ? 'opacity-80' : ''}`}
+        className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${isDragging ? 'opacity-80' : ''}`}
       >
         <div className="flex shrink-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">

@@ -15,22 +15,18 @@ function snapshot(overrides: Partial<SyncSnapshot> = {}): SyncSnapshot {
 const BASE = {
   isAuthenticated: true,
   isAuthLoading: false,
-  online: true,
   pending: 0,
   syncingVisible: false,
   persisted: true,
 };
 
 describe('deriveSyncStatus', () => {
-  it('prioritises checking, sign-in, and offline', () => {
+  it('prioritises checking and sign-in', () => {
     expect(deriveSyncStatus({ ...BASE, snapshot: snapshot(), isAuthLoading: true }).status).toBe(
       'checking',
     );
     expect(deriveSyncStatus({ ...BASE, snapshot: snapshot(), isAuthenticated: false }).status).toBe(
       'unauthenticated',
-    );
-    expect(deriveSyncStatus({ ...BASE, snapshot: snapshot(), online: false }).status).toBe(
-      'offline',
     );
   });
 
