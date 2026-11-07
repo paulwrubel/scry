@@ -1,10 +1,13 @@
 import { Alert, Button, Spinner } from 'flowbite-react';
 import { Outlet } from 'react-router-dom';
+import { useAuth } from '@/providers/Auth';
 import { useReplicaStatus } from '@/providers/Replica';
+import { LayoutBottomNav } from './LayoutBottomNav';
 import { LayoutNavbar } from './LayoutNavbar';
 
 export function Layout() {
   const { status, error, retry } = useReplicaStatus();
+  const { isAuthenticated } = useAuth();
 
   if (status === 'loading') {
     return (
@@ -34,6 +37,7 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+      {isAuthenticated ? <LayoutBottomNav /> : null}
     </div>
   );
 }
