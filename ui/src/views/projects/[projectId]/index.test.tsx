@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type * as DndKitReact from '@dnd-kit/react';
 import type * as DndKitSortable from '@dnd-kit/react/sortable';
+import type * as MediaQuery from '@/hooks/useMediaQuery';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +18,13 @@ const dragIds = vi.hoisted(() => ({
   droppable: [] as string[],
   sortable: [] as string[],
 }));
+
+const viewport = vi.hoisted(() => ({ isDesktop: true }));
+
+vi.mock('@/hooks/useMediaQuery', async (importOriginal) => {
+  const actual = await importOriginal<typeof MediaQuery>();
+  return { ...actual, useIsDesktop: () => viewport.isDesktop };
+});
 
 vi.mock('@dnd-kit/react', async (importOriginal) => {
   const actual = await importOriginal<typeof DndKitReact>();
@@ -118,7 +126,10 @@ function renderBoard(
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  viewport.isDesktop = true;
+  cleanup();
+});
 
 describe('drag ids', () => {
   it('gives the section sortable an id distinct from its item drop target', () => {
@@ -695,6 +706,39 @@ describe('BoardPage', () => {
         id: 'backlog',
         name: null,
         color: { set: 'magenta' },
+      }),
+    );
+  });
+});
+
+describe('mobile quick add', () => {
+  it('hides inline add buttons and creates a No Section task from the FAB', async () => {
+    viewport.isDesktop = false;
+    const enqueue = vi.fn(async (_operation: Operation) => undefined);
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+    });
+
+    renderBoard(project, enqueue);
+
+    const addButtons = screen.getAllByRole('button', { name: 'Add task' });
+    expect(addButtons).toHaveLength(1);
+
+    fireEvent.click(addButtons[0]);
+    fireEvent.change(screen.getByLabelText('Task title'), {
+      target: { value: 'Mobile task' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'create_task',
+        title: 'Mobile task',
+        section_id: null,
       }),
     );
   });

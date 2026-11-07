@@ -32,6 +32,7 @@ import type { TaskFilter } from '@/utils/taskFilter';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
 import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
+import { MobileAddTask } from './MobileAddTask';
 import { NewSectionCard } from './NewSectionCard';
 import { TaskFilterPopover } from './TaskFilterPopover';
 import {
@@ -416,6 +417,7 @@ export function BoardPage() {
               tasks={openNoSectionGroup.tasks}
               showPriority={project.show_priority}
               canReorder={canReorder}
+              showCreate={isDesktop}
               onCreate={(title) => handleCreate(null, title)}
             />
           )}
@@ -427,6 +429,7 @@ export function BoardPage() {
               project={project}
               canReorder={canReorder}
               sectionsSortable={isDesktop}
+              showCreate={isDesktop}
               onCreate={handleCreate}
               onRename={(sectionId, name) => void handleSectionRename(sectionId, name)}
               onColorChange={handleSectionColorChange}
@@ -448,6 +451,7 @@ export function BoardPage() {
           <NewSectionCard onAdd={handleAddSection} />
         </div>
       </DragDropProvider>
+      {isDesktop ? null : <MobileAddTask onCreate={(title) => handleCreate(null, title)} />}
       {settingsOpen ? (
         <ProjectSettingsModal
           key={project.id}
@@ -465,6 +469,7 @@ type SortableBoardColumnProps = {
   project: ProjectSnapshot;
   canReorder: boolean;
   sectionsSortable: boolean;
+  showCreate: boolean;
   onCreate: (sectionId: string, title: string) => Promise<void>;
   onRename: (sectionId: string, name: string) => void;
   onColorChange: (sectionId: string, color: Color | null) => void;
@@ -478,6 +483,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
     project,
     canReorder,
     sectionsSortable,
+    showCreate,
     onCreate,
     onRename,
     onColorChange,
@@ -504,6 +510,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
       tasks={group.tasks}
       showPriority={project.show_priority}
       canReorder={canReorder}
+      showCreate={showCreate}
       onRename={(name) => onRename(section.id, name)}
       onColorChange={(color) => onColorChange(section.id, color)}
       onDelete={() => onDelete(section.id)}
