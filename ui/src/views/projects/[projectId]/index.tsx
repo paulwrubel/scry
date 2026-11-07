@@ -299,7 +299,7 @@ export function BoardPage() {
   }
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
       <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <h1 className="min-w-0 truncate text-2xl font-semibold" title={project.name}>
@@ -405,7 +405,7 @@ export function BoardPage() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-x-auto md:overflow-y-hidden md:p-6">
+        <div className="flex w-full min-w-0 flex-none flex-col gap-3 p-3 md:min-h-0 md:flex-1 md:flex-row md:gap-4 md:overflow-x-auto md:overflow-y-hidden md:p-6">
           {openNoSectionGroup === null ? null : (
             <BoardColumn
               projectId={project.id}
