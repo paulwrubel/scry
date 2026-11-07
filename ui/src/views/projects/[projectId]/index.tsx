@@ -1,3 +1,4 @@
+import { PointerActivationConstraints } from '@dnd-kit/dom';
 import { move } from '@dnd-kit/helpers';
 import { DragDropProvider, KeyboardSensor, PointerSensor } from '@dnd-kit/react';
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react';
@@ -33,7 +34,6 @@ import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
 import { NewSectionCard } from './NewSectionCard';
 import { TaskFilterPopover } from './TaskFilterPopover';
-import { TouchLongPressSensor } from './touchLongPressSensor';
 import {
   buildBoard,
   columnDragId,
@@ -44,6 +44,8 @@ import {
   sectionIdFromGroup,
   type BoardGroup,
 } from './board';
+
+const defaultActivationConstraints = PointerSensor.defaults.activationConstraints;
 
 const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
   { label: 'Alphabetical', value: 'alphabetical' },
@@ -197,9 +199,9 @@ export function BoardPage() {
       return;
     }
 
-    // dnd-kit's optimistic sorting and React state both move items here. Do
-    // not preventDefault: that disables the optimistic sorting and leaves the
-    // dragged card as the only moving node.
+    // Match main: let React own the cross-section move; keep dnd-kit's
+    // optimistic DOM sorting disabled so React is the single reorder path.
+    event.preventDefault();
     setDragItems((current) => (current === null ? current : move(current, event)));
   }
 
@@ -333,14 +335,23 @@ export function BoardPage() {
         </div>
       ) : null}
       <DragDropProvider
-        // Touch uses a touch-event sensor so a long press can stop scrolling
-        // after activation; Pointer events cannot do that.
         sensors={[
           PointerSensor.configure({
-            preventActivation: (event, source) => {
-              if (event.pointerType === 'touch' && source.type === 'item') {
-                return true;
+            activationConstraints(event, source) {
+              if (event.pointerType === 'touch') {
+                return [
+                  new PointerActivationConstraints.Delay({
+                    value: 300,
+                    tolerance: 8,
+                  }),
+                ];
               }
+
+              return typeof defaultActivationConstraints === 'function'
+                ? defaultActivationConstraints(event, source)
+                : defaultActivationConstraints;
+            },
+            preventActivation: (event, source) => {
               if (source.type !== 'column') {
                 return false;
               }
@@ -352,7 +363,6 @@ export function BoardPage() {
               );
             },
           }),
-          TouchLongPressSensor,
           KeyboardSensor,
         ]}
         onDragStart={handleDragStart}
