@@ -23,6 +23,7 @@ type BoardColumnProps = {
   tasks: Task[];
   showPriority: boolean;
   canReorder: boolean;
+  showDragHandle?: boolean;
   onRename?: (name: string) => void;
   onDelete?: () => void;
   onCreate?: (title: string) => Promise<void>;
@@ -46,6 +47,7 @@ export function BoardColumn(props: BoardColumnProps) {
     tasks,
     showPriority,
     canReorder,
+    showDragHandle = false,
     onRename,
     onDelete,
     onCreate,
@@ -68,7 +70,9 @@ export function BoardColumn(props: BoardColumnProps) {
       <Card
         ref={nodeRef}
         theme={columnTheme}
-        className={`flex h-full min-h-0 w-96 shrink-0 flex-col ${isDragging ? 'opacity-80' : ''}`}
+        className={`flex min-h-0 w-full min-w-0 shrink-0 flex-col md:h-full md:w-96 ${
+          isDragging ? 'opacity-80' : ''
+        }`}
       >
         <div className="flex shrink-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -99,7 +103,7 @@ export function BoardColumn(props: BoardColumnProps) {
         </div>
         <div
           ref={ref}
-          className={`flex min-h-10 flex-1 flex-col gap-2 overflow-y-auto rounded-md pr-1 ${
+          className={`flex min-h-10 flex-1 flex-col gap-2 overflow-visible rounded-md pr-1 md:overflow-y-auto ${
             isDropTarget ? 'ring-line-hover ring-1' : ''
           }`}
         >
@@ -114,6 +118,7 @@ export function BoardColumn(props: BoardColumnProps) {
                     index={index}
                     group={group}
                     showPriority={showPriority}
+                    showDragHandle={showDragHandle}
                   />
                 ))
               : tasks.map((task) => (

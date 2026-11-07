@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
+import { ProjectCard } from './ProjectCard';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
 
 export function ProjectsPage() {
@@ -30,64 +31,77 @@ export function ProjectsPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-6 p-6">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto p-4 md:p-6">
       <h1 className="text-2xl font-semibold text-white">Projects</h1>
       <section>
         <h2 className="mb-2 text-lg font-semibold text-zinc-300">Your Projects</h2>
         {projects.length === 0 ? (
           <Alert color="info">No projects yet.</Alert>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-zinc-700">
-            <Table theme={{ root: { base: 'w-full text-left text-sm text-zinc-300' } }}>
-              <TableHead>
-                <TableRow>
-                  <TableHeadCell>Name</TableHeadCell>
-                  <TableHeadCell>Description</TableHeadCell>
-                  <TableHeadCell>Sections</TableHeadCell>
-                  <TableHeadCell>Tasks</TableHeadCell>
-                  <TableHeadCell>Created</TableHeadCell>
-                  <TableHeadCell>Actions</TableHeadCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {projects.map((project) => (
-                  <TableRow key={project.id}>
-                    <TableCell className="font-medium text-white">
-                      <div className="flex items-center gap-2">
-                        {project.name}
-                        {project.id === activeProjectId ? (
-                          <Badge color="success">Active</Badge>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted">{project.description || '—'}</TableCell>
-                    <TableCell>{project.sections.length}</TableCell>
-                    <TableCell>{project.tasks.length}</TableCell>
-                    <TableCell>{new Date(project.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          size="xs"
-                          color="default"
-                          disabled={project.id === activeProjectId}
-                          onClick={() => handleUse(project.id)}
-                        >
-                          Use
-                        </Button>
-                        <Button
-                          size="xs"
-                          color="alternative"
-                          onClick={() => setSettingsProject(project)}
-                        >
-                          Settings
-                        </Button>
-                      </div>
-                    </TableCell>
+          <>
+            <div className="flex flex-col gap-3 md:hidden">
+              {projects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  active={project.id === activeProjectId}
+                  onUse={() => handleUse(project.id)}
+                  onSettings={() => setSettingsProject(project)}
+                />
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto rounded-lg border border-zinc-700 md:block">
+              <Table theme={{ root: { base: 'w-full text-left text-sm text-zinc-300' } }}>
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>Name</TableHeadCell>
+                    <TableHeadCell>Description</TableHeadCell>
+                    <TableHeadCell>Sections</TableHeadCell>
+                    <TableHeadCell>Tasks</TableHeadCell>
+                    <TableHeadCell>Created</TableHeadCell>
+                    <TableHeadCell>Actions</TableHeadCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHead>
+                <TableBody>
+                  {projects.map((project) => (
+                    <TableRow key={project.id}>
+                      <TableCell className="font-medium text-white">
+                        <div className="flex items-center gap-2">
+                          {project.name}
+                          {project.id === activeProjectId ? (
+                            <Badge color="success">Active</Badge>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted">{project.description || '—'}</TableCell>
+                      <TableCell>{project.sections.length}</TableCell>
+                      <TableCell>{project.tasks.length}</TableCell>
+                      <TableCell>{new Date(project.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            size="xs"
+                            color="default"
+                            disabled={project.id === activeProjectId}
+                            onClick={() => handleUse(project.id)}
+                          >
+                            Use
+                          </Button>
+                          <Button
+                            size="xs"
+                            color="alternative"
+                            onClick={() => setSettingsProject(project)}
+                          >
+                            Settings
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </section>
       {settingsProject === null ? null : (

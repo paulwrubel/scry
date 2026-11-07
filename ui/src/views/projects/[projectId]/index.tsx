@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { HiCog6Tooth } from 'react-icons/hi2';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { Color } from '@/generated/Color';
+import { useIsDesktop } from '@/hooks/useMediaQuery';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
@@ -67,6 +68,7 @@ export function BoardPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
+  const isDesktop = useIsDesktop();
 
   const found = snapshot.visible.projects.find((candidate) => candidate.id === projectId);
 
@@ -259,26 +261,25 @@ export function BoardPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-line flex flex-wrap items-center gap-2 border-b px-6 py-4">
-        <h1
-          className="flex h-8 items-center text-2xl font-semibold"
-          title={project.description ?? undefined}
-        >
-          {project.name}
-        </h1>
-        <button
-          type="button"
-          aria-label="Project settings"
-          title="Project settings"
-          onClick={() => setSettingsOpen(true)}
-          className="text-muted inline-flex h-8 w-8 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none"
-        >
-          <HiCog6Tooth aria-hidden="true" className="h-4 w-4" />
-        </button>
-        <div className="ml-auto flex flex-wrap items-center gap-4">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+      <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h1 className="min-w-0 truncate text-2xl font-semibold" title={project.name}>
+            {project.name}
+          </h1>
+          <button
+            type="button"
+            aria-label="Project settings"
+            title="Project settings"
+            onClick={() => setSettingsOpen(true)}
+            className="text-muted hidden h-11 w-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none md:inline-flex md:h-8 md:w-8"
+          >
+            <HiCog6Tooth aria-hidden="true" className="h-5 w-5 md:h-4 md:w-4" />
+          </button>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 md:ml-auto md:gap-4">
           {dragDisabledReason !== '' ? (
-            <span className="text-xs text-yellow-500/80">
+            <span className="hidden text-xs text-yellow-500/80 md:inline">
               {`task drag-and-drop disabled due to ${dragDisabledReason}`}
             </span>
           ) : null}
@@ -289,11 +290,11 @@ export function BoardPage() {
             onClear={handleFilterClear}
           />
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-muted">Sort</span>
+            <span className="text-muted hidden md:inline">Sort</span>
             <Select
               sizing="sm"
               aria-label="Task sorting"
-              className="w-56"
+              className="w-40 md:w-56"
               value={project.task_sorting_mode}
               onChange={(event) =>
                 void handleProjectUpdate({
@@ -308,17 +309,19 @@ export function BoardPage() {
               ))}
             </Select>
           </label>
-          <ToggleSwitch
-            checked={project.show_priority}
-            onChange={(showPriority) => void handleProjectUpdate({ show_priority: showPriority })}
-            label="Show priority"
-            sizing="sm"
-            className="h-8 items-center [&>span]:mt-0"
-          />
+          <div className="hidden md:block">
+            <ToggleSwitch
+              checked={project.show_priority}
+              onChange={(showPriority) => void handleProjectUpdate({ show_priority: showPriority })}
+              label="Show priority"
+              sizing="sm"
+              className="h-8 items-center [&>span]:mt-0"
+            />
+          </div>
         </div>
       </div>
       {narrowing && visibleTaskCount === 0 ? (
-        <div className="border-line text-muted flex items-center gap-3 border-b px-6 py-2 text-sm">
+        <div className="border-line text-muted flex items-center gap-3 border-b px-4 py-2 text-sm md:px-6">
           <span>No tasks match the active filters.</span>
           <button
             type="button"
@@ -353,7 +356,7 @@ export function BoardPage() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-6">
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-x-auto md:overflow-y-hidden md:p-6">
           {noSectionGroup === null ? null : (
             <BoardColumn
               projectId={project.id}
@@ -363,6 +366,7 @@ export function BoardPage() {
               tasks={noSectionGroup.tasks}
               showPriority={project.show_priority}
               canReorder={canReorder}
+              showDragHandle={!isDesktop}
             />
           )}
           {sectionGroups.map((group, index) => (
@@ -372,6 +376,8 @@ export function BoardPage() {
               index={index}
               project={project}
               canReorder={canReorder}
+              sectionsSortable={isDesktop}
+              showDragHandle={!isDesktop}
               onCreate={handleCreate}
               onRename={(sectionId, name) => void handleSectionRename(sectionId, name)}
               onColorChange={handleSectionColorChange}
@@ -397,6 +403,8 @@ type SortableBoardColumnProps = {
   index: number;
   project: ProjectSnapshot;
   canReorder: boolean;
+  sectionsSortable: boolean;
+  showDragHandle: boolean;
   onCreate: (sectionId: string, title: string) => Promise<void>;
   onRename: (sectionId: string, name: string) => void;
   onColorChange: (sectionId: string, color: Color | null) => void;
@@ -404,7 +412,18 @@ type SortableBoardColumnProps = {
 };
 
 function SortableBoardColumn(props: SortableBoardColumnProps) {
-  const { group, index, project, canReorder, onCreate, onRename, onColorChange, onDelete } = props;
+  const {
+    group,
+    index,
+    project,
+    canReorder,
+    sectionsSortable,
+    showDragHandle,
+    onCreate,
+    onRename,
+    onColorChange,
+    onDelete,
+  } = props;
   const section = group.section;
   const { ref, isDragging } = useSortable({
     id: columnDragId(section.id),
@@ -412,6 +431,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
     group: 'columns',
     type: 'column',
     accept: 'column',
+    disabled: !sectionsSortable,
   });
 
   return (
@@ -425,6 +445,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
       tasks={group.tasks}
       showPriority={project.show_priority}
       canReorder={canReorder}
+      showDragHandle={showDragHandle}
       onRename={(name) => onRename(section.id, name)}
       onColorChange={(color) => onColorChange(section.id, color)}
       onDelete={() => onDelete(section.id)}

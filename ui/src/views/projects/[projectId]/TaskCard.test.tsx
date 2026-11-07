@@ -34,4 +34,27 @@ describe('TaskCard', () => {
       '/projects/project-1/tasks/task-1?tags=bug',
     );
   });
+
+  it('renders a drag handle only when the sortable provides one', () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <TaskCard projectId="project-1" task={task} showPriority={false} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Drag Task title' })).toBeNull();
+
+    rerender(
+      <MemoryRouter>
+        <TaskCard
+          projectId="project-1"
+          task={task}
+          showPriority={false}
+          dragHandleRef={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Drag Task title' })).toBeDefined();
+  });
 });

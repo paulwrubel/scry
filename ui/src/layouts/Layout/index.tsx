@@ -1,10 +1,13 @@
 import { Alert, Button, Spinner } from 'flowbite-react';
 import { Outlet } from 'react-router-dom';
+import { useAuth } from '@/providers/Auth';
 import { useReplicaStatus } from '@/providers/Replica';
+import { LayoutBottomNav } from './LayoutBottomNav';
 import { LayoutNavbar } from './LayoutNavbar';
 
 export function Layout() {
   const { status, error, retry } = useReplicaStatus();
+  const { isAuthenticated } = useAuth();
 
   if (status === 'loading') {
     return (
@@ -25,13 +28,16 @@ export function Layout() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
-      <LayoutNavbar />
+    <div className="flex h-dvh flex-col pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
+      <div className="bg-panel pt-[env(safe-area-inset-top)]">
+        <LayoutNavbar />
+      </div>
       <main className="bg-canvas relative flex min-h-0 flex-1 flex-col overflow-hidden text-zinc-200">
         <div className="relative z-0 flex min-h-0 flex-1 flex-col">
           <Outlet />
         </div>
       </main>
+      {isAuthenticated ? <LayoutBottomNav /> : null}
     </div>
   );
 }
@@ -46,7 +52,7 @@ function ShellState(props: ShellStateProps) {
   const { title, message, children } = props;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-8">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-3 p-8 pt-[calc(env(safe-area-inset-top)+2rem)] pb-[calc(env(safe-area-inset-bottom)+2rem)]">
       <Alert color="info" className="max-w-md">
         <span className="font-medium">{title}</span>
         <span className="mt-1 block text-sm">{message}</span>

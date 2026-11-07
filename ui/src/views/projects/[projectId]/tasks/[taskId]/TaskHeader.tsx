@@ -22,7 +22,7 @@ export function TaskHeader(props: TaskHeaderProps) {
         to={`/projects/${project.id}${location.search}`}
         aria-label="Back to board"
         title="Back to board"
-        className="border-line text-muted hover:border-line-hover inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:text-zinc-200"
+        className="border-line text-muted hover:border-line-hover inline-flex h-11 w-11 items-center justify-center rounded-lg border transition-colors hover:text-zinc-200 md:h-8 md:w-8"
         onClick={(event) => {
           event.preventDefault();
           onBack();
@@ -34,7 +34,7 @@ export function TaskHeader(props: TaskHeaderProps) {
           fill="none"
           stroke="currentColor"
           strokeWidth={1.8}
-          className="h-4 w-4"
+          className="h-5 w-5 md:h-4 md:w-4"
         >
           <path
             strokeLinecap="round"

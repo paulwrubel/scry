@@ -12,12 +12,20 @@ import { TaskDetail } from '@/views/projects/[projectId]/tasks/[taskId]/TaskDeta
 
 type Panel = { project: ProjectSnapshot; task: Task };
 
+const mobileSheetClasses =
+  'inset-x-0 bottom-0 h-[75dvh] w-full rounded-t-xl border-t pb-[env(safe-area-inset-bottom)]';
+const desktopDrawerClasses =
+  'md:inset-y-4 md:right-4 md:left-auto md:h-auto md:w-xl md:rounded-xl md:border md:pb-0 md:shadow-2xl';
+
 const drawerTheme: DeepPartial<DrawerTheme> = {
   root: {
-    base: 'fixed z-40 overflow-y-auto bg-surface p-0 transition-transform duration-300 ease-out dark:bg-surface',
+    base: 'fixed z-40 overflow-y-auto border-line bg-surface p-0 transition-transform duration-300 ease-out',
+    // Flowbite accepts one Drawer position per render, so the bottom sheet
+    // restores the desktop right-drawer geometry at the md breakpoint.
     position: {
-      right: {
-        off: 'right-0 top-0 h-screen w-80 translate-x-[calc(100%_+_1rem)]',
+      bottom: {
+        on: `${mobileSheetClasses} ${desktopDrawerClasses}`,
+        off: `${mobileSheetClasses} ${desktopDrawerClasses} translate-y-full md:translate-y-0 md:translate-x-[calc(100%_+_1rem)]`,
       },
     },
   },
@@ -52,7 +60,7 @@ export function ProjectLayout() {
   }, [location.search, navigate, project, projectId, task]);
 
   return (
-    <div className="relative flex min-h-0 flex-1">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
       <div className="flex min-w-0 flex-1" inert={open}>
         <BoardPage />
       </div>
@@ -65,13 +73,12 @@ export function ProjectLayout() {
       />
       <Drawer
         open={open}
-        position="right"
+        position="bottom"
         backdrop={false}
         theme={drawerTheme}
         onClose={close}
         aria-hidden={!open}
         inert={!open}
-        className="md:border-line w-full md:inset-y-4 md:right-4 md:h-auto md:w-xl md:rounded-xl md:border md:shadow-2xl"
       >
         {panel === null ? null : (
           <TaskDetail

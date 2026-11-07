@@ -5,6 +5,7 @@ import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import type { TaskState } from '@/generated/TaskState';
+import { newId } from '@/utils/uuid';
 
 export type TaskFieldPatch = {
   title: string;
@@ -30,10 +31,10 @@ export function createTaskOperation(
   title: string,
 ): Operation {
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'create_task',
-    id: crypto.randomUUID(),
+    id: newId(),
     project_id: project.id,
     title,
     description: null,
@@ -72,7 +73,7 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
   }
 
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'update_task',
     id: task.id,
@@ -94,7 +95,7 @@ export function moveTaskOperation(
   }
 
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'move_task',
     id: task.id,
@@ -109,7 +110,7 @@ export function setTaskStateOperation(task: Task, state: TaskState): Operation |
   }
 
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'update_task',
     id: task.id,
@@ -123,7 +124,7 @@ export function setTaskStateOperation(task: Task, state: TaskState): Operation |
 
 export function deleteTaskOperation(task: Task): Operation {
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'delete_task',
     id: task.id,
@@ -137,10 +138,10 @@ export function createNoteOperation(task: Task, contents: string): Operation | n
   }
 
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'create_note',
-    id: crypto.randomUUID(),
+    id: newId(),
     task_id: task.id,
     contents: text,
     created_at: new Date().toISOString(),
@@ -154,7 +155,7 @@ export function updateNoteOperation(note: Note, contents: string): Operation | n
   }
 
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'update_note',
     id: note.id,
@@ -164,7 +165,7 @@ export function updateNoteOperation(note: Note, contents: string): Operation | n
 
 export function deleteNoteOperation(note: Note): Operation {
   return {
-    operation_id: crypto.randomUUID(),
+    operation_id: newId(),
     operation_version: 1,
     kind: 'delete_note',
     id: note.id,
