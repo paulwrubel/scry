@@ -109,6 +109,14 @@ export function BoardPage() {
     (group): group is SectionBoardGroup => group.section !== null,
   );
   const visibleTaskCount = baseGroups.reduce((total, group) => total + group.tasks.length, 0);
+  const dragDisabledReasons: string[] = [];
+  if (project.task_sorting_mode !== 'manual') {
+    dragDisabledReasons.push('sort mode');
+  }
+  if (narrowing) {
+    dragDisabledReasons.push('applied filters');
+  }
+  const dragDisabledReason = dragDisabledReasons.join(' and ');
 
   async function handleCreate(sectionId: string, title: string) {
     await replica.enqueue(createTaskOperation(project, sectionId, title));
@@ -259,6 +267,17 @@ export function BoardPage() {
           <HiCog6Tooth aria-hidden="true" className="h-4 w-4" />
         </button>
         <div className="ml-auto flex flex-wrap items-center gap-4">
+          {dragDisabledReason !== '' ? (
+            <span className="text-xs text-yellow-500/80">
+              {`task drag-and-drop disabled due to ${dragDisabledReason}`}
+            </span>
+          ) : null}
+          <TaskFilterPopover
+            filter={filter}
+            tasks={project.tasks}
+            onChange={handleFilterChange}
+            onClear={handleFilterClear}
+          />
           <label className="flex items-center gap-2 text-sm">
             <span className="text-muted">Sort</span>
             <Select
@@ -279,15 +298,6 @@ export function BoardPage() {
               ))}
             </Select>
           </label>
-          <TaskFilterPopover
-            filter={filter}
-            tasks={project.tasks}
-            onChange={handleFilterChange}
-            onClear={handleFilterClear}
-          />
-          {narrowing && project.task_sorting_mode === 'manual' ? (
-            <span className="text-faint text-xs">Reordering paused</span>
-          ) : null}
           <ToggleSwitch
             checked={project.show_priority}
             onChange={(showPriority) => void handleProjectUpdate({ show_priority: showPriority })}

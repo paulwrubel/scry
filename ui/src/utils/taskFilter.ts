@@ -9,6 +9,14 @@ export type TaskFilter = {
   search: string;
 };
 
+export type TaskFilterStatus = TaskState | 'all';
+
+export const TASK_FILTER_STATUS_OPTIONS: readonly { value: TaskFilterStatus; label: string }[] = [
+  { value: 'open', label: 'Open' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'all', label: 'All' },
+];
+
 export const DEFAULT_TASK_FILTER: TaskFilter = {
   states: ['open', 'closed'],
   tags: [],
@@ -171,17 +179,17 @@ export function applyTaskFilter(params: URLSearchParams, filter: TaskFilter): UR
   return next;
 }
 
-export function toggleTaskFilterState(filter: TaskFilter, state: TaskState): TaskFilter {
-  // never let the selection collapse to zero states
-  if (filter.states.includes(state) && filter.states.length === 1) {
-    return filter;
+export function taskFilterStatus(filter: TaskFilter): TaskFilterStatus {
+  const states = canonicalStates(filter.states);
+  if (states.length === TASK_STATES.length) {
+    return 'all';
   }
+  return states[0] ?? 'all';
+}
 
-  const states = filter.states.includes(state)
-    ? filter.states.filter((current) => current !== state)
-    : [...filter.states, state];
-
-  return { ...filter, states: canonicalStates(states) };
+export function setTaskFilterStatus(filter: TaskFilter, status: TaskFilterStatus): TaskFilter {
+  const states = status === 'all' ? [...TASK_STATES] : [status];
+  return { ...filter, states };
 }
 
 export function toggleTaskFilterTag(filter: TaskFilter, tag: string): TaskFilter {

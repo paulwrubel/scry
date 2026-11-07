@@ -15,7 +15,8 @@ import {
   matchesTaskFilter,
   parseTaskFilter,
   setTaskFilterSearch,
-  toggleTaskFilterState,
+  setTaskFilterStatus,
+  taskFilterStatus,
   toggleTaskFilterTag,
   type TaskFilter,
 } from './taskFilter';
@@ -249,29 +250,38 @@ describe('canonicalStates', () => {
   });
 });
 
-describe('toggleTaskFilterState', () => {
-  it('removes a selected state', () => {
-    const filter = toggleTaskFilterState(DEFAULT_TASK_FILTER, 'open');
-
-    expect(filter.states).toEqual(['closed']);
+describe('taskFilterStatus', () => {
+  it('reports all when both states are selected', () => {
+    expect(taskFilterStatus(DEFAULT_TASK_FILTER)).toBe('all');
   });
 
-  it('adds a state back in canonical order', () => {
-    const closedOnly = toggleTaskFilterState(DEFAULT_TASK_FILTER, 'open');
-
-    expect(toggleTaskFilterState(closedOnly, 'open').states).toEqual(['open', 'closed']);
+  it('reports the single selected state', () => {
+    expect(taskFilterStatus(makeFilter({ states: ['open'] }))).toBe('open');
+    expect(taskFilterStatus(makeFilter({ states: ['closed'] }))).toBe('closed');
   });
 
-  it('keeps the last remaining state selected', () => {
-    const filter = makeFilter({ states: ['open'] });
+  it('falls back to all for an empty selection', () => {
+    expect(taskFilterStatus(makeFilter({ states: [] }))).toBe('all');
+  });
+});
 
-    expect(toggleTaskFilterState(filter, 'open')).toBe(filter);
+describe('setTaskFilterStatus', () => {
+  it('selects a single state', () => {
+    expect(setTaskFilterStatus(DEFAULT_TASK_FILTER, 'open').states).toEqual(['open']);
+    expect(setTaskFilterStatus(DEFAULT_TASK_FILTER, 'closed').states).toEqual(['closed']);
+  });
+
+  it('selects both states for all', () => {
+    expect(setTaskFilterStatus(makeFilter({ states: ['open'] }), 'all').states).toEqual([
+      'open',
+      'closed',
+    ]);
   });
 
   it('does not mutate the original filter', () => {
-    const filter = makeFilter();
+    const filter = DEFAULT_TASK_FILTER;
 
-    toggleTaskFilterState(filter, 'open');
+    setTaskFilterStatus(filter, 'open');
 
     expect(filter.states).toEqual(['open', 'closed']);
   });

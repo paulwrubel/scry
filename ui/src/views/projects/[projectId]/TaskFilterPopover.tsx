@@ -1,25 +1,30 @@
-import { Badge, Button, Checkbox, Label, ListGroup, Popover, TextInput } from 'flowbite-react';
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Label,
+  ListGroup,
+  Popover,
+  Radio,
+  TextInput,
+} from 'flowbite-react';
 import type { PopoverTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { useMemo } from 'react';
 import { HiFunnel } from 'react-icons/hi2';
 import type { Task } from '@/generated/Task';
-import type { TaskState } from '@/generated/TaskState';
 import { tagBadgeStyle } from '@/utils/tagColor';
 import {
+  TASK_FILTER_STATUS_OPTIONS,
   activeFilterCount,
   collectProjectTags,
   countTasksByTag,
   setTaskFilterSearch,
-  toggleTaskFilterState,
+  setTaskFilterStatus,
+  taskFilterStatus,
   toggleTaskFilterTag,
 } from '@/utils/taskFilter';
 import type { TaskFilter } from '@/utils/taskFilter';
-
-const STATE_LABELS: Record<TaskState, string> = {
-  open: 'Open',
-  closed: 'Closed',
-};
 
 const popoverTheme: DeepPartial<PopoverTheme> = {
   base: 'absolute z-30 w-80 rounded-lg border border-line bg-panel shadow-lg outline-none',
@@ -63,27 +68,25 @@ export function TaskFilterPopover(props: TaskFilterPopoverProps) {
             <legend className="text-muted text-xs font-semibold tracking-wide uppercase">
               Status
             </legend>
-            <ListGroup className="border-line bg-surface text-sm font-medium text-zinc-200 select-none">
-              {(['open', 'closed'] as const).map((state) => (
-                <li key={state} className="border-line w-full border-b last:border-b-0">
-                  <div className="flex items-center ps-3">
-                    <Checkbox
-                      id={`task-filter-state-${state}`}
-                      aria-label={STATE_LABELS[state]}
-                      checked={filter.states.includes(state)}
-                      disabled={filter.states.length === 1 && filter.states.includes(state)}
-                      onChange={() => onChange(toggleTaskFilterState(filter, state))}
-                    />
-                    <Label
-                      htmlFor={`task-filter-state-${state}`}
-                      className="w-full cursor-pointer py-3 ps-2 text-sm font-medium"
-                    >
-                      {STATE_LABELS[state]}
-                    </Label>
-                  </div>
-                </li>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              {TASK_FILTER_STATUS_OPTIONS.map((option) => (
+                <Label
+                  key={option.value}
+                  htmlFor={`task-filter-status-${option.value}`}
+                  className="flex cursor-pointer items-center gap-2 text-sm font-normal"
+                >
+                  <Radio
+                    id={`task-filter-status-${option.value}`}
+                    name="task-filter-status"
+                    value={option.value}
+                    checked={taskFilterStatus(filter) === option.value}
+                    aria-label={option.label}
+                    onChange={() => onChange(setTaskFilterStatus(filter, option.value))}
+                  />
+                  <span>{option.label}</span>
+                </Label>
               ))}
-            </ListGroup>
+            </div>
           </fieldset>
           <fieldset className="flex flex-col gap-2">
             <legend className="text-muted text-xs font-semibold tracking-wide uppercase">
