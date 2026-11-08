@@ -5,37 +5,49 @@ use axum::extract::Extension;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum_extra::extract::SignedCookieJar;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::http_auth::{AuthState, request_is_secure, session_cookie};
+use crate::http_auth::{AuthError, AuthState, refresh_cookie, request_is_secure};
 
 #[derive(Deserialize)]
 pub struct SessionRequest {
     token: String,
 }
 
-/// Exchange the configured API token for a signed session cookie.
+/// The short-lived access token returned by login and refresh.
+#[derive(Serialize)]
+pub struct AccessTokenResponse {
+    pub access_token: String,
+}
+
+/// Exchange the configured API token for an access JWT and a refresh cookie.
 pub async fn create_session(
     Extension(auth): Extension<AuthState>,
     headers: HeaderMap,
     Json(body): Json<SessionRequest>,
 ) -> Response {
     if !auth.enabled() {
-        return (
-            StatusCode::BAD_REQUEST,
-            "authentication is disabled; no api_token is configured",
-        )
-            .into_response();
+        return AuthError::Disabled.into_response();
     }
 
     if !auth.check_token(&body.token) {
-        return (StatusCode::UNAUTHORIZED, "missing or invalid token").into_response();
+        return AuthError::Unauthorized.into_response();
     }
+
+    let access_token = match auth.issue_access_token() {
+        Ok(token) => token,
+        Err(error) => return error.into_response(),
+    };
+    let refresh_token = match auth.create_refresh_token().await {
+        Ok(token) => token,
+        Err(error) => return error.into_response(),
+    };
 
     let jar = SignedCookieJar::from_headers(&headers, auth.key());
     (
-        StatusCode::NO_CONTENT,
-        jar.add(session_cookie(request_is_secure(&headers))),
+        StatusCode::OK,
+        jar.add(refresh_cookie(refresh_token, request_is_secure(&headers))),
+        Json(AccessTokenResponse { access_token }),
     )
         .into_response()
 }

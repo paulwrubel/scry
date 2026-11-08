@@ -43,9 +43,6 @@ pub use delete_project_by_name::delete_project_by_name;
 mod delete_section;
 pub use delete_section::delete_section;
 
-mod delete_session;
-pub use delete_session::delete_session;
-
 mod delete_task;
 pub use delete_task::delete_task;
 
@@ -100,14 +97,14 @@ pub use get_tasks_by_section::get_tasks_by_section;
 mod import;
 pub use import::import;
 
+mod logout_session;
+pub use logout_session::logout_session;
+
 mod max_seq;
 pub use max_seq::max_seq;
 
 mod merge_section;
 pub use merge_section::merge_section;
-
-mod session_status;
-pub use session_status::session_status;
 
 mod move_task;
 pub use move_task::move_task;
@@ -117,6 +114,9 @@ pub use open_task::open_task;
 
 mod open_tasks;
 pub use open_tasks::open_tasks;
+
+mod refresh_session;
+pub use refresh_session::refresh_session;
 
 mod snapshot;
 pub use snapshot::snapshot;

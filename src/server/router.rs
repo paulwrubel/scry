@@ -1,5 +1,6 @@
 //! Router assembly and HTTP startup for the REST API.
 
+use crate::auth_store::AuthStore;
 use crate::error::AppError;
 use crate::http_auth::{AuthState, require_auth};
 use crate::service::ProjectService;
@@ -10,6 +11,7 @@ use axum::serve;
 #[cfg(feature = "embed-ui")]
 use include_dir::{Dir, include_dir};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
 use super::{ScryState, handlers};
@@ -199,10 +201,13 @@ fn build_ui_router() -> Router<ScryState> {
 }
 
 /// Assemble the full router: the versioned API behind the optional bearer-token
-/// or session-cookie gate, the ungated session endpoints, CORS, shared state,
-/// and the public UI.
-pub fn build_router(state: ScryState, token: Option<String>) -> Router {
-    let auth = AuthState::new(token);
+/// gate, the ungated auth endpoints, CORS, shared state, and the public UI.
+pub fn build_router(
+    state: ScryState,
+    auth_store: Arc<dyn AuthStore>,
+    token: Option<String>,
+) -> Router {
+    let auth = AuthState::new(token, auth_store);
     let resources = require_auth(build_api_router(), auth.clone());
     let api = Router::new()
         .merge(resources)
@@ -218,6 +223,7 @@ pub fn build_router(state: ScryState, token: Option<String>) -> Router {
 /// Serve the REST API over HTTP on `addr`.
 pub async fn serve_http(
     service: ProjectService,
+    auth_store: Arc<dyn AuthStore>,
     addr: &str,
     token: Option<String>,
 ) -> Result<(), AppError> {
@@ -226,7 +232,7 @@ pub async fn serve_http(
         .map_err(|error| AppError::Usage(format!("invalid address '{addr}': {error}")))?;
 
     let state = ScryState { service };
-    let router = build_router(state, token);
+    let router = build_router(state, auth_store, token);
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await
