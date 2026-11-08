@@ -34,7 +34,7 @@ export default defineConfig({
       manifest: {
         name: 'Scry',
         short_name: 'Scry',
-        description: 'A task manager for the terminal',
+        description: 'A local-first task manager with a CLI and an offline web UI',
         id: '/',
         start_url: '/',
         scope: '/',

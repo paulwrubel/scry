@@ -1,8 +1,8 @@
 # scry
 
-A task manager for the terminal.
+A client/server task manager for the terminal and the browser.
 
-scry is client/server: `scry serve` owns a PostgreSQL database and exposes a REST API plus an embedded web UI, while the `scry` CLI is an HTTP client that keeps no local copy of your data. A built-in `default` project means you can start adding tasks immediately.
+scry pairs the `scry` CLI with an embedded web UI. `scry serve` owns a PostgreSQL database and exposes a REST API plus the browser app, and the CLI is an HTTP client that keeps no local copy of your data. The web app is local-first: it keeps a confirmed replica and a durable outbox in the browser, so it keeps working offline. A built-in `default` project means you can start adding tasks immediately.
 
 ## Installation
 
@@ -55,6 +55,20 @@ scry -p myapp list --section "in progress"
 
 Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
 
+## Web UI
+
+The default build serves the embedded web app at `/` from the same origin as the API, so opening `http://127.0.0.1:8000/` in a browser is enough to start. Sign in with the server's `api_token`; the browser exchanges it for a session cookie (see [Browser authentication](#browser-authentication)).
+
+The app is a PWA. Use the browser's install control, or add it to your home screen on mobile, to run it in its own window. Installation requires a secure context: HTTPS, or `localhost`/`127.0.0.1` during local development.
+
+After the first visit the service worker caches the app shell, and the app keeps a confirmed replica plus a durable outbox in IndexedDB. While offline you can create, edit, move, close, and delete tasks; changes collect in the outbox and are pushed and pulled when the connection returns. The server remains the only writer and the authority on conflicts.
+
+Offline data is per browser and per origin: the replica does not follow you to another device, and there is no cross-device offline merge. Clearing site data removes both the replica and the outbox, so unsynced edits are lost. Reloading while offline still shows the app shell, but it asks you to sign in because session status has to be checked with the server. The app does not rely on Background Sync or server-sent events; syncing happens while a tab is open and online.
+
+### Browser authentication
+
+Browser sessions currently use an interim signed `scry_session` cookie: `HttpOnly`, `SameSite=Strict`, `Path=/`, with a 30-day max age. The signing key is derived from `api_token`, so rotating the token invalidates every existing session. Signing out clears the cookie. A `401` returns the app to the login screen but preserves the outbox, so queued edits drain after you sign in again. The cookie is marked `Secure` when the request arrives over HTTPS. #109 will replace this with a short-lived in-memory access token plus a refresh cookie scoped to `/api/v1/auth`.
+
 ## Backup and restore
 
 `scry export > backup.json` writes every project, with its sections, tasks, and notes, as JSON; `scry import < backup.json` merges it back. Put `-p <name>` before `export` to back up a single project.
@@ -72,7 +86,7 @@ Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
 
 ## Docker
 
-Each release publishes `ghcr.io/paulwrubel/scry`, tagged with its version and `latest`. The runtime-only image serves the API and web UI on port 8000. Create a `scry.toml` pointing at your PostgreSQL server:
+Each release publishes `ghcr.io/paulwrubel/scry`, tagged with its version and `latest`. The image is runtime-only: the web UI is embedded in the release binary at build time, and the image serves the API and web UI on port 8000. Create a `scry.toml` pointing at your PostgreSQL server:
 
 ```toml
 database_url = "postgres://user:pass@host:5432/scry"
@@ -108,7 +122,7 @@ Only `scry serve` connects to PostgreSQL. The CLI sends every command to `server
 
 ## Server and API
 
-Start the server with `scry serve --http 127.0.0.1:8000`. It serves the REST API at `/api/v1` and, in the default build, the embedded web UI at `/`. `--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Check it with `curl http://127.0.0.1:8000/api/v1`.
+Start the server with `scry serve --http 127.0.0.1:8000`. The same origin serves the REST API at `/api/v1` and, in the default build, the embedded web UI at `/`. `--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Check it with `curl http://127.0.0.1:8000/api/v1`.
 
 Set `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) to require authentication. Non-browser clients send `Authorization: Bearer <token>`; browsers exchange the token at `POST /api/v1/auth/session` for a `scry_session` cookie. With no token, the API is unauthenticated. There is no TLS, so use a TLS-terminating proxy if the server leaves the host.
 

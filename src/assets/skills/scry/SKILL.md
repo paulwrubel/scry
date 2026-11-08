@@ -1,12 +1,12 @@
 ---
 name: scry
-description: Manage tasks, todos, and projects with the scry terminal task manager CLI. Use when the user asks to track work, add or complete todos, move tasks between sections such as backlog, in-progress, or review, organize tasks into projects, or inspect existing tasks and notes.
+description: Manage tasks, todos, and projects with the scry CLI. Use when the user asks to track work, add or complete todos, move tasks between sections such as backlog, in-progress, or review, organize tasks into projects, or inspect existing tasks and notes.
 license: MIT
 ---
 
 # scry
 
-`scry` is a task manager for the terminal. Drive it through its CLI to manage tasks and projects on the user's behalf.
+`scry` is a client/server task manager with a CLI and a web UI; this skill drives it through the CLI to manage tasks and projects on the user's behalf.
 
 ## When to use this skill
 
