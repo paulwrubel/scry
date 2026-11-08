@@ -1,5 +1,6 @@
 import type { SyncRequest } from '@/generated/SyncRequest';
-import { notifyUnauthorized } from './authEvents';
+
+export type AccessTokenResponse = { access_token: string };
 
 export function getAPIURL(): string {
   // the UI and API share an origin in production (Rust embeds both), and Vite
@@ -7,30 +8,20 @@ export function getAPIURL(): string {
   return `${window.location.origin}/api/v1`;
 }
 
-function notifyIfUnauthorized(response: Response): Response {
-  if (response.status === 401) {
-    notifyUnauthorized();
-  }
-  return response;
-}
-
 export async function postSync(
   fetcher: typeof fetch,
   baseUrl: string,
   request: SyncRequest,
 ): Promise<Response> {
-  return notifyIfUnauthorized(
-    await fetcher(`${baseUrl}/sync`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-      credentials: 'include',
-    }),
-  );
+  return fetcher(`${baseUrl}/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
 }
 
 export async function getSnapshot(fetcher: typeof fetch, baseUrl: string): Promise<Response> {
-  return notifyIfUnauthorized(await fetcher(`${baseUrl}/snapshot`, { credentials: 'include' }));
+  return fetcher(`${baseUrl}/snapshot`);
 }
 
 export async function createSession(
@@ -46,13 +37,16 @@ export async function createSession(
   });
 }
 
-export async function deleteSession(fetcher: typeof fetch, baseUrl: string): Promise<Response> {
-  return fetcher(`${baseUrl}/auth/session`, {
-    method: 'DELETE',
+export async function refreshSession(fetcher: typeof fetch, baseUrl: string): Promise<Response> {
+  return fetcher(`${baseUrl}/auth/refresh`, {
+    method: 'POST',
     credentials: 'include',
   });
 }
 
-export async function getSessionStatus(fetcher: typeof fetch, baseUrl: string): Promise<Response> {
-  return fetcher(`${baseUrl}/auth/session`, { credentials: 'include' });
+export async function logoutSession(fetcher: typeof fetch, baseUrl: string): Promise<Response> {
+  return fetcher(`${baseUrl}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  });
 }

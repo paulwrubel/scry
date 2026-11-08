@@ -7,6 +7,7 @@ import {
 } from 'react-router-dom';
 import { Providers } from './layouts/Providers';
 import { AuthenticatedRouteLayout } from './layouts/AuthenticatedRouteLayout';
+import { authLoader } from './layouts/authLoader';
 import { Layout } from './layouts/Layout';
 import { ProjectLayout } from './layouts/ProjectLayout';
 import { ProjectRedirect } from './layouts/ProjectRedirect';
@@ -34,6 +35,7 @@ const routes = [
         children: [
           { path: 'login', element: <LoginPage /> },
           {
+            loader: authLoader,
             element: <AuthenticatedRouteLayout />,
             children: [
               { index: true, element: <ProjectRedirect /> },
