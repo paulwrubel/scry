@@ -26,7 +26,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Parser)]
-#[command(name = "scry", about = "A task manager for the terminal", version)]
+#[command(
+    name = "scry",
+    about = "A task manager for the terminal and the browser",
+    version
+)]
 struct Cli {
     /// Target a specific project (overrides the active project)
     #[arg(short = 'p', long = "project")]

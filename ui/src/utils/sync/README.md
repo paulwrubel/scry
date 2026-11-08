@@ -17,17 +17,21 @@ When `replica.needsBootstrap` is true, the client fetches the snapshot, calls `r
 
 ## Cursor
 
-The Replica stores `last_seen_seq`. The client reads it from `replica.getSnapshot().lastSeenSeq`, sends it as `last_seen_seq`, and writes the response's `next_seq` through `replica.setLastSeenSeq` after applying changes. A confirmed-schema bump resets the cursor to `0` and sets `needsBootstrap`, so the next sync starts from a fresh snapshot.
+The Replica stores `last_seen_seq`. The client reads it from `replica.getSnapshot().lastSeenSeq`, sends it as `last_seen_seq`, and writes the response's `next_seq` through `replica.applySyncResult(changes, next_seq)`, which applies the changes and advances the cursor in one transaction. A stale response whose `next_seq` is not ahead of the stored cursor is ignored. A confirmed-schema bump resets the cursor to `0` and sets `needsBootstrap`, so the next sync starts from a fresh snapshot.
 
 ## Push/pull order
 
 A sync attempt runs in this order:
 
-1. Apply the returned `changes` with `replica.applyChanges`.
-2. Classify every ack and collect the acknowledged `operation_id`s.
-3. Remove those ids with `replica.acknowledge`.
-4. Set the cursor from `next_seq`.
-5. Publish the final status.
+1. Reload the replica from IndexedDB before the request, so this tab sees writes from other tabs.
+2. Bootstrap from `/api/v1/snapshot` when `needsBootstrap` is set.
+3. `POST /api/v1/sync` with the current cursor and outbox.
+4. Apply the returned `changes` and `next_seq` with `replica.applySyncResult`.
+5. Classify every ack and collect the acknowledged `operation_id`s.
+6. Remove those ids with `replica.acknowledge`.
+7. Publish the final status.
+
+A response whose `next_seq` is not ahead of the stored cursor is ignored, so a slow or duplicate response cannot roll the confirmed state back.
 
 New operations queued while the request is in flight are not part of the pushed batch and are not removed, because acknowledgement is by `operation_id` rather than by position.
 
@@ -60,7 +64,7 @@ Failures retry with exponential backoff, clamped at a configurable maximum; succ
 
 React composition lives in `ui/src/providers/Sync/`: `SyncProvider` creates one client per ready Replica, `useSyncTriggers` supplies scheduling, and `useSync`/`useSyncSnapshot` expose the client and its snapshot. `LayoutNavbar/SyncButton` uses those hooks to show syncing/failure state and call `syncNow`.
 
-Multi-tab coordination lives in `ui/src/hooks/useSyncLeadership.ts`. One tab holds an exclusive `scry-sync-leader` Web Lock for its lifetime; only that tab runs the triggers. The leader broadcasts `replica-updated` after a sync attempt, and followers reload from IndexedDB. A follower that queues an edit broadcasts `outbox-changed`; the leader reloads the outbox and syncs. Messages carry no state. When Web Locks or BroadcastChannel is unavailable, every tab leads; the server’s operation-id dedupe and idempotent replay keep that safe, at the cost of duplicate requests. Leadership transfers through the lock queue when the leader closes or unmounts.
+Every authenticated tab syncs independently; there is no leader election or Web Lock. IndexedDB transactions merge pulled changes, and duplicate requests are acceptable because the server dedupes by operation id and replays idempotently. Tabs reload the replica on `focus`, `visibilitychange`, and `pageshow` so they pick up writes made elsewhere.
 
 ## Out of scope
 
@@ -81,4 +85,4 @@ Vitest runs the real Replica on `fake-indexeddb` with a mocked `fetch`, so persi
 
 ## Luxide
 
-Luxide has no local sync client or outbox analogue; the server round-trip is the only state path. Request code follows `ui/src/utils/api.ts`, and this non-React store can be consumed by a provider or hook later, matching Luxide's nearest patterns.
+Luxide has no local sync client or outbox analogue; the server round-trip is the only state path. Request code follows `ui/src/utils/api.ts`, and React composition already lives in `ui/src/providers/Sync/`.

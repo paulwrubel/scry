@@ -22,7 +22,7 @@ IndexedDB returns records in key order, and UUID keys do not carry the order of 
 
 ## Read and write path
 
-At startup, `openReplica` reads the four confirmed stores plus `meta` in one readonly transaction and hydrates `ClientState`, then loads the outbox. `bootstrap` and `applyChanges` each rewrite the confirmed stores and their order arrays in one readwrite transaction through `saveConfirmed`, which clears the stores first so the new state fully replaces the old one.
+At startup, `openReplica` reads the four confirmed stores plus `meta` in one readonly transaction and hydrates `ClientState`, then loads the outbox. `bootstrap` rewrites the confirmed stores and their order arrays in one readwrite transaction through `saveConfirmed`, which clears the stores first so the new state fully replaces the old one. `applySyncResult` applies only changes newer than the stored cursor and writes them together with the new cursor in one transaction, so a stale response cannot roll the confirmed state back.
 
 Confirmed writes and outbox writes use separate transactions, so no atomicity is claimed between them. A crash between an outbox append and a confirmed rewrite leaves a pending operation that will replay on the next open, which is the intended outcome.
 
@@ -44,7 +44,7 @@ Opening the database requests `navigator.storage.persist()`. Denial is not an er
 
 ## Multiple tabs
 
-The `blocking` callback closes this tab's connection when another connection wants to upgrade the database, so an upgrade is not held open by a background tab. `onBlocked` reports the opposite case: this tab asked to upgrade and another connection refused to close. Tab leadership and operation fan-out are out of scope here and tracked in #128.
+Every tab opens its own connection and syncs independently; there is no leader election or Web Lock. `applyConfirmedChangesIfNewer` ignores responses that are not ahead of the stored cursor and advances the cursor in the same transaction as the changes, so concurrent tabs merge safely. The provider reloads the replica on `focus`, `visibilitychange`, and `pageshow` so a tab picks up writes made by another. The `blocking` callback closes this tab's connection when another connection wants to upgrade the database, and `onBlocked` reports the opposite case: this tab asked to upgrade and another connection refused to close.
 
 ## Testing
 
@@ -52,4 +52,4 @@ Tests use `fake-indexeddb/auto`, a fresh database name per test, and raw `openDB
 
 ## Luxide
 
-Luxide has no local replica or outbox; the server round-trip is the only state path. This module follows the repository's `utils/` placement for non-React infrastructure. React bindings and hooks belong to #125, not here.
+Luxide has no local replica or outbox; the server round-trip is the only state path. This module follows the repository's `utils/` placement for non-React infrastructure. React bindings and hooks live in `ui/src/providers/Replica/`.
