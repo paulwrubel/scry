@@ -25,9 +25,11 @@ export function SyncProvider(props: SyncProviderProps) {
 function ReadySyncProvider(props: SyncProviderProps) {
   const { children, client: providedClient, timing } = props;
 
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authenticatedFetch } = useAuth();
   const replica = useReplica();
-  const [client] = useState<SyncClient>(() => providedClient ?? createSyncClient({ replica }));
+  const [client] = useState<SyncClient>(
+    () => providedClient ?? createSyncClient({ replica, fetcher: authenticatedFetch }),
+  );
   const replicaSnapshot = useReplicaSnapshot();
 
   const syncNow = useSyncTriggers({
