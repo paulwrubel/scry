@@ -11,7 +11,7 @@ use crate::http_auth::{AuthError, AuthState, refresh_cookie, request_is_secure};
 
 #[derive(Deserialize)]
 pub struct SessionRequest {
-    token: String,
+    password: String,
 }
 
 /// The short-lived access token returned by login and refresh.
@@ -20,7 +20,7 @@ pub struct AccessTokenResponse {
     pub access_token: String,
 }
 
-/// Exchange the configured API token for an access JWT and a refresh cookie.
+/// Exchange the configured admin password for an access JWT and a refresh cookie.
 pub async fn create_session(
     Extension(auth): Extension<AuthState>,
     headers: HeaderMap,
@@ -30,7 +30,7 @@ pub async fn create_session(
         return AuthError::Disabled.into_response();
     }
 
-    if !auth.check_token(&body.token) {
+    if !auth.check_admin_password(&body.password) {
         return AuthError::Unauthorized.into_response();
     }
 

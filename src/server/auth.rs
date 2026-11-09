@@ -32,11 +32,11 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    fn auth_state(token: Option<&str>) -> (AuthState, Arc<MemoryAuthStore>) {
+    fn auth_state(admin_password: Option<&str>) -> (AuthState, Arc<MemoryAuthStore>) {
         let store = Arc::new(MemoryAuthStore::new());
         let refresh_tokens: Arc<dyn AuthStore> = store.clone();
         (
-            AuthState::new(token.map(str::to_string), refresh_tokens),
+            AuthState::new(admin_password.map(str::to_string), refresh_tokens),
             store,
         )
     }
@@ -45,12 +45,12 @@ mod tests {
         build_auth_router::<()>(auth)
     }
 
-    fn session_request(token: &str) -> Request<Body> {
+    fn session_request(password: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
             .uri("/session")
             .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(format!(r#"{{"token":"{token}"}}"#)))
+            .body(Body::from(format!(r#"{{"password":"{password}"}}"#)))
             .unwrap()
     }
 
@@ -122,7 +122,7 @@ mod tests {
             .uri("/session")
             .header(header::CONTENT_TYPE, "application/json")
             .header("x-forwarded-proto", "https")
-            .body(Body::from(r#"{"token":"secret"}"#))
+            .body(Body::from(r#"{"password":"secret"}"#))
             .unwrap();
 
         let response = session_app(auth).oneshot(request).await.unwrap();
@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn wrong_token_is_rejected() {
+    async fn wrong_password_is_rejected() {
         let (auth, _) = auth_state(Some("secret"));
         let response = session_app(auth)
             .oneshot(session_request("wrong"))

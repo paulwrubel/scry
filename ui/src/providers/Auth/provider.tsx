@@ -140,9 +140,9 @@ export function AuthProvider(props: AuthProviderProps) {
   }, [applyAccessToken, baseUrl, fetcher, notifyTabs]);
 
   const login = useCallback(
-    async (token: string): Promise<LoginResult> => {
+    async (password: string): Promise<LoginResult> => {
       try {
-        const response = await createSession(fetcher, baseUrl, token);
+        const response = await createSession(fetcher, baseUrl, password);
         if (response.ok) {
           let body: AccessTokenResponse;
           try {
@@ -160,7 +160,7 @@ export function AuthProvider(props: AuthProviderProps) {
           return { ok: true };
         }
         if (response.status === 401) {
-          return { ok: false, message: 'Invalid API token' };
+          return { ok: false, message: 'Invalid password' };
         }
         if (response.status === 400) {
           return { ok: false, message: 'Authentication is disabled on this server' };

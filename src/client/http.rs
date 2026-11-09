@@ -16,7 +16,7 @@ const TIMEZONE_HEADER: &str = "Time-Zone";
 pub struct Client {
     http: HttpClient,
     base_url: String,
-    token: Option<String>,
+    admin_password: Option<String>,
     timezone: String,
 }
 
@@ -36,7 +36,7 @@ impl Client {
         Ok(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
-            token: secrets.api_token(),
+            admin_password: secrets.admin_password.clone(),
             timezone: system_timezone(),
         })
     }
@@ -141,8 +141,8 @@ impl Client {
             .request(method, url)
             .header(TIMEZONE_HEADER, &self.timezone);
 
-        if let Some(token) = &self.token {
-            request = request.bearer_auth(token);
+        if let Some(admin_password) = &self.admin_password {
+            request = request.bearer_auth(admin_password);
         }
 
         request

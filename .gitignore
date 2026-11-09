@@ -20,7 +20,7 @@ rustc-ice-*.txt
 scry.db
 scry.db-journal
 
-# Local secret config (database credentials, API tokens)
+# Local secret config
 scry.secret.toml
 
 # reference files

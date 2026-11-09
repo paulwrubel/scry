@@ -27,12 +27,12 @@ export async function getSnapshot(fetcher: typeof fetch, baseUrl: string): Promi
 export async function createSession(
   fetcher: typeof fetch,
   baseUrl: string,
-  token: string,
+  password: string,
 ): Promise<Response> {
   return fetcher(`${baseUrl}/auth/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ password }),
     credentials: 'include',
   });
 }

@@ -1,7 +1,13 @@
-import { Alert, Button, Card, Label, TextInput } from 'flowbite-react';
+import { Alert, Button, Card } from 'flowbite-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { z } from 'zod';
+import { useAppForm } from '@/hooks/useAppForm';
 import { useAuth } from '@/providers/Auth';
+
+const schema = z.object({
+  password: z.string().min(1, 'Please enter the password.'),
+});
 
 function redirectTarget(value: string | null): string {
   if (value !== null && value.startsWith('/') && !value.startsWith('//')) {
@@ -15,52 +21,54 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirect = redirectTarget(searchParams.get('redirect'));
-  const [token, setToken] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+
+  const form = useAppForm({
+    defaultValues: { password: '' },
+    validators: { onChange: schema },
+    listeners: { onChange: () => setError(null) },
+    onSubmit: async ({ value }) => {
+      setError(null);
+      const result = await login(value.password);
+      if (result.ok) {
+        navigate(redirect, { replace: true });
+        return;
+      }
+      setError(result.message);
+    },
+  });
 
   if (isAuthenticated) {
     return <Navigate to={redirect} replace />;
-  }
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-
-    const result = await login(token);
-    if (result.ok) {
-      navigate(redirect, { replace: true });
-      return;
-    }
-
-    setError(result.message);
-    setSubmitting(false);
   }
 
   return (
     <div className="flex flex-1 items-center justify-center p-8">
       <Card className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold">Sign in</h1>
-        <p className="text-muted text-sm">
-          Enter the API token configured on the server. It is exchanged for a short-lived access
-          token held in memory plus an HttpOnly refresh cookie, and the API token itself is never
-          stored in the browser.
-        </p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <Label htmlFor="api-token">API token</Label>
-          <TextInput
-            id="api-token"
-            type="password"
-            autoComplete="current-password"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            required
-          />
-          {error !== null ? <Alert color="failure">{error}</Alert> : null}
-          <Button type="submit" color="default" disabled={submitting || token.length === 0}>
-            {submitting ? 'Signing in...' : 'Sign in'}
-          </Button>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit();
+          }}
+          className="flex flex-col gap-3"
+        >
+          <form.AppField name="password">
+            {(field) => <field.FormPasswordField label="Please enter the password" />}
+          </form.AppField>
+          {error === null ? null : <Alert color="failure">{error}</Alert>}
+          <form.Subscribe
+            selector={(state) => ({
+              password: state.values.password,
+              submitting: state.isSubmitting,
+            })}
+          >
+            {({ password, submitting }) => (
+              <Button type="submit" color="default" disabled={submitting || password.length === 0}>
+                {submitting ? 'Signing in...' : 'Sign in'}
+              </Button>
+            )}
+          </form.Subscribe>
         </form>
       </Card>
     </div>

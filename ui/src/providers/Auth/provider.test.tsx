@@ -253,7 +253,7 @@ describe('AuthProvider', () => {
     const post = calls.find((call) => call.url.endsWith('/auth/session'));
     expect(post).toBeDefined();
     expect(post?.url).toBe('http://test/api/v1/auth/session');
-    expect(post?.init?.body).toBe(JSON.stringify({ token: 'secret' }));
+    expect(post?.init?.body).toBe(JSON.stringify({ password: 'secret' }));
     expect(post?.init?.credentials).toBe('include');
     expect(storageContains(localStorage, 'secret')).toBe(false);
     expect(storageContains(sessionStorage, 'secret')).toBe(false);
@@ -261,7 +261,7 @@ describe('AuthProvider', () => {
     expect(storageContains(sessionStorage, LOGIN_TOKEN)).toBe(false);
   });
 
-  it('reports an invalid token', async () => {
+  it('reports an invalid password', async () => {
     const { fetcher } = createFetcher({ refreshStatus: 401, loginStatus: 401 });
     renderAuth(fetcher);
 
@@ -269,7 +269,7 @@ describe('AuthProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: 'login' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('message').textContent).toBe('Invalid API token');
+      expect(screen.getByTestId('message').textContent).toBe('Invalid password');
       expect(screen.getByTestId('authenticated').textContent).toBe('false');
     });
   });
