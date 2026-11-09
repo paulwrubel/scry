@@ -57,7 +57,7 @@ Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
 
 ## Web UI
 
-The default build serves the embedded web app at `/` from the same origin as the API, so opening `http://127.0.0.1:8000/` in a browser is enough to start. Sign in with the server's `api_token`; the browser exchanges it for a session cookie (see [Browser authentication](#browser-authentication)).
+The default build serves the embedded web app at `/` from the same origin as the API, so opening `http://127.0.0.1:8000/` in a browser is enough to start. Sign in with the server's `api_token`; the browser exchanges it for a short-lived access token and a refresh cookie (see [Browser authentication](#browser-authentication)).
 
 The app is a PWA. Use the browser's install control, or add it to your home screen on mobile, to run it in its own window. Installation requires a secure context: HTTPS, or `localhost`/`127.0.0.1` during local development.
 
@@ -67,7 +67,11 @@ Offline data is per browser and per origin: the replica does not follow you to a
 
 ### Browser authentication
 
-Browser sessions currently use an interim signed `scry_session` cookie: `HttpOnly`, `SameSite=Strict`, `Path=/`, with a 30-day max age. The signing key is derived from `api_token`, so rotating the token invalidates every existing session. Signing out clears the cookie. A `401` returns the app to the login screen but preserves the outbox, so queued edits drain after you sign in again. The cookie is marked `Secure` when the request arrives over HTTPS. #109 will replace this with a short-lived in-memory access token plus a refresh cookie scoped to `/api/v1/auth`.
+Browser sessions use a short-lived access token plus a refresh credential. Signing in at `POST /api/v1/auth/session` exchanges `api_token` for a one-hour HS256 JWT kept only in JavaScript memory, and a 30-day refresh token in an `HttpOnly`, `SameSite=Lax`, `Path=/api/v1/auth` cookie. The refresh token is SHA-256 hashed in the database, rotated on every use, and reuse revokes the token lineage.
+
+Normal API and sync requests send `Authorization: Bearer <access token>`; the refresh cookie is never accepted by those endpoints. A `401` during sync attempts one refresh and retries the request, preserving the outbox. If the refresh fails, the app returns to login without dropping queued edits. A reload recovers the session through `POST /api/v1/auth/refresh`. The signing key is derived from `api_token`, so rotating it invalidates existing access and refresh tokens. The cookie is marked `Secure` when the request arrives over HTTPS.
+
+This remains a single-user authentication model. GitHub SSO and multi-user project ownership are separate future work.
 
 ## Backup and restore
 
@@ -124,7 +128,7 @@ Only `scry serve` connects to PostgreSQL. The CLI sends every command to `server
 
 Start the server with `scry serve --http 127.0.0.1:8000`. The same origin serves the REST API at `/api/v1` and, in the default build, the embedded web UI at `/`. `--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Check it with `curl http://127.0.0.1:8000/api/v1`.
 
-Set `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) to require authentication. Non-browser clients send `Authorization: Bearer <token>`; browsers exchange the token at `POST /api/v1/auth/session` for a `scry_session` cookie. With no token, the API is unauthenticated. There is no TLS, so use a TLS-terminating proxy if the server leaves the host.
+Set `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) to require authentication. Non-browser clients send `Authorization: Bearer <token>`; browsers exchange the token at `POST /api/v1/auth/session` for a short-lived access token and a refresh cookie scoped to `/api/v1/auth`. Normal requests then send `Authorization: Bearer <access token>`. With no token, the API is unauthenticated. There is no TLS, so use a TLS-terminating proxy if the server leaves the host.
 
 For scripting, `--json` emits machine-readable output (for example, `scry --json list`). Collection commands emit arrays, single-resource and mutation commands emit bare objects, and errors carry a stable `kind`: `not_found`, `conflict`, `invalid`, `internal`, or `config`.
 
