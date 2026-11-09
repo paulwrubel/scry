@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { HiPlus } from 'react-icons/hi2';
 import { z } from 'zod';
 import { useAppForm } from '@/hooks/useAppForm';
+import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 
 const schema = z.object({
   title: z.string().trim().min(1, 'A task needs a title.'),
@@ -32,6 +33,7 @@ export function MobileAddTask(props: MobileAddTaskProps) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const bottomInset = useVisualViewportInset();
 
   const form = useAppForm({
     defaultValues: { title: '' },
@@ -83,6 +85,7 @@ export function MobileAddTask(props: MobileAddTaskProps) {
         theme={sheetTheme}
         aria-hidden={!open}
         inert={!open}
+        style={{ bottom: bottomInset }}
       >
         <div className="flex flex-col gap-3 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
           <div aria-hidden="true" className="bg-line-strong mx-auto h-1 w-10 rounded-full" />
