@@ -15,8 +15,10 @@ type RenderGuardOptions = {
 
 function renderGuard(options: RenderGuardOptions = {}) {
   const value: AuthContextType = {
+    accessToken: options.isAuthenticated ? 'test-token' : undefined,
     isAuthenticated: options.isAuthenticated ?? false,
     isAuthLoading: options.isAuthLoading ?? false,
+    authenticatedFetch: fetch,
     login: async () => ({ ok: true }),
     logout: async () => undefined,
   };

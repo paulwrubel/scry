@@ -20,13 +20,19 @@ const IDLE_SNAPSHOT: SyncSnapshot = {
 };
 
 const AUTH_VALUE: AuthContextType = {
+  accessToken: 'test-token',
   isAuthenticated: true,
   isAuthLoading: false,
+  authenticatedFetch: fetch,
   login: async () => ({ ok: true }),
   logout: async () => undefined,
 };
 
-const SIGNED_OUT_AUTH: AuthContextType = { ...AUTH_VALUE, isAuthenticated: false };
+const SIGNED_OUT_AUTH: AuthContextType = {
+  ...AUTH_VALUE,
+  accessToken: undefined,
+  isAuthenticated: false,
+};
 
 function createClient(sync: SyncClient['sync']): SyncClient {
   return {

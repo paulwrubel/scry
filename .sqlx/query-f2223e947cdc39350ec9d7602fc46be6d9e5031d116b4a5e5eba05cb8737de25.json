@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE refresh_tokens\n                SET revoked_at = $2\n                WHERE token_hash = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f2223e947cdc39350ec9d7602fc46be6d9e5031d116b4a5e5eba05cb8737de25"
+}

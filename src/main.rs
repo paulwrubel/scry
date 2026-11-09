@@ -1,3 +1,4 @@
+mod auth_store;
 mod client;
 mod client_state;
 mod color;
@@ -12,6 +13,7 @@ mod skill;
 mod state;
 mod store;
 
+use crate::auth_store::AuthStore;
 use crate::color::ColorChoice;
 use crate::service::ProjectService;
 use crate::skill::Harness;
@@ -692,11 +694,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     }
 
     let database_url = secrets.resolved_database_url(&config)?;
-    let store = connect_store(&database_url).await?;
+    let (store, auth_store) = connect_store(&database_url).await?;
     let service = ProjectService::new(store);
 
     if let Some(Command::Serve { http }) = &cli.command {
-        return server::serve_http(service, http, secrets.api_token()).await;
+        return server::serve_http(service, auth_store, http, secrets.api_token()).await;
     }
 
     Ok(())
@@ -741,10 +743,15 @@ fn skill_target(harness: Option<Harness>, dir: Option<&Path>) -> Result<PathBuf,
 
 /// Open the Postgres store for the given database URL.
 ///
-/// Only Postgres URLs (`postgres://` and `postgresql://`) are supported.
-async fn connect_store(database_url: &str) -> Result<ArcStore, AppError> {
+/// Only Postgres URLs (`postgres://` and `postgresql://`) are supported. The
+/// returned auth store is a clone of the same connection pool, so refresh
+/// tokens share the store's configuration.
+async fn connect_store(database_url: &str) -> Result<(ArcStore, Arc<dyn AuthStore>), AppError> {
     if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
-        Ok(Arc::new(PostgresStore::new(database_url).await?))
+        let postgres = PostgresStore::new(database_url).await?;
+        let auth_store: Arc<dyn AuthStore> = Arc::new(postgres.clone());
+        let store: ArcStore = Arc::new(postgres);
+        Ok((store, auth_store))
     } else {
         Err(AppError::Config(format!(
             "unsupported database URL {database_url}: only postgres:// and postgresql:// are supported"

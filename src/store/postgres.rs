@@ -1,3 +1,4 @@
+use crate::auth_store::{AuthStore, NewRefreshToken, RefreshRotation, reuse_grace};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
@@ -1573,5 +1574,155 @@ impl Store for PostgresStore {
             .map_err(|e| StorageError::Database(format!("failed to acquire apply lock: {}", e)))?;
 
         Ok(tx)
+    }
+}
+
+#[async_trait]
+impl AuthStore for PostgresStore {
+    async fn create_refresh_token(&self, token: NewRefreshToken) -> Result<(), StorageError> {
+        let mut conn = self.connection(None).await?;
+
+        sqlx::query!(
+            r#"
+                INSERT INTO refresh_tokens (token_hash, subject, origin_id, issued_at, expires_at)
+                VALUES ($1, $2, $3, $4, $5)
+            "#,
+            token.token_hash,
+            &token.subject,
+            token.origin_id,
+            token.issued_at,
+            token.expires_at,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to create refresh token: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn rotate_refresh_token(
+        &self,
+        old_hash: &[u8],
+        new_hash: &[u8],
+        now: DateTime<Utc>,
+        new_expires_at: DateTime<Utc>,
+    ) -> Result<RefreshRotation, StorageError> {
+        let mut tx = self.pool.begin().await.map_err(|e| {
+            StorageError::Database(format!("failed to begin refresh rotation: {}", e))
+        })?;
+
+        let row = sqlx::query!(
+            r#"
+                SELECT subject, origin_id, expires_at, revoked_at
+                FROM refresh_tokens
+                WHERE token_hash = $1
+                FOR UPDATE
+            "#,
+            old_hash,
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to look up refresh token: {}", e)))?;
+
+        let Some(row) = row else {
+            tx.commit()
+                .await
+                .map_err(|e| StorageError::Database(format!("failed to commit rotation: {}", e)))?;
+            return Ok(RefreshRotation::Missing);
+        };
+
+        if let Some(revoked_at) = row.revoked_at {
+            if now.signed_duration_since(revoked_at) <= reuse_grace() {
+                tx.commit().await.map_err(|e| {
+                    StorageError::Database(format!("failed to commit rotation: {}", e))
+                })?;
+                return Ok(RefreshRotation::Revoked);
+            }
+
+            // Reuse revokes the whole lineage so a stolen token cannot keep
+            // rotating alongside the legitimate client.
+            sqlx::query!(
+                r#"
+                    UPDATE refresh_tokens
+                    SET revoked_at = $2
+                    WHERE origin_id = $1
+                "#,
+                row.origin_id,
+                now,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!("failed to revoke token lineage: {}", e))
+            })?;
+
+            tx.commit()
+                .await
+                .map_err(|e| StorageError::Database(format!("failed to commit rotation: {}", e)))?;
+            return Ok(RefreshRotation::Reused);
+        }
+
+        if row.expires_at <= now {
+            tx.commit()
+                .await
+                .map_err(|e| StorageError::Database(format!("failed to commit rotation: {}", e)))?;
+            return Ok(RefreshRotation::Expired);
+        }
+
+        sqlx::query!(
+            r#"
+                UPDATE refresh_tokens
+                SET revoked_at = $2
+                WHERE token_hash = $1
+            "#,
+            old_hash,
+            now,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            StorageError::Database(format!("failed to revoke old refresh token: {}", e))
+        })?;
+
+        sqlx::query!(
+            r#"
+                INSERT INTO refresh_tokens (token_hash, subject, origin_id, issued_at, expires_at)
+                VALUES ($1, $2, $3, $4, $5)
+            "#,
+            new_hash,
+            &row.subject,
+            row.origin_id,
+            now,
+            new_expires_at,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to create refresh token: {}", e)))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| StorageError::Database(format!("failed to commit rotation: {}", e)))?;
+
+        Ok(RefreshRotation::Rotated {
+            subject: row.subject,
+        })
+    }
+
+    async fn revoke_refresh_token(&self, token_hash: &[u8]) -> Result<(), StorageError> {
+        let mut conn = self.connection(None).await?;
+
+        sqlx::query!(
+            r#"
+                UPDATE refresh_tokens
+                SET revoked_at = now()
+                WHERE token_hash = $1 AND revoked_at IS NULL
+            "#,
+            token_hash,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to revoke refresh token: {}", e)))?;
+
+        Ok(())
     }
 }

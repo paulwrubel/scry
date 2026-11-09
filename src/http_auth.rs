@@ -1,42 +1,60 @@
-//! Shared bearer-token and session-cookie authentication for scry's HTTP surfaces.
+//! Shared bearer-token authentication for scry's HTTP surfaces.
+//!
+//! The static `api_token` remains the login and CLI credential. Browser clients
+//! exchange it for a short-lived access JWT plus a database-backed refresh
+//! token; only `Authorization: Bearer` may authenticate ordinary API requests.
 
+use crate::auth_store::{AuthStore, NewRefreshToken, RefreshRotation};
 use axum::Router;
 use axum::extract::FromRequestParts;
 use axum::http::{HeaderMap, StatusCode, request::Parts};
 use axum::middleware::from_extractor_with_state;
 use axum::response::{IntoResponse, Response};
 use axum_extra::TypedHeader;
-use axum_extra::extract::SignedCookieJar;
 use axum_extra::extract::cookie::{Cookie, Key, SameSite};
 use axum_extra::headers::{Authorization, authorization::Bearer};
+use chrono::Utc;
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
 use subtle::ConstantTimeEq;
 use time::Duration;
+use uuid::Uuid;
 
-/// Name of the interim browser session cookie.
-pub(crate) const SESSION_COOKIE: &str = "scry_session";
-const SESSION_VALUE: &str = "authenticated";
-const SESSION_MAX_AGE_DAYS: i64 = 30;
+/// Name of the signed browser refresh-token cookie.
+pub(crate) const REFRESH_COOKIE: &str = "refresh_token";
+const REFRESH_MAX_AGE_DAYS: i64 = 30;
+const ACCESS_TOKEN_SECONDS: i64 = 60 * 60;
+const SUBJECT: &str = "local";
 
-/// Credentials shared by the API gate and the session endpoints.
+/// Credentials shared by the API gate and the auth endpoints.
 #[derive(Clone)]
 pub(crate) struct AuthState {
     token: Option<String>,
     key: Key,
+    access_secret: Option<Vec<u8>>,
+    refresh_tokens: Arc<dyn AuthStore>,
 }
 
 impl AuthState {
-    pub(crate) fn new(token: Option<String>) -> Self {
-        let key = match token.as_deref() {
-            // Deriving from the token means rotating it invalidates every cookie.
+    pub(crate) fn new(token: Option<String>, refresh_tokens: Arc<dyn AuthStore>) -> Self {
+        let (key, access_secret) = match token.as_deref() {
+            // Deriving both from the token means rotating it invalidates every
+            // cookie and access token at once.
             Some(token) => {
                 let digest = Sha256::digest(token.as_bytes());
-                Key::derive_from(digest.as_slice())
+                (Key::derive_from(digest.as_slice()), Some(digest.to_vec()))
             }
-            None => Key::generate(),
+            None => (Key::generate(), None),
         };
 
-        Self { token, key }
+        Self {
+            token,
+            key,
+            access_secret,
+            refresh_tokens,
+        }
     }
 
     pub(crate) fn enabled(&self) -> bool {
@@ -53,16 +71,164 @@ impl AuthState {
             .is_some_and(|token| presented.as_bytes().ct_eq(token.as_bytes()).into())
     }
 
-    /// Whether the request carries a valid signed session cookie.
-    pub(crate) fn has_valid_session(&self, headers: &HeaderMap) -> bool {
-        let jar = SignedCookieJar::from_headers(headers, self.key());
-        jar.get(SESSION_COOKIE)
-            .is_some_and(|cookie| cookie.value() == SESSION_VALUE)
+    /// Issue a one-hour HS256 access token for the local subject.
+    pub(crate) fn issue_access_token(&self) -> Result<String, AuthError> {
+        self.issue_access_token_for(SUBJECT)
+    }
+
+    fn issue_access_token_for(&self, subject: &str) -> Result<String, AuthError> {
+        let secret = self.access_secret.as_deref().ok_or(AuthError::Disabled)?;
+        let now = Utc::now().timestamp();
+        let claims = AccessClaims {
+            sub: subject.to_string(),
+            iat: now,
+            exp: now + ACCESS_TOKEN_SECONDS,
+        };
+
+        encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(secret),
+        )
+        .map_err(|error| AuthError::Internal(format!("failed to issue access token: {error}")))
+    }
+
+    /// Validate an access JWT and return the subject it names.
+    pub(crate) fn validate_access_token(&self, token: &str) -> Option<Principal> {
+        let secret = self.access_secret.as_deref()?;
+        let validation = Validation::new(Algorithm::HS256);
+        let data =
+            decode::<AccessClaims>(token, &DecodingKey::from_secret(secret), &validation).ok()?;
+
+        Some(Principal {
+            subject: data.claims.sub,
+        })
+    }
+
+    /// Create a refresh token and return its raw value for the cookie.
+    pub(crate) async fn create_refresh_token(&self) -> Result<String, AuthError> {
+        if !self.enabled() {
+            return Err(AuthError::Disabled);
+        }
+
+        let raw = generate_refresh_token();
+        let now = Utc::now();
+
+        self.refresh_tokens
+            .create_refresh_token(NewRefreshToken {
+                token_hash: hash_refresh_token(&raw),
+                subject: SUBJECT.to_string(),
+                origin_id: Uuid::new_v4(),
+                issued_at: now,
+                expires_at: now + chrono::TimeDelta::days(REFRESH_MAX_AGE_DAYS),
+            })
+            .await
+            .map_err(internal)?;
+
+        Ok(raw)
+    }
+
+    /// Rotate `raw` and return a new access JWT plus refresh token, or `None`
+    /// when the refresh token is missing, expired, revoked, or reused.
+    pub(crate) async fn rotate_refresh_token(
+        &self,
+        raw: &str,
+    ) -> Result<Option<(String, String)>, AuthError> {
+        if !self.enabled() {
+            return Err(AuthError::Disabled);
+        }
+
+        let new_raw = generate_refresh_token();
+        let now = Utc::now();
+
+        let rotation = self
+            .refresh_tokens
+            .rotate_refresh_token(
+                &hash_refresh_token(raw),
+                &hash_refresh_token(&new_raw),
+                now,
+                now + chrono::TimeDelta::days(REFRESH_MAX_AGE_DAYS),
+            )
+            .await
+            .map_err(internal)?;
+
+        match rotation {
+            RefreshRotation::Rotated { subject } => {
+                let access_token = self.issue_access_token_for(&subject)?;
+                Ok(Some((access_token, new_raw)))
+            }
+            RefreshRotation::Missing
+            | RefreshRotation::Expired
+            | RefreshRotation::Revoked
+            | RefreshRotation::Reused => Ok(None),
+        }
+    }
+
+    /// Revoke `raw` if it exists. Revoking a missing or already-revoked token is
+    /// not an error so logout is idempotent.
+    pub(crate) async fn revoke_refresh_token(&self, raw: &str) -> Result<(), AuthError> {
+        self.refresh_tokens
+            .revoke_refresh_token(&hash_refresh_token(raw))
+            .await
+            .map_err(internal)
     }
 }
 
-/// Extractor that admits a request with the configured bearer token or a valid
-/// signed session cookie.
+/// Claims carried by an access JWT.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct AccessClaims {
+    pub sub: String,
+    pub iat: i64,
+    pub exp: i64,
+}
+
+/// The authenticated caller attached to request extensions by `RequireAuth`.
+#[derive(Debug, Clone)]
+pub(crate) struct Principal {
+    #[allow(dead_code)]
+    pub subject: String,
+}
+
+/// Why an auth endpoint or extraction failed.
+#[derive(Debug)]
+pub(crate) enum AuthError {
+    Disabled,
+    Unauthorized,
+    Internal(String),
+}
+
+impl IntoResponse for AuthError {
+    fn into_response(self) -> Response {
+        match self {
+            AuthError::Disabled => (
+                StatusCode::BAD_REQUEST,
+                "authentication is disabled; no api_token is configured",
+            )
+                .into_response(),
+            AuthError::Unauthorized => {
+                (StatusCode::UNAUTHORIZED, "missing or invalid credentials").into_response()
+            }
+            AuthError::Internal(message) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, message).into_response()
+            }
+        }
+    }
+}
+
+fn internal(error: impl std::fmt::Display) -> AuthError {
+    AuthError::Internal(format!("refresh token store error: {error}"))
+}
+
+fn generate_refresh_token() -> String {
+    format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
+}
+
+fn hash_refresh_token(raw: &str) -> Vec<u8> {
+    Sha256::digest(raw.as_bytes()).to_vec()
+}
+
+/// Extractor that admits a request carrying the static token or a valid access
+/// JWT in `Authorization: Bearer`. Cookies are deliberately ignored here.
 struct RequireAuth;
 
 impl FromRequestParts<AuthState> for RequireAuth {
@@ -72,21 +238,25 @@ impl FromRequestParts<AuthState> for RequireAuth {
         parts: &mut Parts,
         state: &AuthState,
     ) -> Result<Self, Self::Rejection> {
-        if let Ok(TypedHeader(Authorization(bearer))) =
-            TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state).await
-        {
-            return if state.check_token(bearer.token()) {
-                Ok(RequireAuth)
-            } else {
-                Err(unauthorized())
+        let bearer =
+            match TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state).await {
+                Ok(TypedHeader(Authorization(bearer))) => bearer,
+                Err(_) => return Err(unauthorized()),
             };
+
+        if state.check_token(bearer.token()) {
+            parts.extensions.insert(Principal {
+                subject: SUBJECT.to_string(),
+            });
+            return Ok(RequireAuth);
         }
 
-        let jar = SignedCookieJar::from_headers(&parts.headers, state.key());
-        match jar.get(SESSION_COOKIE) {
-            Some(cookie) if cookie.value() == SESSION_VALUE => Ok(RequireAuth),
-            _ => Err(unauthorized()),
+        if let Some(principal) = state.validate_access_token(bearer.token()) {
+            parts.extensions.insert(principal);
+            return Ok(RequireAuth);
         }
+
+        Err(unauthorized())
     }
 }
 
@@ -95,10 +265,10 @@ fn unauthorized() -> Response {
     (StatusCode::UNAUTHORIZED, "missing or invalid credentials").into_response()
 }
 
-/// Gate `router` behind the configured credentials.
+/// Gate `router` behind bearer credentials.
 ///
 /// Returns the router unchanged when no token is configured. Otherwise every
-/// API request must present the bearer token or a valid session cookie.
+/// API request must present the bearer token or a valid access JWT.
 pub(crate) fn require_auth<S>(router: Router<S>, auth: AuthState) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -110,20 +280,21 @@ where
     }
 }
 
-/// The session cookie set by `POST /api/v1/auth/session`.
-pub(crate) fn session_cookie(secure: bool) -> Cookie<'static> {
-    Cookie::build((SESSION_COOKIE, SESSION_VALUE))
-        .path("/")
+/// The signed refresh cookie set by `POST /api/v1/auth/session` and refreshed
+/// by `POST /api/v1/auth/refresh`.
+pub(crate) fn refresh_cookie(raw_token: String, secure: bool) -> Cookie<'static> {
+    Cookie::build((REFRESH_COOKIE, raw_token))
+        .path("/api/v1/auth")
         .http_only(true)
-        .same_site(SameSite::Strict)
+        .same_site(SameSite::Lax)
         .secure(secure)
-        .max_age(Duration::days(SESSION_MAX_AGE_DAYS))
+        .max_age(Duration::days(REFRESH_MAX_AGE_DAYS))
         .build()
 }
 
-/// The expired cookie used to clear a session.
-pub(crate) fn cleared_session_cookie() -> Cookie<'static> {
-    Cookie::build(SESSION_COOKIE).path("/").build()
+/// The expired cookie used to clear a refresh token.
+pub(crate) fn cleared_refresh_cookie() -> Cookie<'static> {
+    Cookie::build(REFRESH_COOKIE).path("/api/v1/auth").build()
 }
 
 /// Whether the request reached the server over TLS, as reported by the proxy.
@@ -138,32 +309,36 @@ pub(crate) fn request_is_secure(headers: &HeaderMap) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth_store::test_support::MemoryAuthStore;
     use axum::body::Body;
+    use axum::extract::Extension;
     use axum::http::{Request, StatusCode, header};
     use axum::routing::get;
-    use axum_extra::extract::cookie::Cookie;
+    use std::sync::Arc;
     use tower::ServiceExt;
+
+    fn auth_state(token: Option<&str>) -> (AuthState, Arc<MemoryAuthStore>) {
+        let store = Arc::new(MemoryAuthStore::new());
+        let refresh_tokens: Arc<dyn AuthStore> = store.clone();
+        (
+            AuthState::new(token.map(str::to_string), refresh_tokens),
+            store,
+        )
+    }
+
+    async fn echo_subject(Extension(principal): Extension<Principal>) -> String {
+        principal.subject
+    }
 
     fn app(auth: AuthState) -> Router {
         Router::new()
             .route("/", get(|| async { "ok" }))
+            .route("/whoami", get(echo_subject))
             .layer(from_extractor_with_state::<RequireAuth, _>(auth))
     }
 
     async fn status(app: Router, request: Request<Body>) -> StatusCode {
         app.oneshot(request).await.unwrap().status()
-    }
-
-    fn cookie_header(auth: &AuthState) -> String {
-        let cookie = Cookie::build((SESSION_COOKIE, SESSION_VALUE))
-            .path("/")
-            .build();
-        let jar = SignedCookieJar::new(auth.key()).add(cookie);
-        let response = (StatusCode::NO_CONTENT, jar).into_response();
-        let raw = response.headers()[header::SET_COOKIE].to_str().unwrap();
-        let cookie = Cookie::parse(raw.to_string()).unwrap();
-
-        format!("{}={}", cookie.name(), cookie.value())
     }
 
     fn request_with(name: header::HeaderName, value: &str) -> Request<Body> {
@@ -175,64 +350,101 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bearer_token_authenticates() {
-        let app = app(AuthState::new(Some("secret".into())));
+    async fn static_bearer_authenticates() {
+        let (auth, _) = auth_state(Some("secret"));
         let request = request_with(header::AUTHORIZATION, "Bearer secret");
 
-        assert_eq!(status(app, request).await, StatusCode::OK);
+        assert_eq!(status(app(auth), request).await, StatusCode::OK);
     }
 
     #[tokio::test]
-    async fn session_cookie_authenticates() {
-        let auth = AuthState::new(Some("secret".into()));
-        let request = request_with(header::COOKIE, &cookie_header(&auth));
-        let app = app(auth);
+    async fn access_token_authenticates() {
+        let (auth, _) = auth_state(Some("secret"));
+        let token = auth.issue_access_token().unwrap();
+        let request = request_with(header::AUTHORIZATION, &format!("Bearer {token}"));
 
-        assert_eq!(status(app, request).await, StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn missing_credentials_are_rejected() {
-        let app = app(AuthState::new(Some("secret".into())));
-        let request = Request::builder().uri("/").body(Body::empty()).unwrap();
-
-        assert_eq!(status(app, request).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(status(app(auth), request).await, StatusCode::OK);
     }
 
     #[tokio::test]
     async fn invalid_bearer_is_rejected() {
-        let app = app(AuthState::new(Some("secret".into())));
+        let (auth, _) = auth_state(Some("secret"));
         let request = request_with(header::AUTHORIZATION, "Bearer wrong");
 
-        assert_eq!(status(app, request).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(status(app(auth), request).await, StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
-    async fn rotated_token_rejects_the_old_cookie() {
-        let old_cookie = cookie_header(&AuthState::new(Some("old".into())));
-        let app = app(AuthState::new(Some("new".into())));
-        let request = request_with(header::COOKIE, &old_cookie);
+    async fn refresh_cookie_alone_does_not_authenticate() {
+        let (auth, _) = auth_state(Some("secret"));
+        let request = request_with(header::COOKIE, "refresh_token=raw-token");
 
-        assert_eq!(status(app, request).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(status(app(auth), request).await, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn principal_subject_is_inserted_into_extensions() {
+        let (auth, _) = auth_state(Some("secret"));
+        let request = Request::builder()
+            .uri("/whoami")
+            .header(header::AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app(auth).oneshot(request).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+
+        assert_eq!(&body[..], b"local");
+    }
+
+    #[tokio::test]
+    async fn rotating_api_token_rejects_the_old_access_token() {
+        let (old, _) = auth_state(Some("old"));
+        let token = old.issue_access_token().unwrap();
+
+        let (new, _) = auth_state(Some("new"));
+        let request = request_with(header::AUTHORIZATION, &format!("Bearer {token}"));
+
+        assert_eq!(status(app(new), request).await, StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn refresh_cookie_has_the_agreed_attributes() {
+        let cookie = refresh_cookie("raw-token".to_string(), false);
+
+        assert_eq!(cookie.name(), REFRESH_COOKIE);
+        assert_eq!(cookie.value(), "raw-token");
+        assert_eq!(cookie.path(), Some("/api/v1/auth"));
+        assert_eq!(cookie.http_only(), Some(true));
+        assert_eq!(cookie.same_site(), Some(SameSite::Lax));
+        assert_eq!(cookie.max_age(), Some(Duration::days(30)));
+        assert_eq!(cookie.secure(), Some(false));
+        assert_eq!(refresh_cookie("raw".to_string(), true).secure(), Some(true));
+    }
+
+    #[test]
+    fn cleared_refresh_cookie_targets_the_refresh_path() {
+        let cookie = cleared_refresh_cookie();
+
+        assert_eq!(cookie.name(), REFRESH_COOKIE);
+        assert_eq!(cookie.path(), Some("/api/v1/auth"));
+    }
+
+    #[test]
+    fn refresh_tokens_are_64_hex_characters() {
+        let raw = generate_refresh_token();
+
+        assert_eq!(raw.len(), 64);
+        assert!(raw.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     #[test]
     fn no_token_disables_auth() {
-        assert!(!AuthState::new(None).enabled());
-    }
+        let (auth, _) = auth_state(None);
 
-    #[test]
-    fn session_cookie_has_the_agreed_attributes() {
-        let cookie = session_cookie(false);
-
-        assert_eq!(cookie.name(), SESSION_COOKIE);
-        assert_eq!(cookie.value(), "authenticated");
-        assert_eq!(cookie.path(), Some("/"));
-        assert_eq!(cookie.http_only(), Some(true));
-        assert_eq!(cookie.same_site(), Some(SameSite::Strict));
-        assert_eq!(cookie.max_age(), Some(Duration::days(30)));
-        assert_eq!(cookie.secure(), Some(false));
-        assert_eq!(session_cookie(true).secure(), Some(true));
+        assert!(!auth.enabled());
     }
 
     #[test]

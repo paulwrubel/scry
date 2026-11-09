@@ -17,8 +17,10 @@ type RenderLoginOptions = {
 function renderLogin(options: RenderLoginOptions = {}) {
   const login = options.login ?? vi.fn(async (): Promise<LoginResult> => ({ ok: true }));
   const value: AuthContextType = {
+    accessToken: options.isAuthenticated ? 'test-token' : undefined,
     isAuthenticated: options.isAuthenticated ?? false,
     isAuthLoading: false,
+    authenticatedFetch: fetch,
     login,
     logout: async () => undefined,
   };

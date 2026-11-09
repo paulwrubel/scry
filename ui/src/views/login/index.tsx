@@ -43,8 +43,9 @@ export function LoginPage() {
       <Card className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold">Sign in</h1>
         <p className="text-muted text-sm">
-          Enter the API token configured on the server. It is exchanged for a session cookie and is
-          never stored in the browser.
+          Enter the API token configured on the server. It is exchanged for a short-lived access
+          token held in memory plus an HttpOnly refresh cookie, and the API token itself is never
+          stored in the browser.
         </p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <Label htmlFor="api-token">API token</Label>
