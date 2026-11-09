@@ -88,10 +88,11 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
 
 - **Projects** group related tasks and own optional ordered sections. The built-in `default` project exists automatically.
 - **State**: every task is `open` or `closed`. Closing records whether it was `completed` or `cancelled` and when; reopening restores the task where it was.
-- **Sections** are optional ordered groups within a project. Tasks without one appear under **No section**. New sections append; drag them in the web UI to reorder.
+- **Sections** are optional ordered groups within a project. Tasks without one appear under **No section**. New sections append and can be reordered with `scry section move` or by dragging in the web UI.
   - Create sections explicitly with `scry section add <name>` or `--new-section <name>`. `--section <name>` must match an existing name exactly.
   - Sections can carry an optional color. Set one with `scry section add <name> --color <color>` or `scry section set-color <name> <color>`, remove it with `scry section reset-color <name>`, or click the circle in the web UI column header. Colors are kebab-case: `red`, `light-blue`, `dark-gray`, and so on.
   - Deleting a section moves its tasks to No section. Merging moves the source's tasks into the target and deletes the source.
+  - Reorder with `scry section move <name> --top` (alias `--first`), `--bottom` (alias `--last`), `--before <name>`, or `--after <name>`. The REST equivalent is `POST /api/v1/sections/{id}/move` with `{"op":"top"}`, `{"op":"bottom"}`, `{"op":"before","anchor_id":"<id>"}`, or `{"op":"after","anchor_id":"<id>"}`. Only the moved section is written; anchors must be another section in the same project.
   - Sections have no completion semantics: a section named "Done" does not close anything.
 - **Active project** works like a kubectl context. `scry project use <name>` verifies the name with the server and stores the choice per machine in `$XDG_STATE_HOME/scry/state.toml` (or the `state_file` config option), not in the backend. Task commands use it unless you pass `-p/--project`.
 

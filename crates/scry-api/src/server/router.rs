@@ -106,6 +106,7 @@ fn build_sections_router() -> Router<ScryState> {
                 .delete(handlers::delete_section),
         )
         .route("/{id}/merge", post(handlers::merge_section))
+        .route("/{id}/move", post(handlers::move_section))
         .route("/{id}/tasks", get(handlers::get_tasks_by_section))
 }
 

@@ -106,6 +106,9 @@ pub use max_seq::max_seq;
 mod merge_section;
 pub use merge_section::merge_section;
 
+mod move_section;
+pub use move_section::move_section;
+
 mod move_task;
 pub use move_task::move_task;
 

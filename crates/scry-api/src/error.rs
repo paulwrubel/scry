@@ -91,6 +91,9 @@ pub enum ServiceError {
     SectionMergeIntoItself {
         section: String,
     },
+    SectionMoveAnchorItself {
+        section: String,
+    },
     SectionNameRequired,
     TaskHandleNotFound {
         handle: String,
@@ -131,6 +134,9 @@ impl fmt::Display for ServiceError {
             Self::SectionMergeIntoItself { section } => {
                 write!(f, "Section \"{section}\" cannot be merged into itself")
             }
+            Self::SectionMoveAnchorItself { section } => {
+                write!(f, "Section \"{section}\" cannot be moved relative to itself.")
+            }
             Self::SectionNameRequired => write!(f, "A section name is required"),
             Self::TaskHandleNotFound { handle } => {
                 write!(f, "No task matches handle \"{handle}\"")
@@ -160,7 +166,9 @@ impl ServiceError {
         match self {
             Self::SectionNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
             Self::TaskHandleNotFound { .. } | Self::NoteHandleNotFound { .. } => "not_found",
-            Self::SectionNameTaken { .. } | Self::SectionMergeIntoItself { .. } => "conflict",
+            Self::SectionNameTaken { .. }
+            | Self::SectionMergeIntoItself { .. }
+            | Self::SectionMoveAnchorItself { .. } => "conflict",
             Self::SectionNameRequired => "invalid",
             Self::AmbiguousTaskHandle { .. } | Self::AmbiguousNoteHandle { .. } => "invalid",
             Self::Storage(error) => error.kind(),

@@ -247,6 +247,29 @@ enum ProjectCommand {
 enum SectionCommand {
     /// List sections for a project
     List,
+    /// Move a section to the top, bottom, or next to another section
+    #[command(group(
+        clap::ArgGroup::new("placement")
+            .required(true)
+            .multiple(false)
+            .args(["top", "bottom", "before", "after"])
+    ))]
+    Move {
+        /// The section name
+        name: String,
+        /// Place the section first
+        #[arg(long, visible_alias = "first")]
+        top: bool,
+        /// Place the section last
+        #[arg(long, visible_alias = "last")]
+        bottom: bool,
+        /// Place the section immediately before this section
+        #[arg(long, value_name = "NAME")]
+        before: Option<String>,
+        /// Place the section immediately after this section
+        #[arg(long, value_name = "NAME")]
+        after: Option<String>,
+    },
     /// Add a new section
     Add {
         /// The section name
@@ -590,6 +613,37 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::section_list(&client, &config, cli.project.as_deref(), output_json)
                 .await;
+        }
+        Some(Command::Section(SectionCommand::Move {
+            name,
+            top,
+            bottom,
+            before,
+            after,
+        })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            let placement = if *top {
+                client::SectionMove::Top
+            } else if *bottom {
+                client::SectionMove::Bottom
+            } else if let Some(anchor) = before.as_deref() {
+                client::SectionMove::Before(anchor)
+            } else if let Some(anchor) = after.as_deref() {
+                client::SectionMove::After(anchor)
+            } else {
+                return Err(AppError::Usage(
+                    "Specify one of --top, --bottom, --before, or --after.".to_string(),
+                ));
+            };
+            return client::section_move(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                name,
+                placement,
+                output_json,
+            )
+            .await;
         }
         Some(Command::Section(SectionCommand::Add { name, color })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
