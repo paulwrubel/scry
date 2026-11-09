@@ -144,7 +144,10 @@ mod export_bindings {
     #[test]
     fn export_bindings() {
         let config = Config::new()
-            .with_out_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/ui/src/generated"))
+            .with_out_dir(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../ui/src/generated"
+            ))
             // seq and next_seq are JSON numbers in JavaScript, not bigints
             .with_large_int("number");
 

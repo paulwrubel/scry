@@ -10,10 +10,10 @@ alias run := run-docker
 run-docker: build
     docker compose up -d --build
 
-# build the release binary and run the REST server against the dev postgres
+# build the release binaries and run the REST server against the dev postgres
 [group('run')]
 run-local: build run-postgres
-    ./target/release/scry --config scry.dev.toml --secrets scry.dev-secrets.toml serve --http 127.0.0.1:8000
+    ./target/release/scry-api --config scry.dev.toml --secrets scry.dev-secrets.toml --http 127.0.0.1:8000
 
 # start the dev postgres and apply migrations
 [group('run')]
@@ -49,16 +49,17 @@ run-ui: run-docker setup-ui-env
 [group('build')]
 sqlx-prepare: sqlx-prepare-postgres
 
-# build an optimized release binary
+# build the optimized release binaries
 [group('build')]
 build: build-ui
-    cargo build --release
+    cargo build --release --workspace
 
 # build and install to ~/.local/bin
 [group('build')]
 install: build
     mkdir -p {{"${HOME}"}}/.local/bin
     cp target/release/scry {{"${HOME}"}}/.local/bin/scry
+    cp target/release/scry-api {{"${HOME}"}}/.local/bin/scry-api
 
 # build the ui
 [group('build')]
@@ -133,7 +134,7 @@ sqlx-prepare-postgres: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
-    SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry -- --no-default-features
+    SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry -- --workspace --no-default-features
 
 # verify the Postgres offline query cache is up to date (used in CI)
 [group('validate')]
@@ -141,12 +142,12 @@ sqlx-prepare-check: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
-    SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry -- --no-default-features
+    SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry -- --workspace --no-default-features
 
 # regenerate the TypeScript bindings for the sync wire types
 [group('validate')]
 generate-bindings:
-    cargo test -p scry --no-default-features --features ts export_bindings
+    cargo test -p scry-api --no-default-features --features ts export_bindings
     just prettier-fix-ui
 
 # verify the generated TypeScript bindings are committed and up to date
@@ -192,7 +193,7 @@ release-major-and-push:
 
 # shared release logic — bump version, update Cargo.toml, commit, tag
 _release type do_push="":
-    @current=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/'); \
+    @current=$(grep '^version = "' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/'); \
     IFS=. read major minor patch <<< "$current"; \
     case "{{type}}" in \
         patch) next="$major.$minor.$((patch + 1))" ;; \
@@ -207,7 +208,7 @@ _release type do_push="":
         *) echo "Aborted."; exit 1 ;; \
     esac; \
     sed -i.bak "s/^version = \"$current\"/version = \"$next\"/" Cargo.toml && rm -f Cargo.toml.bak; \
-    cargo check --no-default-features; \
+    cargo check --workspace --no-default-features; \
     git add Cargo.toml Cargo.lock; \
     git commit -m "v$next"; \
     git tag "v$next"; \

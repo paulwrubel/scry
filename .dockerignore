@@ -1,9 +1,10 @@
 # Ignore everything by default
 *
 
-# Allow only the compiled binary (the only file the Dockerfile copies)
+# Allow only the compiled binaries (the Dockerfile copies `scry-api`)
 !target/
 !target/release/
 !target/release/scry
+!target/release/scry-api
 
 # Config is mounted at runtime by compose.yaml, not needed in the build context.

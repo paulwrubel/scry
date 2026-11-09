@@ -54,12 +54,12 @@ jobs:
       - name: Build
         env:
           SQLX_OFFLINE: true
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --workspace --target ${{ matrix.target }}
 
       - name: Package
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf "${{ github.workspace }}/scry-${{ matrix.target }}.tar.gz" scry
+          tar czf "${{ github.workspace }}/scry-${{ matrix.target }}.tar.gz" scry scry-api
         shell: bash
 
       - name: Upload artifact

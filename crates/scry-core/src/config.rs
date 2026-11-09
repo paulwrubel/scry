@@ -1,7 +1,24 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::error::AppError;
+/// Error loading or resolving configuration files.
+#[derive(Debug)]
+pub struct ConfigError(String);
+
+impl ConfigError {
+    fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ConfigError {}
 
 /// Config file name, used both in the current directory and under the XDG
 /// config directory.
@@ -31,7 +48,7 @@ impl ScryConfig {
     /// file is ever created.
     ///
     /// Returns the default merged with the file's set properties.
-    pub fn load(config_path: Option<&Path>) -> Result<Self, AppError> {
+    pub fn load(config_path: Option<&Path>) -> Result<Self, ConfigError> {
         if let Some(path) = config_path {
             return Self::load_file(path);
         }
@@ -40,7 +57,7 @@ impl ScryConfig {
     }
 
     /// Load from the first config file that exists under `dir` or `xdg_dir`.
-    fn load_from(dir: &Path, xdg_dir: &Path) -> Result<Self, AppError> {
+    fn load_from(dir: &Path, xdg_dir: &Path) -> Result<Self, ConfigError> {
         let candidates = [
             dir.join(CONFIG_FILE),
             xdg_dir.join(CONFIG_FILE),
@@ -55,20 +72,20 @@ impl ScryConfig {
     }
 
     /// Read and parse the config file at `path`.
-    fn load_file(path: &Path) -> Result<Self, AppError> {
+    fn load_file(path: &Path) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| AppError::Config(format!("failed to read {:?}: {}", path, e)))?;
+            .map_err(|e| ConfigError::new(format!("failed to read {:?}: {}", path, e)))?;
 
         toml::from_str(&content)
-            .map_err(|e| AppError::Config(format!("failed to parse {:?}: {}", path, e)))
+            .map_err(|e| ConfigError::new(format!("failed to parse {:?}: {}", path, e)))
     }
 
     /// Resolve the client's server URL: `--server`, then `scry.toml`.
-    pub fn resolved_server_url(&self, flag: Option<&str>) -> Result<String, AppError> {
+    pub fn resolved_server_url(&self, flag: Option<&str>) -> Result<String, ConfigError> {
         flag.map(str::to_string)
             .or_else(|| self.server_url.clone())
             .ok_or_else(|| {
-                AppError::Config(
+                ConfigError::new(
                     "no server configured: set `server_url` in scry.toml or pass --server"
                         .to_string(),
                 )
@@ -99,7 +116,7 @@ impl ScrySecrets {
     /// otherwise the first `scry.secret.toml` that exists is used, with the same
     /// discovery as [`ScryConfig::load`]. With none present every field is unset.
     /// No file is ever created.
-    pub fn load(secrets_path: Option<&Path>) -> Result<Self, AppError> {
+    pub fn load(secrets_path: Option<&Path>) -> Result<Self, ConfigError> {
         if let Some(path) = secrets_path {
             return Self::load_file(path);
         }
@@ -108,7 +125,7 @@ impl ScrySecrets {
     }
 
     /// Load from the first secret file that exists under `dir` or `xdg_dir`.
-    fn load_from(dir: &Path, xdg_dir: &Path) -> Result<Self, AppError> {
+    fn load_from(dir: &Path, xdg_dir: &Path) -> Result<Self, ConfigError> {
         let candidates = [dir.join(SECRET_FILE), xdg_dir.join(SECRET_FILE)];
 
         let Some(path) = candidates.into_iter().find(|path| path.is_file()) else {
@@ -119,22 +136,22 @@ impl ScrySecrets {
     }
 
     /// Read and parse the secrets file at `path`.
-    fn load_file(path: &Path) -> Result<Self, AppError> {
+    fn load_file(path: &Path) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| AppError::Config(format!("failed to read {:?}: {}", path, e)))?;
+            .map_err(|e| ConfigError::new(format!("failed to read {:?}: {}", path, e)))?;
 
         toml::from_str(&content)
-            .map_err(|e| AppError::Config(format!("failed to parse {:?}: {}", path, e)))
+            .map_err(|e| ConfigError::new(format!("failed to parse {:?}: {}", path, e)))
     }
 
     /// Resolve the database URL: this file's value, else `config`'s, else an
     /// error when neither is configured.
-    pub fn resolved_database_url(&self, config: &ScryConfig) -> Result<String, AppError> {
+    pub fn resolved_database_url(&self, config: &ScryConfig) -> Result<String, ConfigError> {
         self.database_url
             .clone()
             .or_else(|| config.database_url.clone())
             .ok_or_else(|| {
-                AppError::Config(
+                ConfigError::new(
                     "no database configured: set `database_url` in scry.toml or scry.secret.toml"
                         .to_string(),
                 )

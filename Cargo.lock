@@ -1759,6 +1759,21 @@ dependencies = [
  "anstream",
  "anstyle",
  "assert_fs",
+ "chrono",
+ "clap",
+ "reqwest",
+ "scry-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+ "uuid",
+]
+
+[[package]]
+name = "scry-api"
+version = "0.28.0"
+dependencies = [
  "async-trait",
  "axum",
  "axum-extra",
@@ -1766,8 +1781,6 @@ dependencies = [
  "clap",
  "include_dir",
  "jsonwebtoken",
- "num_enum",
- "reqwest",
  "scry-core",
  "serde",
  "serde_json",
@@ -1776,7 +1789,6 @@ dependencies = [
  "subtle",
  "time",
  "tokio",
- "toml",
  "tower",
  "tower-http",
  "ts-rs",
@@ -1785,9 +1797,10 @@ dependencies = [
 
 [[package]]
 name = "scry-core"
-version = "0.1.0"
+version = "0.28.0"
 dependencies = [
  "anstyle",
+ "assert_fs",
  "async-trait",
  "chrono",
  "clap",
@@ -1797,6 +1810,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "strum",
+ "toml",
  "ts-rs",
  "uuid",
 ]
