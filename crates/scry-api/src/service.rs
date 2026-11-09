@@ -135,6 +135,15 @@ pub struct UpdateSection {
     pub color: ColorChange,
 }
 
+/// Where to place a section relative to its siblings.
+#[derive(Debug, Clone, Copy)]
+pub enum SectionPlacement {
+    Top,
+    Bottom,
+    Before(SectionId),
+    After(SectionId),
+}
+
 /// How a new project's sorting mode, priority flag, and sections are chosen.
 #[derive(Debug, Clone, Copy)]
 pub enum ProjectSetup {
@@ -683,6 +692,50 @@ impl ProjectService {
                 id: updated.id,
                 name: Some(name),
                 color: Some(operation_color),
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(updated)
+    }
+
+    /// Move a section to the top, bottom, or next to a sibling.
+    pub async fn move_section(
+        &self,
+        section_id: SectionId,
+        placement: SectionPlacement,
+    ) -> Result<Section, ServiceError> {
+        let section = self.require_section(section_id).await?;
+        let project = self.require_project(section.project_id).await?;
+        let anchor_id = match placement {
+            SectionPlacement::Before(anchor_id) | SectionPlacement::After(anchor_id) => {
+                Some(anchor_id)
+            }
+            _ => None,
+        };
+        if let Some(anchor_id) = anchor_id {
+            self.require_section_in_project(&project, anchor_id).await?;
+            if anchor_id == section.id {
+                return Err(ServiceError::SectionMoveAnchorItself {
+                    section: section.name.clone(),
+                });
+            }
+        }
+        let sections = self
+            .store
+            .get_all_sections_by_project_id(project.id, None)
+            .await?;
+        let Some(new_position) = section_placement_position(&sections, &section, placement)? else {
+            return Ok(section);
+        };
+        let updated = Section {
+            position: new_position.clone(),
+            ..section
+        };
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::MoveSection {
+                id: updated.id,
+                position: new_position,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
@@ -1974,6 +2027,113 @@ fn section_field_updates(section: &mut Section, op: &OperationKind) -> FieldValu
     }
 
     Value::Object(fields)
+}
+
+fn section_placement_position(
+    sections: &[Section],
+    target: &Section,
+    placement: SectionPlacement,
+) -> Result<Option<Position>, ServiceError> {
+    let target_index = sections
+        .iter()
+        .position(|section| section.id == target.id)
+        .ok_or_else(|| {
+            ServiceError::Storage(StorageError::NotFound(format!(
+                "section {} missing from its project's ordered list",
+                target.id
+            )))
+        })?;
+
+    let others: Vec<&Section> = sections
+        .iter()
+        .filter(|section| section.id != target.id)
+        .collect();
+
+    match placement {
+        SectionPlacement::Top => {
+            if target_index == 0 {
+                return Ok(None);
+            }
+            let first_other = others
+                .first()
+                .copied()
+                .expect("a non-first section has at least one sibling");
+            key_between(None, Some(&first_other.position))
+                .map(Some)
+                .map_err(position_error)
+        }
+        SectionPlacement::Bottom => {
+            if target_index == sections.len() - 1 {
+                return Ok(None);
+            }
+            let last_other = others
+                .last()
+                .copied()
+                .expect("a non-last section has at least one sibling");
+            key_between(Some(&last_other.position), None)
+                .map(Some)
+                .map_err(position_error)
+        }
+        SectionPlacement::Before(anchor_id) => {
+            let anchor_index = sections
+                .iter()
+                .position(|section| section.id == anchor_id)
+                .ok_or_else(|| ServiceError::SectionNotFound {
+                    section: anchor_id.to_string(),
+                    project: target.project_id.to_string(),
+                })?;
+            if anchor_index == target_index + 1 {
+                return Ok(None);
+            }
+            let anchor = &sections[anchor_index];
+            let others_anchor_index = others
+                .iter()
+                .position(|section| section.id == anchor_id)
+                .ok_or_else(|| ServiceError::SectionNotFound {
+                    section: anchor_id.to_string(),
+                    project: target.project_id.to_string(),
+                })?;
+            // skip neighbors with equal keys so we don't bracket equal bounds
+            let predecessor_position = others[..others_anchor_index]
+                .iter()
+                .rev()
+                .copied()
+                .find(|section| section.position < anchor.position)
+                .map(|section| &section.position);
+            key_between(predecessor_position, Some(&anchor.position))
+                .map(Some)
+                .map_err(position_error)
+        }
+        SectionPlacement::After(anchor_id) => {
+            let anchor_index = sections
+                .iter()
+                .position(|section| section.id == anchor_id)
+                .ok_or_else(|| ServiceError::SectionNotFound {
+                    section: anchor_id.to_string(),
+                    project: target.project_id.to_string(),
+                })?;
+            if target_index == anchor_index + 1 {
+                return Ok(None);
+            }
+            let anchor = &sections[anchor_index];
+            let others_anchor_index = others
+                .iter()
+                .position(|section| section.id == anchor_id)
+                .ok_or_else(|| ServiceError::SectionNotFound {
+                    section: anchor_id.to_string(),
+                    project: target.project_id.to_string(),
+                })?;
+            // skip neighbors with equal keys so we don't bracket equal bounds
+            let successor_position = others[others_anchor_index + 1..]
+                .iter()
+                .copied()
+                .find(|section| section.position > anchor.position)
+                .map(|section| &section.position);
+            key_between(Some(&anchor.position), successor_position)
+                .map(Some)
+                .map_err(position_error)
+        }
+    }
 }
 
 fn note_field_updates(note: &mut Note, op: &OperationKind) -> FieldValues {
