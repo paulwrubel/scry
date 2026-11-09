@@ -32,8 +32,6 @@ export type TaskFieldsFormProps = {
 export function TaskFieldsForm(props: TaskFieldsFormProps) {
   const { task, project, onSave } = props;
 
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sections = [
@@ -49,11 +47,9 @@ export function TaskFieldsForm(props: TaskFieldsFormProps) {
       sectionId: task.section_id ?? '',
       tags: normalizeTags(task.tags).join(', '),
     },
-    validators: { onChange: schema },
+    validators: { onChange: schema, onMount: schema },
     onSubmit: async ({ value }) => {
-      setSaving(true);
       setError(null);
-      setSaved(false);
 
       const tags = normalizeTags(value.tags.split(','));
 
@@ -68,11 +64,8 @@ export function TaskFieldsForm(props: TaskFieldsFormProps) {
           value.sectionId.length === 0 ? null : value.sectionId,
         );
         form.setFieldValue('tags', tags.join(', '));
-        setSaved(true);
       } catch {
         setError('Could not save this task.');
-      } finally {
-        setSaving(false);
       }
     },
   });
@@ -105,12 +98,22 @@ export function TaskFieldsForm(props: TaskFieldsFormProps) {
           {error}
         </p>
       )}
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={saving || !form.state.isValid}>
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
-        {saved ? <Badge color="success">Saved locally</Badge> : null}
-      </div>
+      <form.Subscribe
+        selector={(state) => ({
+          isValid: state.isValid,
+          submitting: state.isSubmitting,
+          saved: state.isSubmitSuccessful,
+        })}
+      >
+        {({ isValid, submitting, saved }) => (
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={submitting || !isValid}>
+              {submitting ? 'Saving...' : 'Save'}
+            </Button>
+            {saved ? <Badge color="success">Saved locally</Badge> : null}
+          </div>
+        )}
+      </form.Subscribe>
     </form>
   );
 }

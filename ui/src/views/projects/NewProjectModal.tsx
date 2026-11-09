@@ -26,17 +26,15 @@ export function NewProjectModal(props: NewProjectModalProps) {
   const { createProject } = useCreateProject();
 
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const form = useAppForm({
     defaultValues: {
       name: '',
       description: '',
     },
-    validators: { onChange: schemaFor(existingNames) },
+    validators: { onChange: schemaFor(existingNames), onMount: schemaFor(existingNames) },
     listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
-      setSaving(true);
       setError(null);
 
       try {
@@ -44,8 +42,6 @@ export function NewProjectModal(props: NewProjectModalProps) {
         onCreated(projectId);
       } catch {
         setError('Could not create this project.');
-      } finally {
-        setSaving(false);
       }
     },
   });
@@ -81,18 +77,21 @@ export function NewProjectModal(props: NewProjectModalProps) {
         <Button color="alternative" onClick={onClose}>
           Cancel
         </Button>
-        <form.Subscribe selector={(state) => state.values.name}>
-          {(name) => {
-            const trimmed = name.trim();
-            const disabled =
-              saving || error !== null || trimmed.length === 0 || existingNames.includes(trimmed);
-
-            return (
-              <Button type="submit" form="new-project-form" disabled={disabled}>
-                {saving ? 'Creating...' : 'Create'}
-              </Button>
-            );
-          }}
+        <form.Subscribe
+          selector={(state) => ({
+            isValid: state.isValid,
+            submitting: state.isSubmitting,
+          })}
+        >
+          {({ isValid, submitting }) => (
+            <Button
+              type="submit"
+              form="new-project-form"
+              disabled={submitting || error !== null || !isValid}
+            >
+              {submitting ? 'Creating...' : 'Create'}
+            </Button>
+          )}
         </form.Subscribe>
       </ModalFooter>
     </Modal>

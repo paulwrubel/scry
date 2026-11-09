@@ -25,7 +25,7 @@ export function LoginPage() {
 
   const form = useAppForm({
     defaultValues: { password: '' },
-    validators: { onChange: schema },
+    validators: { onChange: schema, onMount: schema },
     listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
       setError(null);
@@ -59,12 +59,12 @@ export function LoginPage() {
           {error === null ? null : <Alert color="failure">{error}</Alert>}
           <form.Subscribe
             selector={(state) => ({
-              password: state.values.password,
+              isValid: state.isValid,
               submitting: state.isSubmitting,
             })}
           >
-            {({ password, submitting }) => (
-              <Button type="submit" color="default" disabled={submitting || password.length === 0}>
+            {({ isValid, submitting }) => (
+              <Button type="submit" color="default" disabled={submitting || !isValid}>
                 {submitting ? 'Signing in...' : 'Sign in'}
               </Button>
             )}

@@ -35,7 +35,7 @@ export function MobileAddTask(props: MobileAddTaskProps) {
 
   const form = useAppForm({
     defaultValues: { title: '' },
-    validators: { onChange: schema },
+    validators: { onChange: schema, onMount: schema },
     listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
       const submitted = value.title;
@@ -44,6 +44,7 @@ export function MobileAddTask(props: MobileAddTaskProps) {
         await onCreate(submitted.trim());
         if (form.getFieldValue('title') === submitted) {
           form.reset();
+          void form.validate('change');
         }
         inputRef.current?.focus();
       } catch {
@@ -61,6 +62,7 @@ export function MobileAddTask(props: MobileAddTaskProps) {
   function close() {
     setOpen(false);
     form.reset();
+    void form.validate('change');
     setError(null);
   }
 
@@ -105,12 +107,12 @@ export function MobileAddTask(props: MobileAddTaskProps) {
             </div>
             <form.Subscribe
               selector={(state) => ({
-                title: state.values.title,
+                isValid: state.isValid,
                 submitting: state.isSubmitting,
               })}
             >
-              {({ title, submitting }) => (
-                <Button type="submit" disabled={submitting || title.trim().length === 0}>
+              {({ isValid, submitting }) => (
+                <Button type="submit" disabled={submitting || !isValid}>
                   Add
                 </Button>
               )}

@@ -26,13 +26,14 @@ export function NotesSection(props: NotesSectionProps) {
 
   const createForm = useAppForm({
     defaultValues: { contents: '' },
-    validators: { onChange: schema },
+    validators: { onChange: schema, onMount: schema },
     listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
       setError(null);
       try {
         await onCreate(value.contents.trim());
         createForm.reset();
+        void createForm.validate('change');
       } catch {
         setError('Could not save this note.');
       }
@@ -41,7 +42,7 @@ export function NotesSection(props: NotesSectionProps) {
 
   const editForm = useAppForm({
     defaultValues: { contents: '' },
-    validators: { onChange: schema },
+    validators: { onChange: schema, onMount: schema },
     listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
       const note = notes.find((item) => item.id === editingId);
@@ -105,16 +106,12 @@ export function NotesSection(props: NotesSectionProps) {
               <div className="flex gap-2">
                 <editForm.Subscribe
                   selector={(state) => ({
-                    contents: state.values.contents,
+                    isValid: state.isValid,
                     submitting: state.isSubmitting,
                   })}
                 >
-                  {({ contents, submitting }) => (
-                    <Button
-                      type="submit"
-                      size="xs"
-                      disabled={submitting || contents.trim().length === 0}
-                    >
+                  {({ isValid, submitting }) => (
+                    <Button type="submit" size="xs" disabled={submitting || !isValid}>
                       Save note
                     </Button>
                   )}
@@ -182,12 +179,12 @@ export function NotesSection(props: NotesSectionProps) {
         <div>
           <createForm.Subscribe
             selector={(state) => ({
-              contents: state.values.contents,
+              isValid: state.isValid,
               submitting: state.isSubmitting,
             })}
           >
-            {({ contents, submitting }) => (
-              <Button type="submit" size="xs" disabled={submitting || contents.trim().length === 0}>
+            {({ isValid, submitting }) => (
+              <Button type="submit" size="xs" disabled={submitting || !isValid}>
                 Add note
               </Button>
             )}

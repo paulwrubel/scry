@@ -12,9 +12,9 @@ export type FormPasswordFieldProps = {
 
 export function FormPasswordField(props: FormPasswordFieldProps) {
   const { label, autoComplete = 'current-password', autoFocus } = props;
-  
+
   const field = useFieldContext<string>();
-  const error = fieldErrorMessage(field.state.meta.errors);
+  const error = field.state.meta.isTouched ? fieldErrorMessage(field.state.meta.errors) : null;
   const id = useId();
   const [showPassword, setShowPassword] = useState(false);
 

@@ -18,7 +18,7 @@ const cardTheme: DeepPartial<CardTheme> = {
 };
 
 export type NewSectionCardProps = {
-  onAdd: (name: string) => void;
+  onAdd: (name: string) => void | Promise<void>;
 };
 
 export function NewSectionCard(props: NewSectionCardProps) {
@@ -28,16 +28,18 @@ export function NewSectionCard(props: NewSectionCardProps) {
 
   const form = useAppForm({
     defaultValues: { name: '' },
-    validators: { onChange: schema },
-    onSubmit: ({ value }) => {
-      onAdd(value.name.trim());
+    validators: { onChange: schema, onMount: schema },
+    onSubmit: async ({ value }) => {
+      await onAdd(value.name.trim());
       form.reset();
+      void form.validate('change');
       setOpen(false);
     },
   });
 
   function close() {
     form.reset();
+    void form.validate('change');
     setOpen(false);
   }
 
@@ -85,16 +87,12 @@ export function NewSectionCard(props: NewSectionCardProps) {
           </Button>
           <form.Subscribe
             selector={(state) => ({
-              name: state.values.name,
+              isValid: state.isValid,
               submitting: state.isSubmitting,
             })}
           >
-            {({ name, submitting }) => (
-              <Button
-                type="submit"
-                form="new-section-form"
-                disabled={submitting || name.trim().length === 0}
-              >
+            {({ isValid, submitting }) => (
+              <Button type="submit" form="new-section-form" disabled={submitting || !isValid}>
                 Add
               </Button>
             )}

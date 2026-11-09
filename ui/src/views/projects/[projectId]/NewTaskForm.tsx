@@ -20,12 +20,13 @@ export function NewTaskForm(props: NewTaskFormProps) {
 
   const form = useAppForm({
     defaultValues: { title: '' },
-    validators: { onChange: schema },
+    validators: { onChange: schema, onMount: schema },
     onSubmit: async ({ value }) => {
       const submitted = value.title;
       await onCreate(submitted.trim());
       if (form.getFieldValue('title') === submitted) {
         form.reset();
+        void form.validate('change');
       }
       inputRef.current?.focus();
     },
@@ -33,6 +34,7 @@ export function NewTaskForm(props: NewTaskFormProps) {
 
   function cancel() {
     form.reset();
+    void form.validate('change');
     setOpen(false);
   }
 
@@ -46,6 +48,7 @@ export function NewTaskForm(props: NewTaskFormProps) {
         return;
       }
       form.reset();
+      void form.validate('change');
       setOpen(false);
     }
 
@@ -92,16 +95,16 @@ export function NewTaskForm(props: NewTaskFormProps) {
       </form.AppField>
       <form.Subscribe
         selector={(state) => ({
-          title: state.values.title,
+          isValid: state.isValid,
           submitting: state.isSubmitting,
         })}
       >
-        {({ title, submitting }) => (
+        {({ isValid, submitting }) => (
           <div className="flex justify-between gap-2">
             <Button type="button" size="xs" color="alternative" onClick={cancel}>
               Cancel
             </Button>
-            <Button type="submit" size="xs" disabled={submitting || title.trim().length === 0}>
+            <Button type="submit" size="xs" disabled={submitting || !isValid}>
               Add
             </Button>
           </div>
