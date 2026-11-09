@@ -2222,4 +2222,218 @@ mod tests {
         assert_eq!(task.title, "second");
         assert_eq!(fields["title"], json!("second"));
     }
+
+    fn section(name: &str, position: &str) -> Section {
+        Section {
+            id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            name: name.to_string(),
+            position: Position::parse(position).expect("valid position"),
+            color: None,
+            created_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn top_places_a_section_before_the_first() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[2];
+
+        let result = section_placement_position(&sections, target, SectionPlacement::Top);
+
+        let Some(position) = result.expect("top placement computes a position") else {
+            panic!("top should move a non-first section");
+        };
+        assert!(position < sections[0].position);
+    }
+
+    #[test]
+    fn top_is_a_noop_for_the_first_section() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[0];
+
+        let result = section_placement_position(&sections, target, SectionPlacement::Top);
+
+        assert!(result.expect("top placement succeeds").is_none());
+    }
+
+    #[test]
+    fn bottom_places_a_section_after_the_last() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[0];
+
+        let result = section_placement_position(&sections, target, SectionPlacement::Bottom);
+
+        let Some(position) = result.expect("bottom placement computes a position") else {
+            panic!("bottom should move a non-last section");
+        };
+        assert!(position > sections[2].position);
+    }
+
+    #[test]
+    fn bottom_is_a_noop_for_the_last_section() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[2];
+
+        let result = section_placement_position(&sections, target, SectionPlacement::Bottom);
+
+        assert!(result.expect("bottom placement succeeds").is_none());
+    }
+
+    #[test]
+    fn top_and_bottom_are_noops_for_the_only_section() {
+        let sections = vec![section("only", "a0")];
+        let target = &sections[0];
+
+        let top = section_placement_position(&sections, target, SectionPlacement::Top);
+        let bottom = section_placement_position(&sections, target, SectionPlacement::Bottom);
+
+        assert!(top.expect("top placement succeeds").is_none());
+        assert!(bottom.expect("bottom placement succeeds").is_none());
+    }
+
+    #[test]
+    fn before_places_a_section_between_the_left_neighbor_and_anchor() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[2];
+        let anchor = sections[1].id;
+
+        let result =
+            section_placement_position(&sections, target, SectionPlacement::Before(anchor));
+
+        let Some(position) = result.expect("before placement computes a position") else {
+            panic!("before should move a non-adjacent section");
+        };
+        assert!(position > sections[0].position);
+        assert!(position < sections[1].position);
+    }
+
+    #[test]
+    fn after_places_a_section_between_the_anchor_and_right_neighbor() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[0];
+        let anchor = sections[1].id;
+
+        let result =
+            section_placement_position(&sections, target, SectionPlacement::After(anchor));
+
+        let Some(position) = result.expect("after placement computes a position") else {
+            panic!("after should move a non-adjacent section");
+        };
+        assert!(position > sections[1].position);
+        assert!(position < sections[2].position);
+    }
+
+    #[test]
+    fn before_is_a_noop_when_already_adjacent() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[0];
+        let anchor = sections[1].id;
+
+        let result =
+            section_placement_position(&sections, target, SectionPlacement::Before(anchor));
+
+        assert!(result.expect("before placement succeeds").is_none());
+    }
+
+    #[test]
+    fn after_is_a_noop_when_already_adjacent() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[2];
+        let anchor = sections[1].id;
+
+        let result =
+            section_placement_position(&sections, target, SectionPlacement::After(anchor));
+
+        assert!(result.expect("after placement succeeds").is_none());
+    }
+
+    #[test]
+    fn before_skips_equal_position_neighbors() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1-left", "a1"),
+            section("a1-right", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[3];
+        let anchor = sections[2].id;
+
+        let result =
+            section_placement_position(&sections, target, SectionPlacement::Before(anchor));
+
+        let Some(position) = result.expect("before placement computes a position") else {
+            panic!("before should move a non-adjacent section");
+        };
+        assert!(position > sections[0].position);
+        assert!(position < sections[1].position);
+    }
+
+    #[test]
+    fn after_skips_equal_position_neighbors() {
+        let sections = vec![
+            section("a0", "a0"),
+            section("a1-left", "a1"),
+            section("a1-right", "a1"),
+            section("a2", "a2"),
+        ];
+        let target = &sections[0];
+        let anchor = sections[1].id;
+
+        let result =
+            section_placement_position(&sections, target, SectionPlacement::After(anchor));
+
+        let Some(position) = result.expect("after placement computes a position") else {
+            panic!("after should move a non-adjacent section");
+        };
+        assert!(position > sections[1].position);
+        assert!(position < sections[3].position);
+    }
+
+    #[test]
+    fn before_with_an_unknown_anchor_is_not_found() {
+        let sections = vec![section("a0", "a0"), section("a1", "a1")];
+        let target = &sections[1];
+        let anchor = Uuid::new_v4();
+
+        let result =
+            section_placement_position(&sections, target, SectionPlacement::Before(anchor));
+
+        assert!(matches!(
+            result,
+            Err(ServiceError::SectionNotFound { .. })
+        ));
+    }
 }
