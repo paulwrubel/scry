@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MobileAddTask } from './MobileAddTask';
 
@@ -7,7 +7,16 @@ function renderTask(onCreate: (title: string) => Promise<void>) {
   render(<MobileAddTask onCreate={onCreate} />);
 }
 
-afterEach(cleanup);
+const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+
+afterEach(() => {
+  cleanup();
+  if (originalVisualViewport === undefined) {
+    Reflect.deleteProperty(window, 'visualViewport');
+  } else {
+    Object.defineProperty(window, 'visualViewport', originalVisualViewport);
+  }
+});
 
 describe('MobileAddTask', () => {
   it('opens the sheet and adds a task without closing', async () => {
@@ -50,5 +59,30 @@ describe('MobileAddTask', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(screen.queryByRole('button', { name: 'Add' })).toBeNull();
+  });
+
+  it('lifts the sheet by the visual viewport inset', () => {
+    const viewport = new EventTarget() as unknown as VisualViewport;
+    Object.defineProperty(viewport, 'height', {
+      configurable: true,
+      value: window.innerHeight - 300,
+    });
+    Object.defineProperty(viewport, 'offsetTop', { configurable: true, value: 0 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+
+    renderTask(vi.fn(async () => undefined));
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+
+    expect(screen.getByTestId('flowbite-drawer').style.bottom).toBe('300px');
+
+    act(() => {
+      Object.defineProperty(viewport, 'height', {
+        configurable: true,
+        value: window.innerHeight - 400,
+      });
+      viewport.dispatchEvent(new Event('resize'));
+    });
+
+    expect(screen.getByTestId('flowbite-drawer').style.bottom).toBe('400px');
   });
 });
