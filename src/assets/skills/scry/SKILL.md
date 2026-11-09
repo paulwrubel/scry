@@ -110,15 +110,20 @@ Every example below includes the global `--json` flag, which must come before th
 | `scry --json project delete <name> [-f]`                                                                             | Delete a project and all its tasks                 |
 | `scry --json section list`                                                                                           | List a project's sections                          |
 | `scry --json section add <name> [--color <color>]`                                                                   | Add a section                                      |
+| `scry --json section move <name> [--top\|--first\|--bottom\|--last\|--before <name>\|--after <name>]`                | Move a section within the project order            |
 | `scry --json section remove <name>`                                                                                  | Delete a section, moving its tasks to No section   |
 | `scry --json section rename <old> <new>`                                                                             | Rename a section                                   |
 | `scry --json section merge <source> <target>`                                                                        | Merge the source into the target                   |
 | `scry --json section set-color <name> <color>`                                                                       | Set a section's color                              |
 | `scry --json section reset-color <name>`                                                                             | Clear a section's color                            |
 
-There is no CLI command for moving a section within the ordering; reorder sections in the
-web UI. Likewise, `move` can transfer a task between sections but cannot place it at a
-specific position, so ordering tasks within a section is also web-UI-only.
+`scry section move` reorders sections: `--top` (alias `--first`) places the section first,
+`--bottom` (alias `--last`) places it last, and `--before <name>` or `--after <name>` places
+it next to another section in the same project. The REST equivalent is
+`POST /api/v1/sections/{id}/move` with `{"op":"top"}`, `{"op":"bottom"}`,
+`{"op":"before","anchor_id":"<id>"}`, or `{"op":"after","anchor_id":"<id>"}`. `move` (the
+task command) still transfers a task between sections but appends it, so ordering tasks
+within a section remains web-UI-only.
 
 Project templates seed a project's sections and settings via
 `scry --json project create -t <template> <name>`:
