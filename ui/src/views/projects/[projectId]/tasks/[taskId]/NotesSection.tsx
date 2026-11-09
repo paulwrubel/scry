@@ -1,7 +1,12 @@
 import { Button } from 'flowbite-react';
 import { useState } from 'react';
-import { TextAreaControl } from '@/components/form-controls/TextAreaControl';
+import { z } from 'zod';
 import type { Note } from '@/generated/Note';
+import { useAppForm } from '@/hooks/useAppForm';
+
+const schema = z.object({
+  contents: z.string().trim().min(1, 'A note cannot be empty.'),
+});
 
 export type NotesSectionProps = {
   notes: Note[];
@@ -13,49 +18,58 @@ export type NotesSectionProps = {
 export function NotesSection(props: NotesSectionProps) {
   const { notes, onCreate, onUpdate, onDelete } = props;
 
-  const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editContents, setEditContents] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const ordered = [...notes].sort((left, right) => left.created_at.localeCompare(right.created_at));
 
-  async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (draft.trim().length === 0) {
-      return;
-    }
+  const createForm = useAppForm({
+    defaultValues: { contents: '' },
+    validators: { onChange: schema },
+    listeners: { onChange: () => setError(null) },
+    onSubmit: async ({ value }) => {
+      setError(null);
+      try {
+        await onCreate(value.contents.trim());
+        createForm.reset();
+      } catch {
+        setError('Could not save this note.');
+      }
+    },
+  });
 
-    setError(null);
-    try {
-      await onCreate(draft);
-      setDraft('');
-    } catch {
-      setError('Could not save this note.');
-    }
-  }
+  const editForm = useAppForm({
+    defaultValues: { contents: '' },
+    validators: { onChange: schema },
+    listeners: { onChange: () => setError(null) },
+    onSubmit: async ({ value }) => {
+      const note = notes.find((item) => item.id === editingId);
+      if (note === undefined) {
+        return;
+      }
+
+      setError(null);
+      try {
+        await onUpdate(note, value.contents.trim());
+        setEditingId(null);
+        editForm.reset();
+      } catch {
+        setError('Could not save this note.');
+      }
+    },
+  });
 
   function startEditing(note: Note) {
+    editForm.reset();
+    editForm.setFieldValue('contents', note.contents);
     setEditingId(note.id);
-    setEditContents(note.contents);
     setConfirmingId(null);
   }
 
-  async function handleUpdate(event: React.FormEvent<HTMLFormElement>, note: Note) {
-    event.preventDefault();
-    if (editContents.trim().length === 0) {
-      setError('A note cannot be empty.');
-      return;
-    }
-
-    setError(null);
-    try {
-      await onUpdate(note, editContents);
-      setEditingId(null);
-    } catch {
-      setError('Could not save this note.');
-    }
+  function cancelEditing() {
+    setEditingId(null);
+    editForm.reset();
   }
 
   async function handleDelete(note: Note) {
@@ -79,25 +93,33 @@ export function NotesSection(props: NotesSectionProps) {
         >
           {editingId === note.id ? (
             <form
-              onSubmit={(event) => void handleUpdate(event, note)}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void editForm.handleSubmit();
+              }}
               className="flex flex-col gap-2"
             >
-              <TextAreaControl
-                label="Note contents"
-                value={editContents}
-                onChange={setEditContents}
-                rows={3}
-              />
+              <editForm.AppField name="contents">
+                {(field) => <field.FormTextAreaField label="Note contents" rows={3} />}
+              </editForm.AppField>
               <div className="flex gap-2">
-                <Button type="submit" size="xs">
-                  Save note
-                </Button>
-                <Button
-                  size="xs"
-                  color="alternative"
-                  type="button"
-                  onClick={() => setEditingId(null)}
+                <editForm.Subscribe
+                  selector={(state) => ({
+                    contents: state.values.contents,
+                    submitting: state.isSubmitting,
+                  })}
                 >
+                  {({ contents, submitting }) => (
+                    <Button
+                      type="submit"
+                      size="xs"
+                      disabled={submitting || contents.trim().length === 0}
+                    >
+                      Save note
+                    </Button>
+                  )}
+                </editForm.Subscribe>
+                <Button size="xs" color="alternative" type="button" onClick={cancelEditing}>
                   Cancel
                 </Button>
               </div>
@@ -145,18 +167,31 @@ export function NotesSection(props: NotesSectionProps) {
           )}
         </div>
       ))}
-      <form onSubmit={(event) => void handleCreate(event)} className="flex flex-col gap-2">
-        <TextAreaControl
-          label="New note"
-          value={draft}
-          onChange={setDraft}
-          placeholder="Add a note"
-          rows={2}
-        />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void createForm.handleSubmit();
+        }}
+        className="flex flex-col gap-2"
+      >
+        <createForm.AppField name="contents">
+          {(field) => (
+            <field.FormTextAreaField label="New note" placeholder="Add a note" rows={2} />
+          )}
+        </createForm.AppField>
         <div>
-          <Button type="submit" size="xs" disabled={draft.trim().length === 0}>
-            Add note
-          </Button>
+          <createForm.Subscribe
+            selector={(state) => ({
+              contents: state.values.contents,
+              submitting: state.isSubmitting,
+            })}
+          >
+            {({ contents, submitting }) => (
+              <Button type="submit" size="xs" disabled={submitting || contents.trim().length === 0}>
+                Add note
+              </Button>
+            )}
+          </createForm.Subscribe>
         </div>
       </form>
       {error === null ? null : (
