@@ -98,7 +98,9 @@ describe('ProjectsPage deletion', () => {
       expect(setActiveProjectId).toHaveBeenCalledWith('project-2');
     });
     expect(clearActiveProject).not.toHaveBeenCalled();
-    expect(screen.getByTestId('path').textContent).toBe('/projects/project-2/tasks');
+    await waitFor(() => {
+      expect(screen.getByTestId('path').textContent).toBe('/projects/project-2/tasks');
+    });
   });
 
   it('stays on the list when deleting a non-active project', async () => {
