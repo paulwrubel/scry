@@ -94,6 +94,13 @@ pub enum ServiceError {
     SectionMoveAnchorItself {
         section: String,
     },
+    TaskMoveAnchorItself {
+        task: TaskId,
+    },
+    TaskAnchorNotInSection {
+        task: TaskId,
+        section: String,
+    },
     SectionNameRequired,
     TaskHandleNotFound {
         handle: String,
@@ -137,6 +144,12 @@ impl fmt::Display for ServiceError {
             Self::SectionMoveAnchorItself { section } => {
                 write!(f, "Section \"{section}\" cannot be moved relative to itself.")
             }
+            Self::TaskMoveAnchorItself { task } => {
+                write!(f, "Task {task} cannot be moved relative to itself")
+            }
+            Self::TaskAnchorNotInSection { task, section } => {
+                write!(f, "Task {task} is not in section \"{section}\"")
+            }
             Self::SectionNameRequired => write!(f, "A section name is required"),
             Self::TaskHandleNotFound { handle } => {
                 write!(f, "No task matches handle \"{handle}\"")
@@ -168,8 +181,10 @@ impl ServiceError {
             Self::TaskHandleNotFound { .. } | Self::NoteHandleNotFound { .. } => "not_found",
             Self::SectionNameTaken { .. }
             | Self::SectionMergeIntoItself { .. }
-            | Self::SectionMoveAnchorItself { .. } => "conflict",
+            | Self::SectionMoveAnchorItself { .. }
+            | Self::TaskMoveAnchorItself { .. } => "conflict",
             Self::SectionNameRequired => "invalid",
+            Self::TaskAnchorNotInSection { .. } => "invalid",
             Self::AmbiguousTaskHandle { .. } | Self::AmbiguousNoteHandle { .. } => "invalid",
             Self::Storage(error) => error.kind(),
         }
