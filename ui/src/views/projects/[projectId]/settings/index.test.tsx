@@ -5,9 +5,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ActiveProjectContext } from '@/providers/ActiveProject/context';
+import { InstallPromptContext } from '@/providers/InstallPrompt/context';
+import type { InstallPromptContextType } from '@/providers/InstallPrompt/context';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
+import { SyncContext } from '@/providers/Sync/context';
+import type { SyncContextValue } from '@/providers/Sync/context';
 import type { Replica } from '@/utils/replica';
+import type { SyncClient, SyncSnapshot } from '@/utils/sync';
 import { ProjectSettingsPage } from './index';
 
 const CREATED_AT = '2026-01-01T00:00:00Z';
@@ -57,21 +62,53 @@ function renderPage(
     retry: () => undefined,
   };
 
+  const syncSnapshot: SyncSnapshot = {
+    status: 'idle',
+    error: null,
+    rejected: [],
+    lastSyncedAt: null,
+  };
+  const client: SyncClient = {
+    getSnapshot: () => syncSnapshot,
+    subscribe: () => () => undefined,
+    sync: async () => undefined,
+    clearRejectedOperation: () => undefined,
+    clearAllRejectedOperations: () => undefined,
+  };
+  const syncContext: SyncContextValue = {
+    client,
+    syncNow: async () => undefined,
+    clearRejectedOperation: () => undefined,
+    clearAllRejectedOperations: () => undefined,
+  };
+
+  const installPromptContext: InstallPromptContextType = {
+    canInstall: false,
+    isInstalled: false,
+    isIos: false,
+    isMobile: false,
+    promptInstall: async () => undefined,
+  };
+
   const setActiveProjectId = vi.fn();
   const clearActiveProject = vi.fn();
 
   render(
     <ReplicaContext.Provider value={replicaContext}>
-      <ActiveProjectContext.Provider
-        value={{ activeProjectId, setActiveProjectId, clearActiveProject }}
-      >
-        <MemoryRouter initialEntries={[`/projects/${projectId}/settings`]}>
-          <LocationProbe />
-          <Routes>
-            <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
-          </Routes>
-        </MemoryRouter>
-      </ActiveProjectContext.Provider>
+      <SyncContext.Provider value={syncContext}>
+        <InstallPromptContext.Provider value={installPromptContext}>
+          <ActiveProjectContext.Provider
+            value={{ activeProjectId, setActiveProjectId, clearActiveProject }}
+          >
+            <MemoryRouter initialEntries={[`/projects/${projectId}/settings`]}>
+              <LocationProbe />
+              <Routes>
+                <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
+              </Routes>
+            </MemoryRouter>
+          </ActiveProjectContext.Provider>
+        </InstallPromptContext.Provider>
+      </SyncContext.Provider>
     </ReplicaContext.Provider>,
   );
 

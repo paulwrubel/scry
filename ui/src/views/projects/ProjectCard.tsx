@@ -1,16 +1,13 @@
-import { Badge, Button, Card } from 'flowbite-react';
+import { Button, Card } from 'flowbite-react';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 
 export type ProjectCardProps = {
   project: ProjectSnapshot;
-  active: boolean;
   onUse: () => void;
-  onSettings: () => void;
-  onDelete: () => void;
 };
 
 export function ProjectCard(props: ProjectCardProps) {
-  const { project, active, onUse, onSettings, onDelete } = props;
+  const { project, onUse } = props;
 
   return (
     <Card>
@@ -18,11 +15,6 @@ export function ProjectCard(props: ProjectCardProps) {
         <h3 className="min-w-0 truncate text-base font-semibold text-white" title={project.name}>
           {project.name}
         </h3>
-        {active ? (
-          <Badge color="success" className="shrink-0">
-            Active
-          </Badge>
-        ) : null}
       </div>
 
       <p className="text-muted text-sm">{project.description || 'No description.'}</p>
@@ -43,20 +35,8 @@ export function ProjectCard(props: ProjectCardProps) {
       </dl>
 
       <div className="flex gap-2">
-        <Button
-          size="sm"
-          color="default"
-          disabled={active}
-          onClick={onUse}
-          className="min-h-11 flex-1"
-        >
+        <Button size="sm" color="default" onClick={onUse} className="min-h-11 flex-1">
           Use
-        </Button>
-        <Button size="sm" color="alternative" onClick={onSettings} className="min-h-11 flex-1">
-          Settings
-        </Button>
-        <Button size="sm" color="red" onClick={onDelete} className="min-h-11 flex-1">
-          Delete
         </Button>
       </div>
     </Card>

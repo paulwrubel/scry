@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
 import { DeleteProjectModal } from '../../DeleteProjectModal';
+import { AppSection } from './AppSection';
 import { ProjectSettingsForm } from './ProjectSettingsForm';
 
 export function ProjectSettingsPage() {
@@ -67,6 +68,7 @@ export function ProjectSettingsPage() {
           </div>
         </div>
       </Card>
+      <AppSection />
       {deleteOpen ? (
         <DeleteProjectModal
           key={project.id}

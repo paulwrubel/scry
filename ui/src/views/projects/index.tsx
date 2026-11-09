@@ -1,6 +1,5 @@
 import {
   Alert,
-  Badge,
   Button,
   Table,
   TableBody,
@@ -10,53 +9,27 @@ import {
   TableRow,
 } from 'flowbite-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
-import { DeleteProjectModal } from './DeleteProjectModal';
 import { NewProjectModal } from './NewProjectModal';
 import { ProjectCard } from './ProjectCard';
 
 export function ProjectsPage() {
   const snapshot = useReplicaSnapshot();
-  const { activeProjectId, setActiveProjectId, clearActiveProject } = useActiveProject();
+  const { activeProjectId, setActiveProjectId } = useActiveProject();
   const navigate = useNavigate();
-  const [deleteTarget, setDeleteTarget] = useState<ProjectSnapshot | null>(null);
   const [creating, setCreating] = useState(false);
 
   const projects = snapshot.visible.projects;
 
+  if (activeProjectId !== null) {
+    return <Navigate to={`/projects/${activeProjectId}/tasks`} replace />;
+  }
+
   function handleUse(projectId: string) {
     setActiveProjectId(projectId);
     navigate(`/projects/${projectId}/tasks`);
-  }
-
-  function handleSettings(projectId: string) {
-    setActiveProjectId(projectId);
-    navigate(`/projects/${projectId}/settings`);
-  }
-
-  function handleDeleted(projectId: string) {
-    setDeleteTarget(null);
-    if (projectId !== activeProjectId) {
-      return;
-    }
-
-    const index = projects.findIndex((project) => project.id === projectId);
-    const nextProject =
-      index === -1
-        ? (projects.find((project) => project.id !== projectId) ?? null)
-        : (projects[index + 1] ?? projects[index - 1] ?? null);
-
-    if (nextProject === null) {
-      clearActiveProject();
-      navigate('/projects');
-      return;
-    }
-
-    setActiveProjectId(nextProject.id);
-    navigate(`/projects/${nextProject.id}/tasks`);
   }
 
   function handleCreated(projectId: string) {
@@ -91,10 +64,7 @@ export function ProjectsPage() {
                 <ProjectCard
                   key={project.id}
                   project={project}
-                  active={project.id === activeProjectId}
                   onUse={() => handleUse(project.id)}
-                  onSettings={() => handleSettings(project.id)}
-                  onDelete={() => setDeleteTarget(project)}
                 />
               ))}
             </div>
@@ -113,39 +83,15 @@ export function ProjectsPage() {
                 <TableBody>
                   {projects.map((project) => (
                     <TableRow key={project.id}>
-                      <TableCell className="font-medium text-white">
-                        <div className="flex items-center gap-2">
-                          {project.name}
-                          {project.id === activeProjectId ? (
-                            <Badge color="success">Active</Badge>
-                          ) : null}
-                        </div>
-                      </TableCell>
+                      <TableCell className="font-medium text-white">{project.name}</TableCell>
                       <TableCell className="text-muted">{project.description || '—'}</TableCell>
                       <TableCell>{project.sections.length}</TableCell>
                       <TableCell>{project.tasks.length}</TableCell>
                       <TableCell>{new Date(project.created_at).toLocaleDateString()}</TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            size="xs"
-                            color="default"
-                            disabled={project.id === activeProjectId}
-                            onClick={() => handleUse(project.id)}
-                          >
-                            Use
-                          </Button>
-                          <Button
-                            size="xs"
-                            color="alternative"
-                            onClick={() => handleSettings(project.id)}
-                          >
-                            Settings
-                          </Button>
-                          <Button size="xs" color="red" onClick={() => setDeleteTarget(project)}>
-                            Delete
-                          </Button>
-                        </div>
+                        <Button size="xs" color="default" onClick={() => handleUse(project.id)}>
+                          Use
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -155,14 +101,6 @@ export function ProjectsPage() {
           </>
         )}
       </section>
-      {deleteTarget === null ? null : (
-        <DeleteProjectModal
-          key={deleteTarget.id}
-          project={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onDeleted={handleDeleted}
-        />
-      )}
       {creating ? (
         <NewProjectModal
           existingNames={projects.map((project) => project.name)}

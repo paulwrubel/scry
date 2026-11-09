@@ -77,73 +77,19 @@ function renderPage(
 
 afterEach(cleanup);
 
-describe('ProjectsPage deletion', () => {
-  it('switches to the next project after deleting the active one', async () => {
-    const enqueue = vi.fn(async () => undefined);
-    const { setActiveProjectId, clearActiveProject } = renderPage(
-      [projectSnapshot('project-1', 'Alpha'), projectSnapshot('project-2', 'Beta')],
+describe('ProjectsPage', () => {
+  it('redirects to the active project board when one is active', async () => {
+    renderPage(
+      [projectSnapshot('project-1', 'Alpha')],
       'project-1',
-      enqueue,
+      vi.fn(async () => undefined),
     );
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
-    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }));
-
     await waitFor(() => {
-      expect(enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'delete_project', id: 'project-1' }),
-      );
-    });
-    await waitFor(() => {
-      expect(setActiveProjectId).toHaveBeenCalledWith('project-2');
-    });
-    expect(clearActiveProject).not.toHaveBeenCalled();
-    await waitFor(() => {
-      expect(screen.getByTestId('path').textContent).toBe('/projects/project-2/tasks');
+      expect(screen.getByTestId('path').textContent).toBe('/projects/project-1/tasks');
     });
   });
 
-  it('stays on the list when deleting a non-active project', async () => {
-    const enqueue = vi.fn(async () => undefined);
-    const { setActiveProjectId, clearActiveProject } = renderPage(
-      [projectSnapshot('project-1', 'Alpha'), projectSnapshot('project-2', 'Beta')],
-      'project-2',
-      enqueue,
-    );
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
-    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }));
-
-    await waitFor(() => {
-      expect(enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'delete_project', id: 'project-1' }),
-      );
-    });
-    expect(setActiveProjectId).not.toHaveBeenCalled();
-    expect(clearActiveProject).not.toHaveBeenCalled();
-    expect(screen.getByTestId('path').textContent).toBe('/projects');
-  });
-
-  it('clears the active project when deleting the last project', async () => {
-    const enqueue = vi.fn(async () => undefined);
-    const { setActiveProjectId, clearActiveProject } = renderPage(
-      [projectSnapshot('project-1', 'Only')],
-      'project-1',
-      enqueue,
-    );
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
-    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }));
-
-    await waitFor(() => {
-      expect(clearActiveProject).toHaveBeenCalledTimes(1);
-    });
-    expect(setActiveProjectId).not.toHaveBeenCalled();
-    expect(screen.getByTestId('path').textContent).toBe('/projects');
-  });
-});
-
-describe('ProjectsPage creation', () => {
   it('creates a project and opens its board', async () => {
     const enqueue = vi.fn(async (_operation: Operation) => undefined);
     const { setActiveProjectId, clearActiveProject } = renderPage([], null, enqueue);
