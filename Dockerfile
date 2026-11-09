@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# The binary is built on the host with `just build`, which also builds the web
-# UI and embeds it at compile time. `just run-docker` builds it first; plain
-# `docker build .` requires `target/release/scry` to exist.
+# The binaries are built on the host with `just build`, which also builds the
+# web UI and embeds it into `scry-api` at compile time. `just run-docker` builds
+# them first; plain `docker build .` requires `target/release/scry-api` to exist.
 FROM debian:bookworm-slim
 
 # Run as a non-root user. Native-root TLS validates against the operating
@@ -13,15 +13,15 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 scry
 
-# `scry` reads `./scry.toml` from its working directory, so compose mounts the
-# config there (see compose.yaml).
+# `scry-api` reads `./scry.toml` from its working directory, so compose mounts
+# the config there (see compose.yaml).
 WORKDIR /app
 
-COPY target/release/scry /usr/local/bin/scry
+COPY target/release/scry-api /usr/local/bin/scry-api
 
 USER scry
 EXPOSE 8000
 
-ENTRYPOINT ["scry"]
+ENTRYPOINT ["scry-api"]
 # Defaults to the REST API on 0.0.0.0:8000.
-CMD ["serve", "--http", "0.0.0.0:8000"]
+CMD ["--http", "0.0.0.0:8000"]

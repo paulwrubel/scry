@@ -2,7 +2,7 @@
 
 A client/server task manager for the terminal and the browser.
 
-scry pairs the `scry` CLI with an embedded web UI. `scry serve` owns a PostgreSQL database and exposes a REST API plus the browser app, and the CLI is an HTTP client that keeps no local copy of your data. The web app is local-first: it keeps a confirmed replica and a durable outbox in the browser, so it keeps working offline. A built-in `default` project means you can start adding tasks immediately.
+scry pairs the `scry` CLI with the `scry-api` server. `scry-api` owns a PostgreSQL database, exposes a REST API plus the embedded web UI, and the CLI is an HTTP client that keeps no local copy of your data. The web app is local-first: it keeps a confirmed replica and a durable outbox in the browser, so it keeps working offline. A built-in `default` project means you can start adding tasks immediately.
 
 ## Installation
 
@@ -12,32 +12,39 @@ scry pairs the `scry` CLI with an embedded web UI. `scry serve` owns a PostgreSQ
 curl -fsSL https://raw.githubusercontent.com/paulwrubel/scry/main/install.sh | sh
 ```
 
-This downloads the latest release and installs to `~/.local/bin`. Make sure that directory is in your `PATH`.
+This downloads the latest release and installs both `scry` and `scry-api` into `~/.local/bin`. Make sure that directory is in your `PATH`.
 
 ### Manual download
 
-Download the latest binary from the [releases page](https://github.com/paulwrubel/scry/releases/latest).
+Download the latest release binaries from the [releases page](https://github.com/paulwrubel/scry/releases/latest).
 
 ### Build from source
 
-Building requires [Rust](https://www.rust-lang.org/tools/install), [just](https://github.com/casey/just), and Node 26 installed through nvm (see `ui/.nvmrc`). `just build` installs the UI dependencies, builds the web UI, and embeds it in the binary:
+Building requires [Rust](https://www.rust-lang.org/tools/install), [just](https://github.com/casey/just), and Node 26 installed through nvm (see `ui/.nvmrc`). `just build` installs the UI dependencies, builds the web UI, and builds both binaries:
 
 ```sh
 git clone https://github.com/paulwrubel/scry.git
 cd scry
 just build
 ./target/release/scry --help
+./target/release/scry-api --help
 ```
 
 For an API-only binary without the embedded web UI:
 
 ```sh
-cargo build --release --no-default-features
+cargo build --release -p scry-api --no-default-features
+```
+
+To build only the CLI, without the server:
+
+```sh
+cargo build --release -p scry
 ```
 
 ## Quick start
 
-Point the CLI at a running server, then use it like a local task manager:
+Once `database_url` is configured, start the server with `scry-api --http 127.0.0.1:8000`. Then point the CLI at it and use it like a local task manager:
 
 ```sh
 # Set the server once in scry.toml, or pass --server <url> to each command.
@@ -90,7 +97,7 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
 
 ## Docker
 
-Each release publishes `ghcr.io/paulwrubel/scry`, tagged with its version and `latest`. The image is runtime-only: the web UI is embedded in the release binary at build time, and the image serves the API and web UI on port 8000. Create a `scry.toml` pointing at your PostgreSQL server:
+Each release publishes `ghcr.io/paulwrubel/scry`, tagged with its version and `latest`. The image is runtime-only: the web UI is embedded in the `scry-api` binary at build time, and the image runs `scry-api`, which serves the API and web UI on port 8000. Create a `scry.toml` pointing at your PostgreSQL server:
 
 ```toml
 database_url = "postgres://user:pass@host:5432/scry"
@@ -111,7 +118,7 @@ Pin a released version tag in production rather than tracking `latest`. Use `hos
 scry reads `scry.toml` from the current directory, then `$XDG_CONFIG_HOME/scry/scry.toml`, then the legacy `$XDG_CONFIG_HOME/scry/config.toml`. Pass `--config <path>` to use a specific file. The file is never created automatically.
 
 - `server_url` — the REST server the client talks to.
-- `database_url` — the PostgreSQL URL used by `scry serve`; client commands do not use it.
+- `database_url` — the PostgreSQL URL used by `scry-api`; client commands do not use it.
 - `state_file` — override the active-project state file location.
 
 The server URL resolves from `--server`, then `server_url`.
@@ -120,13 +127,13 @@ Credentials belong in `scry.secret.toml` (discovered in the same locations, or p
 
 ## Database
 
-`scry serve` requires `database_url` in `scry.toml` or `scry.secret.toml`; if neither sets it, the server fails to start. Only `postgres://` and `postgresql://` URLs are accepted, and TLS works through the URL's `sslmode` parameter. Migrations run automatically on startup.
+`scry-api` requires `database_url` in `scry.toml` or `scry.secret.toml`; if neither sets it, the server fails to start. Only `postgres://` and `postgresql://` URLs are accepted, and TLS works through the URL's `sslmode` parameter. Migrations run automatically on startup.
 
-Only `scry serve` connects to PostgreSQL. The CLI sends every command to `server_url` over HTTP.
+Only `scry-api` connects to PostgreSQL. The CLI sends every command to `server_url` over HTTP.
 
 ## Server and API
 
-Start the server with `scry serve --http 127.0.0.1:8000`. The same origin serves the REST API at `/api/v1` and, in the default build, the embedded web UI at `/`. `--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Check it with `curl http://127.0.0.1:8000/api/v1`.
+Start the server with `scry-api --http 127.0.0.1:8000`. The same origin serves the REST API at `/api/v1` and, in the default build, the embedded web UI at `/`. `--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Check it with `curl http://127.0.0.1:8000/api/v1`.
 
 Set `admin_password` in `scry.secret.toml` to require authentication. Non-browser clients send the admin password as `Authorization: Bearer <admin password>`; browsers exchange it at `POST /api/v1/auth/session` for a short-lived access token and a refresh cookie scoped to `/api/v1/auth`. Normal requests then send `Authorization: Bearer <access token>`. With no admin password, the API is unauthenticated. There is no TLS, so use a TLS-terminating proxy if the server leaves the host.
 

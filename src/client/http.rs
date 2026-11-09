@@ -12,7 +12,7 @@ use crate::error::AppError;
 const TIMEOUT: Duration = Duration::from_secs(30);
 const TIMEZONE_HEADER: &str = "Time-Zone";
 
-/// A thin client for `scry serve`.
+/// A thin client for the `scry-api` server.
 pub struct Client {
     http: HttpClient,
     base_url: String,

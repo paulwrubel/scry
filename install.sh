@@ -53,12 +53,14 @@ trap 'rm -rf "$TMPDIR"' EXIT
 echo "Downloading scry for ${TARGET}..."
 $FETCH "$RELEASE_URL" | tar xz -C "$TMPDIR"
 
-install "$TMPDIR/scry" "$INSTALL_DIR/scry"
+for binary in scry scry-api; do
+    install "$TMPDIR/$binary" "$INSTALL_DIR/$binary"
+done
 
 VERSION=$("$INSTALL_DIR/scry" --version)
 
 echo ""
-echo "${VERSION} installed to ${INSTALL_DIR}/scry"
+echo "${VERSION} installed to ${INSTALL_DIR} (scry and scry-api)"
 
 case ":$PATH:" in
     *:"$INSTALL_DIR":*)
@@ -73,4 +75,4 @@ case ":$PATH:" in
 esac
 
 echo ""
-echo "Run 'scry --help' to get started!"
+echo "Run 'scry --help' to get started, and 'scry-api --help' for the server."

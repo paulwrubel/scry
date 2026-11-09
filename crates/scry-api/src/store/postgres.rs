@@ -99,7 +99,7 @@ impl PostgresStore {
             .await
             .map_err(|e| StorageError::Database(format!("failed to connect: {}", e)))?;
 
-        sqlx::migrate!("./migrations")
+        sqlx::migrate!("../../migrations")
             .run(&pool)
             .await
             .map_err(|e| StorageError::Database(format!("migration failed: {}", e)))?;

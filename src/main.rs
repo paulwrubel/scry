@@ -1,23 +1,15 @@
-mod auth_store;
 mod client;
 mod client_state;
 mod color;
-mod config;
+pub use scry_core::config;
 mod docs;
 mod error;
-mod http_auth;
 mod output;
-mod server;
-mod service;
 mod skill;
 mod state;
-mod store;
 
-use crate::auth_store::AuthStore;
 use crate::color::ColorChoice;
-use crate::service::ProjectService;
 use crate::skill::Harness;
-use crate::store::{ArcStore, PostgresStore};
 use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::AppError;
@@ -25,7 +17,6 @@ use scry_core::ids::Handle;
 use scry_core::models::{Color, Priority, TaskSortingMode};
 use scry_core::snapshot::ImportMode;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(
@@ -184,12 +175,6 @@ enum Command {
     /// Manage the agent skill that teaches coding agents to drive scry
     #[command(subcommand)]
     Skill(SkillCommand),
-    /// Serve the REST API over HTTP
-    Serve {
-        /// The address to bind, for example `127.0.0.1:9000`
-        #[arg(long, value_name = "ADDR")]
-        http: String,
-    },
 }
 
 #[derive(Subcommand)]
@@ -360,13 +345,18 @@ async fn main() -> std::process::ExitCode {
 
 /// Render an error as the machine-readable document emitted on stderr under `--json`.
 fn error_document(error: &AppError) -> String {
-    serde_json::json!({
+    let mut document = serde_json::json!({
         "error": {
             "kind": error.kind(),
             "message": error.to_string(),
         }
-    })
-    .to_string()
+    });
+
+    if let Some(details) = error.details() {
+        document["error"]["details"] = details;
+    }
+
+    document.to_string()
 }
 
 async fn run(cli: Cli) -> Result<(), AppError> {
@@ -375,7 +365,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         && (cli.command.is_none()
             || matches!(
                 cli.command.as_ref(),
-                Some(Command::Serve { .. } | Command::Docs | Command::Skill(_))
+                Some(Command::Docs | Command::Skill(_))
             ))
     {
         return Err(AppError::Usage(
@@ -693,14 +683,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         _ => {}
     }
 
-    let database_url = secrets.resolved_database_url(&config)?;
-    let (store, auth_store) = connect_store(&database_url).await?;
-    let service = ProjectService::new(store);
-
-    if let Some(Command::Serve { http }) = &cli.command {
-        return server::serve_http(service, auth_store, http, secrets.admin_password.clone()).await;
-    }
-
     Ok(())
 }
 
@@ -738,23 +720,5 @@ fn skill_target(harness: Option<Harness>, dir: Option<&Path>) -> Result<PathBuf,
         _ => Err(AppError::Usage(
             "specify exactly one of --harness or --dir".to_string(),
         )),
-    }
-}
-
-/// Open the Postgres store for the given database URL.
-///
-/// Only Postgres URLs (`postgres://` and `postgresql://`) are supported. The
-/// returned auth store is a clone of the same connection pool, so refresh
-/// tokens share the store's configuration.
-async fn connect_store(database_url: &str) -> Result<(ArcStore, Arc<dyn AuthStore>), AppError> {
-    if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
-        let postgres = PostgresStore::new(database_url).await?;
-        let auth_store: Arc<dyn AuthStore> = Arc::new(postgres.clone());
-        let store: ArcStore = Arc::new(postgres);
-        Ok((store, auth_store))
-    } else {
-        Err(AppError::Config(format!(
-            "unsupported database URL {database_url}: only postgres:// and postgresql:// are supported"
-        )))
     }
 }

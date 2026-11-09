@@ -57,4 +57,3 @@ pub fn priority_long(priority: Priority) -> String {
         &format!("p{} - {}", i64::from(priority), priority),
     )
 }
-

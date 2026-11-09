@@ -141,7 +141,7 @@ fn build_notes_router() -> Router<ScryState> {
 }
 
 #[cfg(feature = "embed-ui")]
-static UI_DIST_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/ui/dist");
+static UI_DIST_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../ui/dist");
 
 #[cfg(feature = "embed-ui")]
 fn get_content_type(path: &str) -> &'static str {

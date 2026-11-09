@@ -1,12 +1,12 @@
 # Service / Store call graph
 
-Derived from `src/service.rs` (`ProjectService`), `crates/scry-core/src/store.rs` (the `Store` trait), `crates/scry-core/src/snapshot.rs`, and the REST handlers in `src/server/handlers.rs`. `PostgresStore` is the only implementor of `Store`, and `ProjectService` is the only caller of `Store` apart from the snapshot module.
+Derived from `crates/scry-api/src/service.rs` (`ProjectService`), `crates/scry-core/src/store.rs` (the `Store` trait), `crates/scry-core/src/snapshot.rs`, and the REST handlers in `crates/scry-api/src/server/handlers.rs`. `PostgresStore` is the only implementor of `Store`, and `ProjectService` is the only caller of `Store` apart from the snapshot module.
 
 ## How to read these diagrams
 
 - Solid arrow (`-->`): a call across the boundary into the `Store` trait.
 - Dashed arrow (`-.->`): an internal `ProjectService` call, including delegations into `scry_core::snapshot`.
-- Thick arrow (`==>`): a REST handler calling into the service. The route is in the handler's label. CLI commands call the same service methods and are not drawn.
+- Thick arrow (`==>`): a REST handler calling into the service. The route is in the handler's label. The CLI reaches the service over HTTP and is not drawn.
 - A node label containing arrows, such as `append_position -> last_task_position -> tasks_in_section`, is a collapsed call chain drawn as one node so the diagram stays legible; its edges leave the collapsed node for the store calls made at the end of the chain. The arrow direction is written with the ASCII sequence `->`.
 - `*_by_id` and `*_in_project` service methods are drawn only where a handler or another service method calls them.
 
@@ -474,7 +474,7 @@ flowchart LR
 
 ## Coverage
 
-- The six diagrams together touch all 31 `Store` trait methods (8 task, 8 note, 6 section, 7 project, 2 sync) and every REST handler in `src/server/handlers.rs` except `index`, which only reports server metadata.
+- The six diagrams together touch all 31 `Store` trait methods (8 task, 8 note, 6 section, 7 project, 2 sync) and every REST handler in `crates/scry-api/src/server/handlers.rs` except `index`, which only reports server metadata.
 - `get_note_by_id`, `get_all_notes_by_task_id`, `update_note`, `delete_note` and `find_note_ids_by_handle` are marked `dead_code` on the trait and are reached only by the note scaffolding methods `get_note`, `list_notes_by_task_id`, `update_note`, `delete_note` and `get_note_by_handle`.
 
 ## Notes
