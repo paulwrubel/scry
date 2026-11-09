@@ -47,15 +47,7 @@ afterEach(cleanup);
 
 describe('ProjectCard', () => {
   it('renders the project name, description, and counts', () => {
-    render(
-      <ProjectCard
-        project={projectSnapshot()}
-        active={false}
-        onUse={() => undefined}
-        onSettings={() => undefined}
-        onDelete={() => undefined}
-      />,
-    );
+    render(<ProjectCard project={projectSnapshot()} onUse={() => undefined} />);
 
     expect(screen.getByRole('heading', { name: 'Project' })).toBeDefined();
     expect(screen.getByText('A project description.')).toBeDefined();
@@ -64,69 +56,12 @@ describe('ProjectCard', () => {
     expect(screen.getByText('Created')).toBeDefined();
   });
 
-  it('shows the active badge and disables Use for the active project', () => {
-    render(
-      <ProjectCard
-        project={projectSnapshot()}
-        active
-        onUse={() => undefined}
-        onSettings={() => undefined}
-        onDelete={() => undefined}
-      />,
-    );
-
-    expect(screen.getByText('Active')).toBeDefined();
-    expect((screen.getByRole('button', { name: 'Use' }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('calls the settings action', () => {
-    const onSettings = vi.fn();
-    render(
-      <ProjectCard
-        project={projectSnapshot()}
-        active={false}
-        onUse={() => undefined}
-        onSettings={onSettings}
-        onDelete={() => undefined}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-
-    expect(onSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it('calls the use action for an inactive project', () => {
+  it('calls the use action', () => {
     const onUse = vi.fn();
-    render(
-      <ProjectCard
-        project={projectSnapshot()}
-        active={false}
-        onUse={onUse}
-        onSettings={() => undefined}
-        onDelete={() => undefined}
-      />,
-    );
+    render(<ProjectCard project={projectSnapshot()} onUse={onUse} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Use' }));
 
     expect(onUse).toHaveBeenCalledTimes(1);
-  });
-
-  it('calls the delete action', () => {
-    const onDelete = vi.fn();
-    render(
-      <ProjectCard
-        project={projectSnapshot()}
-        active={false}
-        onUse={() => undefined}
-        onSettings={() => undefined}
-        onDelete={onDelete}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-
-    expect(onDelete).toHaveBeenCalledTimes(1);
   });
 });

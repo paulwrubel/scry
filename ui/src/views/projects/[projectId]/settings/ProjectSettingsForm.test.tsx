@@ -6,7 +6,7 @@ import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
 import type { Replica } from '@/utils/replica';
-import { ProjectSettingsModal } from './ProjectSettingsModal';
+import { ProjectSettingsForm } from './ProjectSettingsForm';
 
 const PROJECT_ID = 'project-1';
 const CREATED_AT = '2026-01-01T00:00:00Z';
@@ -25,7 +25,7 @@ function projectSnapshot(): ProjectSnapshot {
   };
 }
 
-function renderModal(enqueue: (operation: Operation) => Promise<void>, onClose = vi.fn()) {
+function renderForm(enqueue: (operation: Operation) => Promise<void>) {
   const snapshot = {
     confirmed: { projects: [projectSnapshot()] },
     visible: { projects: [projectSnapshot()] },
@@ -48,11 +48,9 @@ function renderModal(enqueue: (operation: Operation) => Promise<void>, onClose =
 
   render(
     <ReplicaContext.Provider value={context}>
-      <ProjectSettingsModal project={projectSnapshot()} onClose={onClose} />
+      <ProjectSettingsForm project={projectSnapshot()} />
     </ReplicaContext.Provider>,
   );
-
-  return { onClose };
 }
 
 function saveButton() {
@@ -61,15 +59,15 @@ function saveButton() {
 
 afterEach(cleanup);
 
-describe('ProjectSettingsModal', () => {
+describe('ProjectSettingsForm', () => {
   it('starts with Save enabled for a valid project', () => {
-    renderModal(vi.fn(async () => undefined));
+    renderForm(vi.fn(async () => undefined));
 
     expect(saveButton().disabled).toBe(false);
   });
 
   it('disables Save when the name is empty', async () => {
-    renderModal(vi.fn(async () => undefined));
+    renderForm(vi.fn(async () => undefined));
 
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: '   ' } });
 
@@ -79,7 +77,7 @@ describe('ProjectSettingsModal', () => {
   });
 
   it('re-enables Save when the name becomes valid again', async () => {
-    renderModal(vi.fn(async () => undefined));
+    renderForm(vi.fn(async () => undefined));
 
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: '   ' } });
     await waitFor(() => {
@@ -97,7 +95,7 @@ describe('ProjectSettingsModal', () => {
     const enqueue = vi.fn(async (_operation: Operation) => {
       throw new Error('offline');
     });
-    renderModal(enqueue);
+    renderForm(enqueue);
 
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Details' } });
     fireEvent.click(saveButton());
@@ -115,11 +113,25 @@ describe('ProjectSettingsModal', () => {
     });
   });
 
-  it('calls onClose when Cancel is clicked', () => {
-    const { onClose } = renderModal(vi.fn(async () => undefined));
+  it('enqueues an update_project operation with the edited name', async () => {
+    const enqueue = vi.fn(async (_operation: Operation) => undefined);
+    renderForm(enqueue);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Renamed' } });
+    fireEvent.click(saveButton());
 
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'update_project',
+        id: PROJECT_ID,
+        name: 'Renamed',
+        task_sorting_mode: null,
+        show_priority: null,
+      }),
+    );
   });
 });

@@ -5,7 +5,6 @@ import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react
 import { isSortable, useSortable } from '@dnd-kit/react/sortable';
 import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
-import { HiCog6Tooth } from 'react-icons/hi2';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { Color } from '@/generated/Color';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
@@ -30,7 +29,6 @@ import {
 } from '@/utils/taskFilter';
 import type { TaskFilter } from '@/utils/taskFilter';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
-import { ProjectSettingsModal } from '../ProjectSettingsModal';
 import { BoardColumn } from './BoardColumn';
 import { MobileAddTask } from './MobileAddTask';
 import { NewSectionCard } from './NewSectionCard';
@@ -72,7 +70,6 @@ export function BoardPage() {
   const snapshot = useReplicaSnapshot();
   const replica = useReplica();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
   const isDesktop = useIsDesktop();
@@ -302,20 +299,6 @@ export function BoardPage() {
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
       <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h1 className="min-w-0 truncate text-2xl font-semibold" title={project.name}>
-            {project.name}
-          </h1>
-          <button
-            type="button"
-            aria-label="Project settings"
-            title="Project settings"
-            onClick={() => setSettingsOpen(true)}
-            className="text-muted hidden h-11 w-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none md:inline-flex md:h-8 md:w-8"
-          >
-            <HiCog6Tooth aria-hidden="true" className="h-5 w-5 md:h-4 md:w-4" />
-          </button>
-        </div>
         <div className="flex shrink-0 items-center gap-2 md:ml-auto md:gap-4">
           {dragDisabledReason !== '' ? (
             <span className="hidden text-xs text-yellow-500/80 md:inline">
@@ -452,13 +435,6 @@ export function BoardPage() {
         </div>
       </DragDropProvider>
       {isDesktop ? null : <MobileAddTask onCreate={(title) => handleCreate(null, title)} />}
-      {settingsOpen ? (
-        <ProjectSettingsModal
-          key={project.id}
-          project={project}
-          onClose={() => setSettingsOpen(false)}
-        />
-      ) : null}
     </div>
   );
 }

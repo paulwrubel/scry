@@ -1,16 +1,19 @@
-import { Navbar, NavbarBrand, NavbarCollapse, NavbarLink } from 'flowbite-react';
+import { Navbar, NavbarCollapse, NavbarLink } from 'flowbite-react';
 import type { NavbarTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { Link } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { ConnectionStatus } from './ConnectionStatus';
+import { ProjectSwitcher } from './ProjectSwitcher';
+import { ScryMark } from './ScryMark';
 import { SignOutButton } from './SignOutButton';
 import { SyncButton } from './SyncButton';
 import { SyncStatus } from './SyncStatus';
 
 export function LayoutNavbar() {
   const { activeProjectId } = useActiveProject();
-  const boardPath = activeProjectId === null ? '/projects' : `/projects/${activeProjectId}/tasks`;
+  const tasksPath = activeProjectId === null ? null : `/projects/${activeProjectId}/tasks`;
+  const settingsPath = activeProjectId === null ? null : `/projects/${activeProjectId}/settings`;
 
   const navbarTheme: DeepPartial<NavbarTheme> = {
     root: {
@@ -23,14 +26,10 @@ export function LayoutNavbar() {
 
   return (
     <Navbar fluid theme={navbarTheme}>
-      <div className="flex flex-1 items-baseline gap-4">
-        {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
-        <NavbarBrand as={Link} to="/" className="min-h-11 md:min-h-0">
-          <span className="self-center text-xl font-semibold whitespace-nowrap text-white">
-            Scry
-          </span>
-        </NavbarBrand>
-        <span className="hidden cursor-default self-baseline text-sm text-zinc-500 select-none md:inline">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <ScryMark className="h-6 w-6 shrink-0" />
+        <ProjectSwitcher />
+        <span className="hidden cursor-default text-sm text-zinc-500 select-none md:inline">
           {__APP_VERSION__}
         </span>
       </div>
@@ -44,20 +43,18 @@ export function LayoutNavbar() {
         </div>
         <SyncButton />
       </div>
-      <NavbarCollapse>
-        {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
-        <NavbarLink as={Link} to={boardPath}>
-          Tasks
-        </NavbarLink>
-        {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
-        <NavbarLink as={Link} to="/projects">
-          Projects
-        </NavbarLink>
-        {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
-        <NavbarLink as={Link} to="/admin">
-          Admin
-        </NavbarLink>
-      </NavbarCollapse>
+      {tasksPath === null || settingsPath === null ? null : (
+        <NavbarCollapse>
+          {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
+          <NavbarLink as={Link} to={tasksPath}>
+            Tasks
+          </NavbarLink>
+          {/* @ts-expect-error polymorphic 'as' prop not typed in flowbite-react */}
+          <NavbarLink as={Link} to={settingsPath}>
+            Settings
+          </NavbarLink>
+        </NavbarCollapse>
+      )}
     </Navbar>
   );
 }
