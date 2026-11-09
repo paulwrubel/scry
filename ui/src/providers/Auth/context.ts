@@ -7,7 +7,7 @@ export type AuthContextType = {
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   authenticatedFetch: typeof fetch;
-  login: (token: string) => Promise<LoginResult>;
+  login: (password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
 };
 

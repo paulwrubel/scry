@@ -10,7 +10,7 @@ afterEach(cleanup);
 
 type RenderLoginOptions = {
   isAuthenticated?: boolean;
-  login?: (token: string) => Promise<LoginResult>;
+  login?: (password: string) => Promise<LoginResult>;
   initialEntries?: string[];
 };
 
@@ -44,14 +44,29 @@ describe('LoginPage', () => {
     renderLogin();
 
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy();
-    expect(screen.getByLabelText('API token')).toBeTruthy();
+    expect(screen.getByLabelText('Please enter the password')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
   });
 
-  it('submits the token', async () => {
+  it('toggles password visibility', () => {
+    renderLogin();
+
+    const input = screen.getByLabelText('Please enter the password');
+    expect(input.getAttribute('type')).toBe('password');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(input.getAttribute('type')).toBe('text');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(input.getAttribute('type')).toBe('password');
+  });
+
+  it('submits the password', async () => {
     const { login } = renderLogin();
 
-    fireEvent.change(screen.getByLabelText('API token'), { target: { value: 'secret' } });
+    fireEvent.change(screen.getByLabelText('Please enter the password'), {
+      target: { value: 'secret' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => {
@@ -60,12 +75,14 @@ describe('LoginPage', () => {
   });
 
   it('shows the login error', async () => {
-    renderLogin({ login: async () => ({ ok: false, message: 'Invalid API token' }) });
+    renderLogin({ login: async () => ({ ok: false, message: 'Invalid admin password' }) });
 
-    fireEvent.change(screen.getByLabelText('API token'), { target: { value: 'wrong' } });
+    fireEvent.change(screen.getByLabelText('Please enter the password'), {
+      target: { value: 'wrong' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    expect(await screen.findByText('Invalid API token')).toBeTruthy();
+    expect(await screen.findByText('Invalid admin password')).toBeTruthy();
   });
 
   it('redirects when already authenticated', async () => {

@@ -1,8 +1,14 @@
-import { Button, Drawer, TextInput } from 'flowbite-react';
+import { Button, Drawer } from 'flowbite-react';
 import type { DrawerTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { useEffect, useRef, useState } from 'react';
 import { HiPlus } from 'react-icons/hi2';
+import { z } from 'zod';
+import { useAppForm } from '@/hooks/useAppForm';
+
+const schema = z.object({
+  title: z.string().trim().min(1, 'A task needs a title.'),
+});
 
 const sheetTheme: DeepPartial<DrawerTheme> = {
   root: {
@@ -24,10 +30,28 @@ export function MobileAddTask(props: MobileAddTaskProps) {
   const { onCreate } = props;
 
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const form = useAppForm({
+    defaultValues: { title: '' },
+    validators: { onChange: schema, onMount: schema },
+    listeners: { onChange: () => setError(null) },
+    onSubmit: async ({ value }) => {
+      const submitted = value.title;
+      setError(null);
+      try {
+        await onCreate(submitted.trim());
+        if (form.getFieldValue('title') === submitted) {
+          form.reset();
+          void form.validate('change');
+        }
+        inputRef.current?.focus();
+      } catch {
+        setError('Could not add this task.');
+      }
+    },
+  });
 
   useEffect(() => {
     if (open) {
@@ -37,33 +61,9 @@ export function MobileAddTask(props: MobileAddTaskProps) {
 
   function close() {
     setOpen(false);
-    setTitle('');
+    form.reset();
+    void form.validate('change');
     setError(null);
-  }
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (submitting) {
-      return;
-    }
-
-    const trimmed = title.trim();
-    if (trimmed.length === 0) {
-      return;
-    }
-
-    const submitted = title;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onCreate(trimmed);
-      setTitle((current) => (current === submitted ? '' : current));
-      inputRef.current?.focus();
-    } catch {
-      setError('Could not add this task.');
-    } finally {
-      setSubmitting(false);
-    }
   }
 
   return (
@@ -86,22 +86,37 @@ export function MobileAddTask(props: MobileAddTaskProps) {
       >
         <div className="flex flex-col gap-3 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
           <div aria-hidden="true" className="bg-line-strong mx-auto h-1 w-10 rounded-full" />
-          <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void form.handleSubmit();
+            }}
+            className="flex items-center gap-2"
+          >
             <div className="min-w-0 flex-1">
-              <TextInput
-                ref={inputRef}
-                value={title}
-                onChange={(event) => {
-                  setTitle(event.target.value);
-                  setError(null);
-                }}
-                placeholder="Task title"
-                aria-label="Task title"
-              />
+              <form.AppField name="title">
+                {(field) => (
+                  <field.FormTextField
+                    label="Task title"
+                    hideLabel
+                    placeholder="Task title"
+                    inputRef={inputRef}
+                  />
+                )}
+              </form.AppField>
             </div>
-            <Button type="submit" disabled={submitting || title.trim().length === 0}>
-              Add
-            </Button>
+            <form.Subscribe
+              selector={(state) => ({
+                isValid: state.isValid,
+                submitting: state.isSubmitting,
+              })}
+            >
+              {({ isValid, submitting }) => (
+                <Button type="submit" disabled={submitting || !isValid}>
+                  Add
+                </Button>
+              )}
+            </form.Subscribe>
           </form>
           {error === null ? null : (
             <p className="text-danger text-sm" role="alert">

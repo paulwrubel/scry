@@ -14,12 +14,6 @@ const LEGACY_CONFIG_FILE: &str = "config.toml";
 /// must not be committed.
 const SECRET_FILE: &str = "scry.secret.toml";
 
-/// Environment variable holding the REST API bearer token.
-const API_TOKEN_ENV: &str = "SCRY_API_TOKEN";
-
-/// Environment variable overriding the client's server URL.
-const SERVER_URL_ENV: &str = "SCRY_SERVER_URL";
-
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ScryConfig {
@@ -69,15 +63,13 @@ impl ScryConfig {
             .map_err(|e| AppError::Config(format!("failed to parse {:?}: {}", path, e)))
     }
 
-    /// Resolve the client's server URL: `--server`, then `SCRY_SERVER_URL`, then
-    /// `scry.toml`.
+    /// Resolve the client's server URL: `--server`, then `scry.toml`.
     pub fn resolved_server_url(&self, flag: Option<&str>) -> Result<String, AppError> {
         flag.map(str::to_string)
-            .or_else(|| non_empty_env(SERVER_URL_ENV))
             .or_else(|| self.server_url.clone())
             .ok_or_else(|| {
                 AppError::Config(
-                    "no server configured: set `server_url` in scry.toml, SCRY_SERVER_URL, or --server"
+                    "no server configured: set `server_url` in scry.toml or pass --server"
                         .to_string(),
                 )
             })
@@ -94,12 +86,12 @@ impl ScryConfig {
 }
 
 /// Secrets loaded from `scry.secret.toml`, a file kept out of version control.
-/// Its fields take precedence over `scry.toml` and the environment variables.
+/// Its fields take precedence over `scry.toml`.
 #[derive(Debug, Default, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ScrySecrets {
     pub database_url: Option<String>,
-    pub api_token: Option<String>,
+    pub admin_password: Option<String>,
 }
 
 impl ScrySecrets {
@@ -148,18 +140,6 @@ impl ScrySecrets {
                 )
             })
     }
-
-    /// The REST token: this file's value, else `SCRY_API_TOKEN`.
-    pub fn api_token(&self) -> Option<String> {
-        self.api_token
-            .clone()
-            .or_else(|| non_empty_env(API_TOKEN_ENV))
-    }
-}
-
-/// Read an environment variable, treating an empty value as unset.
-fn non_empty_env(name: &str) -> Option<String> {
-    std::env::var(name).ok().filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]
@@ -248,7 +228,7 @@ mod tests {
         let dir = TempDir::new().expect("temp dir");
         write_config(
             &dir.path().join(SECRET_FILE),
-            "database_url = \"postgres://secret.db\"\napi_token = \"rest-token\"\n",
+            "database_url = \"postgres://secret.db\"\nadmin_password = \"rest-token\"\n",
         );
         let xdg = dir.path().join("xdg");
 
@@ -257,7 +237,7 @@ mod tests {
             secrets.database_url.as_deref(),
             Some("postgres://secret.db")
         );
-        assert_eq!(secrets.api_token.as_deref(), Some("rest-token"));
+        assert_eq!(secrets.admin_password.as_deref(), Some("rest-token"));
     }
 
     #[test]
@@ -295,7 +275,7 @@ mod tests {
         let config = ScryConfig::load_from(dir.path(), &xdg).expect("load config");
         let secrets = ScrySecrets::load_from(dir.path(), &xdg).expect("load secrets");
         assert!(secrets.database_url.is_none());
-        assert!(secrets.api_token.is_none());
+        assert!(secrets.admin_password.is_none());
         assert_eq!(
             secrets
                 .resolved_database_url(&config)
@@ -381,7 +361,7 @@ mod tests {
         let explicit = dir.path().join("explicit.secret.toml");
         write_config(
             &explicit,
-            "database_url = \"postgres://secret.db\"\napi_token = \"rest-token\"\n",
+            "database_url = \"postgres://secret.db\"\nadmin_password = \"rest-token\"\n",
         );
 
         let secrets = ScrySecrets::load(Some(&explicit)).expect("load");
@@ -389,7 +369,7 @@ mod tests {
             secrets.database_url.as_deref(),
             Some("postgres://secret.db")
         );
-        assert_eq!(secrets.api_token.as_deref(), Some("rest-token"));
+        assert_eq!(secrets.admin_password.as_deref(), Some("rest-token"));
     }
 
     #[test]
@@ -402,5 +382,14 @@ mod tests {
             error.to_string().contains("failed to read"),
             "unexpected error: {error}"
         );
+    }
+
+    #[test]
+    fn unknown_secret_fields_are_rejected() {
+        let dir = TempDir::new().expect("temp dir");
+        write_config(&dir.path().join(SECRET_FILE), "unknown = \"rest-token\"\n");
+        let xdg = dir.path().join("xdg");
+
+        ScrySecrets::load_from(dir.path(), &xdg).expect_err("unknown fields should be rejected");
     }
 }

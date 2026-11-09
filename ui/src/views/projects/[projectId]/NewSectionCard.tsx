@@ -1,16 +1,14 @@
-import {
-  Button,
-  Card,
-  Modal,
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
-  TextInput,
-} from 'flowbite-react';
+import { Button, Card, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
 import type { CardTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { useState } from 'react';
 import { HiPlusCircle } from 'react-icons/hi2';
+import { z } from 'zod';
+import { useAppForm } from '@/hooks/useAppForm';
+
+const schema = z.object({
+  name: z.string().trim().min(1, 'A section needs a name.'),
+});
 
 const cardTheme: DeepPartial<CardTheme> = {
   root: {
@@ -20,29 +18,29 @@ const cardTheme: DeepPartial<CardTheme> = {
 };
 
 export type NewSectionCardProps = {
-  onAdd: (name: string) => void;
+  onAdd: (name: string) => void | Promise<void>;
 };
 
 export function NewSectionCard(props: NewSectionCardProps) {
   const { onAdd } = props;
 
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
+
+  const form = useAppForm({
+    defaultValues: { name: '' },
+    validators: { onChange: schema, onMount: schema },
+    onSubmit: async ({ value }) => {
+      await onAdd(value.name.trim());
+      form.reset();
+      void form.validate('change');
+      setOpen(false);
+    },
+  });
 
   function close() {
-    setName('');
+    form.reset();
+    void form.validate('change');
     setOpen(false);
-  }
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = name.trim();
-    if (trimmed.length === 0) {
-      return;
-    }
-
-    onAdd(trimmed);
-    close();
   }
 
   return (
@@ -63,24 +61,42 @@ export function NewSectionCard(props: NewSectionCardProps) {
       <Modal show={open} onClose={close}>
         <ModalHeader>Add section</ModalHeader>
         <ModalBody>
-          <form id="new-section-form" onSubmit={handleSubmit} className="flex flex-col gap-2">
-            <TextInput
-              autoFocus
-              sizing="sm"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Section name"
-              aria-label="Section name"
-            />
+          <form
+            id="new-section-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void form.handleSubmit();
+            }}
+            className="flex flex-col gap-2"
+          >
+            <form.AppField name="name">
+              {(field) => (
+                <field.FormTextField
+                  label="Section name"
+                  placeholder="Section name"
+                  sizing="sm"
+                  autoFocus
+                />
+              )}
+            </form.AppField>
           </form>
         </ModalBody>
         <ModalFooter className="justify-between">
           <Button color="alternative" onClick={close}>
             Cancel
           </Button>
-          <Button type="submit" form="new-section-form" disabled={name.trim().length === 0}>
-            Add
-          </Button>
+          <form.Subscribe
+            selector={(state) => ({
+              isValid: state.isValid,
+              submitting: state.isSubmitting,
+            })}
+          >
+            {({ isValid, submitting }) => (
+              <Button type="submit" form="new-section-form" disabled={submitting || !isValid}>
+                Add
+              </Button>
+            )}
+          </form.Subscribe>
         </ModalFooter>
       </Modal>
     </>

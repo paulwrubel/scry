@@ -15,7 +15,7 @@ export type SelectControlProps = {
 export function SelectControl(props: SelectControlProps) {
   const { label, items } = props;
   const field = useFieldContext<string>();
-  const error = fieldErrorMessage(field.state.meta.errors);
+  const error = field.state.meta.isTouched ? fieldErrorMessage(field.state.meta.errors) : null;
 
   return (
     <Label className="flex w-full flex-col items-stretch gap-1.5">

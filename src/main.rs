@@ -698,7 +698,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     let service = ProjectService::new(store);
 
     if let Some(Command::Serve { http }) = &cli.command {
-        return server::serve_http(service, auth_store, http, secrets.api_token()).await;
+        return server::serve_http(service, auth_store, http, secrets.admin_password.clone()).await;
     }
 
     Ok(())

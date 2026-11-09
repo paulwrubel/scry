@@ -200,14 +200,14 @@ fn build_ui_router() -> Router<ScryState> {
     })
 }
 
-/// Assemble the full router: the versioned API behind the optional bearer-token
+/// Assemble the full router: the versioned API behind the optional credential
 /// gate, the ungated auth endpoints, CORS, shared state, and the public UI.
 pub fn build_router(
     state: ScryState,
     auth_store: Arc<dyn AuthStore>,
-    token: Option<String>,
+    admin_password: Option<String>,
 ) -> Router {
-    let auth = AuthState::new(token, auth_store);
+    let auth = AuthState::new(admin_password, auth_store);
     let resources = require_auth(build_api_router(), auth.clone());
     let api = Router::new()
         .merge(resources)
@@ -225,14 +225,14 @@ pub async fn serve_http(
     service: ProjectService,
     auth_store: Arc<dyn AuthStore>,
     addr: &str,
-    token: Option<String>,
+    admin_password: Option<String>,
 ) -> Result<(), AppError> {
     let addr: SocketAddr = addr
         .parse()
         .map_err(|error| AppError::Usage(format!("invalid address '{addr}': {error}")))?;
 
     let state = ScryState { service };
-    let router = build_router(state, auth_store, token);
+    let router = build_router(state, auth_store, admin_password);
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

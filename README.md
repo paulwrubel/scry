@@ -40,8 +40,8 @@ cargo build --release --no-default-features
 Point the CLI at a running server, then use it like a local task manager:
 
 ```sh
-export SCRY_SERVER_URL=http://127.0.0.1:8000
-# Alternatively: pass --server <url> or set server_url in scry.toml.
+# Set the server once in scry.toml, or pass --server <url> to each command.
+echo 'server_url = "http://127.0.0.1:8000"' > scry.toml
 
 scry add "buy groceries"   # prints the new task's handle
 scry list
@@ -57,7 +57,7 @@ Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
 
 ## Web UI
 
-The default build serves the embedded web app at `/` from the same origin as the API, so opening `http://127.0.0.1:8000/` in a browser is enough to start. Sign in with the server's `api_token`; the browser exchanges it for a short-lived access token and a refresh cookie (see [Browser authentication](#browser-authentication)).
+The default build serves the embedded web app at `/` from the same origin as the API, so opening `http://127.0.0.1:8000/` in a browser is enough to start. Sign in with the server's `admin_password`; the browser exchanges it for a short-lived access token and a refresh cookie (see [Browser authentication](#browser-authentication)).
 
 The app is a PWA. Use the browser's install control, or add it to your home screen on mobile, to run it in its own window. Installation requires a secure context: HTTPS, or `localhost`/`127.0.0.1` during local development.
 
@@ -67,9 +67,9 @@ Offline data is per browser and per origin: the replica does not follow you to a
 
 ### Browser authentication
 
-Browser sessions use a short-lived access token plus a refresh credential. Signing in at `POST /api/v1/auth/session` exchanges `api_token` for a one-hour HS256 JWT kept only in JavaScript memory, and a 30-day refresh token in an `HttpOnly`, `SameSite=Lax`, `Path=/api/v1/auth` cookie. The refresh token is SHA-256 hashed in the database, rotated on every use, and reuse revokes the token lineage.
+Browser sessions use a short-lived access token plus a refresh credential. Signing in at `POST /api/v1/auth/session` exchanges `admin_password` for a one-hour HS256 JWT kept only in JavaScript memory, and a 30-day refresh token in an `HttpOnly`, `SameSite=Lax`, `Path=/api/v1/auth` cookie. The refresh token is SHA-256 hashed in the database, rotated on every use, and reuse revokes the token lineage.
 
-Normal API and sync requests send `Authorization: Bearer <access token>`; the refresh cookie is never accepted by those endpoints. A `401` during sync attempts one refresh and retries the request, preserving the outbox. If the refresh fails, the app returns to login without dropping queued edits. A reload recovers the session through `POST /api/v1/auth/refresh`. The signing key is derived from `api_token`, so rotating it invalidates existing access and refresh tokens. The cookie is marked `Secure` when the request arrives over HTTPS.
+Normal API and sync requests send `Authorization: Bearer <access token>`; the refresh cookie is never accepted by those endpoints. A `401` during sync attempts one refresh and retries the request, preserving the outbox. If the refresh fails, the app returns to login without dropping queued edits. A reload recovers the session through `POST /api/v1/auth/refresh`. The signing key is derived from `admin_password`, so rotating it invalidates existing access and refresh tokens. The cookie is marked `Secure` when the request arrives over HTTPS.
 
 This remains a single-user authentication model. GitHub SSO and multi-user project ownership are separate future work.
 
@@ -114,9 +114,9 @@ scry reads `scry.toml` from the current directory, then `$XDG_CONFIG_HOME/scry/s
 - `database_url` — the PostgreSQL URL used by `scry serve`; client commands do not use it.
 - `state_file` — override the active-project state file location.
 
-The server URL resolves from `--server`, then `SCRY_SERVER_URL`, then `server_url`.
+The server URL resolves from `--server`, then `server_url`.
 
-Credentials belong in `scry.secret.toml` (discovered in the same locations, or passed with `--secrets`). It is gitignored and never created automatically. `database_url` there overrides `scry.toml`, and `api_token` overrides `SCRY_API_TOKEN`.
+Credentials belong in `scry.secret.toml` (discovered in the same locations, or passed with `--secrets`). It is gitignored and never created automatically. `database_url` there overrides `scry.toml`, and `admin_password` is read from the secrets file.
 
 ## Database
 
@@ -128,7 +128,7 @@ Only `scry serve` connects to PostgreSQL. The CLI sends every command to `server
 
 Start the server with `scry serve --http 127.0.0.1:8000`. The same origin serves the REST API at `/api/v1` and, in the default build, the embedded web UI at `/`. `--http` takes a literal `ip:port`; a hostname such as `localhost` is rejected. Check it with `curl http://127.0.0.1:8000/api/v1`.
 
-Set `api_token` in `scry.secret.toml` (or `SCRY_API_TOKEN`) to require authentication. Non-browser clients send `Authorization: Bearer <token>`; browsers exchange the token at `POST /api/v1/auth/session` for a short-lived access token and a refresh cookie scoped to `/api/v1/auth`. Normal requests then send `Authorization: Bearer <access token>`. With no token, the API is unauthenticated. There is no TLS, so use a TLS-terminating proxy if the server leaves the host.
+Set `admin_password` in `scry.secret.toml` to require authentication. Non-browser clients send the admin password as `Authorization: Bearer <admin password>`; browsers exchange it at `POST /api/v1/auth/session` for a short-lived access token and a refresh cookie scoped to `/api/v1/auth`. Normal requests then send `Authorization: Bearer <access token>`. With no admin password, the API is unauthenticated. There is no TLS, so use a TLS-terminating proxy if the server leaves the host.
 
 For scripting, `--json` emits machine-readable output (for example, `scry --json list`). Collection commands emit arrays, single-resource and mutation commands emit bare objects, and errors carry a stable `kind`: `not_found`, `conflict`, `invalid`, `internal`, or `config`.
 

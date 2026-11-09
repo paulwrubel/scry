@@ -20,17 +20,15 @@ export function ProjectSettingsModal(props: ProjectSettingsModalProps) {
   const { saveFields } = useProjectMutations(project);
 
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const form = useAppForm({
     defaultValues: {
       name: project.name,
       description: project.description ?? '',
     },
-    validators: { onChange: schema },
+    validators: { onChange: schema, onMount: schema },
     listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
-      setSaving(true);
       setError(null);
 
       try {
@@ -43,8 +41,6 @@ export function ProjectSettingsModal(props: ProjectSettingsModalProps) {
         onClose();
       } catch {
         setError('Could not save this project.');
-      } finally {
-        setSaving(false);
       }
     },
   });
@@ -80,14 +76,19 @@ export function ProjectSettingsModal(props: ProjectSettingsModalProps) {
         <Button color="alternative" onClick={onClose}>
           Cancel
         </Button>
-        <form.Subscribe selector={(state) => ({ name: state.values.name, isValid: state.isValid })}>
-          {({ name, isValid }) => (
+        <form.Subscribe
+          selector={(state) => ({
+            isValid: state.isValid,
+            submitting: state.isSubmitting,
+          })}
+        >
+          {({ isValid, submitting }) => (
             <Button
               type="submit"
               form="project-settings-form"
-              disabled={saving || error !== null || name.trim().length === 0 || !isValid}
+              disabled={submitting || error !== null || !isValid}
             >
-              {saving ? 'Saving...' : 'Save'}
+              {submitting ? 'Saving...' : 'Save'}
             </Button>
           )}
         </form.Subscribe>

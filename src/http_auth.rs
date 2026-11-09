@@ -1,8 +1,9 @@
 //! Shared bearer-token authentication for scry's HTTP surfaces.
 //!
-//! The static `api_token` remains the login and CLI credential. Browser clients
-//! exchange it for a short-lived access JWT plus a database-backed refresh
-//! token; only `Authorization: Bearer` may authenticate ordinary API requests.
+//! The static `admin_password` remains the login and CLI credential. Browser
+//! clients exchange it for a short-lived access JWT plus a database-backed
+//! refresh token; only `Authorization: Bearer` may authenticate ordinary API
+//! requests.
 
 use crate::auth_store::{AuthStore, NewRefreshToken, RefreshRotation};
 use axum::Router;
@@ -31,26 +32,26 @@ const SUBJECT: &str = "local";
 /// Credentials shared by the API gate and the auth endpoints.
 #[derive(Clone)]
 pub(crate) struct AuthState {
-    token: Option<String>,
+    admin_password: Option<String>,
     key: Key,
     access_secret: Option<Vec<u8>>,
     refresh_tokens: Arc<dyn AuthStore>,
 }
 
 impl AuthState {
-    pub(crate) fn new(token: Option<String>, refresh_tokens: Arc<dyn AuthStore>) -> Self {
-        let (key, access_secret) = match token.as_deref() {
-            // Deriving both from the token means rotating it invalidates every
-            // cookie and access token at once.
-            Some(token) => {
-                let digest = Sha256::digest(token.as_bytes());
+    pub(crate) fn new(admin_password: Option<String>, refresh_tokens: Arc<dyn AuthStore>) -> Self {
+        let (key, access_secret) = match admin_password.as_deref() {
+            // Deriving both from the password means rotating it invalidates
+            // every cookie and access token at once.
+            Some(admin_password) => {
+                let digest = Sha256::digest(admin_password.as_bytes());
                 (Key::derive_from(digest.as_slice()), Some(digest.to_vec()))
             }
             None => (Key::generate(), None),
         };
 
         Self {
-            token,
+            admin_password,
             key,
             access_secret,
             refresh_tokens,
@@ -58,17 +59,18 @@ impl AuthState {
     }
 
     pub(crate) fn enabled(&self) -> bool {
-        self.token.is_some()
+        self.admin_password.is_some()
     }
 
     pub(crate) fn key(&self) -> Key {
         self.key.clone()
     }
 
-    pub(crate) fn check_token(&self, presented: &str) -> bool {
-        self.token
-            .as_deref()
-            .is_some_and(|token| presented.as_bytes().ct_eq(token.as_bytes()).into())
+    pub(crate) fn check_admin_password(&self, presented: &str) -> bool {
+        let Some(admin_password) = self.admin_password.as_deref() else {
+            return false;
+        };
+        presented.as_bytes().ct_eq(admin_password.as_bytes()).into()
     }
 
     /// Issue a one-hour HS256 access token for the local subject.
@@ -202,7 +204,7 @@ impl IntoResponse for AuthError {
         match self {
             AuthError::Disabled => (
                 StatusCode::BAD_REQUEST,
-                "authentication is disabled; no api_token is configured",
+                "authentication is disabled; no admin password is configured",
             )
                 .into_response(),
             AuthError::Unauthorized => {
@@ -227,8 +229,9 @@ fn hash_refresh_token(raw: &str) -> Vec<u8> {
     Sha256::digest(raw.as_bytes()).to_vec()
 }
 
-/// Extractor that admits a request carrying the static token or a valid access
-/// JWT in `Authorization: Bearer`. Cookies are deliberately ignored here.
+/// Extractor that admits a request carrying the static admin password or a
+/// valid access JWT in `Authorization: Bearer`. Cookies are deliberately ignored
+/// here.
 struct RequireAuth;
 
 impl FromRequestParts<AuthState> for RequireAuth {
@@ -244,7 +247,7 @@ impl FromRequestParts<AuthState> for RequireAuth {
                 Err(_) => return Err(unauthorized()),
             };
 
-        if state.check_token(bearer.token()) {
+        if state.check_admin_password(bearer.token()) {
             parts.extensions.insert(Principal {
                 subject: SUBJECT.to_string(),
             });
@@ -267,8 +270,8 @@ fn unauthorized() -> Response {
 
 /// Gate `router` behind bearer credentials.
 ///
-/// Returns the router unchanged when no token is configured. Otherwise every
-/// API request must present the bearer token or a valid access JWT.
+/// Returns the router unchanged when no admin password is configured. Otherwise
+/// every API request must present the bearer token or a valid access JWT.
 pub(crate) fn require_auth<S>(router: Router<S>, auth: AuthState) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -317,11 +320,11 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    fn auth_state(token: Option<&str>) -> (AuthState, Arc<MemoryAuthStore>) {
+    fn auth_state(admin_password: Option<&str>) -> (AuthState, Arc<MemoryAuthStore>) {
         let store = Arc::new(MemoryAuthStore::new());
         let refresh_tokens: Arc<dyn AuthStore> = store.clone();
         (
-            AuthState::new(token.map(str::to_string), refresh_tokens),
+            AuthState::new(admin_password.map(str::to_string), refresh_tokens),
             store,
         )
     }
@@ -400,7 +403,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rotating_api_token_rejects_the_old_access_token() {
+    async fn rotating_admin_password_rejects_the_old_access_token() {
         let (old, _) = auth_state(Some("old"));
         let token = old.issue_access_token().unwrap();
 

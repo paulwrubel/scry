@@ -1,5 +1,11 @@
-import { Button, TextInput } from 'flowbite-react';
-import { useRef, useState } from 'react';
+import { Button } from 'flowbite-react';
+import { useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
+import { useAppForm } from '@/hooks/useAppForm';
+
+const schema = z.object({
+  title: z.string().trim().min(1, 'A task needs a title.'),
+});
 
 type NewTaskFormProps = {
   onCreate: (title: string) => Promise<void>;
@@ -9,9 +15,46 @@ export function NewTaskForm(props: NewTaskFormProps) {
   const { onCreate } = props;
 
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const form = useAppForm({
+    defaultValues: { title: '' },
+    validators: { onChange: schema, onMount: schema },
+    onSubmit: async ({ value }) => {
+      const submitted = value.title;
+      await onCreate(submitted.trim());
+      if (form.getFieldValue('title') === submitted) {
+        form.reset();
+        void form.validate('change');
+      }
+      inputRef.current?.focus();
+    },
+  });
+
+  function cancel() {
+    form.reset();
+    void form.validate('change');
+    setOpen(false);
+  }
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (event.target instanceof Node && formRef.current?.contains(event.target)) {
+        return;
+      }
+      form.reset();
+      void form.validate('change');
+      setOpen(false);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open, form]);
 
   if (!open) {
     return (
@@ -21,63 +64,52 @@ export function NewTaskForm(props: NewTaskFormProps) {
     );
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (submitting) {
-      return;
-    }
-
-    const trimmed = title.trim();
-    if (trimmed.length === 0) {
-      return;
-    }
-
-    const submitted = title;
-    setSubmitting(true);
-    try {
-      await onCreate(trimmed);
-      setTitle((current) => (current === submitted ? '' : current));
-      inputRef.current?.focus();
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function handleCancel() {
-    setTitle('');
-    setOpen(false);
-  }
-
   function handleKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
     if (event.key === 'Escape') {
       event.preventDefault();
-      handleCancel();
+      cancel();
     }
   }
 
   return (
     <form
-      onSubmit={handleSubmit}
+      ref={formRef}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
       onKeyDown={handleKeyDown}
       className="flex shrink-0 flex-col gap-2"
     >
-      <TextInput
-        ref={inputRef}
-        autoFocus
-        sizing="sm"
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder="Task title"
-        aria-label="Task title"
-      />
-      <div className="flex gap-2">
-        <Button type="submit" size="xs" disabled={submitting || title.trim().length === 0}>
-          Add
-        </Button>
-        <Button type="button" size="xs" color="alternative" onClick={handleCancel}>
-          Cancel
-        </Button>
-      </div>
+      <form.AppField name="title">
+        {(field) => (
+          <field.FormTextField
+            label="Task title"
+            hideLabel
+            placeholder="Task title"
+            sizing="sm"
+            autoFocus
+            inputRef={inputRef}
+          />
+        )}
+      </form.AppField>
+      <form.Subscribe
+        selector={(state) => ({
+          isValid: state.isValid,
+          submitting: state.isSubmitting,
+        })}
+      >
+        {({ isValid, submitting }) => (
+          <div className="flex justify-between gap-2">
+            <Button type="button" size="xs" color="alternative" onClick={cancel}>
+              Cancel
+            </Button>
+            <Button type="submit" size="xs" disabled={submitting || !isValid}>
+              Add
+            </Button>
+          </div>
+        )}
+      </form.Subscribe>
     </form>
   );
 }
