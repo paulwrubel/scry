@@ -44,10 +44,10 @@ export function TaskHeader(props: TaskHeaderProps) {
         </svg>
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-baseline gap-2">
-            <h1 className="text-2xl font-semibold">{task.title}</h1>
-            <span className="text-faint font-mono text-sm">{handle}</span>
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h1 className="min-w-0 text-2xl font-semibold wrap-break-word">{task.title}</h1>
+            <span className="text-faint shrink-0 font-mono text-sm">{handle}</span>
           </div>
           <p className="text-muted text-sm">{project.name}</p>
         </div>

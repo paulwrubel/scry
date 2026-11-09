@@ -79,7 +79,7 @@ export function TaskCard(props: TaskCardProps) {
             />
           ) : null}
           <span
-            className={`min-w-0 text-sm hover:text-blue-400 hover:underline ${
+            className={`min-w-0 text-sm wrap-break-word hover:text-blue-400 hover:underline ${
               closed ? 'text-faint line-through' : ''
             }`}
           >
