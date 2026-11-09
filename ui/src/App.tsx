@@ -13,6 +13,7 @@ import { ProjectLayout } from './layouts/ProjectLayout';
 import { ProjectRedirect } from './layouts/ProjectRedirect';
 import { LoginPage } from './views/login';
 import { ProjectsPage } from './views/projects';
+import { ProjectSettingsPage } from './views/projects/[projectId]/settings';
 import { StatsPage } from './views/stats';
 
 function ProjectTasksRedirect() {
@@ -46,6 +47,7 @@ const routes = [
                 element: <ProjectLayout />,
                 children: [{ path: ':taskId' }],
               },
+              { path: 'projects/:projectId/settings', element: <ProjectSettingsPage /> },
               { path: 'admin', element: <StatsPage /> },
               { path: 'stats', element: <Navigate to="/admin" replace /> },
               { path: '*', element: <Navigate to="/" replace /> },

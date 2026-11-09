@@ -17,13 +17,11 @@ import { useReplicaSnapshot } from '@/providers/Replica';
 import { DeleteProjectModal } from './DeleteProjectModal';
 import { NewProjectModal } from './NewProjectModal';
 import { ProjectCard } from './ProjectCard';
-import { ProjectSettingsModal } from './ProjectSettingsModal';
 
 export function ProjectsPage() {
   const snapshot = useReplicaSnapshot();
   const { activeProjectId, setActiveProjectId, clearActiveProject } = useActiveProject();
   const navigate = useNavigate();
-  const [settingsProject, setSettingsProject] = useState<ProjectSnapshot | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSnapshot | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -32,6 +30,11 @@ export function ProjectsPage() {
   function handleUse(projectId: string) {
     setActiveProjectId(projectId);
     navigate(`/projects/${projectId}/tasks`);
+  }
+
+  function handleSettings(projectId: string) {
+    setActiveProjectId(projectId);
+    navigate(`/projects/${projectId}/settings`);
   }
 
   function handleDeleted(projectId: string) {
@@ -90,7 +93,7 @@ export function ProjectsPage() {
                   project={project}
                   active={project.id === activeProjectId}
                   onUse={() => handleUse(project.id)}
-                  onSettings={() => setSettingsProject(project)}
+                  onSettings={() => handleSettings(project.id)}
                   onDelete={() => setDeleteTarget(project)}
                 />
               ))}
@@ -135,7 +138,7 @@ export function ProjectsPage() {
                           <Button
                             size="xs"
                             color="alternative"
-                            onClick={() => setSettingsProject(project)}
+                            onClick={() => handleSettings(project.id)}
                           >
                             Settings
                           </Button>
@@ -152,13 +155,6 @@ export function ProjectsPage() {
           </>
         )}
       </section>
-      {settingsProject === null ? null : (
-        <ProjectSettingsModal
-          key={settingsProject.id}
-          project={settingsProject}
-          onClose={() => setSettingsProject(null)}
-        />
-      )}
       {deleteTarget === null ? null : (
         <DeleteProjectModal
           key={deleteTarget.id}
