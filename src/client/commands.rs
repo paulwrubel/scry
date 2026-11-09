@@ -22,7 +22,7 @@ mod list;
 pub use list::list;
 
 mod move_task;
-pub use move_task::{MoveTask, move_task};
+pub use move_task::{MoveTask, TaskMovePlacement, move_task};
 
 mod note_add;
 pub use note_add::note_add;

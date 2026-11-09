@@ -75,7 +75,12 @@ enum Command {
         #[arg(long, conflicts_with = "section")]
         new_section: Option<String>,
     },
-    /// Move a task to a section
+    /// Move a task to a section or place it within its group
+    #[command(group(
+        clap::ArgGroup::new("placement")
+            .multiple(false)
+            .args(["top", "bottom", "before", "after"])
+    ))]
     Move {
         /// The task ID or a unique handle prefix
         id: Handle,
@@ -84,6 +89,18 @@ enum Command {
         /// Move the task to No section
         #[arg(long, conflicts_with = "section")]
         no_section: bool,
+        /// Place the task first in its destination
+        #[arg(long, visible_alias = "first")]
+        top: bool,
+        /// Place the task last in its destination
+        #[arg(long, visible_alias = "last")]
+        bottom: bool,
+        /// Place the task immediately before this task
+        #[arg(long, value_name = "HANDLE")]
+        before: Option<String>,
+        /// Place the task immediately after this task
+        #[arg(long, value_name = "HANDLE")]
+        after: Option<String>,
     },
     /// Update task properties
     Update {
@@ -506,14 +523,28 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             id,
             section,
             no_section,
+            top,
+            bottom,
+            before,
+            after,
         }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            let placement = if *top {
+                Some(client::TaskMovePlacement::Top)
+            } else if *bottom {
+                Some(client::TaskMovePlacement::Bottom)
+            } else if let Some(anchor) = before.as_deref() {
+                Some(client::TaskMovePlacement::Before(anchor))
+            } else {
+                after.as_deref().map(client::TaskMovePlacement::After)
+            };
             return client::move_task(
                 &client,
                 client::MoveTask {
                     handle: id.as_str(),
                     section: section.as_deref(),
                     no_section: *no_section,
+                    placement,
                 },
                 output_json,
             )

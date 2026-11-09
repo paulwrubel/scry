@@ -72,7 +72,7 @@ Every example below includes the global `--json` flag, which must come before th
 | `scry --json add <title> [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>]`                   | Add a task                       |
 | `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                       | List tasks grouped by section    |
 | `scry --json show <handle>`                                                                                                                      | Show full task details and notes |
-| `scry --json move <handle> <section>`                                                                                                            | Move a task to a section         |
+| `scry --json move <handle> [<section>] [--no-section] [--top\|--first\|--bottom\|--last\|--before <handle>\|--after <handle>]`                   | Move or place a task             |
 | `scry --json update <handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section]` | Update task properties           |
 | `scry --json close <handle>...`                                                                                                                  | Close one or more tasks          |
 | `scry --json open <handle>...`                                                                                                                   | Reopen one or more closed tasks  |
@@ -91,9 +91,16 @@ Sections are created explicitly: `--section <name>` must name an existing sectio
 with a not-found error naming the section, while `--new-section <name>` (or
 `scry section add`) creates one. New tasks go to No section unless one of those flags is
 given, and `--no-section` on `move` or `update` moves a task back to No section. `move`
-requires either a section name or `--no-section` and appends the task to the end of the
-target section; it cannot place a task at a specific position. `close` and `open` change
-only the state; they never change a task's section or position.
+appends by default when given a section or `--no-section`. Add `--top`/`--first`,
+`--bottom`/`--last`, `--before <handle>`, or `--after <handle>` to place the task instead.
+The placement flags work with a destination section, with `--no-section`, or alone to stay
+in the current group; anchors must be another task in that group. The REST equivalent is
+`POST /api/v1/tasks/{handle}/move` with `{"placement":"top"}`, `{"placement":"bottom"}`,
+`{"placement":"before","anchor_id":"<task-id>"}`, or
+`{"placement":"after","anchor_id":"<task-id>"}`. Omit `section_id` to keep the current
+section, use `null` for No section, or pass a section id. Positions are always written, but
+task order is only visible when the project uses `manual` sorting. `close` and `open`
+change only the state; they never change a task's section or position.
 
 ## Project and section commands
 
@@ -121,9 +128,8 @@ Every example below includes the global `--json` flag, which must come before th
 `--bottom` (alias `--last`) places it last, and `--before <name>` or `--after <name>` places
 it next to another section in the same project. The REST equivalent is
 `POST /api/v1/sections/{id}/move` with `{"placement":"top"}`, `{"placement":"bottom"}`,
-`{"placement":"before","anchor_id":"<id>"}`, or `{"placement":"after","anchor_id":"<id>"}`. `move` (the
-task command) still transfers a task between sections but appends it, so ordering tasks
-within a section remains web-UI-only.
+`{"placement":"before","anchor_id":"<id>"}`, or `{"placement":"after","anchor_id":"<id>"}`.
+The task `move` command has the same placement flags; see Core task commands above.
 
 Project templates seed a project's sections and settings via
 `scry --json project create -t <template> <name>`:
