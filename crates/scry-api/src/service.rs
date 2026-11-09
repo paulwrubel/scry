@@ -355,7 +355,7 @@ impl ProjectService {
         Ok(task)
     }
 
-    pub async fn move_task_to_section_by_id(
+    pub async fn move_task_by_id(
         &self,
         task_id: TaskId,
         section: SectionInput,

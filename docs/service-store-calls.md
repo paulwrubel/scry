@@ -31,8 +31,7 @@ flowchart LR
     duplicate_task[duplicate_task]
     update_task[update_task]
     update_task_by_id[update_task_by_id]
-    move_task_to_section[move_task_to_section]
-    move_task_to_section_by_id[move_task_to_section_by_id]
+    move_task_by_id[move_task_by_id]
     close_task[close_task]
     close_task_by_id[close_task_by_id]
     open_task[open_task]
@@ -68,7 +67,7 @@ flowchart LR
 
   h_create_task ==> create_task_in_project
   h_update_task ==> update_task_by_id
-  h_move_task ==> move_task_to_section_by_id
+  h_move_task ==> move_task_by_id
   h_close_task ==> close_task_by_id
   h_open_task ==> open_task_by_id
   h_delete_task ==> delete_task_by_id
@@ -78,9 +77,8 @@ flowchart LR
   update_task_by_id -.-> require_task
   update_task_by_id -.-> require_project
   update_task_by_id -.-> update_task
-  move_task_to_section_by_id -.-> require_task
-  move_task_to_section_by_id -.-> require_project
-  move_task_to_section_by_id -.-> move_task_to_section
+  move_task_by_id -.-> require_task
+  move_task_by_id -.-> require_project
   close_task_by_id -.-> require_task
   close_task_by_id -.-> require_project
   close_task_by_id -.-> close_task

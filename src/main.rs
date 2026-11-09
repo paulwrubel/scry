@@ -623,13 +623,13 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             let placement = if *top {
-                client::SectionMove::Top
+                client::SectionMovePlacement::Top
             } else if *bottom {
-                client::SectionMove::Bottom
+                client::SectionMovePlacement::Bottom
             } else if let Some(anchor) = before.as_deref() {
-                client::SectionMove::Before(anchor)
+                client::SectionMovePlacement::Before(anchor)
             } else if let Some(anchor) = after.as_deref() {
-                client::SectionMove::After(anchor)
+                client::SectionMovePlacement::After(anchor)
             } else {
                 return Err(AppError::Usage(
                     "Specify one of --top, --bottom, --before, or --after.".to_string(),

@@ -11,7 +11,7 @@ use crate::output::print_json;
 use super::{project_by_name, section_by_name};
 
 /// Where to move a section relative to its siblings.
-pub enum SectionMove<'a> {
+pub enum SectionMovePlacement<'a> {
     Top,
     Bottom,
     Before(&'a str),
@@ -24,7 +24,7 @@ pub async fn section_move(
     config: &ScryConfig,
     project_flag: Option<&str>,
     name: &str,
-    placement: SectionMove<'_>,
+    placement: SectionMovePlacement<'_>,
     output_json: bool,
 ) -> Result<(), AppError> {
     let project: Project = project_by_name(client, config, project_flag).await?;
@@ -38,13 +38,13 @@ pub async fn section_move(
     }
 
     let (placement_kind, anchor_id): (&'static str, Option<SectionId>) = match &placement {
-        SectionMove::Top => ("top", None),
-        SectionMove::Bottom => ("bottom", None),
-        SectionMove::Before(anchor_name) => {
+        SectionMovePlacement::Top => ("top", None),
+        SectionMovePlacement::Bottom => ("bottom", None),
+        SectionMovePlacement::Before(anchor_name) => {
             let anchor = section_by_name(client, &project, anchor_name).await?;
             ("before", Some(anchor.id))
         }
-        SectionMove::After(anchor_name) => {
+        SectionMovePlacement::After(anchor_name) => {
             let anchor = section_by_name(client, &project, anchor_name).await?;
             ("after", Some(anchor.id))
         }
@@ -66,19 +66,19 @@ pub async fn section_move(
         print_json(&updated)?;
     } else {
         match &placement {
-            SectionMove::Top => println!(
+            SectionMovePlacement::Top => println!(
                 "Moved section \"{}\" to the top of project \"{}\"",
                 name, project.name
             ),
-            SectionMove::Bottom => println!(
+            SectionMovePlacement::Bottom => println!(
                 "Moved section \"{}\" to the bottom of project \"{}\"",
                 name, project.name
             ),
-            SectionMove::Before(anchor_name) => println!(
+            SectionMovePlacement::Before(anchor_name) => println!(
                 "Moved section \"{}\" before \"{}\" in project \"{}\"",
                 name, anchor_name, project.name
             ),
-            SectionMove::After(anchor_name) => println!(
+            SectionMovePlacement::After(anchor_name) => println!(
                 "Moved section \"{}\" after \"{}\" in project \"{}\"",
                 name, anchor_name, project.name
             ),

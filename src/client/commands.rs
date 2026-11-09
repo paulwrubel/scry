@@ -61,7 +61,7 @@ mod section_merge;
 pub use section_merge::section_merge;
 
 mod section_move;
-pub use section_move::{SectionMove, section_move};
+pub use section_move::{SectionMovePlacement, section_move};
 
 mod section_remove;
 pub use section_remove::section_remove;
