@@ -120,8 +120,8 @@ Every example below includes the global `--json` flag, which must come before th
 `scry section move` reorders sections: `--top` (alias `--first`) places the section first,
 `--bottom` (alias `--last`) places it last, and `--before <name>` or `--after <name>` places
 it next to another section in the same project. The REST equivalent is
-`POST /api/v1/sections/{id}/move` with `{"op":"top"}`, `{"op":"bottom"}`,
-`{"op":"before","anchor_id":"<id>"}`, or `{"op":"after","anchor_id":"<id>"}`. `move` (the
+`POST /api/v1/sections/{id}/move` with `{"placement":"top"}`, `{"placement":"bottom"}`,
+`{"placement":"before","anchor_id":"<id>"}`, or `{"placement":"after","anchor_id":"<id>"}`. `move` (the
 task command) still transfers a task between sections but appends it, so ordering tasks
 within a section remains web-UI-only.
 

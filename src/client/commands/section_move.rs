@@ -32,12 +32,12 @@ pub async fn section_move(
 
     #[derive(Serialize)]
     struct MoveSectionRequest {
-        op: &'static str,
+        placement: &'static str,
         #[serde(skip_serializing_if = "Option::is_none")]
         anchor_id: Option<SectionId>,
     }
 
-    let (op, anchor_id): (&'static str, Option<SectionId>) = match &placement {
+    let (placement_kind, anchor_id): (&'static str, Option<SectionId>) = match &placement {
         SectionMove::Top => ("top", None),
         SectionMove::Bottom => ("bottom", None),
         SectionMove::Before(anchor_name) => {
@@ -55,7 +55,10 @@ pub async fn section_move(
         .post_json(
             &["sections", section_id.as_str(), "move"],
             &[],
-            &MoveSectionRequest { op, anchor_id },
+            &MoveSectionRequest {
+                placement: placement_kind,
+                anchor_id,
+            },
         )
         .await?;
 
