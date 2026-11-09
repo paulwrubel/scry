@@ -83,6 +83,7 @@ export function NewTaskForm(props: NewTaskFormProps) {
           <field.FormTextField
             label="Task title"
             hideLabel
+            placeholder="Task title"
             sizing="sm"
             autoFocus
             inputRef={inputRef}
