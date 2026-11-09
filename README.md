@@ -14,6 +14,15 @@ curl -fsSL https://raw.githubusercontent.com/paulwrubel/scry/main/install.sh | s
 
 This downloads the latest release and installs both `scry` and `scry-api` into `~/.local/bin`. Make sure that directory is in your `PATH`.
 
+### Updating
+
+```sh
+scry self-update         # replace the installed binaries with the latest release
+scry self-update --check # report whether a newer release is available
+```
+
+`scry self-update` (also available as `scry upgrade`) downloads the release for the current platform, verifies it against the release checksum, and replaces the installed `scry` binary in place. It updates `scry-api` too when both binaries sit in the same directory. A running `scry-api` must be restarted to pick up the new server build, and the command only updates the local machine, so a `scry-api` running in Docker or on another host has to be updated separately.
+
 ### Manual download
 
 Download the latest release binaries from the [releases page](https://github.com/paulwrubel/scry/releases/latest).

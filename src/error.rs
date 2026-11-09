@@ -6,6 +6,7 @@ use std::fmt;
 pub enum AppError {
     Usage(String),
     Config(String),
+    Update(String),
 
     Remote {
         kind: &'static str,
@@ -21,7 +22,8 @@ impl fmt::Display for AppError {
         match self {
             AppError::Usage(msg) => write!(f, "usage error: {msg}"),
             AppError::Config(msg) => write!(f, "config error: {msg}"),
-            AppError::Remote { message, .. } => f.write_str(message),
+            AppError::Update(msg) => write!(f, "update error: {msg}"),
+            AppError::Remote { message, .. } => write!(f, "remote error: {message}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
@@ -35,6 +37,7 @@ impl AppError {
         match self {
             AppError::Usage(_) => "invalid",
             AppError::Config(_) => "config",
+            AppError::Update(_) => "update",
             AppError::Internal(_) => "internal",
             AppError::Remote { kind, .. } => kind,
         }

@@ -5,6 +5,7 @@ pub use scry_core::config;
 mod docs;
 mod error;
 mod output;
+mod self_update;
 mod skill;
 mod state;
 
@@ -189,6 +190,13 @@ enum Command {
     Section(SectionCommand),
     /// Print the bundled documentation (the README) to stdout
     Docs,
+    /// Update the installed binaries to the latest release
+    #[command(visible_alias = "upgrade")]
+    SelfUpdate {
+        /// Report whether an update is available without installing it
+        #[arg(long)]
+        check: bool,
+    },
     /// Manage the agent skill that teaches coding agents to drive scry
     #[command(subcommand)]
     Skill(SkillCommand),
@@ -405,7 +413,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         && (cli.command.is_none()
             || matches!(
                 cli.command.as_ref(),
-                Some(Command::Docs | Command::Skill(_))
+                Some(Command::Docs | Command::Skill(_) | Command::SelfUpdate { .. })
             ))
     {
         return Err(AppError::Usage(
@@ -428,6 +436,11 @@ async fn run(cli: Cli) -> Result<(), AppError> {
     // Skill commands are filesystem-only: they never touch the database or active project.
     if let Some(Command::Skill(command)) = &cli.command {
         return run_skill(command);
+    }
+
+    // `self-update` replaces the installed binaries: no config, project, or server involved.
+    if let Some(Command::SelfUpdate { check }) = &cli.command {
+        return self_update::run(*check).await;
     }
 
     if cli.command.is_none() {
