@@ -125,6 +125,8 @@ scry reads `scry.toml` from the current directory, then `$XDG_CONFIG_HOME/scry/s
 
 The server URL resolves from `--server`, then `server_url`.
 
+When `server_url` uses `https://`, TLS validates against the operating system trust store, so corporate intercepting roots such as ZScaler's are trusted; set `SSL_CERT_FILE` or `SSL_CERT_DIR` to override which roots load. The client also honours the system proxy configuration, plus the usual `HTTPS_PROXY` and `NO_PROXY` environment variables.
+
 Credentials belong in `scry.secret.toml` (discovered in the same locations, or passed with `--secrets`). It is gitignored and never created automatically. `database_url` there overrides `scry.toml`, and `admin_password` is read from the secrets file.
 
 ## Database
