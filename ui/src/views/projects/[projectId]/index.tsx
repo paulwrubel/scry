@@ -13,6 +13,7 @@ import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
+import { automationReferencesSection, describeAutomation } from '@/utils/automationOperations';
 import { updateProjectOperation } from '@/utils/projectOperations';
 import {
   createSectionOperation,
@@ -466,6 +467,9 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
     onDelete,
   } = props;
   const section = group.section;
+  const blockingAutomations = project.automations
+    .filter((automation) => automationReferencesSection(automation, section.id))
+    .map((automation) => describeAutomation(automation, project.sections));
   const { ref, isDragging } = useSortable({
     id: columnDragId(section.id),
     index,
@@ -486,6 +490,7 @@ function SortableBoardColumn(props: SortableBoardColumnProps) {
       tasks={group.tasks}
       showPriority={project.show_priority}
       canReorder={canReorder}
+      blockingAutomations={blockingAutomations}
       showCreate={showCreate}
       onRename={(name) => onRename(section.id, name)}
       onColorChange={(color) => onColorChange(section.id, color)}
