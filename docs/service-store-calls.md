@@ -470,9 +470,20 @@ flowchart LR
   class st_get_all_projects,st_get_project_snapshot,st_last_change_seq,st_begin_apply,st_get_all_sections_by_project_id,st_get_all_tasks_by_project_id,st_get_all_notes_by_project_id,st_is_tombstoned storeNode
 ```
 
+## 7. Automations
+
+Automation rules are project-scoped and single-step. The service validates a rule against the project's sections and sibling triggers, and the engine evaluates at most one matching rule after a task change and applies its actions with further automation evaluation disabled.
+
+- `create_automation_in_project` -> `apply_operations` -> `apply_one_operation` (`CreateAutomation`) -> `create_automation`, `record_change`. Validation reads `get_section_by_id` for trigger/action sections, `is_tombstoned`, and `get_all_automations_by_project_id` for duplicate-trigger checks.
+- `update_automation` -> `get_automation_by_id`, then `apply_operations` -> `update_automation`, `record_change`.
+- `delete_automation` -> `get_automation_by_id`, then `apply_operations` -> `create_tombstone`, `delete_automation`, `record_change`.
+- `list_automations` -> `get_all_automations_by_project_id`; `get_automation` -> `get_automation_by_id`.
+- `apply_one_operation` for task create/update/move calls `apply_matching_automations`, which reads `get_all_automations_by_project_id`, chooses the matching trigger, appends a move position inside the transaction (`append_task_position_in_transaction` -> `get_all_tasks_by_section_id` or `get_all_tasks_by_project_id`), and applies generated action operations with `AutomationEvaluation::Skip` so actions do not cascade.
+- `delete_section_by_id` and `merge_sections_by_id` call `get_all_automations_by_project_id` and reject with `SectionInUseByAutomation` when a rule references the section; the `DeleteSection` apply arm likewise rejects with `RejectionReason::Conflict`.
+
 ## Coverage
 
-- The six diagrams together touch all 31 `Store` trait methods (8 task, 8 note, 6 section, 7 project, 2 sync) and every REST handler in `crates/scry-api/src/server/handlers.rs` except `index`, which only reports server metadata.
+- The six diagrams plus the Automations section cover every `Store` trait method and every REST handler in `crates/scry-api/src/server/handlers.rs` except `index`, which only reports server metadata.
 - `get_note_by_id`, `get_all_notes_by_task_id`, `update_note`, `delete_note` and `find_note_ids_by_handle` are marked `dead_code` on the trait and are reached only by the note scaffolding methods `get_note`, `list_notes_by_task_id`, `update_note`, `delete_note` and `get_note_by_handle`.
 
 ## Notes

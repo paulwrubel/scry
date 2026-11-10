@@ -5,6 +5,7 @@ import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
 import { DeleteProjectModal } from '../../DeleteProjectModal';
 import { AppSection } from './AppSection';
+import { AutomationsSection } from './AutomationsSection';
 import { ProjectSettingsForm } from './ProjectSettingsForm';
 
 export function ProjectSettingsPage() {
@@ -56,10 +57,17 @@ export function ProjectSettingsPage() {
         </div>
       </Card>
       <Card>
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Automations</h2>
+          <p className="text-sm text-zinc-300">Run one action when a task changes.</p>
+          <AutomationsSection project={project} />
+        </div>
+      </Card>
+      <Card>
         <div className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">Danger zone</h2>
           <p className="text-sm text-zinc-300">
-            Deleting this project permanently deletes its sections, tasks, and notes.
+            Deleting this project permanently deletes its sections, tasks, notes, and automations.
           </p>
           <div>
             <Button color="red" onClick={() => setDeleteOpen(true)}>

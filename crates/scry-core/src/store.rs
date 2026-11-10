@@ -1,6 +1,8 @@
 use crate::error::StorageError;
-use crate::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
-use crate::models::{Change, Entity, EntityType, Note, Project, ProjectSnapshot, Section, Task};
+use crate::ids::{AutomationId, Handle, NoteId, ProjectId, SectionId, TaskId};
+use crate::models::{
+    Automation, Change, Entity, EntityType, Note, Project, ProjectSnapshot, Section, Task,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{PgConnection, Postgres, Transaction};
@@ -203,6 +205,44 @@ pub trait Store: Send + Sync {
     async fn delete_section(
         &self,
         id: SectionId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<(), StorageError>;
+
+    /// Add an automation to a project.
+    async fn create_automation(
+        &self,
+        automation: Automation,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Automation, StorageError>;
+
+    /// Get an automation by its id.
+    async fn get_automation_by_id(
+        &self,
+        id: AutomationId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Option<Automation>, StorageError>;
+
+    /// List all automations in a project.
+    ///
+    /// Results are ordered by created date ascending, then automation ID
+    /// ascending.
+    async fn get_all_automations_by_project_id(
+        &self,
+        project_id: ProjectId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Vec<Automation>, StorageError>;
+
+    /// Write an automation's action list. The trigger is immutable.
+    async fn update_automation(
+        &self,
+        automation: Automation,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Automation, StorageError>;
+
+    /// Delete an automation.
+    async fn delete_automation(
+        &self,
+        id: AutomationId,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError>;
 

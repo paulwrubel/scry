@@ -70,6 +70,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
       task({ id: 'task-2', title: 'Other task', section_id: 'doing', position: 'a4' }),
     ],
     notes: [note({ id: 'note-1', contents: 'A note' })],
+    automations: [],
     ...overrides,
   };
 }

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use uuid::Uuid;
 
-pub use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
+pub use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
@@ -331,6 +331,76 @@ pub struct Note {
     pub created_at: DateTime<Utc>,
 }
 
+pub const MAX_AUTOMATION_ACTIONS: usize = 1;
+
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AutomationTrigger {
+    TaskCreated,
+    TaskClosed,
+    TaskOpened,
+    TaskEntersSection { section_id: SectionId },
+}
+
+impl AutomationTrigger {
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            Self::TaskCreated => "task_created",
+            Self::TaskClosed => "task_closed",
+            Self::TaskOpened => "task_opened",
+            Self::TaskEntersSection { .. } => "task_enters_section",
+        }
+    }
+
+    pub fn section_id(&self) -> Option<SectionId> {
+        match self {
+            Self::TaskEntersSection { section_id } => Some(*section_id),
+            _ => None,
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AutomationAction {
+    MoveToSection { section_id: Option<SectionId> },
+    CloseTask,
+    OpenTask,
+    SetPriority { priority: Priority },
+}
+
+impl AutomationAction {
+    pub fn section_id(&self) -> Option<SectionId> {
+        match self {
+            Self::MoveToSection { section_id } => *section_id,
+            _ => None,
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Automation {
+    pub id: AutomationId,
+    pub project_id: ProjectId,
+    pub trigger: AutomationTrigger,
+    pub actions: Vec<AutomationAction>,
+    pub created_at: DateTime<Utc>,
+}
+
+impl Automation {
+    /// Whether this rule's trigger or any action refers to the section.
+    pub fn references_section(&self, section_id: SectionId) -> bool {
+        self.trigger.section_id() == Some(section_id)
+            || self
+                .actions
+                .iter()
+                .any(|action| action.section_id() == Some(section_id))
+    }
+}
+
 /// A JSON object holding the model field names and the values they take after
 /// the operation, as recorded in the changes log.
 pub type FieldValues = serde_json::Value;
@@ -343,6 +413,7 @@ pub enum EntityType {
     Section,
     Task,
     Note,
+    Automation,
 }
 
 impl EntityType {
@@ -352,6 +423,7 @@ impl EntityType {
             Self::Section => "section",
             Self::Task => "task",
             Self::Note => "note",
+            Self::Automation => "automation",
         }
     }
 }
@@ -362,6 +434,7 @@ pub enum Entity {
     Section(SectionId),
     Task(TaskId),
     Note(NoteId),
+    Automation(AutomationId),
 }
 
 impl Entity {
@@ -371,12 +444,17 @@ impl Entity {
             Self::Section(_) => EntityType::Section,
             Self::Task(_) => EntityType::Task,
             Self::Note(_) => EntityType::Note,
+            Self::Automation(_) => EntityType::Automation,
         }
     }
 
     pub fn id(&self) -> Uuid {
         match self {
-            Self::Project(id) | Self::Section(id) | Self::Task(id) | Self::Note(id) => *id,
+            Self::Project(id)
+            | Self::Section(id)
+            | Self::Task(id)
+            | Self::Note(id)
+            | Self::Automation(id) => *id,
         }
     }
 }
@@ -424,7 +502,7 @@ pub struct Change {
     pub created_at: DateTime<Utc>,
 }
 
-/// A project together with all of its sections, tasks, and notes.
+/// A project together with all of its sections, tasks, notes, and automations.
 ///
 /// This is scry's canonical project document: `GET /projects/{id}/snapshot`
 /// returns it directly, and each entry in a snapshot file is the same
@@ -439,4 +517,6 @@ pub struct ProjectSnapshot {
     pub sections: Vec<Section>,
     pub tasks: Vec<Task>,
     pub notes: Vec<Note>,
+    #[serde(default)]
+    pub automations: Vec<Automation>,
 }

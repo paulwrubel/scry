@@ -1,6 +1,9 @@
 use crate::error::StorageError;
-use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
-use crate::models::{Color, EntityType, Note, Project, ProjectSnapshot, Section, Tags, Task};
+use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
+use crate::models::{
+    Automation, AutomationAction, AutomationTrigger, Color, EntityType, MAX_AUTOMATION_ACTIONS,
+    Note, Project, ProjectSnapshot, Section, Tags, Task,
+};
 use crate::store::Store;
 use crate::sync::operations::{
     ColorChange as OperationColorChange, OPERATION_VERSION, Operation, OperationKind,
@@ -10,7 +13,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use uuid::Uuid;
 
-pub const SNAPSHOT_VERSION: u32 = 1;
+pub const SNAPSHOT_VERSION: u32 = 2;
+pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 1;
 
 /// The bare server-wide snapshot: every project document plus the cursor a
 /// client should pull from next.
@@ -47,7 +51,7 @@ impl fmt::Display for SnapshotFileError {
             Self::InvalidJson(message) => write!(f, "invalid snapshot JSON: {message}"),
             Self::UnsupportedVersion { found, supported } => write!(
                 f,
-                "unsupported snapshot version {found}; this build supports version {supported}"
+                "unsupported snapshot version {found}; this build supports versions {MIN_SUPPORTED_SNAPSHOT_VERSION} through {supported}"
             ),
         }
     }
@@ -57,12 +61,13 @@ impl std::error::Error for SnapshotFileError {}
 
 /// Parse a snapshot file.
 ///
-/// Only the current format version is accepted; there is no upgrade path for
-/// other versions, so a mismatched document is rejected rather than guessed at.
+/// The current format version and the immediately preceding one are accepted;
+/// there is no upgrade path for older versions, so a document outside that
+/// range is rejected rather than guessed at.
 pub fn parse_file(input: &str) -> Result<SnapshotFile, SnapshotFileError> {
     let file: SnapshotFile = serde_json::from_str(input)
         .map_err(|error| SnapshotFileError::InvalidJson(error.to_string()))?;
-    if file.version != SNAPSHOT_VERSION {
+    if !(MIN_SUPPORTED_SNAPSHOT_VERSION..=SNAPSHOT_VERSION).contains(&file.version) {
         return Err(SnapshotFileError::UnsupportedVersion {
             found: file.version,
             supported: SNAPSHOT_VERSION,
@@ -129,6 +134,7 @@ pub struct ImportReport {
     pub sections: usize,
     pub tasks: usize,
     pub notes: usize,
+    pub automations: usize,
     /// Fresh ids assigned because the incoming id was tombstoned or its parent
     /// was reminted. Omitted from JSON when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -142,6 +148,7 @@ pub struct ImportState {
     pub sections: Vec<Section>,
     pub tasks: Vec<Task>,
     pub notes: Vec<Note>,
+    pub automations: Vec<Automation>,
     pub tombstones: HashSet<(EntityType, Uuid)>,
 }
 
@@ -191,6 +198,11 @@ pub fn plan_import(
             deleted_ids.insert((EntityType::Note, note.id));
         }
     }
+    for automation in &state.automations {
+        if deleted_projects.contains(&automation.project_id) {
+            deleted_ids.insert((EntityType::Automation, automation.id));
+        }
+    }
 
     let is_dead = |entity_type: EntityType, id: Uuid| {
         state.tombstones.contains(&(entity_type, id)) || deleted_ids.contains(&(entity_type, id))
@@ -219,6 +231,12 @@ pub fn plan_import(
         .iter()
         .filter(|note| !deleted_ids.contains(&(EntityType::Note, note.id)))
         .map(|note| (note.id, note))
+        .collect();
+    let live_automations: HashMap<AutomationId, &Automation> = state
+        .automations
+        .iter()
+        .filter(|automation| !deleted_ids.contains(&(EntityType::Automation, automation.id)))
+        .map(|automation| (automation.id, automation))
         .collect();
 
     // imported entities must stay inside the project their ops target, so track
@@ -652,6 +670,98 @@ pub fn plan_import(
             }));
             plan.report.notes += 1;
         }
+
+        for incoming_automation in &document.automations {
+            let original_id = incoming_automation.id;
+
+            let trigger = remap_automation_trigger(&incoming_automation.trigger, &section_remap);
+            let actions: Vec<AutomationAction> = incoming_automation
+                .actions
+                .iter()
+                .map(|action| remap_automation_action(action, &section_remap))
+                .collect();
+
+            if actions.is_empty() || actions.len() > MAX_AUTOMATION_ACTIONS {
+                return Err(StorageError::Conflict(format!(
+                    "automation {original_id} has an invalid number of actions"
+                )));
+            }
+
+            let section_ids = trigger
+                .section_id()
+                .into_iter()
+                .chain(actions.iter().filter_map(AutomationAction::section_id));
+            for section_id in section_ids {
+                if section_projects.get(&section_id) != Some(&target_project_id) {
+                    return Err(StorageError::Conflict(format!(
+                        "automation {original_id} references a section outside project {target_project_id}"
+                    )));
+                }
+            }
+
+            let dead = is_dead(EntityType::Automation, original_id);
+            let reminted = project_reminted || dead;
+            let live_automation = live_automations
+                .get(&original_id)
+                .copied()
+                .filter(|_| !reminted);
+
+            if let Some(live_automation) = live_automation {
+                if live_automation.project_id != target_project_id {
+                    return Err(StorageError::Conflict(format!(
+                        "automation {original_id} belongs to a different project"
+                    )));
+                }
+                if live_automation.trigger != trigger {
+                    return Err(StorageError::Conflict(format!(
+                        "automation {original_id} changes an immutable trigger"
+                    )));
+                }
+
+                if live_automation.actions != actions {
+                    plan.operations
+                        .push(operation(OperationKind::UpdateAutomation {
+                            id: live_automation.id,
+                            actions,
+                        }));
+                }
+
+                plan.report.automations += 1;
+                continue;
+            }
+
+            if live_automations.values().any(|existing| {
+                existing.project_id == target_project_id
+                    && existing.id != original_id
+                    && existing.trigger == trigger
+            }) {
+                return Err(StorageError::Conflict(format!(
+                    "automation {original_id} duplicates a trigger in project {target_project_id}"
+                )));
+            }
+
+            let automation_id = if reminted {
+                let fresh = Uuid::new_v4();
+                plan.report.remapped.push(ImportIdRemap {
+                    entity_type: EntityType::Automation,
+                    from: original_id,
+                    to: fresh,
+                });
+                fresh
+            } else {
+                original_id
+            };
+
+            plan.operations
+                .push(operation(OperationKind::CreateAutomation {
+                    id: automation_id,
+                    project_id: target_project_id,
+                    trigger,
+                    actions,
+                    created_at: incoming_automation.created_at,
+                }));
+            plan.report.automations += 1;
+        }
     }
 
     Ok(plan)
@@ -770,6 +880,42 @@ fn section_color_change(
     })
 }
 
+fn remap_automation_trigger(
+    trigger: &AutomationTrigger,
+    section_remap: &HashMap<SectionId, SectionId>,
+) -> AutomationTrigger {
+    match trigger {
+        AutomationTrigger::TaskEntersSection { section_id } => {
+            AutomationTrigger::TaskEntersSection {
+                section_id: section_remap
+                    .get(section_id)
+                    .copied()
+                    .unwrap_or(*section_id),
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+fn remap_automation_action(
+    action: &AutomationAction,
+    section_remap: &HashMap<SectionId, SectionId>,
+) -> AutomationAction {
+    match action {
+        AutomationAction::MoveToSection {
+            section_id: Some(section_id),
+        } => AutomationAction::MoveToSection {
+            section_id: Some(
+                section_remap
+                    .get(section_id)
+                    .copied()
+                    .unwrap_or(*section_id),
+            ),
+        },
+        other => other.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -853,6 +999,7 @@ mod tests {
             sections: vec![section],
             tasks: vec![task],
             notes: vec![note],
+            automations: Vec::new(),
         }
     }
 
@@ -925,6 +1072,51 @@ mod tests {
         assert_eq!(parsed_with.last_seen_seq, Some(7));
         assert_eq!(parsed_without.version, SNAPSHOT_VERSION);
         assert_eq!(parsed_with.version, SNAPSHOT_VERSION);
+    }
+
+    #[test]
+    fn parse_accepts_previous_version() {
+        let file = snapshot_file(vec![full_project_doc(PROJECT_ID, "alpha")]);
+        let mut value = serde_json::to_value(&file).expect("snapshot file should serialize");
+        value["version"] = json!(1);
+        for project in value["projects"]
+            .as_array_mut()
+            .expect("projects should be an array")
+        {
+            project
+                .as_object_mut()
+                .expect("project should be an object")
+                .remove("automations");
+        }
+
+        let parsed = parse_file(&value.to_string()).expect("previous version should parse");
+
+        assert_eq!(parsed.version, 1);
+        assert!(parsed.projects[0].automations.is_empty());
+    }
+
+    #[test]
+    fn snapshot_file_round_trips_automations() {
+        let mut document = full_project_doc(PROJECT_ID, "alpha");
+        let section_id = document.sections[0].id;
+        document.automations.push(Automation {
+            id: uuid("e1b2c3d4-0000-4000-8000-000000000006"),
+            project_id: document.project.id,
+            trigger: AutomationTrigger::TaskEntersSection { section_id },
+            actions: vec![AutomationAction::MoveToSection {
+                section_id: Some(section_id),
+            }],
+            created_at: at(),
+        });
+        let original = snapshot_file(vec![document]);
+
+        let serialized = serde_json::to_string(&original).expect("snapshot file should serialize");
+        let parsed = parse_file(&serialized).expect("current version should parse");
+
+        assert_eq!(
+            parsed.projects[0].automations,
+            original.projects[0].automations
+        );
     }
 }
 
@@ -1000,6 +1192,7 @@ mod import_tests {
             sections,
             tasks,
             notes,
+            automations: Vec::new(),
         }
     }
 
@@ -1023,6 +1216,7 @@ mod import_tests {
             sections,
             tasks,
             notes,
+            automations: Vec::new(),
             tombstones: HashSet::new(),
         }
     }
@@ -1037,6 +1231,7 @@ mod import_tests {
                         | OperationKind::CreateSection { .. }
                         | OperationKind::CreateTask { .. }
                         | OperationKind::CreateNote { .. }
+                        | OperationKind::CreateAutomation { .. }
                 )
             })
             .count()
@@ -1546,5 +1741,62 @@ mod import_tests {
         let result = plan_import(&incoming, &live_state, ImportMode::Merge);
 
         assert!(matches!(result, Err(StorageError::Conflict(_))));
+    }
+
+    #[test]
+    fn new_project_automation_is_created() {
+        let project_id = uuid(1);
+        let section_id = uuid(2);
+        let automation_id = uuid(3);
+
+        let mut incoming_document = document(
+            project(project_id, "p"),
+            vec![section(section_id, project_id, "todo")],
+            vec![],
+            vec![],
+        );
+        incoming_document.automations.push(Automation {
+            id: automation_id,
+            project_id,
+            trigger: AutomationTrigger::TaskEntersSection { section_id },
+            actions: vec![AutomationAction::MoveToSection {
+                section_id: Some(section_id),
+            }],
+            created_at: at(),
+        });
+
+        let incoming = file(vec![incoming_document]);
+        let state = import_state(vec![], vec![], vec![], vec![]);
+
+        let plan = plan_import(&incoming, &state, ImportMode::Merge).unwrap();
+
+        let (id, created_project_id, trigger, actions) = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::CreateAutomation {
+                    id,
+                    project_id,
+                    trigger,
+                    actions,
+                    ..
+                } => Some((id, project_id, trigger, actions)),
+                _ => None,
+            })
+            .expect("expected CreateAutomation");
+
+        assert_eq!(*id, automation_id);
+        assert_eq!(*created_project_id, project_id);
+        assert_eq!(
+            *trigger,
+            AutomationTrigger::TaskEntersSection { section_id }
+        );
+        assert_eq!(
+            *actions,
+            vec![AutomationAction::MoveToSection {
+                section_id: Some(section_id)
+            }]
+        );
+        assert_eq!(plan.report.automations, 1);
     }
 }

@@ -58,6 +58,9 @@ scry project create myapp
 scry -p myapp section add "in progress"
 scry -p myapp add "design API" --section "in progress"
 scry -p myapp list --section "in progress"
+scry -p myapp automation set --when closed --move-to "in progress"
+scry -p myapp automation set --when enters --section Review --close
+scry -p myapp automation list
 ```
 
 Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
@@ -82,7 +85,7 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
 
 ## Backup and restore
 
-`scry export > backup.json` writes every project, with its sections, tasks, and notes, as JSON; `scry import < backup.json` merges it back. Put `-p <name>` before `export` to back up a single project.
+`scry export > backup.json` writes every project, with its sections, tasks, notes, and automations, as JSON; `scry import < backup.json` merges it back. Put `-p <name>` before `export` to back up a single project.
 
 ## Core concepts
 
@@ -93,8 +96,15 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
   - Create sections explicitly with `scry section add <name>` or `--new-section <name>`. `--section <name>` must match an existing name exactly.
   - Sections can carry an optional color. Set one with `scry section add <name> --color <color>` or `scry section set-color <name> <color>`, remove it with `scry section reset-color <name>`, or click the circle in the web UI column header. Colors are kebab-case: `red`, `light-blue`, `dark-gray`, and so on.
   - Deleting a section moves its tasks to No section. Merging moves the source's tasks into the target and deletes the source.
+  - A section used by an automation cannot be deleted or merged until the rule is removed or changed.
   - Reorder with `scry section move <name> --top` (alias `--first`), `--bottom` (alias `--last`), `--before <name>`, or `--after <name>`, or by dragging in the web UI. Only the moved section is written; anchors must be another section in the same project.
   - Sections have no completion semantics: a section named "Done" does not close anything.
+- **Automations** are project-scoped, single-step rules: one trigger maps to one action.
+  - Triggers: task created, task closed, task opened, task enters a section.
+  - Actions: move to a section or No section, close, open, set priority.
+  - Actions do not trigger other rules.
+  - A section referenced by an automation cannot be deleted or merged until the rule is removed or changed.
+  - Manage with `scry automation list`, `scry automation set --when <trigger> <action>`, and `scry automation remove --when <trigger>`. Use `--section <name>` with `--when enters`, and `--move-to <name>` for the action target.
 - **Active project** works like a kubectl context. `scry project use <name>` verifies the name with the server and stores the choice per machine in `$XDG_STATE_HOME/scry/state.toml` (or the `state_file` config option), not in the backend. Task commands use it unless you pass `-p/--project`.
 
 ## Docker

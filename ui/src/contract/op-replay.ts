@@ -1,3 +1,5 @@
+import type { Automation } from '../generated/Automation';
+import type { AutomationAction } from '../generated/AutomationAction';
 import type { Change } from '../generated/Change';
 import type { Color } from '../generated/Color';
 import type { Note } from '../generated/Note';
@@ -61,7 +63,7 @@ function applyOperation(state: ClientState, operation: Operation): void {
       if (existing) {
         setProject(existing, project);
       } else {
-        state.projects.push({ ...project, sections: [], tasks: [], notes: [] });
+        state.projects.push({ ...project, sections: [], tasks: [], notes: [], automations: [] });
       }
       return;
     }
@@ -204,6 +206,31 @@ function applyOperation(state: ClientState, operation: Operation): void {
       removeNote(state, operation.id);
       return;
     }
+    case 'create_automation': {
+      const automation: Automation = {
+        id: operation.id,
+        project_id: operation.project_id,
+        trigger: operation.trigger,
+        actions: operation.actions,
+        created_at: operation.created_at,
+      };
+      const snapshot = findProject(state, automation.project_id);
+      if (snapshot) {
+        upsertAutomation(snapshot, automation);
+      }
+      return;
+    }
+    case 'update_automation': {
+      const automation = findAutomation(state, operation.id);
+      if (automation) {
+        automation.actions = operation.actions;
+      }
+      return;
+    }
+    case 'delete_automation': {
+      removeAutomation(state, operation.id);
+      return;
+    }
   }
 }
 
@@ -221,6 +248,9 @@ function applyChange(state: ClientState, change: Change): void {
     case 'note':
       applyNoteChange(state, change);
       return;
+    case 'automation':
+      applyAutomationChange(state, change);
+      return;
   }
 }
 
@@ -232,7 +262,7 @@ function applyProjectChange(state: ClientState, change: Change): void {
       if (existing) {
         setProject(existing, project);
       } else {
-        state.projects.push({ ...project, sections: [], tasks: [], notes: [] });
+        state.projects.push({ ...project, sections: [], tasks: [], notes: [], automations: [] });
       }
       return;
     }
@@ -317,6 +347,30 @@ function applyNoteChange(state: ClientState, change: Change): void {
     }
     case 'delete': {
       removeNote(state, change.entity_id);
+      return;
+    }
+  }
+}
+
+function applyAutomationChange(state: ClientState, change: Change): void {
+  switch (change.kind) {
+    case 'create': {
+      const automation = change.field_values as unknown as Automation;
+      const snapshot = findProject(state, automation.project_id);
+      if (snapshot) {
+        upsertAutomation(snapshot, automation);
+      }
+      return;
+    }
+    case 'update': {
+      const automation = findAutomation(state, change.entity_id);
+      if (automation && Array.isArray(change.field_values.actions)) {
+        automation.actions = change.field_values.actions as AutomationAction[];
+      }
+      return;
+    }
+    case 'delete': {
+      removeAutomation(state, change.entity_id);
       return;
     }
   }
@@ -409,6 +463,15 @@ function upsertNote(snapshot: ProjectSnapshot, note: Note): void {
   }
 }
 
+function upsertAutomation(snapshot: ProjectSnapshot, automation: Automation): void {
+  const index = snapshot.automations.findIndex((existing) => existing.id === automation.id);
+  if (index === -1) {
+    snapshot.automations.push(automation);
+  } else {
+    snapshot.automations[index] = automation;
+  }
+}
+
 function findProject(state: ClientState, id: string): ProjectSnapshot | undefined {
   return state.projects.find((snapshot) => snapshot.id === id);
 }
@@ -447,6 +510,16 @@ function findNote(state: ClientState, id: string): Note | undefined {
   return undefined;
 }
 
+function findAutomation(state: ClientState, id: string): Automation | undefined {
+  for (const snapshot of state.projects) {
+    const automation = snapshot.automations.find((existing) => existing.id === id);
+    if (automation) {
+      return automation;
+    }
+  }
+  return undefined;
+}
+
 function removeSection(state: ClientState, id: string): void {
   for (const snapshot of state.projects) {
     const index = snapshot.sections.findIndex((section) => section.id === id);
@@ -476,5 +549,11 @@ function removeTask(state: ClientState, id: string): void {
 function removeNote(state: ClientState, id: string): void {
   for (const snapshot of state.projects) {
     snapshot.notes = snapshot.notes.filter((note) => note.id !== id);
+  }
+}
+
+function removeAutomation(state: ClientState, id: string): void {
+  for (const snapshot of state.projects) {
+    snapshot.automations = snapshot.automations.filter((automation) => automation.id !== id);
   }
 }

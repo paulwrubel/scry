@@ -1,6 +1,6 @@
 ---
 name: scry
-description: Manage tasks, todos, projects, and sections with the scry CLI; use to track, move, or inspect tasks.
+description: Manage tasks, todos, projects, sections, and automations with the scry CLI; use to track, move, or inspect tasks.
 license: MIT
 ---
 
@@ -78,6 +78,17 @@ Order is only visible when the project uses `manual` sorting. `close` and `open`
 with no sections. `project update --sort` accepts `alphabetical`, `alphabetical-case-insensitive`, `created`,
 `manual`, or `priority`. An empty `--description` clears it.
 
+## Automation commands
+
+| Command | Purpose |
+| --- | --- |
+| `scry --json automation list` | List a project's automations |
+| `scry --json automation set --when <trigger> [--section <name>] <action>` | Create or update a rule |
+| `scry --json automation remove --when <trigger> [--section <name>]` | Remove a rule |
+
+Triggers are `created`, `closed`, `opened`, and `enters` (with `--section`). Actions are `--move-to <section>`,
+`--no-section`, `--close`, `--open`, or `--priority <level>`. `set` updates the existing rule for a trigger.
+
 ## Snapshots
 
 `scry export` prints a JSON snapshot; put `-p <name>` before `export` for a single project. `scry import`
@@ -89,3 +100,4 @@ reads a snapshot from stdin.
 - Never guess an id for a destructive action; confirm it with `scry --json show <id>` first when in doubt.
 - `scry close` keeps the task; `scry delete` removes it permanently.
 - Changing the active project affects the user's later commands on this machine; prefer `-p/--project`.
+- Confirm the trigger and action before changing or removing an automation.

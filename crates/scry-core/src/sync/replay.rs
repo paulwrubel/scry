@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{
-    Change, ChangeKind, Color, EntityType, Note, Priority, Project, ProjectSnapshot, Section, Tags,
-    Task, TaskState,
+    Automation, AutomationAction, Change, ChangeKind, Color, EntityType, Note, Priority, Project,
+    ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use crate::position::Position;
 use crate::sync::operations::{ColorChange, Operation, OperationKind};
@@ -254,6 +254,36 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
         OperationKind::DeleteNote { id } => {
             remove_note(state, *id);
         }
+        OperationKind::CreateAutomation {
+            id,
+            project_id,
+            trigger,
+            actions,
+            created_at,
+        } => {
+            let automation = Automation {
+                id: *id,
+                project_id: *project_id,
+                trigger: trigger.clone(),
+                actions: actions.clone(),
+                created_at: *created_at,
+            };
+            if let Some(snapshot) = state
+                .projects
+                .iter_mut()
+                .find(|p| p.project.id == *project_id)
+            {
+                upsert_automation(snapshot, automation);
+            }
+        }
+        OperationKind::UpdateAutomation { id, actions } => {
+            if let Some(automation) = find_automation_mut(state, *id) {
+                automation.actions = actions.clone();
+            }
+        }
+        OperationKind::DeleteAutomation { id } => {
+            remove_automation(state, *id);
+        }
     }
 }
 
@@ -340,6 +370,29 @@ fn apply_change(state: &mut ClientState, change: &Change) {
         (EntityType::Note, ChangeKind::Delete) => {
             remove_note(state, change.entity_id);
         }
+        (EntityType::Automation, ChangeKind::Create) => {
+            if let Ok(automation) =
+                serde_json::from_value::<Automation>(change.field_values.clone())
+                && let Some(existing) = state
+                    .projects
+                    .iter_mut()
+                    .find(|snapshot| snapshot.project.id == automation.project_id)
+            {
+                upsert_automation(existing, automation);
+            }
+        }
+        (EntityType::Automation, ChangeKind::Update) => {
+            if let Some(automation) = find_automation_mut(state, change.entity_id)
+                && let Some(actions) = change.field_values.get("actions")
+                && let Ok(actions) =
+                    serde_json::from_value::<Vec<AutomationAction>>(actions.clone())
+            {
+                automation.actions = actions;
+            }
+        }
+        (EntityType::Automation, ChangeKind::Delete) => {
+            remove_automation(state, change.entity_id);
+        }
     }
 }
 
@@ -421,6 +474,7 @@ fn snapshot(project: Project) -> ProjectSnapshot {
         sections: Vec::new(),
         tasks: Vec::new(),
         notes: Vec::new(),
+        automations: Vec::new(),
     }
 }
 
@@ -460,6 +514,18 @@ fn upsert_note(snapshot: &mut ProjectSnapshot, note: Note) {
     }
 }
 
+fn upsert_automation(snapshot: &mut ProjectSnapshot, automation: Automation) {
+    if let Some(existing) = snapshot
+        .automations
+        .iter_mut()
+        .find(|existing| existing.id == automation.id)
+    {
+        *existing = automation;
+    } else {
+        snapshot.automations.push(automation);
+    }
+}
+
 fn find_section_mut(state: &mut ClientState, id: Uuid) -> Option<&mut Section> {
     state.projects.iter_mut().find_map(|snapshot| {
         snapshot
@@ -481,6 +547,15 @@ fn find_note_mut(state: &mut ClientState, id: Uuid) -> Option<&mut Note> {
         .projects
         .iter_mut()
         .find_map(|snapshot| snapshot.notes.iter_mut().find(|note| note.id == id))
+}
+
+fn find_automation_mut(state: &mut ClientState, id: Uuid) -> Option<&mut Automation> {
+    state.projects.iter_mut().find_map(|snapshot| {
+        snapshot
+            .automations
+            .iter_mut()
+            .find(|automation| automation.id == id)
+    })
 }
 
 fn remove_section(state: &mut ClientState, id: Uuid) {
@@ -514,5 +589,13 @@ fn remove_task(state: &mut ClientState, id: Uuid) {
 fn remove_note(state: &mut ClientState, id: Uuid) {
     for snapshot in &mut state.projects {
         snapshot.notes.retain(|note| note.id != id);
+    }
+}
+
+fn remove_automation(state: &mut ClientState, id: Uuid) {
+    for snapshot in &mut state.projects {
+        snapshot
+            .automations
+            .retain(|automation| automation.id != id);
     }
 }

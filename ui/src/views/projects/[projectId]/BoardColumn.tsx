@@ -4,7 +4,7 @@ import { Badge, Card } from 'flowbite-react';
 import type { CardTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { useState } from 'react';
-import { HiTrash } from 'react-icons/hi2';
+import { HiLockClosed, HiTrash } from 'react-icons/hi2';
 import { RenamableLabel } from '@/components/RenamableLabel';
 import type { Color } from '@/generated/Color';
 import type { Task } from '@/generated/Task';
@@ -23,6 +23,7 @@ type BoardColumnProps = {
   tasks: Task[];
   showPriority: boolean;
   canReorder: boolean;
+  blockingAutomations?: readonly string[];
   onRename?: (name: string) => void;
   onDelete?: () => void;
   onCreate?: (title: string) => Promise<void>;
@@ -48,6 +49,7 @@ export function BoardColumn(props: BoardColumnProps) {
     tasks,
     showPriority,
     canReorder,
+    blockingAutomations = [],
     onRename,
     onDelete,
     onCreate,
@@ -89,6 +91,13 @@ export function BoardColumn(props: BoardColumnProps) {
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Badge color="gray">{tasks.length}</Badge>
+            {blockingAutomations.length === 0 ? null : (
+              <HiLockClosed
+                aria-label="Used by an automation"
+                title="This section is used by an automation."
+                className="text-muted h-3.5 w-3.5"
+              />
+            )}
             {onDelete === undefined ? null : (
               <button
                 type="button"
@@ -135,6 +144,7 @@ export function BoardColumn(props: BoardColumnProps) {
       {onDelete === undefined ? null : (
         <DeleteSectionModal
           sectionName={title}
+          blockingAutomations={blockingAutomations}
           show={confirmingDelete}
           onClose={() => setConfirmingDelete(false)}
           onDelete={() => {

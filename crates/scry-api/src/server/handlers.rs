@@ -16,6 +16,9 @@ pub use close_task::close_task;
 mod close_tasks;
 pub use close_tasks::close_tasks;
 
+mod create_automation;
+pub use create_automation::create_automation;
+
 mod create_note;
 pub use create_note::create_note;
 
@@ -30,6 +33,9 @@ pub use create_session::create_session;
 
 mod create_task;
 pub use create_task::create_task;
+
+mod delete_automation;
+pub use delete_automation::delete_automation;
 
 mod delete_note;
 pub use delete_note::delete_note;
@@ -54,6 +60,12 @@ pub use export::export;
 
 mod export_project;
 pub use export_project::export_project;
+
+mod get_automation;
+pub use get_automation::get_automation;
+
+mod get_automations;
+pub use get_automations::get_automations;
 
 mod get_note;
 pub use get_note::get_note;
@@ -126,6 +138,9 @@ pub use snapshot::snapshot;
 
 mod sync;
 pub use sync::sync;
+
+mod update_automation;
+pub use update_automation::update_automation;
 
 mod update_note;
 pub use update_note::update_note;

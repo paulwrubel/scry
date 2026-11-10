@@ -1,4 +1,4 @@
-use scry_core::models::{Change, Priority, Task, TaskState};
+use scry_core::models::{AutomationAction, AutomationTrigger, Change, Priority, Task, TaskState};
 use scry_core::sync::operations::Operation;
 use scry_core::sync::replay::{ClientState, apply_changes, replay_operations, visible_state};
 use serde_json::json;
@@ -8,6 +8,7 @@ const PROJECT_ID: &str = "11111111-1111-4111-8111-111111111111";
 const SECTION_ID: &str = "22222222-2222-4222-8222-222222222222";
 const TASK_ID: &str = "44444444-4444-4444-8444-444444444444";
 const NOTE_ID: &str = "66666666-6666-4666-8666-666666666666";
+const AUTOMATION_ID: &str = "88888888-8888-4888-8888-888888888888";
 const OPERATION_ID: &str = "c0000000-0000-4000-8000-000000000001";
 const NOW: &str = "2026-01-01T00:00:00Z";
 
@@ -103,6 +104,55 @@ fn move_section_operation(position: &str) -> Operation {
     .unwrap()
 }
 
+fn create_automation_operation() -> Operation {
+    serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "create_automation",
+        "id": AUTOMATION_ID,
+        "project_id": PROJECT_ID,
+        "trigger": { "kind": "task_enters_section", "section_id": SECTION_ID },
+        "actions": [{ "kind": "move_to_section", "section_id": SECTION_ID }],
+        "created_at": NOW
+    }))
+    .unwrap()
+}
+
+fn update_automation_operation() -> Operation {
+    serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "update_automation",
+        "id": AUTOMATION_ID,
+        "actions": [{ "kind": "set_priority", "priority": "high" }]
+    }))
+    .unwrap()
+}
+
+fn delete_automation_operation() -> Operation {
+    serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "delete_automation",
+        "id": AUTOMATION_ID
+    }))
+    .unwrap()
+}
+
+fn automation_change(kind: &str, field_values: serde_json::Value) -> Change {
+    serde_json::from_value(json!({
+        "seq": 2,
+        "entity_type": "automation",
+        "entity_id": AUTOMATION_ID,
+        "kind": kind,
+        "operation_id": OPERATION_ID,
+        "client_timestamp": null,
+        "field_values": field_values,
+        "created_at": NOW
+    }))
+    .unwrap()
+}
+
 fn only_task(state: &ClientState) -> &Task {
     &state.projects[0].tasks[0]
 }
@@ -173,4 +223,85 @@ fn acknowledged_section_move_keeps_server_position() {
     );
 
     assert_eq!(state.projects[0].sections[0].position.as_str(), "a1");
+}
+
+#[test]
+fn replay_operations_creates_automation() {
+    let state = replay_operations(&confirmed(), &[create_automation_operation()]);
+    let automation = &state.projects[0].automations[0];
+
+    assert_eq!(automation.id, Uuid::parse_str(AUTOMATION_ID).unwrap());
+    assert_eq!(automation.project_id, Uuid::parse_str(PROJECT_ID).unwrap());
+    assert_eq!(
+        automation.trigger,
+        AutomationTrigger::TaskEntersSection {
+            section_id: Uuid::parse_str(SECTION_ID).unwrap()
+        }
+    );
+    assert_eq!(
+        automation.actions,
+        vec![AutomationAction::MoveToSection {
+            section_id: Some(Uuid::parse_str(SECTION_ID).unwrap())
+        }]
+    );
+}
+
+#[test]
+fn replay_operations_updates_automation_actions() {
+    let confirmed = replay_operations(&confirmed(), &[create_automation_operation()]);
+    let state = replay_operations(&confirmed, &[update_automation_operation()]);
+
+    assert_eq!(
+        state.projects[0].automations[0].actions,
+        vec![AutomationAction::SetPriority {
+            priority: Priority::High
+        }]
+    );
+}
+
+#[test]
+fn replay_operations_deletes_automation() {
+    let confirmed = replay_operations(&confirmed(), &[create_automation_operation()]);
+    let state = replay_operations(&confirmed, &[delete_automation_operation()]);
+
+    assert!(state.projects[0].automations.is_empty());
+}
+
+#[test]
+fn apply_changes_creates_updates_and_deletes_automation() {
+    let created = apply_changes(
+        &confirmed(),
+        &[automation_change(
+            "create",
+            json!({
+                "id": AUTOMATION_ID,
+                "project_id": PROJECT_ID,
+                "trigger": { "kind": "task_enters_section", "section_id": SECTION_ID },
+                "actions": [{ "kind": "move_to_section", "section_id": SECTION_ID }],
+                "created_at": NOW
+            }),
+        )],
+    );
+    assert_eq!(created.projects[0].automations.len(), 1);
+    assert_eq!(
+        created.projects[0].automations[0].actions,
+        vec![AutomationAction::MoveToSection {
+            section_id: Some(Uuid::parse_str(SECTION_ID).unwrap())
+        }]
+    );
+
+    let updated = apply_changes(
+        &created,
+        &[automation_change(
+            "update",
+            json!({ "actions": [{ "kind": "open_task" }] }),
+        )],
+    );
+    assert_eq!(
+        updated.projects[0].automations[0].actions,
+        vec![AutomationAction::OpenTask]
+    );
+
+    let deleted = apply_changes(&updated, &[automation_change("delete", json!({}))]);
+    assert!(deleted.projects[0].automations.is_empty());
 }

@@ -8,6 +8,7 @@ mod output;
 mod skill;
 mod state;
 
+use crate::client::{AutomationActionChoice, AutomationTriggerKind};
 use crate::color::ColorChoice;
 use crate::skill::Harness;
 use clap::{CommandFactory, Parser, Subcommand};
@@ -187,6 +188,9 @@ enum Command {
     /// Manage sections in the active or -p project
     #[command(subcommand)]
     Section(SectionCommand),
+    /// Manage automations in the active or -p project
+    #[command(subcommand)]
+    Automation(AutomationCommand),
     /// Print the bundled documentation (the README) to stdout
     Docs,
     /// Manage the agent skill that teaches coding agents to drive scry
@@ -325,6 +329,51 @@ enum SectionCommand {
     ResetColor {
         /// The section name
         name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum AutomationCommand {
+    /// List automations
+    List,
+    /// Create or update the action for a trigger
+    #[command(group(
+        clap::ArgGroup::new("action")
+            .required(true)
+            .multiple(false)
+            .args(["move_to", "no_section", "close", "open", "priority"])
+    ))]
+    Set {
+        /// The trigger: created, closed, opened, or enters
+        #[arg(long, value_enum)]
+        when: AutomationTriggerKind,
+        /// The section for --when enters
+        #[arg(long, value_name = "SECTION")]
+        section: Option<String>,
+        /// Move the task to this section
+        #[arg(long, value_name = "SECTION")]
+        move_to: Option<String>,
+        /// Move the task to No section
+        #[arg(long)]
+        no_section: bool,
+        /// Close the task
+        #[arg(long)]
+        close: bool,
+        /// Open the task
+        #[arg(long)]
+        open: bool,
+        /// Set the task priority
+        #[arg(long, value_enum)]
+        priority: Option<Priority>,
+    },
+    /// Remove the automation for a trigger
+    Remove {
+        /// The trigger: created, closed, opened, or enters
+        #[arg(long, value_enum)]
+        when: AutomationTriggerKind,
+        /// The section for --when enters
+        #[arg(long, value_name = "SECTION")]
+        section: Option<String>,
     },
 }
 
@@ -742,6 +791,60 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 &config,
                 cli.project.as_deref(),
                 name,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Automation(AutomationCommand::List)) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::automation_list(&client, &config, cli.project.as_deref(), output_json)
+                .await;
+        }
+        Some(Command::Automation(AutomationCommand::Set {
+            when,
+            section,
+            move_to,
+            no_section,
+            close,
+            open,
+            priority,
+        })) => {
+            let action = if let Some(target) = move_to {
+                AutomationActionChoice::MoveTo(target.clone())
+            } else if *no_section {
+                AutomationActionChoice::NoSection
+            } else if *close {
+                AutomationActionChoice::Close
+            } else if *open {
+                AutomationActionChoice::Open
+            } else if let Some(priority) = priority {
+                AutomationActionChoice::Priority(*priority)
+            } else {
+                return Err(AppError::Usage(
+                    "Specify one automation action.".to_string(),
+                ));
+            };
+
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::automation_set(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                *when,
+                section.as_deref(),
+                action,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Automation(AutomationCommand::Remove { when, section })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::automation_remove(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                *when,
+                section.as_deref(),
                 output_json,
             )
             .await;

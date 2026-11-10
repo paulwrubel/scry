@@ -1,6 +1,6 @@
 use scry_core::config::ConfigError;
 use scry_core::error::StorageError;
-use scry_core::ids::TaskId;
+use scry_core::ids::{AutomationId, TaskId};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -116,7 +116,12 @@ pub enum ServiceError {
         handle: String,
         candidates: Vec<String>,
     },
-
+    SectionInUseByAutomation {
+        section: String,
+    },
+    AutomationNotFound {
+        id: AutomationId,
+    },
     Storage(StorageError),
 }
 
@@ -170,6 +175,11 @@ impl fmt::Display for ServiceError {
                 "Handle \"{handle}\" matches multiple notes: {}. Use a longer prefix.",
                 candidates.join(", ")
             ),
+            Self::SectionInUseByAutomation { section } => write!(
+                f,
+                "Section \"{section}\" is used by an automation. Remove or change that automation first."
+            ),
+            Self::AutomationNotFound { id } => write!(f, "Automation {id} not found."),
             Self::Storage(error) => write!(f, "{error}"),
         }
     }
@@ -182,10 +192,12 @@ impl ServiceError {
         match self {
             Self::SectionNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
             Self::TaskHandleNotFound { .. } | Self::NoteHandleNotFound { .. } => "not_found",
+            Self::AutomationNotFound { .. } => "not_found",
             Self::SectionNameTaken { .. }
             | Self::SectionMergeIntoItself { .. }
             | Self::SectionMoveAnchorItself { .. }
             | Self::TaskMoveAnchorItself { .. } => "conflict",
+            Self::SectionInUseByAutomation { .. } => "conflict",
             Self::SectionNameRequired => "invalid",
             Self::TaskAnchorNotInSection { .. } => "invalid",
             Self::AmbiguousTaskHandle { .. } | Self::AmbiguousNoteHandle { .. } => "invalid",
