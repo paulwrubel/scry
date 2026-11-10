@@ -95,6 +95,33 @@ describe('ProjectLayout', () => {
     expect(screen.getByTestId('flowbite-drawer').getAttribute('aria-hidden')).toBe('false');
   });
 
+  it('shows the read-only task view when opening a task', () => {
+    renderLayout(`/projects/${PROJECT_ID}/tasks/task-1`);
+
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit title' })).toBeDefined();
+  });
+
+  it('returns to view mode after closing and reopening the drawer', async () => {
+    renderLayout(`/projects/${PROJECT_ID}/tasks/task-1`);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit title' }));
+    expect(screen.getByLabelText('Title')).toBeDefined();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.getByTestId('path').textContent).toBe(`/projects/${PROJECT_ID}/tasks`);
+    });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Task title' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('path').textContent).toBe(`/projects/${PROJECT_ID}/tasks/task-1`);
+    });
+
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit title' })).toBeDefined();
+  });
+
   it('closes the drawer on Escape', async () => {
     renderLayout(`/projects/${PROJECT_ID}/tasks/task-1`);
 
