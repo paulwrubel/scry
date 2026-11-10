@@ -1803,7 +1803,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "scry"
-version = "0.31.0"
+version = "0.31.1"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1821,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "scry-api"
-version = "0.31.0"
+version = "0.31.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -1846,7 +1846,7 @@ dependencies = [
 
 [[package]]
 name = "scry-core"
-version = "0.31.0"
+version = "0.31.1"
 dependencies = [
  "anstyle",
  "assert_fs",
