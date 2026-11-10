@@ -134,6 +134,10 @@ sqlx-prepare-postgres: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
+    cd "{{justfile_directory()}}"
+    # `cargo sqlx prepare` only sees queries from crates it recompiles. Drop the
+    # API crate's artifacts so a warm build cannot hide them.
+    cargo clean -p scry-api
     SQLX_OFFLINE=false cargo sqlx prepare --database-url postgres://postgres:postgres@127.0.0.1:5432/scry -- --workspace --no-default-features
 
 # verify the Postgres offline query cache is up to date (used in CI)
@@ -142,6 +146,9 @@ sqlx-prepare-check: run-postgres
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'cd "{{justfile_directory()}}" && just pg-down || true' EXIT
+    cd "{{justfile_directory()}}"
+    # Force the same rebuild the prepare path needs so the check sees the queries.
+    cargo clean -p scry-api
     SQLX_OFFLINE=false cargo sqlx prepare --check --database-url postgres://postgres:postgres@127.0.0.1:5432/scry -- --workspace --no-default-features
 
 # regenerate the TypeScript bindings for the sync wire types
