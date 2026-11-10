@@ -3,6 +3,12 @@
 mod add;
 pub use add::{AddTask, add};
 
+mod automation;
+pub use automation::{
+    AutomationActionChoice, AutomationTriggerKind, automation_list, automation_remove,
+    automation_set,
+};
+
 mod close_tasks;
 pub use close_tasks::close_tasks;
 
