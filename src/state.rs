@@ -88,6 +88,7 @@ impl ProjectState {
             sections,
             tasks,
             notes,
+            ..
         } = snapshot;
 
         let task_with_notes = |task: &Task| {
@@ -338,6 +339,7 @@ mod tests {
                 contents: "belongs to first".to_string(),
                 created_at: ts("2026-01-02T00:00:00Z"),
             }],
+            automations: Vec::new(),
         };
 
         let state = ProjectState::from_snapshot(snapshot);
@@ -383,6 +385,7 @@ mod tests {
                 closed_task(task_id(2), "closed unsectioned", None, "a0"),
             ],
             notes: vec![],
+            automations: Vec::new(),
         };
 
         let state = ProjectState::from_snapshot(snapshot);
@@ -412,6 +415,7 @@ mod tests {
                 closed_task(task_id(5), "closed late b", None, "a1"),
             ],
             notes: vec![],
+            automations: Vec::new(),
         };
 
         let state = ProjectState::from_snapshot(snapshot);
@@ -458,6 +462,7 @@ mod tests {
                 ),
             ],
             notes: vec![],
+            automations: Vec::new(),
         }
     }
 
@@ -525,6 +530,7 @@ mod tests {
             sections: vec![section(section_id(10), "a0")],
             tasks: vec![newest, oldest_second, oldest_first],
             notes: vec![],
+            automations: Vec::new(),
         };
 
         let state = ProjectState::from_snapshot(snapshot);
@@ -561,6 +567,7 @@ mod tests {
                 open_task(task_id(3), "read docs", None, "a0", Priority::Medium),
             ],
             notes: vec![],
+            automations: Vec::new(),
         };
 
         let by_title = ProjectState::from_snapshot(snapshot.clone())

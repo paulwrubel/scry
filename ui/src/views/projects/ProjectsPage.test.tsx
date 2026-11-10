@@ -23,6 +23,7 @@ function projectSnapshot(id: string, name: string): ProjectSnapshot {
     sections: [],
     tasks: [],
     notes: [],
+    automations: [],
   };
 }
 

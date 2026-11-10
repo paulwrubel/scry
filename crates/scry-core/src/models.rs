@@ -502,7 +502,7 @@ pub struct Change {
     pub created_at: DateTime<Utc>,
 }
 
-/// A project together with all of its sections, tasks, and notes.
+/// A project together with all of its sections, tasks, notes, and automations.
 ///
 /// This is scry's canonical project document: `GET /projects/{id}/snapshot`
 /// returns it directly, and each entry in a snapshot file is the same
@@ -517,4 +517,6 @@ pub struct ProjectSnapshot {
     pub sections: Vec<Section>,
     pub tasks: Vec<Task>,
     pub notes: Vec<Note>,
+    #[serde(default)]
+    pub automations: Vec<Automation>,
 }

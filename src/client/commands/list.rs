@@ -61,6 +61,7 @@ pub async fn list(
             .iter()
             .flat_map(|task| task.notes.clone().unwrap_or_default())
             .collect(),
+        automations: Vec::new(),
     };
 
     let mut state = ProjectState::from_snapshot(snapshot);

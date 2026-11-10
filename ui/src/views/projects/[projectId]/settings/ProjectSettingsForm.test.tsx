@@ -22,6 +22,7 @@ function projectSnapshot(): ProjectSnapshot {
     sections: [],
     tasks: [],
     notes: [],
+    automations: [],
   };
 }
 

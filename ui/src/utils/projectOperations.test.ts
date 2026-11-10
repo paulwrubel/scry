@@ -17,6 +17,7 @@ function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
     sections: [],
     tasks: [],
     notes: [],
+    automations: [],
     ...overrides,
   };
 }

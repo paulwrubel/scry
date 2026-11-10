@@ -1383,16 +1383,17 @@ impl Store for PostgresStore {
         project_id: ProjectId,
         tx: Option<&mut PgConnection>,
     ) -> Result<ProjectSnapshot, StorageError> {
-        // The four reads are independent; overlapping them hides per-query
+        // The five reads are independent; overlapping them hides per-query
         // latency when Postgres is reached over the network. A missing project
-        // still pays for the three child reads, which is fine on the rare 404 path.
+        // still pays for the four child reads, which is fine on the rare 404 path.
         // a caller's transaction is one connection, so those reads serialize.
-        let (project, sections, tasks, notes) = match tx {
+        let (project, sections, tasks, notes, automations) = match tx {
             None => tokio::try_join!(
                 self.get_project_by_id(project_id, None),
                 self.get_all_sections_by_project_id(project_id, None),
                 self.get_all_tasks_by_project_id(project_id, None),
                 self.get_all_notes_by_project_id(project_id, None),
+                self.get_all_automations_by_project_id(project_id, None),
             )?,
             Some(tx) => {
                 let project = self.get_project_by_id(project_id, Some(&mut *tx)).await?;
@@ -1405,7 +1406,10 @@ impl Store for PostgresStore {
                 let notes = self
                     .get_all_notes_by_project_id(project_id, Some(&mut *tx))
                     .await?;
-                (project, sections, tasks, notes)
+                let automations = self
+                    .get_all_automations_by_project_id(project_id, Some(&mut *tx))
+                    .await?;
+                (project, sections, tasks, notes, automations)
             }
         };
         let project = project.ok_or_else(|| {
@@ -1417,6 +1421,7 @@ impl Store for PostgresStore {
             sections,
             tasks,
             notes,
+            automations,
         })
     }
 

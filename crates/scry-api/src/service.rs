@@ -74,6 +74,16 @@ pub enum ApplyMode {
     PerOperation,
 }
 
+/// Whether applying an operation should evaluate the project's automations
+/// after the operation takes effect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AutomationEvaluation {
+    /// Normal user and server writes: evaluate automations after applying.
+    Evaluate,
+    /// Import and automation-generated actions: do not evaluate automations.
+    Skip,
+}
+
 /// The acks, pulled changes, and next cursor produced by one sync round.
 #[derive(Debug, Clone)]
 pub struct SyncResult {
@@ -1169,8 +1179,13 @@ impl ProjectService {
         let mut tx = self.store.begin_apply().await?;
         let state = self.load_import_state(&mut tx, file).await?;
         let plan = snapshot::plan_import(file, &state, mode)?;
-        self.apply_batch(&mut tx, &plan.operations, ApplyMode::Atomic)
-            .await?;
+        self.apply_batch(
+            &mut tx,
+            &plan.operations,
+            ApplyMode::Atomic,
+            AutomationEvaluation::Skip,
+        )
+        .await?;
         tx.commit()
             .await
             .map_err(|error| StorageError::Database(format!("failed to commit import: {error}")))?;
@@ -1188,6 +1203,7 @@ impl ProjectService {
         let mut sections = Vec::new();
         let mut tasks = Vec::new();
         let mut notes = Vec::new();
+        let mut automations = Vec::new();
 
         for project in &projects {
             sections.extend(
@@ -1203,6 +1219,11 @@ impl ProjectService {
             notes.extend(
                 self.store
                     .get_all_notes_by_project_id(project.id, Some(&mut **tx))
+                    .await?,
+            );
+            automations.extend(
+                self.store
+                    .get_all_automations_by_project_id(project.id, Some(&mut **tx))
                     .await?,
             );
         }
@@ -1228,6 +1249,12 @@ impl ProjectService {
                     .iter()
                     .map(|note| (EntityType::Note, note.id)),
             );
+            referenced.extend(
+                document
+                    .automations
+                    .iter()
+                    .map(|automation| (EntityType::Automation, automation.id)),
+            );
         }
 
         let mut tombstones = HashSet::new();
@@ -1246,6 +1273,7 @@ impl ProjectService {
             sections,
             tasks,
             notes,
+            automations,
             tombstones,
         })
     }
@@ -1264,7 +1292,9 @@ impl ProjectService {
         }
 
         let mut tx = self.store.begin_apply().await?;
-        let outcome = self.apply_batch(&mut tx, ops, mode).await?;
+        let outcome = self
+            .apply_batch(&mut tx, ops, mode, AutomationEvaluation::Evaluate)
+            .await?;
         tx.commit().await.map_err(|error| {
             StorageError::Database(format!("failed to commit apply batch: {error}"))
         })?;
@@ -1276,12 +1306,15 @@ impl ProjectService {
         tx: &mut Transaction<'static, Postgres>,
         ops: &[Operation],
         mode: ApplyMode,
+        automation_evaluation: AutomationEvaluation,
     ) -> Result<ApplyOutcome, ServiceError> {
         let mut acks = Vec::with_capacity(ops.len());
         let mut last_seq = None;
 
         for op in ops {
-            let (ack, seq) = self.apply_one_operation(tx, op).await?;
+            let (ack, seq) = self
+                .apply_one_operation(tx, op, automation_evaluation)
+                .await?;
             if matches!(mode, ApplyMode::Atomic)
                 && let AcknowledgmentStatus::Rejected { reason } = &ack.status
             {
@@ -1329,6 +1362,7 @@ impl ProjectService {
         &self,
         tx: &mut Transaction<'static, Postgres>,
         op: &Operation,
+        automation_evaluation: AutomationEvaluation,
     ) -> Result<(OperationAcknowledgment, Option<i64>), ServiceError> {
         // 1. an op whose wire version this build cannot read is rejected on its
         // own, so the rest of the batch still applies
@@ -1366,7 +1400,8 @@ impl ProjectService {
 
         // 4-6. apply the fields the op names, write through the store, then log
         // one change per affected entity; deletes fan out via affected_entities
-        let seq = match &op.kind {
+        let mut task_transition: Option<(Option<Task>, Task)> = None;
+        let mut seq = match &op.kind {
             OperationKind::CreateProject {
                 id,
                 name,
@@ -1747,6 +1782,7 @@ impl ProjectService {
                     tags: tags.clone(),
                     created_at: *created_at,
                 };
+                task_transition = Some((None, task.clone()));
                 self.store
                     .create_task(task.clone(), Some(&mut **tx))
                     .await?;
@@ -1768,7 +1804,9 @@ impl ProjectService {
                     ));
                 };
 
+                let before = task.clone();
                 let field_values = task_field_updates(&mut task, &op.kind);
+                task_transition = Some((Some(before), task.clone()));
                 self.store.update_task(task, Some(&mut **tx)).await?;
                 Some(
                     self.record_change(tx, op, Entity::Task(*id), ChangeKind::Update, field_values)
@@ -2045,6 +2083,15 @@ impl ProjectService {
             .record_applied_operation(op.operation_id, Utc::now(), Some(&mut **tx))
             .await?;
 
+        if automation_evaluation == AutomationEvaluation::Evaluate
+            && let Some((before, after)) = &task_transition
+        {
+            seq = seq.max(
+                self.apply_matching_automations(tx, op, before.as_ref(), after)
+                    .await?,
+            );
+        }
+
         Ok((OperationAcknowledgment::applied(op.operation_id), seq))
     }
 
@@ -2204,6 +2251,108 @@ impl ProjectService {
         key_between(last.as_ref(), None).map_err(position_error)
     }
 
+    /// The position that appends a task to the section or unsectioned group,
+    /// computed inside the caller's transaction.
+    async fn append_task_position_in_transaction(
+        &self,
+        tx: &mut Transaction<'static, Postgres>,
+        project_id: ProjectId,
+        section_id: Option<SectionId>,
+    ) -> Result<Position, ServiceError> {
+        let tasks = match section_id {
+            Some(section_id) => {
+                self.store
+                    .get_all_tasks_by_section_id(section_id, Some(&mut **tx))
+                    .await?
+            }
+            None => self
+                .store
+                .get_all_tasks_by_project_id(project_id, Some(&mut **tx))
+                .await?
+                .into_iter()
+                .filter(|task| task.section_id.is_none())
+                .collect(),
+        };
+        let last = tasks.iter().map(|task| &task.position).max().cloned();
+        key_between(last.as_ref(), None).map_err(position_error)
+    }
+
+    /// Evaluate the project's rule for the trigger represented by `op`, then
+    /// apply that rule's actions in order. Further automation evaluation is
+    /// skipped for the generated actions.
+    async fn apply_matching_automations(
+        &self,
+        tx: &mut Transaction<'static, Postgres>,
+        op: &Operation,
+        before: Option<&Task>,
+        after: &Task,
+    ) -> Result<Option<i64>, ServiceError> {
+        let Some(trigger) = automation_trigger_for_task_change(&op.kind, before, after) else {
+            return Ok(None);
+        };
+
+        let automations = self
+            .store
+            .get_all_automations_by_project_id(after.project_id, Some(&mut **tx))
+            .await?;
+        let Some(rule) = automations.iter().find(|rule| rule.trigger == trigger) else {
+            return Ok(None);
+        };
+
+        let mut current = after.clone();
+        let mut max_seq = None;
+
+        for action in &rule.actions {
+            if create_placement_blocks_move_action(&trigger, action, &op.kind) {
+                continue;
+            }
+            if automation_action_is_noop(action, &current) {
+                continue;
+            }
+
+            let kind = match action {
+                AutomationAction::MoveToSection { section_id } => {
+                    let position = self
+                        .append_task_position_in_transaction(tx, current.project_id, *section_id)
+                        .await?;
+                    OperationKind::MoveTask {
+                        id: current.id,
+                        section_id: *section_id,
+                        position,
+                    }
+                }
+                AutomationAction::CloseTask => {
+                    update_task_state_operation(current.id, TaskState::Closed)
+                }
+                AutomationAction::OpenTask => {
+                    update_task_state_operation(current.id, TaskState::Open)
+                }
+                AutomationAction::SetPriority { priority } => {
+                    update_task_priority_operation(current.id, *priority)
+                }
+            };
+
+            let action_op = new_operation(Uuid::new_v4(), kind);
+            // Box the recursive call: the engine suppresses further automation
+            // evaluation at runtime, but the compiler still needs a sized future.
+            let (ack, seq) =
+                Box::pin(self.apply_one_operation(tx, &action_op, AutomationEvaluation::Skip))
+                    .await?;
+            max_seq = max_seq.max(seq);
+
+            if ack.status == AcknowledgmentStatus::Applied
+                && let Some(task) = self
+                    .store
+                    .get_task_by_id(current.id, Some(&mut **tx))
+                    .await?
+            {
+                current = task;
+            }
+        }
+
+        Ok(max_seq)
+    }
+
     async fn require_project(&self, id: ProjectId) -> Result<Project, ServiceError> {
         self.store
             .get_project_by_id(id, None)
@@ -2335,6 +2484,93 @@ fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldValues {
     }
 
     Value::Object(fields)
+}
+
+/// The automation trigger represented by an applied task operation, if any.
+///
+/// `before` is the task before the operation and `after` is the task after it.
+/// Creation fires only `TaskCreated`; state and section triggers require a
+/// real change.
+fn automation_trigger_for_task_change(
+    op: &OperationKind,
+    before: Option<&Task>,
+    after: &Task,
+) -> Option<AutomationTrigger> {
+    match op {
+        OperationKind::CreateTask { .. } => Some(AutomationTrigger::TaskCreated),
+        OperationKind::UpdateTask { state: Some(_), .. } => {
+            let before = before?;
+            if before.state == after.state {
+                None
+            } else {
+                Some(match after.state {
+                    TaskState::Closed => AutomationTrigger::TaskClosed,
+                    TaskState::Open => AutomationTrigger::TaskOpened,
+                })
+            }
+        }
+        OperationKind::MoveTask { .. } => {
+            let before = before?;
+            if before.section_id == after.section_id {
+                None
+            } else {
+                after
+                    .section_id
+                    .map(|section_id| AutomationTrigger::TaskEntersSection { section_id })
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Whether applying the action would leave the task unchanged.
+fn automation_action_is_noop(action: &AutomationAction, task: &Task) -> bool {
+    match action {
+        AutomationAction::MoveToSection { section_id } => task.section_id == *section_id,
+        AutomationAction::CloseTask => task.state == TaskState::Closed,
+        AutomationAction::OpenTask => task.state == TaskState::Open,
+        AutomationAction::SetPriority { priority } => task.priority == *priority,
+    }
+}
+
+fn update_task_state_operation(id: TaskId, state: TaskState) -> OperationKind {
+    OperationKind::UpdateTask {
+        id,
+        title: None,
+        description: None,
+        priority: None,
+        tags: None,
+        state: Some(state),
+    }
+}
+
+fn update_task_priority_operation(id: TaskId, priority: Priority) -> OperationKind {
+    OperationKind::UpdateTask {
+        id,
+        title: None,
+        description: None,
+        priority: Some(priority),
+        tags: None,
+        state: None,
+    }
+}
+
+/// A task-created rule that moves the task is skipped when the create
+/// explicitly placed it in a section.
+fn create_placement_blocks_move_action(
+    trigger: &AutomationTrigger,
+    action: &AutomationAction,
+    op: &OperationKind,
+) -> bool {
+    matches!(trigger, AutomationTrigger::TaskCreated)
+        && matches!(action, AutomationAction::MoveToSection { .. })
+        && matches!(
+            op,
+            OperationKind::CreateTask {
+                section_id: Some(_),
+                ..
+            }
+        )
 }
 
 fn project_field_updates(project: &mut Project, op: &OperationKind) -> FieldValues {
@@ -3228,5 +3464,178 @@ mod tests {
             "Section \"Todo\" is used by an automation. Remove or change that automation first."
         );
         assert_eq!(AppError::Service(in_use).kind(), "conflict");
+    }
+
+    fn create_task_op(task: &Task, section_id: Option<SectionId>) -> OperationKind {
+        OperationKind::CreateTask {
+            id: task.id,
+            project_id: task.project_id,
+            title: task.title.clone(),
+            description: task.description.clone(),
+            priority: task.priority,
+            section_id,
+            position: task.position.clone(),
+            state: task.state,
+            tags: task.tags.clone(),
+            created_at: task.created_at,
+        }
+    }
+
+    #[test]
+    fn automation_trigger_for_task_change_detects_task_transitions() {
+        let id = Uuid::new_v4();
+        let section_id = Uuid::new_v4();
+        let created = task_at(id, None, "a0");
+        assert_eq!(
+            automation_trigger_for_task_change(&create_task_op(&created, None), None, &created),
+            Some(AutomationTrigger::TaskCreated)
+        );
+
+        let open = task_at(id, None, "a0");
+        let mut closed = open.clone();
+        closed.state = TaskState::Closed;
+        let close_op = OperationKind::UpdateTask {
+            id,
+            title: None,
+            description: None,
+            priority: None,
+            tags: None,
+            state: Some(TaskState::Closed),
+        };
+        assert_eq!(
+            automation_trigger_for_task_change(&close_op, Some(&open), &closed),
+            Some(AutomationTrigger::TaskClosed)
+        );
+
+        let reopen_op = OperationKind::UpdateTask {
+            id,
+            title: None,
+            description: None,
+            priority: None,
+            tags: None,
+            state: Some(TaskState::Open),
+        };
+        assert_eq!(
+            automation_trigger_for_task_change(&reopen_op, Some(&closed), &open),
+            Some(AutomationTrigger::TaskOpened)
+        );
+        assert_eq!(
+            automation_trigger_for_task_change(&reopen_op, Some(&open), &open),
+            None
+        );
+
+        let unsectioned = task_at(id, None, "a0");
+        let sectioned = task_at(id, Some(section_id), "a0");
+        let enter_op = OperationKind::MoveTask {
+            id,
+            section_id: Some(section_id),
+            position: sectioned.position.clone(),
+        };
+        assert_eq!(
+            automation_trigger_for_task_change(&enter_op, Some(&unsectioned), &sectioned),
+            Some(AutomationTrigger::TaskEntersSection { section_id })
+        );
+        assert_eq!(
+            automation_trigger_for_task_change(&enter_op, Some(&sectioned), &sectioned),
+            None
+        );
+
+        let leave_op = OperationKind::MoveTask {
+            id,
+            section_id: None,
+            position: unsectioned.position.clone(),
+        };
+        assert_eq!(
+            automation_trigger_for_task_change(&leave_op, Some(&sectioned), &unsectioned),
+            None
+        );
+
+        let note_op = OperationKind::CreateNote {
+            id: Uuid::new_v4(),
+            task_id: id,
+            contents: "note".to_string(),
+            created_at: Utc::now(),
+        };
+        assert_eq!(
+            automation_trigger_for_task_change(&note_op, None, &created),
+            None
+        );
+    }
+
+    #[test]
+    fn automation_action_is_noop_matches_the_current_task() {
+        let section_id = Uuid::new_v4();
+        let task = task_at(Uuid::new_v4(), Some(section_id), "a0");
+        assert!(automation_action_is_noop(
+            &AutomationAction::MoveToSection {
+                section_id: Some(section_id)
+            },
+            &task
+        ));
+        assert!(!automation_action_is_noop(
+            &AutomationAction::MoveToSection { section_id: None },
+            &task
+        ));
+
+        let unsectioned = task_at(Uuid::new_v4(), None, "a0");
+        assert!(automation_action_is_noop(
+            &AutomationAction::MoveToSection { section_id: None },
+            &unsectioned
+        ));
+
+        assert!(!automation_action_is_noop(
+            &AutomationAction::CloseTask,
+            &task
+        ));
+        assert!(automation_action_is_noop(
+            &AutomationAction::OpenTask,
+            &task
+        ));
+        assert!(automation_action_is_noop(
+            &AutomationAction::SetPriority {
+                priority: Priority::Medium
+            },
+            &task
+        ));
+        assert!(!automation_action_is_noop(
+            &AutomationAction::SetPriority {
+                priority: Priority::High
+            },
+            &task
+        ));
+
+        let mut closed = task.clone();
+        closed.state = TaskState::Closed;
+        assert!(automation_action_is_noop(
+            &AutomationAction::CloseTask,
+            &closed
+        ));
+        assert!(!automation_action_is_noop(
+            &AutomationAction::OpenTask,
+            &closed
+        ));
+    }
+
+    #[test]
+    fn create_placement_blocks_move_action_only_for_explicit_create_sections() {
+        let task = task_at(Uuid::new_v4(), Some(Uuid::new_v4()), "a0");
+        let section_id = task.section_id;
+        let move_action = AutomationAction::MoveToSection { section_id };
+
+        assert!(create_placement_blocks_move_action(
+            &AutomationTrigger::TaskCreated,
+            &move_action,
+            &create_task_op(&task, section_id)
+        ));
+        assert!(!create_placement_blocks_move_action(
+            &AutomationTrigger::TaskCreated,
+            &move_action,
+            &create_task_op(&task, None)
+        ));
+        assert!(!create_placement_blocks_move_action(
+            &AutomationTrigger::TaskClosed,
+            &move_action,
+            &create_task_op(&task, section_id)
+        ));
     }
 }

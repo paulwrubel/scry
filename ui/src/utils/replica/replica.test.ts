@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientState } from '@/contract/op-replay';
+import type { Automation } from '@/generated/Automation';
 import type { Change } from '@/generated/Change';
 import type { Note } from '@/generated/Note';
 import type { Operation } from '@/generated/Operation';
@@ -22,6 +23,7 @@ const SECTION_B_ID = 'section-b';
 const TASK_A_ID = 'task-a';
 const TASK_B_ID = 'task-b';
 const NOTE_ID = 'note-a';
+const AUTOMATION_ID = 'automation-a';
 
 let name = '';
 
@@ -44,7 +46,7 @@ describe('replica confirmed state', () => {
 
     const db = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
     const project = state.projects[0];
-    const { sections, tasks, notes, ...projectRecord } = project;
+    const { sections, tasks, notes, automations, ...projectRecord } = project;
 
     expect(await db.get('projects', project.id)).toEqual(projectRecord);
     expect(await db.get('sections', SECTION_A_ID)).toEqual(sections[0]);
@@ -52,6 +54,7 @@ describe('replica confirmed state', () => {
     expect(await db.get('tasks', TASK_A_ID)).toEqual(tasks[0]);
     expect(await db.get('tasks', TASK_B_ID)).toEqual(tasks[1]);
     expect(await db.get('notes', NOTE_ID)).toEqual(notes[0]);
+    expect(automations).toEqual([]);
     expect(await db.get('meta', 'project_order')).toEqual([PROJECT_ID]);
     expect(await db.get('meta', 'section_order')).toEqual([SECTION_A_ID, SECTION_B_ID]);
     expect(await db.get('meta', 'task_order')).toEqual([TASK_A_ID, TASK_B_ID]);
@@ -75,6 +78,30 @@ describe('replica confirmed state', () => {
     second.close();
   });
 
+  it('persists an automation and attaches it to its project', async () => {
+    const automation: Automation = {
+      id: AUTOMATION_ID,
+      project_id: PROJECT_ID,
+      trigger: { kind: 'task_created' },
+      actions: [{ kind: 'close_task' }],
+      created_at: '2026-01-01T00:00:05Z',
+    };
+    const state = sampleState();
+    state.projects[0].automations = [automation];
+
+    const first = await openReplica({ databaseName: name });
+    await first.bootstrap(state);
+    first.close();
+
+    const db = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
+    expect(await db.get('automations', AUTOMATION_ID)).toEqual(automation);
+    db.close();
+
+    const second = await openReplica({ databaseName: name });
+    expect(second.confirmed.projects[0].automations).toEqual([automation]);
+    second.close();
+  });
+
   it('bootstrapping replaces older confirmed state', async () => {
     const firstState = sampleState();
     const secondState: ClientState = {
@@ -89,6 +116,7 @@ describe('replica confirmed state', () => {
           sections: [],
           tasks: [],
           notes: [],
+          automations: [],
         },
       ],
     };
@@ -606,6 +634,7 @@ function sampleState(): ClientState {
         sections: [sectionA, sectionB],
         tasks: [taskA, taskB],
         notes: [note],
+        automations: [],
       },
     ],
   };
@@ -671,6 +700,7 @@ function orderedState(): ClientState {
         sections: [sectionA, sectionB],
         tasks: [taskA, taskB],
         notes: [note],
+        automations: [],
       },
       {
         id: 'aaa-project',
@@ -682,6 +712,7 @@ function orderedState(): ClientState {
         sections: [],
         tasks: [],
         notes: [],
+        automations: [],
       },
     ],
   };

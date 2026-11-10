@@ -39,6 +39,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
       },
     ],
     notes: [],
+    automations: [],
     ...overrides,
   };
 }

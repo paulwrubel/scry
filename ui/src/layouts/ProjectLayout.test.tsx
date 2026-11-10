@@ -35,6 +35,7 @@ function projectSnapshot(): ProjectSnapshot {
       },
     ],
     notes: [],
+    automations: [],
   };
 }
 

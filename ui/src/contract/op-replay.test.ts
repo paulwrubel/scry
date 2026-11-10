@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { Automation } from '../generated/Automation';
+import type { AutomationAction } from '../generated/AutomationAction';
 import type { Change } from '../generated/Change';
 import type { Note } from '../generated/Note';
 import type { Operation } from '../generated/Operation';
@@ -12,6 +14,7 @@ const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const SECTION_ID = '22222222-2222-4222-8222-222222222222';
 const TASK_ID = '44444444-4444-4444-8444-444444444444';
 const NOTE_ID = '66666666-6666-4666-8666-666666666666';
+const AUTOMATION_ID = '88888888-8888-4888-8888-888888888888';
 const CREATED_AT = '2026-01-01T00:00:00Z';
 
 const section: Section = {
@@ -56,6 +59,7 @@ function snapshot(title: string): ProjectSnapshot {
     sections: [section],
     tasks: [task(title)],
     notes: [note],
+    automations: [],
   };
 }
 
@@ -134,6 +138,63 @@ function serverProjectDelete(): Change {
   };
 }
 
+function automation(
+  actions: AutomationAction[] = [{ kind: 'move_to_section', section_id: SECTION_ID }],
+): Automation {
+  return {
+    id: AUTOMATION_ID,
+    project_id: PROJECT_ID,
+    trigger: { kind: 'task_enters_section', section_id: SECTION_ID },
+    actions,
+    created_at: CREATED_AT,
+  };
+}
+
+function createAutomation(operationId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'create_automation',
+    id: AUTOMATION_ID,
+    project_id: PROJECT_ID,
+    trigger: { kind: 'task_enters_section', section_id: SECTION_ID },
+    actions: [{ kind: 'move_to_section', section_id: SECTION_ID }],
+    created_at: CREATED_AT,
+  };
+}
+
+function updateAutomation(operationId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'update_automation',
+    id: AUTOMATION_ID,
+    actions: [{ kind: 'set_priority', priority: 'high' }],
+  };
+}
+
+function deleteAutomation(operationId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'delete_automation',
+    id: AUTOMATION_ID,
+  };
+}
+
+function automationChange(kind: Change['kind'], fieldValues: Record<string, unknown>): Change {
+  return {
+    seq: 2,
+    entity_type: 'automation',
+    entity_id: AUTOMATION_ID,
+    kind,
+    operation_id: 'automation-change',
+    client_timestamp: null,
+    field_values: fieldValues,
+    created_at: CREATED_AT,
+  };
+}
+
 describe('op replay', () => {
   it('applyChanges applies an update_task change', () => {
     const result = applyChanges(state(), [serverChange('server')]);
@@ -196,5 +257,46 @@ describe('op replay', () => {
     const result = applyChanges(state(), [serverProjectDelete()]);
 
     expect(result.projects).toHaveLength(0);
+  });
+});
+
+describe('automation replay', () => {
+  it('replayOperations creates an automation in the right project', () => {
+    const result = replayOperations(state(), [createAutomation('op-create')]);
+
+    expect(result.projects[0].automations).toEqual([automation()]);
+  });
+
+  it('replayOperations replaces an automation action list', () => {
+    const confirmed = state();
+    confirmed.projects[0].automations = [automation()];
+
+    const result = replayOperations(confirmed, [updateAutomation('op-update')]);
+
+    expect(result.projects[0].automations[0].actions).toEqual([
+      { kind: 'set_priority', priority: 'high' },
+    ]);
+  });
+
+  it('replayOperations removes an automation', () => {
+    const confirmed = state();
+    confirmed.projects[0].automations = [automation()];
+
+    const result = replayOperations(confirmed, [deleteAutomation('op-delete')]);
+
+    expect(result.projects[0].automations).toEqual([]);
+  });
+
+  it('applyChanges applies automation create, update, and delete', () => {
+    const created = applyChanges(state(), [automationChange('create', automation())]);
+    expect(created.projects[0].automations).toEqual([automation()]);
+
+    const updated = applyChanges(created, [
+      automationChange('update', { actions: [{ kind: 'open_task' }] }),
+    ]);
+    expect(updated.projects[0].automations[0].actions).toEqual([{ kind: 'open_task' }]);
+
+    const deleted = applyChanges(updated, [automationChange('delete', {})]);
+    expect(deleted.projects[0].automations).toEqual([]);
   });
 });
