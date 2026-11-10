@@ -142,7 +142,10 @@ impl fmt::Display for ServiceError {
                 write!(f, "Section \"{section}\" cannot be merged into itself")
             }
             Self::SectionMoveAnchorItself { section } => {
-                write!(f, "Section \"{section}\" cannot be moved relative to itself.")
+                write!(
+                    f,
+                    "Section \"{section}\" cannot be moved relative to itself."
+                )
             }
             Self::TaskMoveAnchorItself { task } => {
                 write!(f, "Task {task} cannot be moved relative to itself")

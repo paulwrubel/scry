@@ -150,10 +150,31 @@ impl Client {
 
     fn transport_error(&self, error: reqwest::Error) -> AppError {
         AppError::Internal(format!(
-            "failed to reach the server at {}: {error}",
-            self.base_url
+            "failed to reach the server at {}: {}",
+            self.base_url,
+            error_chain(&error)
         ))
     }
+}
+
+// reqwest's Display is only a generic "error sending request" message, so the
+// actual transport cause (TLS, DNS, proxy) lives deeper in the source chain.
+fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut message = error.to_string();
+    let mut previous = message.clone();
+    let mut source = error.source();
+
+    while let Some(cause) = source {
+        let text = cause.to_string();
+        if text != previous {
+            message.push_str(": ");
+            message.push_str(&text);
+            previous = text;
+        }
+        source = cause.source();
+    }
+
+    message
 }
 
 /// Decode a successful body, or turn the server's error document into an error.
