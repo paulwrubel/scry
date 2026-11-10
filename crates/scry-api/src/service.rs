@@ -2,12 +2,13 @@ use crate::error::ServiceError;
 use chrono::Utc;
 use scry_core::error::StorageError;
 use scry_core::ids::{
-    Handle, MIN_HANDLE_LENGTH, NoteId, ProjectId, SectionId, TaskId, distinguishing_prefixes,
-    shortest_handle, shortest_handles, template_section_id,
+    AutomationId, Handle, MIN_HANDLE_LENGTH, NoteId, ProjectId, SectionId, TaskId,
+    distinguishing_prefixes, shortest_handle, shortest_handles, template_section_id,
 };
 use scry_core::models::{
-    Change, ChangeKind, Color, Entity, EntityType, FieldValues, Note, Priority, Project,
-    ProjectSnapshot, ProjectTemplate, Section, Tags, Task, TaskSortingMode, TaskState,
+    Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Entity, EntityType,
+    FieldValues, MAX_AUTOMATION_ACTIONS, Note, Priority, Project, ProjectSnapshot, ProjectTemplate,
+    Section, Tags, Task, TaskSortingMode, TaskState,
 };
 use scry_core::position::{Position, key_between, n_keys_between};
 use scry_core::snapshot::{
@@ -21,7 +22,7 @@ use scry_core::sync::operations::{
     ColorChange as OperationColorChange, OPERATION_VERSION, Operation, OperationKind,
 };
 use serde_json::{Map, Value, json};
-use sqlx::{Postgres, Transaction};
+use sqlx::{PgConnection, Postgres, Transaction};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -782,6 +783,18 @@ impl ProjectService {
         section_id: SectionId,
     ) -> Result<Section, ServiceError> {
         let section = self.require_section(section_id).await?;
+        let automations = self
+            .store
+            .get_all_automations_by_project_id(section.project_id, None)
+            .await?;
+        if automations
+            .iter()
+            .any(|automation| automation.references_section(section.id))
+        {
+            return Err(ServiceError::SectionInUseByAutomation {
+                section: section.name.clone(),
+            });
+        }
         let op = new_operation(
             Uuid::new_v4(),
             OperationKind::DeleteSection { id: section_id },
@@ -802,6 +815,21 @@ impl ProjectService {
             return Err(ServiceError::SectionMergeIntoItself {
                 section: source.name.clone(),
             });
+        }
+
+        let automations = self
+            .store
+            .get_all_automations_by_project_id(project.id, None)
+            .await?;
+        if let Some(automation) = automations.iter().find(|automation| {
+            automation.references_section(source.id) || automation.references_section(target.id)
+        }) {
+            let section = if automation.references_section(source.id) {
+                source.name.clone()
+            } else {
+                target.name.clone()
+            };
+            return Err(ServiceError::SectionInUseByAutomation { section });
         }
 
         let source_tasks = self.tasks_in_section(project.id, Some(source.id)).await?;
@@ -826,6 +854,144 @@ impl ProjectService {
         self.apply_operations(&ops, ApplyMode::Atomic).await?;
 
         Ok((source, target))
+    }
+
+    /// Create an automation in a project.
+    pub async fn create_automation_in_project(
+        &self,
+        project_id: ProjectId,
+        trigger: AutomationTrigger,
+        actions: Vec<AutomationAction>,
+    ) -> Result<Automation, ServiceError> {
+        let project = self.require_project(project_id).await?;
+        let automation = Automation {
+            id: Uuid::new_v4(),
+            project_id: project.id,
+            trigger,
+            actions: actions.clone(),
+            created_at: Utc::now(),
+        };
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::CreateAutomation {
+                id: automation.id,
+                project_id: automation.project_id,
+                trigger: automation.trigger.clone(),
+                actions,
+                created_at: automation.created_at,
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(automation)
+    }
+
+    /// Replace an automation's action list. The trigger is immutable.
+    pub async fn update_automation(
+        &self,
+        id: AutomationId,
+        actions: Vec<AutomationAction>,
+    ) -> Result<Automation, ServiceError> {
+        let existing = self
+            .store
+            .get_automation_by_id(id, None)
+            .await?
+            .ok_or(ServiceError::AutomationNotFound { id })?;
+        let op = new_operation(
+            Uuid::new_v4(),
+            OperationKind::UpdateAutomation {
+                id,
+                actions: actions.clone(),
+            },
+        );
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(Automation {
+            actions,
+            ..existing
+        })
+    }
+
+    /// Delete an automation, returning the deleted rule.
+    pub async fn delete_automation(&self, id: AutomationId) -> Result<Automation, ServiceError> {
+        let existing = self
+            .store
+            .get_automation_by_id(id, None)
+            .await?
+            .ok_or(ServiceError::AutomationNotFound { id })?;
+        let op = new_operation(Uuid::new_v4(), OperationKind::DeleteAutomation { id });
+        self.apply_operations(&[op], ApplyMode::Atomic).await?;
+        Ok(existing)
+    }
+
+    pub async fn get_automation(
+        &self,
+        id: AutomationId,
+    ) -> Result<Option<Automation>, ServiceError> {
+        Ok(self.store.get_automation_by_id(id, None).await?)
+    }
+
+    pub async fn list_automations(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<Vec<Automation>, ServiceError> {
+        Ok(self
+            .store
+            .get_all_automations_by_project_id(project_id, None)
+            .await?)
+    }
+
+    /// Check an automation against the project's sections and sibling rules.
+    ///
+    /// Returns `Ok(None)` when valid, or the reason the operation should be
+    /// rejected. `exclude` is the rule being updated, which is not a duplicate
+    /// of itself.
+    async fn validate_automation(
+        &self,
+        project: &Project,
+        trigger: &AutomationTrigger,
+        actions: &[AutomationAction],
+        exclude: Option<AutomationId>,
+        conn: &mut PgConnection,
+    ) -> Result<Option<RejectionReason>, ServiceError> {
+        if actions.is_empty() || actions.len() > MAX_AUTOMATION_ACTIONS {
+            return Ok(Some(RejectionReason::Conflict));
+        }
+
+        let section_ids = trigger
+            .section_id()
+            .into_iter()
+            .chain(actions.iter().filter_map(AutomationAction::section_id));
+        for section_id in section_ids {
+            let Some(section) = self
+                .store
+                .get_section_by_id(section_id, Some(&mut *conn))
+                .await?
+            else {
+                return Ok(Some(RejectionReason::NotFound));
+            };
+            if section.project_id != project.id {
+                return Ok(Some(RejectionReason::NotFound));
+            }
+            if self
+                .store
+                .is_tombstoned(EntityType::Section, section_id, Some(&mut *conn))
+                .await?
+            {
+                return Ok(Some(RejectionReason::Tombstoned));
+            }
+        }
+
+        let rules = self
+            .store
+            .get_all_automations_by_project_id(project.id, Some(&mut *conn))
+            .await?;
+        if rules
+            .iter()
+            .any(|rule| Some(rule.id) != exclude && rule.trigger == *trigger)
+        {
+            return Ok(Some(RejectionReason::Conflict));
+        }
+
+        Ok(None)
     }
 
     /// Create a project, optionally seeding sections from a template.
@@ -1436,6 +1602,23 @@ impl ProjectService {
                 // a section's tasks survive its deletion, so they are relocated
                 // to No section and logged as updates rather than tombstoned
                 if let Some(section) = &section {
+                    let automations = self
+                        .store
+                        .get_all_automations_by_project_id(section.project_id, Some(&mut **tx))
+                        .await?;
+                    if automations
+                        .iter()
+                        .any(|automation| automation.references_section(section.id))
+                    {
+                        return Ok((
+                            OperationAcknowledgment::rejected(
+                                op.operation_id,
+                                RejectionReason::Conflict,
+                            ),
+                            None,
+                        ));
+                    }
+
                     let tasks = self
                         .store
                         .get_all_tasks_by_section_id(section.id, Some(&mut **tx))
@@ -1710,6 +1893,151 @@ impl ProjectService {
                 }
                 seqs.into_iter().max()
             }
+            OperationKind::CreateAutomation {
+                id,
+                project_id,
+                trigger,
+                actions,
+                created_at,
+            } => {
+                let Some(project) = self
+                    .store
+                    .get_project_by_id(*project_id, Some(&mut **tx))
+                    .await?
+                else {
+                    return Ok((
+                        OperationAcknowledgment::rejected(
+                            op.operation_id,
+                            RejectionReason::NotFound,
+                        ),
+                        None,
+                    ));
+                };
+                if self
+                    .store
+                    .is_tombstoned(EntityType::Project, *project_id, Some(&mut **tx))
+                    .await?
+                {
+                    return Ok((
+                        OperationAcknowledgment::rejected(
+                            op.operation_id,
+                            RejectionReason::Tombstoned,
+                        ),
+                        None,
+                    ));
+                }
+                if let Some(reason) = self
+                    .validate_automation(&project, trigger, actions, None, tx)
+                    .await?
+                {
+                    return Ok((
+                        OperationAcknowledgment::rejected(op.operation_id, reason),
+                        None,
+                    ));
+                }
+
+                let automation = Automation {
+                    id: *id,
+                    project_id: *project_id,
+                    trigger: trigger.clone(),
+                    actions: actions.clone(),
+                    created_at: *created_at,
+                };
+                self.store
+                    .create_automation(automation.clone(), Some(&mut **tx))
+                    .await?;
+
+                let field_values =
+                    serde_json::to_value(&automation).expect("an automation serializes to JSON");
+                Some(
+                    self.record_change(
+                        tx,
+                        op,
+                        Entity::Automation(*id),
+                        ChangeKind::Create,
+                        field_values,
+                    )
+                    .await?,
+                )
+            }
+            OperationKind::UpdateAutomation { id, actions } => {
+                let Some(mut automation) = self
+                    .store
+                    .get_automation_by_id(*id, Some(&mut **tx))
+                    .await?
+                else {
+                    return Ok((
+                        OperationAcknowledgment::rejected(
+                            op.operation_id,
+                            RejectionReason::NotFound,
+                        ),
+                        None,
+                    ));
+                };
+                let Some(project) = self
+                    .store
+                    .get_project_by_id(automation.project_id, Some(&mut **tx))
+                    .await?
+                else {
+                    return Ok((
+                        OperationAcknowledgment::rejected(
+                            op.operation_id,
+                            RejectionReason::NotFound,
+                        ),
+                        None,
+                    ));
+                };
+                if let Some(reason) = self
+                    .validate_automation(&project, &automation.trigger, actions, Some(*id), tx)
+                    .await?
+                {
+                    return Ok((
+                        OperationAcknowledgment::rejected(op.operation_id, reason),
+                        None,
+                    ));
+                }
+
+                automation.actions = actions.clone();
+                self.store
+                    .update_automation(automation, Some(&mut **tx))
+                    .await?;
+
+                Some(
+                    self.record_change(
+                        tx,
+                        op,
+                        Entity::Automation(*id),
+                        ChangeKind::Update,
+                        json!({ "actions": actions }),
+                    )
+                    .await?,
+                )
+            }
+            OperationKind::DeleteAutomation { id } => {
+                let existed = self
+                    .store
+                    .get_automation_by_id(*id, Some(&mut **tx))
+                    .await?
+                    .is_some();
+                let entities = self.affected_entities(tx, Entity::Automation(*id)).await?;
+                let deleted_at = Utc::now();
+
+                let mut seqs = Vec::with_capacity(entities.len());
+                for entity in entities.iter().rev() {
+                    self.store
+                        .create_tombstone(*entity, deleted_at, Some(&mut **tx))
+                        .await?;
+                    seqs.push(
+                        self.record_change(tx, op, *entity, ChangeKind::Delete, json!({}))
+                            .await?,
+                    );
+                }
+
+                if existed {
+                    self.store.delete_automation(*id, Some(&mut **tx)).await?;
+                }
+                seqs.into_iter().max()
+            }
         };
 
         // 7. the effect is in the log, so a later replay is stopped at step 2
@@ -1741,6 +2069,10 @@ impl ProjectService {
                     .store
                     .get_all_notes_by_project_id(project_id, Some(&mut **tx))
                     .await?;
+                let automations = self
+                    .store
+                    .get_all_automations_by_project_id(project_id, Some(&mut **tx))
+                    .await?;
 
                 entities.extend(
                     sections
@@ -1749,6 +2081,11 @@ impl ProjectService {
                 );
                 entities.extend(tasks.into_iter().map(|task| Entity::Task(task.id)));
                 entities.extend(notes.into_iter().map(|note| Entity::Note(note.id)));
+                entities.extend(
+                    automations
+                        .into_iter()
+                        .map(|automation| Entity::Automation(automation.id)),
+                );
             }
             Entity::Task(task_id) => {
                 let notes = self
@@ -1758,7 +2095,7 @@ impl ProjectService {
                 entities.extend(notes.into_iter().map(|note| Entity::Note(note.id)));
             }
             // a section's tasks survive and are relocated instead of tombstoned
-            Entity::Section(_) | Entity::Note(_) => {}
+            Entity::Section(_) | Entity::Note(_) | Entity::Automation(_) => {}
         }
 
         Ok(entities)
@@ -1944,6 +2281,9 @@ fn subject(op: &OperationKind) -> Entity {
         OperationKind::CreateNote { id, .. }
         | OperationKind::UpdateNote { id, .. }
         | OperationKind::DeleteNote { id } => Entity::Note(*id),
+        OperationKind::CreateAutomation { id, .. }
+        | OperationKind::UpdateAutomation { id, .. }
+        | OperationKind::DeleteAutomation { id } => Entity::Automation(*id),
     }
 }
 
@@ -2289,6 +2629,7 @@ fn note_field_updates(note: &mut Note, op: &OperationKind) -> FieldValues {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::AppError;
 
     fn task(title: &str, description: Option<&str>) -> Task {
         Task {
@@ -2833,5 +3174,59 @@ mod tests {
             result,
             Err(ServiceError::Storage(StorageError::NotFound(_)))
         ));
+    }
+
+    #[test]
+    fn automation_references_section_in_trigger_or_actions() {
+        let section_id = Uuid::new_v4();
+        let other_id = Uuid::new_v4();
+
+        let triggered = Automation {
+            id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            trigger: AutomationTrigger::TaskEntersSection { section_id },
+            actions: vec![AutomationAction::CloseTask],
+            created_at: Utc::now(),
+        };
+        assert!(triggered.references_section(section_id));
+        assert!(!triggered.references_section(other_id));
+
+        let actioned = Automation {
+            id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            trigger: AutomationTrigger::TaskCreated,
+            actions: vec![AutomationAction::MoveToSection {
+                section_id: Some(section_id),
+            }],
+            created_at: Utc::now(),
+        };
+        assert!(actioned.references_section(section_id));
+        assert!(!actioned.references_section(other_id));
+
+        let unrelated = Automation {
+            id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            trigger: AutomationTrigger::TaskClosed,
+            actions: vec![AutomationAction::OpenTask],
+            created_at: Utc::now(),
+        };
+        assert!(!unrelated.references_section(section_id));
+    }
+
+    #[test]
+    fn automation_service_errors_have_the_expected_display_and_kind() {
+        let id = Uuid::new_v4();
+        let not_found = ServiceError::AutomationNotFound { id };
+        assert_eq!(not_found.to_string(), format!("Automation {id} not found."));
+        assert_eq!(AppError::Service(not_found).kind(), "not_found");
+
+        let in_use = ServiceError::SectionInUseByAutomation {
+            section: "Todo".to_string(),
+        };
+        assert_eq!(
+            in_use.to_string(),
+            "Section \"Todo\" is used by an automation. Remove or change that automation first."
+        );
+        assert_eq!(AppError::Service(in_use).kind(), "conflict");
     }
 }

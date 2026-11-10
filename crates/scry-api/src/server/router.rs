@@ -48,6 +48,7 @@ fn build_api_router() -> Router<ScryState> {
         .nest("/sections", build_sections_router())
         .nest("/tasks", build_tasks_router())
         .nest("/notes", build_notes_router())
+        .nest("/automations", build_automations_router())
         .fallback(not_found)
 }
 
@@ -90,6 +91,10 @@ fn build_projects_router() -> Router<ScryState> {
             get(handlers::get_tasks_by_project).post(handlers::create_task),
         )
         .route("/{project_id}/notes", get(handlers::get_notes_by_project))
+        .route(
+            "/{project_id}/automations",
+            get(handlers::get_automations).post(handlers::create_automation),
+        )
         .route(
             "/{project_id}/snapshot",
             get(handlers::get_project_snapshot),
@@ -138,6 +143,16 @@ fn build_notes_router() -> Router<ScryState> {
         get(handlers::get_note)
             .put(handlers::update_note)
             .delete(handlers::delete_note),
+    )
+}
+
+/// Routes nested under `/automations`.
+fn build_automations_router() -> Router<ScryState> {
+    Router::new().route(
+        "/{id}",
+        get(handlers::get_automation)
+            .put(handlers::update_automation)
+            .delete(handlers::delete_automation),
     )
 }
 

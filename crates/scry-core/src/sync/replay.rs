@@ -254,6 +254,12 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
         OperationKind::DeleteNote { id } => {
             remove_note(state, *id);
         }
+        OperationKind::CreateAutomation { .. }
+        | OperationKind::UpdateAutomation { .. }
+        | OperationKind::DeleteAutomation { .. } => {
+            // Automations join ProjectSnapshot in the next batch; the reference
+            // replay model starts applying them then.
+        }
     }
 }
 
@@ -339,6 +345,9 @@ fn apply_change(state: &mut ClientState, change: &Change) {
         }
         (EntityType::Note, ChangeKind::Delete) => {
             remove_note(state, change.entity_id);
+        }
+        (EntityType::Automation, _) => {
+            // Automations join ProjectSnapshot in the next batch.
         }
     }
 }

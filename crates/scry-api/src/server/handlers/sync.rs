@@ -130,8 +130,8 @@ mod tests {
 #[cfg(all(test, feature = "ts"))]
 mod export_bindings {
     use scry_core::models::{
-        Change, ChangeKind, Color, EntityType, Note, Priority, Project, ProjectSnapshot, Section,
-        Tags, Task, TaskSortingMode, TaskState,
+        Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, EntityType,
+        Note, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskSortingMode, TaskState,
     };
     use scry_core::position::Position;
     use scry_core::snapshot::Snapshot;
@@ -173,6 +173,9 @@ mod export_bindings {
         Section::export_all(&config).expect("failed to export Section");
         Task::export_all(&config).expect("failed to export Task");
         Note::export_all(&config).expect("failed to export Note");
+        Automation::export_all(&config).expect("failed to export Automation");
+        AutomationTrigger::export_all(&config).expect("failed to export AutomationTrigger");
+        AutomationAction::export_all(&config).expect("failed to export AutomationAction");
         EntityType::export_all(&config).expect("failed to export EntityType");
         ChangeKind::export_all(&config).expect("failed to export ChangeKind");
     }

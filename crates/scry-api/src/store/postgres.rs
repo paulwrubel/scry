@@ -3,10 +3,10 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use scry_core::error::StorageError;
-use scry_core::ids::{Handle, NoteId, ProjectId, SectionId, TaskId};
+use scry_core::ids::{AutomationId, Handle, NoteId, ProjectId, SectionId, TaskId};
 use scry_core::models::{
-    Change, ChangeKind, Color, Entity, EntityType, Note, Priority, Project, ProjectSnapshot,
-    Section, Tags, Task, TaskState,
+    Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Entity, EntityType,
+    Note, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
 use scry_core::store::Store;
@@ -244,12 +244,34 @@ fn section_from_fields(
     })
 }
 
+fn automation_from_fields(
+    id: AutomationId,
+    project_id: ProjectId,
+    trigger: serde_json::Value,
+    actions: serde_json::Value,
+    created_at: DateTime<Utc>,
+) -> Result<Automation, StorageError> {
+    let trigger = serde_json::from_value::<AutomationTrigger>(trigger)
+        .map_err(|e| StorageError::Database(format!("automation {id} has invalid trigger: {e}")))?;
+    let actions = serde_json::from_value::<Vec<AutomationAction>>(actions)
+        .map_err(|e| StorageError::Database(format!("automation {id} has invalid actions: {e}")))?;
+
+    Ok(Automation {
+        id,
+        project_id,
+        trigger,
+        actions,
+        created_at,
+    })
+}
+
 fn entity_type_from_field(value: &str) -> Result<EntityType, StorageError> {
     match value {
         "project" => Ok(EntityType::Project),
         "section" => Ok(EntityType::Section),
         "task" => Ok(EntityType::Task),
         "note" => Ok(EntityType::Note),
+        "automation" => Ok(EntityType::Automation),
         other => Err(StorageError::Database(format!(
             "unknown change entity type '{other}'"
         ))),
@@ -1094,6 +1116,193 @@ impl Store for PostgresStore {
         }
 
         conn.commit().await
+    }
+
+    async fn create_automation(
+        &self,
+        automation: Automation,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Automation, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        let trigger = serde_json::to_value(&automation.trigger).map_err(|e| {
+            StorageError::Database(format!("failed to serialize automation trigger: {}", e))
+        })?;
+        let actions = serde_json::to_value(&automation.actions).map_err(|e| {
+            StorageError::Database(format!("failed to serialize automation actions: {}", e))
+        })?;
+
+        match sqlx::query!(
+            r#"
+                INSERT INTO automations (id, project_id, trigger, actions, created_at)
+                VALUES ($1, $2, $3, $4, $5)
+            "#,
+            automation.id,
+            automation.project_id,
+            trigger,
+            actions,
+            automation.created_at,
+        )
+        .execute(&mut *conn)
+        .await
+        {
+            Ok(result) => match result.rows_affected() {
+                1 => Ok(automation),
+                n => Err(StorageError::Database(format!(
+                    "failed to create automation: expected 1 row affected, got {n}"
+                ))),
+            },
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to create automation: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn get_automation_by_id(
+        &self,
+        id: AutomationId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Option<Automation>, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        match sqlx::query!(
+            r#"
+                SELECT
+                    id,
+                    project_id,
+                    trigger,
+                    actions,
+                    created_at
+                FROM automations
+                WHERE id = $1
+            "#,
+            id,
+        )
+        .fetch_optional(&mut *conn)
+        .await
+        {
+            Ok(Some(row)) => Ok(Some(automation_from_fields(
+                row.id,
+                row.project_id,
+                row.trigger,
+                row.actions,
+                row.created_at,
+            )?)),
+            Ok(None) => Ok(None),
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to look up automation: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn get_all_automations_by_project_id(
+        &self,
+        project_id: ProjectId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Vec<Automation>, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        match sqlx::query!(
+            r#"
+                SELECT
+                    id,
+                    project_id,
+                    trigger,
+                    actions,
+                    created_at
+                FROM automations
+                WHERE project_id = $1
+                ORDER BY created_at ASC, id ASC
+            "#,
+            project_id,
+        )
+        .fetch_all(&mut *conn)
+        .await
+        {
+            Ok(rows) => rows
+                .into_iter()
+                .map(|row| {
+                    automation_from_fields(
+                        row.id,
+                        row.project_id,
+                        row.trigger,
+                        row.actions,
+                        row.created_at,
+                    )
+                })
+                .collect::<Result<Vec<Automation>, StorageError>>(),
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to list automations: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn update_automation(
+        &self,
+        automation: Automation,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Automation, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        let actions = serde_json::to_value(&automation.actions).map_err(|e| {
+            StorageError::Database(format!("failed to serialize automation actions: {}", e))
+        })?;
+
+        match sqlx::query!(
+            r#"
+                UPDATE automations
+                SET actions = $1
+                WHERE id = $2
+            "#,
+            actions,
+            automation.id,
+        )
+        .execute(&mut *conn)
+        .await
+        {
+            Ok(result) => match result.rows_affected() {
+                0 => Err(StorageError::NotFound(format!(
+                    "automation with id '{}' not found",
+                    automation.id
+                ))),
+                _ => Ok(automation),
+            },
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to update automation: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn delete_automation(
+        &self,
+        id: AutomationId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<(), StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        let result = sqlx::query!(
+            r#"
+                DELETE FROM automations
+                WHERE id = $1
+            "#,
+            id,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to delete automation: {}", e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StorageError::NotFound(format!(
+                "automation with id '{}' not found",
+                id
+            )));
+        }
+
+        Ok(())
     }
 
     async fn create_project(

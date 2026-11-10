@@ -1,5 +1,7 @@
-use crate::ids::{NoteId, ProjectId, SectionId, TaskId};
-use crate::models::{Color, Priority, Tags, TaskSortingMode, TaskState};
+use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
+use crate::models::{
+    AutomationAction, AutomationTrigger, Color, Priority, Tags, TaskSortingMode, TaskState,
+};
 use crate::position::Position;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -215,6 +217,20 @@ pub enum OperationKind {
     DeleteNote {
         id: NoteId,
     },
+    CreateAutomation {
+        id: AutomationId,
+        project_id: ProjectId,
+        trigger: AutomationTrigger,
+        actions: Vec<AutomationAction>,
+        created_at: DateTime<Utc>,
+    },
+    UpdateAutomation {
+        id: AutomationId,
+        actions: Vec<AutomationAction>,
+    },
+    DeleteAutomation {
+        id: AutomationId,
+    },
 }
 
 #[cfg(test)]
@@ -286,5 +302,89 @@ mod tests {
             serde_json::to_value(&operation).unwrap().get("description"),
             Some(&json!("hello"))
         );
+    }
+
+    #[test]
+    fn create_automation_round_trips() {
+        let section_id = Uuid::new_v4();
+        let value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "kind": "create_automation",
+            "id": Uuid::new_v4(),
+            "project_id": Uuid::new_v4(),
+            "trigger": { "kind": "task_enters_section", "section_id": section_id },
+            "actions": [{ "kind": "move_to_section", "section_id": section_id }],
+            "created_at": "2026-01-01T00:00:00Z"
+        });
+
+        let operation: Operation = serde_json::from_value(value.clone()).unwrap();
+        let OperationKind::CreateAutomation {
+            trigger, actions, ..
+        } = &operation.kind
+        else {
+            panic!("expected CreateAutomation");
+        };
+        assert_eq!(
+            trigger,
+            &AutomationTrigger::TaskEntersSection { section_id }
+        );
+        assert_eq!(
+            actions,
+            &[AutomationAction::MoveToSection {
+                section_id: Some(section_id)
+            }]
+        );
+
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized.get("kind"), Some(&json!("create_automation")));
+        assert_eq!(serialized, value);
+    }
+
+    #[test]
+    fn update_automation_round_trips() {
+        let value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "kind": "update_automation",
+            "id": Uuid::new_v4(),
+            "actions": [{ "kind": "set_priority", "priority": "high" }]
+        });
+
+        let operation: Operation = serde_json::from_value(value.clone()).unwrap();
+        let OperationKind::UpdateAutomation { actions, .. } = &operation.kind else {
+            panic!("expected UpdateAutomation");
+        };
+        assert_eq!(
+            actions,
+            &[AutomationAction::SetPriority {
+                priority: Priority::High
+            }]
+        );
+
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized.get("kind"), Some(&json!("update_automation")));
+        assert_eq!(serialized, value);
+    }
+
+    #[test]
+    fn delete_automation_round_trips() {
+        let id = Uuid::new_v4();
+        let value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "kind": "delete_automation",
+            "id": id
+        });
+
+        let operation: Operation = serde_json::from_value(value.clone()).unwrap();
+        let OperationKind::DeleteAutomation { id: parsed } = &operation.kind else {
+            panic!("expected DeleteAutomation");
+        };
+        assert_eq!(*parsed, id);
+
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized.get("kind"), Some(&json!("delete_automation")));
+        assert_eq!(serialized, value);
     }
 }
