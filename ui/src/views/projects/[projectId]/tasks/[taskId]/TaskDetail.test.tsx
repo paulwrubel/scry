@@ -118,53 +118,137 @@ function renderTask(
 afterEach(cleanup);
 
 describe('TaskDetail', () => {
-  it('shows the task fields and notes', () => {
+  it('shows the task in view mode', () => {
     renderTask(
       projectSnapshot(),
       vi.fn(async () => undefined),
     );
 
-    expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Write tests');
-    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('Details');
+    expect(screen.getByText('Details')).toBeDefined();
     expect((screen.getByLabelText('Priority') as HTMLSelectElement).value).toBe('high');
     expect((screen.getByLabelText('Section') as HTMLSelectElement).value).toBe('backlog');
-    expect((screen.getByLabelText('Tags') as HTMLInputElement).value).toBe('one, two');
+    expect(screen.getByText('one')).toBeDefined();
+    expect(screen.getByText('two')).toBeDefined();
     expect(screen.getByText('abcd')).toBeDefined();
     expect(screen.getByText('A note')).toBeDefined();
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    expect(screen.queryByLabelText('Description')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit title' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Edit description' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Edit tags' })).toBeDefined();
+  });
+
+  it('edits the title inline', async () => {
+    const enqueue = vi.fn(async () => undefined);
+    renderTask(projectSnapshot(), enqueue);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit title' }));
+    expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Write tests');
+
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New title' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save title' }));
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'update_task',
+          id: TASK_ID,
+          title: 'New title',
+          priority: null,
+          tags: null,
+          state: null,
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Title')).toBeNull();
+    });
   });
 
   it('rejects an empty title', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
+    fireEvent.click(screen.getByRole('button', { name: 'Edit title' }));
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save title' }));
 
     expect(await screen.findByText('A task needs a title.')).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(enqueue).not.toHaveBeenCalled();
   });
 
-  it('saves changed fields as one update operation', async () => {
+  it('cancels title editing without saving', () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
-    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New title' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit title' }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Changed title' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel title edit' }));
+
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Write tests' })).toBeDefined();
+  });
+
+  it('edits the description inline', async () => {
+    const enqueue = vi.fn(async () => undefined);
+    renderTask(projectSnapshot(), enqueue);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('Details');
+
+    fireEvent.change(screen.getByLabelText('Description'), {
+      target: { value: 'Updated details' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save description' }));
 
     await waitFor(() => {
-      expect(enqueue).toHaveBeenCalledTimes(1);
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'update_task',
+          id: TASK_ID,
+          description: 'Updated details',
+        }),
+      );
     });
-    expect(enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'update_task',
-        id: TASK_ID,
-        title: 'New title',
-        priority: null,
-        tags: null,
-        state: null,
-      }),
-    );
-    expect(await screen.findByText('Saved locally')).toBeDefined();
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Description')).toBeNull();
+    });
+  });
+
+  it('edits tags inline', async () => {
+    const enqueue = vi.fn(async () => undefined);
+    renderTask(projectSnapshot(), enqueue);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit tags' }));
+    expect((screen.getByLabelText('Tags') as HTMLInputElement).value).toBe('one, two');
+
+    fireEvent.change(screen.getByLabelText('Tags'), { target: { value: 'three, four' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save tags' }));
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'update_task',
+          id: TASK_ID,
+          tags: ['four', 'three'],
+        }),
+      );
+    });
+  });
+
+  it('changes priority inline', async () => {
+    const enqueue = vi.fn(async () => undefined);
+    renderTask(projectSnapshot(), enqueue);
+
+    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'low' } });
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'update_task', id: TASK_ID, priority: 'low' }),
+      );
+    });
   });
 
   it('moves the task when the section changes', async () => {
@@ -172,19 +256,17 @@ describe('TaskDetail', () => {
     renderTask(projectSnapshot(), enqueue);
 
     fireEvent.change(screen.getByLabelText('Section'), { target: { value: 'doing' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
-      expect(enqueue).toHaveBeenCalledTimes(1);
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'move_task',
+          id: TASK_ID,
+          section_id: 'doing',
+          position: 'a5',
+        }),
+      );
     });
-    expect(enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'move_task',
-        id: TASK_ID,
-        section_id: 'doing',
-        position: 'a5',
-      }),
-    );
   });
 
   it('closes an open task', async () => {

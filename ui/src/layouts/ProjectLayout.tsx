@@ -15,7 +15,7 @@ type Panel = { project: ProjectSnapshot; task: Task };
 const mobileSheetClasses =
   'inset-x-0 bottom-0 h-[75dvh] w-full rounded-t-xl border-t pb-[env(safe-area-inset-bottom)]';
 const desktopDrawerClasses =
-  'md:inset-y-4 md:right-4 md:left-auto md:h-auto md:w-xl md:rounded-xl md:border md:pb-0 md:shadow-2xl';
+  'md:inset-y-4 md:right-4 md:left-auto md:h-auto md:w-[54rem] md:rounded-xl md:border md:pb-0 md:shadow-2xl';
 
 const drawerTheme: DeepPartial<DrawerTheme> = {
   root: {
@@ -82,6 +82,7 @@ export function ProjectLayout() {
       >
         {panel === null ? null : (
           <TaskDetail
+            key={`${panel.task.id}:${open}`}
             project={panel.project}
             task={panel.task}
             handle={handles.get(panel.task.id) ?? panel.task.id}

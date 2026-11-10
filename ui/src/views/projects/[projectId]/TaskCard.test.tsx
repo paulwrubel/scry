@@ -34,4 +34,42 @@ describe('TaskCard', () => {
       '/projects/project-1/tasks/task-1?tags=bug',
     );
   });
+
+  it('renders a plain description preview and preserves newlines', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/project-1?tags=bug']}>
+        <TaskCard
+          projectId="project-1"
+          task={{ ...task, description: 'First line\nSecond line' }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    const preview = screen.getByText('First line Second line');
+    expect(preview.textContent).toBe('First line\nSecond line');
+    expect(preview.className).toContain('whitespace-pre-wrap');
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+  });
+
+  it('renders the priority dot at the top-right of the title row', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/project-1?tags=bug']}>
+        <TaskCard projectId="project-1" task={task} showPriority={true} />
+      </MemoryRouter>,
+    );
+
+    const link = screen.getByRole('link', { name: 'Task title' });
+    expect(link.nextElementSibling).toBe(screen.getByRole('img', { name: 'medium priority' }));
+  });
+
+  it('renders no extra description text for a null description', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/project-1?tags=bug']}>
+        <TaskCard projectId="project-1" task={task} showPriority={false} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+  });
 });
