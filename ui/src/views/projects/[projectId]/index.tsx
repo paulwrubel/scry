@@ -2,18 +2,17 @@ import { PointerActivationConstraints } from '@dnd-kit/dom';
 import { move } from '@dnd-kit/helpers';
 import { DragDropProvider, KeyboardSensor, PointerSensor } from '@dnd-kit/react';
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react';
-import { isSortable, useSortable } from '@dnd-kit/react/sortable';
+import { isSortable } from '@dnd-kit/react/sortable';
 import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { Color } from '@/generated/Color';
+import { useCollapsedSections } from '@/hooks/useCollapsedSections';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
-import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
-import { automationReferencesSection, describeAutomation } from '@/utils/automationOperations';
 import { updateProjectOperation } from '@/utils/projectOperations';
 import {
   createSectionOperation,
@@ -33,19 +32,18 @@ import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
 import { BoardColumn } from './BoardColumn';
 import { MobileAddTask } from './MobileAddTask';
 import { NewSectionCard } from './NewSectionCard';
+import { SortableBoardColumn, type SectionBoardGroup } from './SortableBoardColumn';
 import { TaskFilterPopover } from './TaskFilterPopover';
 import {
   CLOSED_NO_SECTION_GROUP,
   OPEN_NO_SECTION_GROUP,
   buildBoard,
-  columnDragId,
   dropPosition,
   groupKey,
   isNoSectionGroupKey,
   itemsFromGroups,
   planSectionMove,
   sectionIdFromGroup,
-  type BoardGroup,
 } from './board';
 
 const defaultActivationConstraints = PointerSensor.defaults.activationConstraints;
@@ -64,8 +62,6 @@ type PendingMove = {
   position: string;
 };
 
-type SectionBoardGroup = BoardGroup & { section: Section };
-
 export function BoardPage() {
   const { projectId } = useParams();
   const snapshot = useReplicaSnapshot();
@@ -74,6 +70,7 @@ export function BoardPage() {
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
   const isDesktop = useIsDesktop();
+  const { collapsedSections, toggleCollapsedSection } = useCollapsedSections(projectId ?? '');
 
   const found = snapshot.visible.projects.find((candidate) => candidate.id === projectId);
 
@@ -403,6 +400,10 @@ export function BoardPage() {
               canReorder={canReorder}
               showCreate={isDesktop}
               onCreate={(title) => handleCreate(null, title)}
+              collapsed={!isDesktop && collapsedSections.has(OPEN_NO_SECTION_GROUP)}
+              onToggleCollapsed={
+                isDesktop ? undefined : () => toggleCollapsedSection(OPEN_NO_SECTION_GROUP)
+              }
             />
           )}
           {sectionGroups.map((group, index) => (
@@ -414,6 +415,10 @@ export function BoardPage() {
               canReorder={canReorder}
               sectionsSortable={isDesktop}
               showCreate={isDesktop}
+              collapsed={!isDesktop && collapsedSections.has(group.section.id)}
+              onToggleCollapsed={
+                isDesktop ? undefined : () => toggleCollapsedSection(group.section.id)
+              }
               onCreate={handleCreate}
               onRename={(sectionId, name) => void handleSectionRename(sectionId, name)}
               onColorChange={handleSectionColorChange}
@@ -430,6 +435,10 @@ export function BoardPage() {
               tasks={closedNoSectionGroup.tasks}
               showPriority={project.show_priority}
               canReorder={canReorder}
+              collapsed={!isDesktop && collapsedSections.has(CLOSED_NO_SECTION_GROUP)}
+              onToggleCollapsed={
+                isDesktop ? undefined : () => toggleCollapsedSection(CLOSED_NO_SECTION_GROUP)
+              }
             />
           )}
           <NewSectionCard onAdd={handleAddSection} />
@@ -437,66 +446,6 @@ export function BoardPage() {
       </DragDropProvider>
       {isDesktop ? null : <MobileAddTask onCreate={(title) => handleCreate(null, title)} />}
     </div>
-  );
-}
-
-type SortableBoardColumnProps = {
-  group: SectionBoardGroup;
-  index: number;
-  project: ProjectSnapshot;
-  canReorder: boolean;
-  sectionsSortable: boolean;
-  showCreate: boolean;
-  onCreate: (sectionId: string, title: string) => Promise<void>;
-  onRename: (sectionId: string, name: string) => void;
-  onColorChange: (sectionId: string, color: Color | null) => void;
-  onDelete: (sectionId: string) => void;
-};
-
-function SortableBoardColumn(props: SortableBoardColumnProps) {
-  const {
-    group,
-    index,
-    project,
-    canReorder,
-    sectionsSortable,
-    showCreate,
-    onCreate,
-    onRename,
-    onColorChange,
-    onDelete,
-  } = props;
-  const section = group.section;
-  const blockingAutomations = project.automations
-    .filter((automation) => automationReferencesSection(automation, section.id))
-    .map((automation) => describeAutomation(automation, project.sections));
-  const { ref, isDragging } = useSortable({
-    id: columnDragId(section.id),
-    index,
-    group: 'columns',
-    type: 'column',
-    accept: 'column',
-    disabled: !sectionsSortable,
-  });
-
-  return (
-    <BoardColumn
-      nodeRef={(element) => ref(element)}
-      isDragging={isDragging}
-      projectId={project.id}
-      group={groupKey(group)}
-      title={section.name}
-      color={section.color}
-      tasks={group.tasks}
-      showPriority={project.show_priority}
-      canReorder={canReorder}
-      blockingAutomations={blockingAutomations}
-      showCreate={showCreate}
-      onRename={(name) => onRename(section.id, name)}
-      onColorChange={(color) => onColorChange(section.id, color)}
-      onDelete={() => onDelete(section.id)}
-      onCreate={(title) => onCreate(section.id, title)}
-    />
   );
 }
 

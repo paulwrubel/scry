@@ -3,18 +3,17 @@ import { useDroppable } from '@dnd-kit/react';
 import { Badge, Card } from 'flowbite-react';
 import type { CardTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
-import { HiLockClosed, HiTrash } from 'react-icons/hi2';
+import { HiChevronDown, HiChevronUp, HiLockClosed, HiTrash } from 'react-icons/hi2';
 import { RenamableLabel } from '@/components/RenamableLabel';
 import type { Color } from '@/generated/Color';
 import type { Task } from '@/generated/Task';
+import { BoardColumnBody } from './BoardColumnBody';
 import { DeleteSectionModal } from './DeleteSectionModal';
-import { NewTaskForm } from './NewTaskForm';
 import { SectionColorPicker } from './SectionColorPicker';
-import { SortableTaskCard } from './SortableTaskCard';
-import { TaskCard } from './TaskCard';
 
-type BoardColumnProps = {
+export type BoardColumnProps = {
   projectId: string;
   group: string;
   droppable?: boolean;
@@ -31,6 +30,8 @@ type BoardColumnProps = {
   onColorChange?: (color: Color | null) => void;
   nodeRef?: (element: HTMLDivElement | null) => void;
   isDragging?: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 };
 
 const columnTheme: DeepPartial<CardTheme> = {
@@ -57,16 +58,29 @@ export function BoardColumn(props: BoardColumnProps) {
     onColorChange,
     nodeRef,
     isDragging,
+    collapsed = false,
+    onToggleCollapsed,
   } = props;
+
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const bodyId = `${group}-tasks`;
+  const collapsible = onToggleCollapsed !== undefined;
 
   const { ref, isDropTarget } = useDroppable({
     id: group,
     type: 'column',
     accept: 'item',
     collisionPriority: CollisionPriority.Low,
-    disabled: !(droppable ?? true),
+    disabled: !(droppable ?? true) || collapsed,
   });
+
+  function stopRowToggle(event: React.SyntheticEvent) {
+    event.stopPropagation();
+  }
+
+  function handleToggle() {
+    onToggleCollapsed?.();
+  }
 
   return (
     <>
@@ -77,10 +91,34 @@ export function BoardColumn(props: BoardColumnProps) {
           isDragging ? 'opacity-80' : ''
         }`}
       >
-        <div className="flex shrink-0 items-center justify-between gap-2">
+        <div
+          role={collapsible ? 'button' : undefined}
+          tabIndex={collapsible ? 0 : undefined}
+          aria-label={
+            collapsible ? (collapsed ? `Expand ${title}` : `Collapse ${title}`) : undefined
+          }
+          aria-expanded={collapsible ? !collapsed : undefined}
+          onClick={collapsible ? handleToggle : undefined}
+          onKeyDown={(event) => {
+            if (!collapsible) {
+              return;
+            }
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              handleToggle();
+            }
+          }}
+          className={`flex shrink-0 items-center justify-between gap-2 ${
+            collapsible
+              ? 'focus-visible:outline-line-hover cursor-pointer select-none focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2'
+              : ''
+          }`}
+        >
           <div className="flex min-w-0 items-center gap-2">
             {onColorChange === undefined ? null : (
-              <SectionColorPicker color={color} onChange={onColorChange} />
+              <span onClick={stopRowToggle} onKeyDown={stopRowToggle}>
+                <SectionColorPicker color={color} onChange={onColorChange} />
+              </span>
             )}
             <RenamableLabel
               label={title}
@@ -103,43 +141,67 @@ export function BoardColumn(props: BoardColumnProps) {
                 type="button"
                 aria-label={`Delete ${title}`}
                 title={`Delete ${title}`}
-                onClick={() => setConfirmingDelete(true)}
+                onClick={(event) => {
+                  stopRowToggle(event);
+                  setConfirmingDelete(true);
+                }}
+                onKeyDown={stopRowToggle}
                 className="text-muted inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-red-400 focus:outline-none focus-visible:outline-none"
               >
                 <HiTrash aria-hidden="true" className="h-3.5 w-3.5" />
               </button>
             )}
+            {collapsible ? (
+              collapsed ? (
+                <HiChevronDown aria-hidden="true" className="text-muted h-4 w-4 shrink-0" />
+              ) : (
+                <HiChevronUp aria-hidden="true" className="text-muted h-4 w-4 shrink-0" />
+              )
+            ) : null}
           </div>
         </div>
-        <div
-          ref={ref}
-          className={`flex min-h-10 flex-1 flex-col gap-2 overflow-visible rounded-md pr-1 md:overflow-y-auto ${
-            isDropTarget ? 'ring-line-hover ring-1' : ''
-          }`}
-        >
-          {tasks.length === 0
-            ? null
-            : canReorder
-              ? tasks.map((task, index) => (
-                  <SortableTaskCard
-                    key={task.id}
+        {collapsible ? (
+          <AnimatePresence initial={false}>
+            {collapsed ? null : (
+              <motion.div
+                id={bodyId}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="overflow-hidden"
+              >
+                <div className="flex min-h-0 flex-col gap-2">
+                  <BoardColumnBody
                     projectId={projectId}
-                    task={task}
-                    index={index}
                     group={group}
+                    tasks={tasks}
                     showPriority={showPriority}
+                    canReorder={canReorder}
+                    showCreate={showCreate}
+                    onCreate={onCreate}
+                    dropRef={ref}
+                    isDropTarget={isDropTarget}
                   />
-                ))
-              : tasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    projectId={projectId}
-                    task={task}
-                    showPriority={showPriority}
-                  />
-                ))}
-        </div>
-        {onCreate === undefined || !showCreate ? null : <NewTaskForm onCreate={onCreate} />}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        ) : (
+          <div id={bodyId} className="flex min-h-0 flex-1 flex-col gap-2">
+            <BoardColumnBody
+              projectId={projectId}
+              group={group}
+              tasks={tasks}
+              showPriority={showPriority}
+              canReorder={canReorder}
+              showCreate={showCreate}
+              onCreate={onCreate}
+              dropRef={ref}
+              isDropTarget={isDropTarget}
+            />
+          </div>
+        )}
       </Card>
       {onDelete === undefined ? null : (
         <DeleteSectionModal

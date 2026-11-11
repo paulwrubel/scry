@@ -22,6 +22,7 @@
     "@tanstack/react-form": "^1.33.5",
     "flowbite-react": "^0.12.17",
     "fractional-indexing": "^3.4.0",
+    "framer-motion": "^14.12.0",
     "idb": "^8.0.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
