@@ -2,7 +2,7 @@
 import type * as DndKitReact from '@dnd-kit/react';
 import type * as DndKitSortable from '@dnd-kit/react/sortable';
 import type * as MediaQuery from '@/hooks/useMediaQuery';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Operation } from '@/generated/Operation';
@@ -129,6 +129,7 @@ function renderBoard(
 
 afterEach(() => {
   viewport.isDesktop = true;
+  localStorage.clear();
   cleanup();
 });
 
@@ -709,6 +710,133 @@ describe('BoardPage', () => {
         color: { set: 'magenta' },
       }),
     );
+  });
+});
+
+describe('collapsible sections', () => {
+  function collapseButton(name: string) {
+    return screen.getByRole('button', { name });
+  }
+
+  it('collapses and expands a section on mobile', async () => {
+    viewport.isDesktop = false;
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'Write tests', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.getByText('Write tests')).toBeDefined();
+
+    fireEvent.click(collapseButton('Collapse Backlog'));
+
+    expect(collapseButton('Expand Backlog')).toBeDefined();
+    await waitFor(() => expect(screen.queryByText('Write tests')).toBeNull());
+
+    fireEvent.click(collapseButton('Expand Backlog'));
+
+    expect(collapseButton('Collapse Backlog')).toBeDefined();
+    await waitFor(() => expect(screen.getByText('Write tests')).toBeDefined());
+  });
+
+  it('toggles twice when two taps land before the commit', () => {
+    viewport.isDesktop = false;
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    const button = collapseButton('Collapse Backlog');
+    act(() => {
+      button.click();
+      button.click();
+    });
+
+    expect(collapseButton('Collapse Backlog')).toBeDefined();
+  });
+
+  it('toggles from the whole header row', () => {
+    viewport.isDesktop = false;
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'Write tests', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    fireEvent.click(screen.getByRole('heading', { name: 'Backlog' }));
+
+    expect(collapseButton('Expand Backlog')).toBeDefined();
+
+    fireEvent.click(collapseButton('Expand Backlog'));
+
+    expect(collapseButton('Collapse Backlog')).toBeDefined();
+  });
+
+  it('collapses a no-section column on mobile', async () => {
+    viewport.isDesktop = false;
+    const project = projectSnapshot({
+      tasks: [task({ id: 'loose', title: 'Loose task' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    fireEvent.click(collapseButton('Collapse Open (No Section)'));
+
+    expect(collapseButton('Expand Open (No Section)')).toBeDefined();
+    await waitFor(() => expect(document.getElementById('no-section-open-tasks')).toBeNull());
+  });
+
+  it('renders no collapse controls on desktop', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'Write tests', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.queryByRole('button', { name: /^Collapse / })).toBeNull();
+    expect(screen.getByText('Write tests')).toBeDefined();
+  });
+
+  it('remembers a collapsed section across renders', () => {
+    viewport.isDesktop = false;
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'Write tests', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+    fireEvent.click(collapseButton('Collapse Backlog'));
+
+    cleanup();
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+    );
+
+    expect(collapseButton('Expand Backlog')).toBeDefined();
   });
 });
 
