@@ -44,8 +44,12 @@ function FieldHeader(props: { label: string; onEdit?: () => void }) {
   );
 }
 
-function DescriptionField(props: { task: Task; onSave: (description: string) => Promise<void> }) {
-  const { task, onSave } = props;
+function DescriptionField(props: {
+  task: Task;
+  readOnly: boolean;
+  onSave: (description: string) => Promise<void>;
+}) {
+  const { task, readOnly, onSave } = props;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.description ?? '');
@@ -80,7 +84,7 @@ function DescriptionField(props: { task: Task; onSave: (description: string) => 
 
   return (
     <div className="flex flex-col gap-1">
-      <FieldHeader label="Description" onEdit={editing ? undefined : startEditing} />
+      <FieldHeader label="Description" onEdit={editing || readOnly ? undefined : startEditing} />
       {editing ? (
         <>
           <textarea
@@ -220,9 +224,11 @@ export type TaskFieldsProps = {
 export function TaskFields(props: TaskFieldsProps) {
   const { task, onSaveDescription, onSaveTags } = props;
 
+  const descriptionReadOnly = (task.external_metadata?.description ?? null) !== null;
+
   return (
     <section className="flex flex-col gap-4">
-      <DescriptionField task={task} onSave={onSaveDescription} />
+      <DescriptionField task={task} readOnly={descriptionReadOnly} onSave={onSaveDescription} />
       <TagsField task={task} onSave={onSaveTags} />
     </section>
   );

@@ -89,6 +89,29 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
   };
 }
 
+export function externalIdentityOperation(
+  task: Task,
+  identity: ExternalIdentity | null,
+): Operation | null {
+  if (sameIdentity(task.external_identity, identity)) {
+    return null;
+  }
+
+  return {
+    operation_id: newId(),
+    operation_version: 1,
+    kind: 'update_task',
+    id: task.id,
+    title: null,
+    description: undefined,
+    priority: null,
+    tags: null,
+    state: null,
+    external_identity: identity,
+    external_metadata: null,
+  };
+}
+
 export function moveTaskOperation(
   task: Task,
   sectionId: string | null,
@@ -178,4 +201,16 @@ export function deleteNoteOperation(note: Note): Operation {
 
 function sameTags(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((tag, index) => tag === right[index]);
+}
+
+function sameIdentity(left: ExternalIdentity | null, right: ExternalIdentity | null): boolean {
+  if (left === null || right === null) {
+    return left === right;
+  }
+  return (
+    left.provider === right.provider &&
+    left.owner === right.owner &&
+    left.repo === right.repo &&
+    left.number === right.number
+  );
 }

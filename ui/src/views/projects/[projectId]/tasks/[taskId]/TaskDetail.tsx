@@ -6,6 +6,7 @@ import type { Task } from '@/generated/Task';
 import { useTaskMutations } from '@/hooks/useTaskMutations';
 import type { TaskFieldPatch } from '@/utils/taskOperations';
 import { DeleteTaskModal } from './DeleteTaskModal';
+import { ExternalLinkField } from './ExternalLinkField';
 import { NotesSection } from './NotesSection';
 import { TaskActions } from './TaskActions';
 import { TaskFields } from './TaskFields';
@@ -25,8 +26,15 @@ export function TaskDetail(props: TaskDetailProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { saveFields, toggleState, deleteTask, createNote, updateNote, deleteNote } =
-    useTaskMutations(task, project);
+  const {
+    saveFields,
+    saveExternalIdentity,
+    toggleState,
+    deleteTask,
+    createNote,
+    updateNote,
+    deleteNote,
+  } = useTaskMutations(task, project);
 
   const notes = project.notes.filter((note) => note.task_id === task.id);
 
@@ -82,6 +90,7 @@ export function TaskDetail(props: TaskDetailProps) {
           onSavePriority={savePriority}
           onSaveSection={saveSection}
         />
+        <ExternalLinkField task={task} onSave={saveExternalIdentity} />
         {error === null ? null : <Alert color="failure">{error}</Alert>}
         <Card>
           <TaskFields task={task} onSaveDescription={saveDescription} onSaveTags={saveTags} />

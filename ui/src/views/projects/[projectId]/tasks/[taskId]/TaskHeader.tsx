@@ -8,8 +8,12 @@ import type { Task } from '@/generated/Task';
 const ICON_BUTTON_CLASS =
   'text-muted inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50';
 
-function TaskTitle(props: { title: string; onSave: (title: string) => Promise<void> }) {
-  const { title, onSave } = props;
+function TaskTitle(props: {
+  title: string;
+  readOnly: boolean;
+  onSave: (title: string) => Promise<void>;
+}) {
+  const { title, readOnly, onSave } = props;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
@@ -107,15 +111,17 @@ function TaskTitle(props: { title: string; onSave: (title: string) => Promise<vo
   return (
     <div className="flex min-w-0 items-center gap-2">
       <h1 className="min-w-0 text-2xl font-semibold wrap-break-word">{title}</h1>
-      <button
-        type="button"
-        aria-label="Edit title"
-        title="Edit title"
-        onClick={startEditing}
-        className={ICON_BUTTON_CLASS}
-      >
-        <HiPencil aria-hidden="true" className="h-3.5 w-3.5" />
-      </button>
+      {readOnly ? null : (
+        <button
+          type="button"
+          aria-label="Edit title"
+          title="Edit title"
+          onClick={startEditing}
+          className={ICON_BUTTON_CLASS}
+        >
+          <HiPencil aria-hidden="true" className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -132,6 +138,7 @@ export function TaskHeader(props: TaskHeaderProps) {
   const { project, task, handle, onSaveTitle, onBack } = props;
 
   const location = useLocation();
+  const readOnly = (task.external_metadata?.title ?? null) !== null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -161,7 +168,7 @@ export function TaskHeader(props: TaskHeaderProps) {
         </svg>
       </Link>
       <div className="flex min-w-0 flex-col gap-1">
-        <TaskTitle title={task.title} onSave={onSaveTitle} />
+        <TaskTitle title={task.title} readOnly={readOnly} onSave={onSaveTitle} />
         <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
           <p className="text-muted text-sm">{project.name}</p>
           <span className="text-muted shrink-0 font-mono text-sm">{handle}</span>

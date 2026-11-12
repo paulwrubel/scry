@@ -8,6 +8,7 @@ import {
   createTaskOperation,
   deleteNoteOperation,
   deleteTaskOperation,
+  externalIdentityOperation,
   moveTaskOperation,
   nextTaskPosition,
   setTaskStateOperation,
@@ -211,6 +212,47 @@ describe('updateTaskOperation', () => {
     });
 
     expect(operation).toMatchObject({ tags: ['three', 'two'], title: null });
+  });
+});
+
+describe('externalIdentityOperation', () => {
+  const identity: ExternalIdentity = {
+    provider: 'github',
+    owner: 'acme',
+    repo: 'widgets',
+    number: 123,
+  };
+
+  it('links an unlinked task', () => {
+    const operation = externalIdentityOperation(task({ id: TASK_ID, title: 'Title' }), identity);
+
+    expect(operation).toMatchObject({
+      kind: 'update_task',
+      id: TASK_ID,
+      external_identity: identity,
+      external_metadata: null,
+    });
+  });
+
+  it('clears a linked task', () => {
+    const linked = task({ id: TASK_ID, title: 'Title', external_identity: identity });
+
+    expect(externalIdentityOperation(linked, null)).toMatchObject({
+      kind: 'update_task',
+      id: TASK_ID,
+      external_identity: null,
+      external_metadata: null,
+    });
+  });
+
+  it('returns null when the identity is unchanged', () => {
+    const linked = task({ id: TASK_ID, title: 'Title', external_identity: identity });
+
+    expect(externalIdentityOperation(linked, { ...identity })).toBeNull();
+  });
+
+  it('returns null for an unlinked task with no identity', () => {
+    expect(externalIdentityOperation(task({ id: TASK_ID, title: 'Title' }), null)).toBeNull();
   });
 });
 
