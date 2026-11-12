@@ -166,6 +166,12 @@ enum Command {
         #[arg(required = true, num_args = 1..)]
         ids: Vec<Handle>,
     },
+    /// Sync tasks with external systems
+    Sync {
+        /// Only sync this provider
+        #[arg(long, value_enum)]
+        provider: Option<client::Provider>,
+    },
     /// Show full details for a task
     Show {
         /// The task ID or a unique handle prefix
@@ -635,6 +641,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Some(Command::Open { ids }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::open_tasks(&client, ids, output_json).await;
+        }
+        Some(Command::Sync { provider }) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::sync(&client, *provider, output_json).await;
         }
         Some(Command::Note(NoteCommand::Add { task_id, contents })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
