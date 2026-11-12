@@ -14,21 +14,11 @@ export type BoardColumnBodyProps = {
   showCreate: boolean;
   onCreate?: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>;
   dropRef: ComponentProps<'div'>['ref'];
-  isDropTarget: boolean;
 };
 
 export function BoardColumnBody(props: BoardColumnBodyProps) {
-  const {
-    projectId,
-    group,
-    tasks,
-    showPriority,
-    canReorder,
-    showCreate,
-    onCreate,
-    dropRef,
-    isDropTarget,
-  } = props;
+  const { projectId, group, tasks, showPriority, canReorder, showCreate, onCreate, dropRef } =
+    props;
 
   return (
     <>
@@ -36,9 +26,8 @@ export function BoardColumnBody(props: BoardColumnBodyProps) {
       <div
         ref={dropRef}
         data-column-drag-ignore
-        className={`flex min-h-10 flex-1 cursor-default flex-col gap-2 overflow-visible rounded-md pr-1 md:overflow-y-auto ${
-          isDropTarget ? 'ring-line-hover ring-1' : ''
-        }`}
+        data-board-group={group}
+        className="flex min-h-10 flex-1 cursor-default flex-col gap-2 overflow-visible rounded-md pr-1 md:overflow-y-auto"
       >
         {tasks.length === 0
           ? null

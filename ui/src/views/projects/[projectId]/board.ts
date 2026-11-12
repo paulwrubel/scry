@@ -90,6 +90,100 @@ export function itemsFromGroups(groups: BoardGroup[]): Record<string, string[]> 
   );
 }
 
+export type TaskSlot = {
+  id: string;
+  /** Top edge in the column's scroll-content space. */
+  top: number;
+  /** Bottom edge in the column's scroll-content space. */
+  bottom: number;
+};
+
+export type DragLayout = {
+  groups: Record<string, { gap: number; slots: TaskSlot[] }>;
+  /** Height of the card being dragged. */
+  draggedHeight: number;
+};
+
+/**
+ * Returns the insertion index whose placeholder slot center is nearest `anchorY`.
+ * `slots` must be the destination's layout with the dragged card removed and
+ * the remaining slots shifted up to close its gap.
+ */
+export function insertionIndexForPointer(
+  slots: readonly TaskSlot[],
+  anchorY: number,
+  draggedHeight: number,
+  gap: number,
+): number {
+  if (slots.length === 0) {
+    return 0;
+  }
+
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index <= slots.length; index += 1) {
+    const slotTop = index < slots.length ? slots[index].top : slots[slots.length - 1].bottom + gap;
+    const slotCenter = slotTop + draggedHeight / 2;
+    const distance = Math.abs(slotCenter - anchorY);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+
+  return bestIndex;
+}
+
+/**
+ * Returns the original `items` when the preview matches it exactly, so callers
+ * can skip re-rendering.
+ */
+export function previewAtPointer(
+  items: Record<string, string[]>,
+  layout: DragLayout,
+  destination: string,
+  dragId: string,
+  anchorY: number,
+): Record<string, string[]> {
+  const withoutDrag: Record<string, string[]> = {};
+  for (const [group, ids] of Object.entries(items)) {
+    withoutDrag[group] = ids.filter((id) => id !== dragId);
+  }
+
+  if (!(destination in items)) {
+    return items;
+  }
+
+  const groupLayout = layout.groups[destination];
+  if (groupLayout === undefined) {
+    return items;
+  }
+
+  const slots: TaskSlot[] = [];
+  let shift = 0;
+  for (const slot of groupLayout.slots) {
+    if (slot.id === dragId) {
+      shift = layout.draggedHeight + groupLayout.gap;
+      continue;
+    }
+    slots.push({ id: slot.id, top: slot.top - shift, bottom: slot.bottom - shift });
+  }
+
+  const index = insertionIndexForPointer(slots, anchorY, layout.draggedHeight, groupLayout.gap);
+  const nextDestination = [...withoutDrag[destination]];
+  nextDestination.splice(index, 0, dragId);
+
+  const next: Record<string, string[]> = { ...withoutDrag, [destination]: nextDestination };
+
+  const currentDestination = items[destination];
+  const unchanged =
+    currentDestination.length === nextDestination.length &&
+    currentDestination.every((id, position) => id === nextDestination[position]);
+
+  return unchanged ? items : next;
+}
+
 export function sectionTasks(project: ProjectSnapshot, sectionId: string | null): Task[] {
   return project.tasks
     .filter((task) => task.section_id === sectionId)

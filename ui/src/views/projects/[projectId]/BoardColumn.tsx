@@ -1,4 +1,3 @@
-import { CollisionPriority } from '@dnd-kit/abstract';
 import { useDroppable } from '@dnd-kit/react';
 import { Badge, Card } from 'flowbite-react';
 import type { CardTheme } from 'flowbite-react';
@@ -69,11 +68,10 @@ export function BoardColumn(props: BoardColumnProps) {
   const bodyId = `${group}-tasks`;
   const collapsible = onToggleCollapsed !== undefined;
 
-  const { ref, isDropTarget } = useDroppable({
+  const { ref } = useDroppable({
     id: group,
     type: 'column',
     accept: 'item',
-    collisionPriority: CollisionPriority.Low,
     disabled: !(droppable ?? true) || collapsed,
   });
 
@@ -184,7 +182,6 @@ export function BoardColumn(props: BoardColumnProps) {
                     showCreate={showCreate}
                     onCreate={onCreate}
                     dropRef={ref}
-                    isDropTarget={isDropTarget}
                   />
                 </div>
               </motion.div>
@@ -201,7 +198,6 @@ export function BoardColumn(props: BoardColumnProps) {
               showCreate={showCreate}
               onCreate={onCreate}
               dropRef={ref}
-              isDropTarget={isDropTarget}
             />
           </div>
         )}
