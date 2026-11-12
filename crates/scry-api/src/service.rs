@@ -7,8 +7,8 @@ use scry_core::ids::{
 };
 use scry_core::models::{
     Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Entity, EntityType,
-    FieldValues, MAX_AUTOMATION_ACTIONS, Note, Priority, Project, ProjectSnapshot, ProjectTemplate,
-    Section, Tags, Task, TaskSortingMode, TaskState,
+    ExternalIdentity, ExternalMetadata, FieldValues, MAX_AUTOMATION_ACTIONS, Note, Priority,
+    Project, ProjectSnapshot, ProjectTemplate, Section, Tags, Task, TaskSortingMode, TaskState,
 };
 use scry_core::position::{Position, key_between, n_keys_between};
 use scry_core::snapshot::{
@@ -100,6 +100,8 @@ pub struct NewTask {
     pub priority: Option<Priority>,
     pub tags: Option<Tags>,
     pub section: SectionInput,
+    pub external_identity: Option<ExternalIdentity>,
+    pub external_metadata: Option<ExternalMetadata>,
 }
 
 /// Partial task input. `None` leaves a field unchanged, including
@@ -212,8 +214,8 @@ impl ProjectService {
             state: TaskState::Open,
             tags: input.tags.unwrap_or_default(),
             created_at: Utc::now(),
-            external_identity: None,
-            external_metadata: None,
+            external_identity: input.external_identity,
+            external_metadata: input.external_metadata,
         };
 
         let mut ops = Vec::new();
@@ -233,6 +235,8 @@ impl ProjectService {
                 state: task.state,
                 tags: task.tags.clone(),
                 created_at: task.created_at,
+                external_identity: task.external_identity.clone(),
+                external_metadata: task.external_metadata.clone().map(Box::new),
             },
         ));
         self.apply_operations(&ops, ApplyMode::Atomic).await?;
@@ -266,8 +270,8 @@ impl ProjectService {
             state: source.state,
             tags: source.tags,
             created_at: Utc::now(),
-            external_identity: None,
-            external_metadata: None,
+            external_identity: source.external_identity.clone(),
+            external_metadata: source.external_metadata.clone(),
         };
 
         let op = new_operation(
@@ -283,6 +287,8 @@ impl ProjectService {
                 state: task.state,
                 tags: task.tags.clone(),
                 created_at: task.created_at,
+                external_identity: task.external_identity.clone(),
+                external_metadata: source.external_metadata.clone().map(Box::new),
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
@@ -1723,6 +1729,8 @@ impl ProjectService {
                 state,
                 tags,
                 created_at,
+                external_identity,
+                external_metadata,
             } => {
                 if self
                     .store
@@ -1785,8 +1793,8 @@ impl ProjectService {
                     state: *state,
                     tags: tags.clone(),
                     created_at: *created_at,
-                    external_identity: None,
-                    external_metadata: None,
+                    external_identity: external_identity.clone(),
+                    external_metadata: external_metadata.as_deref().cloned(),
                 };
                 task_transition = Some((None, task.clone()));
                 self.store
@@ -3488,6 +3496,8 @@ mod tests {
             state: task.state,
             tags: task.tags.clone(),
             created_at: task.created_at,
+            external_identity: task.external_identity.clone(),
+            external_metadata: task.external_metadata.clone().map(Box::new),
         }
     }
 

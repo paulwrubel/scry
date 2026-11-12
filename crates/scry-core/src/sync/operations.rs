@@ -1,6 +1,7 @@
 use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
 use crate::models::{
-    AutomationAction, AutomationTrigger, Color, Priority, Tags, TaskSortingMode, TaskState,
+    AutomationAction, AutomationTrigger, Color, ExternalIdentity, ExternalMetadata, Priority, Tags,
+    TaskSortingMode, TaskState,
 };
 use crate::position::Position;
 use chrono::{DateTime, Utc};
@@ -174,6 +175,10 @@ pub enum OperationKind {
         state: TaskState,
         tags: Tags,
         created_at: DateTime<Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        external_identity: Option<ExternalIdentity>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        external_metadata: Option<Box<ExternalMetadata>>,
     },
     /// Covers title, description, priority, tags, and state: section and position
     /// belong to [`OperationKind::MoveTask`].

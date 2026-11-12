@@ -549,6 +549,8 @@ pub fn plan_import(
                     state: incoming_task.state,
                     tags: incoming_task.tags.clone(),
                     created_at: incoming_task.created_at,
+                    external_identity: incoming_task.external_identity.clone(),
+                    external_metadata: incoming_task.external_metadata.clone().map(Box::new),
                 }));
                 plan.report.tasks += 1;
                 continue;
@@ -610,6 +612,8 @@ pub fn plan_import(
                 state: incoming_task.state,
                 tags: incoming_task.tags.clone(),
                 created_at: incoming_task.created_at,
+                external_identity: incoming_task.external_identity.clone(),
+                external_metadata: incoming_task.external_metadata.clone().map(Box::new),
             }));
             plan.report.tasks += 1;
         }
