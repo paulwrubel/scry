@@ -5,18 +5,41 @@ export function githubIdentity(task: Task): ExternalIdentity | null {
   return task.external_identity?.provider === 'github' ? task.external_identity : null;
 }
 
+export type GithubKind = 'issue' | 'pull';
+
+export function githubKind(task: Task): GithubKind | null {
+  const kind = task.external_metadata?.kind;
+  return kind === 'issue' || kind === 'pull' ? kind : null;
+}
+
 export function githubUrl(task: Task): string | null {
   const identity = githubIdentity(task);
   if (identity === null) {
     return null;
   }
-  const kind = task.external_metadata?.kind === 'pull' ? 'pull' : 'issues';
-  return `https://github.com/${identity.owner}/${identity.repo}/${kind}/${identity.number}`;
+  const kind = githubKind(task);
+  return `https://github.com/${identity.owner}/${identity.repo}/${
+    kind === 'pull' ? 'pull' : 'issues'
+  }/${identity.number}`;
 }
 
 export function githubLabel(task: Task): string | null {
   const identity = githubIdentity(task);
   return identity === null ? null : `${identity.owner}/${identity.repo}#${identity.number}`;
+}
+
+export function githubIconColor(task: Task): string {
+  const state = task.external_metadata?.state;
+  if (state === 'open') {
+    return 'text-green-400';
+  }
+  if (state === 'merged') {
+    return 'text-purple-400';
+  }
+  if (state === 'closed') {
+    return githubKind(task) === 'pull' ? 'text-red-400' : 'text-purple-400';
+  }
+  return 'text-muted';
 }
 
 export function titleLocked(task: Task): boolean {
