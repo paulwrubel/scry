@@ -376,6 +376,12 @@ impl ProjectService {
                     .external_metadata
                     .map(|metadata| metadata.map(Box::new)),
             };
+            if update_changes_locked_external_field(&task, &kind) {
+                return Err(ServiceError::Storage(StorageError::Conflict(format!(
+                    "task {} is linked to an external identity; its title, description, and state are locked",
+                    task.id
+                ))));
+            }
             // apply exactly the op's fields to the returned model
             task_field_updates(&mut task, &kind);
             ops.push(new_operation(Uuid::new_v4(), kind));
@@ -1832,6 +1838,18 @@ impl ProjectService {
                     ));
                 };
 
+                if matches!(&op.kind, OperationKind::UpdateTask { .. })
+                    && update_changes_locked_external_field(&task, &op.kind)
+                {
+                    return Ok((
+                        OperationAcknowledgment::rejected(
+                            op.operation_id,
+                            RejectionReason::Conflict,
+                        ),
+                        None,
+                    ));
+                }
+
                 let before = task.clone();
                 let field_values = task_field_updates(&mut task, &op.kind);
                 task_transition = Some((Some(before), task.clone()));
@@ -2524,6 +2542,55 @@ fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldValues {
     Value::Object(fields)
 }
 
+/// Whether a non-sync update changes a task field that the external metadata
+/// marks as externally owned.
+///
+/// An update that includes `external_metadata` is a sync write and may change
+/// those fields. Clearing the identity in the same update also unlocks them.
+fn update_changes_locked_external_field(task: &Task, op: &OperationKind) -> bool {
+    let OperationKind::UpdateTask {
+        title,
+        description,
+        state,
+        external_identity,
+        external_metadata,
+        ..
+    } = op
+    else {
+        return false;
+    };
+
+    let has_identity_after = match external_identity {
+        Some(identity) => identity.is_some(),
+        None => task.external_identity.is_some(),
+    };
+    if !has_identity_after || external_metadata.is_some() {
+        return false;
+    }
+
+    let Some(ExternalMetadata::Github {
+        title: metadata_title,
+        description: metadata_description,
+        state: metadata_state,
+        ..
+    }) = task.external_metadata.as_ref()
+    else {
+        return false;
+    };
+
+    let title_changes = title
+        .as_deref()
+        .is_some_and(|value| value != task.title.as_str());
+    let description_changes = description
+        .as_ref()
+        .is_some_and(|value| value != &task.description);
+    let state_changes = state.as_ref().is_some_and(|value| *value != task.state);
+
+    (metadata_title.is_some() && title_changes)
+        || (metadata_description.is_some() && description_changes)
+        || (metadata_state.is_some() && state_changes)
+}
+
 /// The automation trigger represented by an applied task operation, if any.
 ///
 /// `before` is the task before the operation and `after` is the task after it.
@@ -3017,6 +3084,54 @@ mod tests {
         }
     }
 
+    fn github_metadata_with(
+        title: Option<&str>,
+        description: Option<&str>,
+        state: Option<&str>,
+    ) -> ExternalMetadata {
+        ExternalMetadata::Github {
+            title: title.map(str::to_string),
+            description: description.map(str::to_string),
+            kind: Some("issue".to_string()),
+            state: state.map(str::to_string),
+            reason: None,
+            draft: Some(false),
+            updated_at: None,
+            error: None,
+        }
+    }
+
+    fn linked_task(metadata: ExternalMetadata) -> Task {
+        let mut task = task("linked", Some("external description"));
+        task.external_identity = Some(ExternalIdentity::Github {
+            owner: "acme".to_string(),
+            repo: "widgets".to_string(),
+            number: 42,
+        });
+        task.external_metadata = Some(metadata);
+        task
+    }
+
+    fn lock_op(
+        task: &Task,
+        title: Option<&str>,
+        description: Option<Option<&str>>,
+        state: Option<TaskState>,
+        external_identity: Option<Option<ExternalIdentity>>,
+        external_metadata: Option<Option<Box<ExternalMetadata>>>,
+    ) -> OperationKind {
+        OperationKind::UpdateTask {
+            id: task.id,
+            title: title.map(str::to_string),
+            description: description.map(|description| description.map(str::to_string)),
+            priority: None,
+            tags: None,
+            state,
+            external_identity,
+            external_metadata,
+        }
+    }
+
     #[test]
     fn update_task_sets_and_clears_external_fields() {
         let mut task = task("t", None);
@@ -3067,6 +3182,133 @@ mod tests {
         let fields = fields.as_object().expect("the field map is an object");
         assert_eq!(fields["external_identity"], json!(null));
         assert_eq!(fields["external_metadata"], json!(null));
+    }
+
+    #[test]
+    fn linked_task_blocks_locked_title_change() {
+        let task = linked_task(github_metadata_with(
+            Some("Fix login"),
+            Some("Users cannot sign in"),
+            Some("open"),
+        ));
+        let op = lock_op(&task, Some("New title"), None, None, None, None);
+
+        assert!(update_changes_locked_external_field(&task, &op));
+    }
+
+    #[test]
+    fn sync_update_may_change_locked_title() {
+        let task = linked_task(github_metadata_with(
+            Some("Fix login"),
+            Some("Users cannot sign in"),
+            Some("open"),
+        ));
+        let op = lock_op(
+            &task,
+            Some("New title"),
+            None,
+            None,
+            None,
+            Some(Some(Box::new(github_metadata_with(
+                Some("Fix login"),
+                Some("Users cannot sign in"),
+                Some("open"),
+            )))),
+        );
+
+        assert!(!update_changes_locked_external_field(&task, &op));
+    }
+
+    #[test]
+    fn metadata_without_title_allows_title_change() {
+        let task = linked_task(github_metadata_with(None, None, None));
+        let op = lock_op(&task, Some("New title"), None, None, None, None);
+
+        assert!(!update_changes_locked_external_field(&task, &op));
+    }
+
+    #[test]
+    fn linked_task_blocks_a_real_description_change_only() {
+        let task = linked_task(github_metadata_with(
+            Some("Fix login"),
+            Some("Users cannot sign in"),
+            Some("open"),
+        ));
+
+        let changed = lock_op(
+            &task,
+            None,
+            Some(Some("A new description")),
+            None,
+            None,
+            None,
+        );
+        assert!(update_changes_locked_external_field(&task, &changed));
+
+        let unchanged = lock_op(
+            &task,
+            None,
+            Some(Some("external description")),
+            None,
+            None,
+            None,
+        );
+        assert!(!update_changes_locked_external_field(&task, &unchanged));
+    }
+
+    #[test]
+    fn linked_task_blocks_locked_state_change() {
+        let task = linked_task(github_metadata_with(
+            Some("Fix login"),
+            Some("Users cannot sign in"),
+            Some("closed"),
+        ));
+        let op = lock_op(&task, None, None, Some(TaskState::Closed), None, None);
+
+        assert!(update_changes_locked_external_field(&task, &op));
+    }
+
+    #[test]
+    fn priority_and_tags_are_not_locked() {
+        let task = linked_task(github_metadata_with(
+            Some("Fix login"),
+            Some("Users cannot sign in"),
+            Some("open"),
+        ));
+        let mut op = lock_op(&task, None, None, None, None, None);
+        if let OperationKind::UpdateTask { priority, tags, .. } = &mut op {
+            *priority = Some(Priority::High);
+            *tags = Some(Tags::from(vec!["urgent"]));
+        }
+
+        assert!(!update_changes_locked_external_field(&task, &op));
+    }
+
+    #[test]
+    fn clearing_identity_unlocks_title_change() {
+        let task = linked_task(github_metadata_with(
+            Some("Fix login"),
+            Some("Users cannot sign in"),
+            Some("open"),
+        ));
+        let op = lock_op(&task, Some("New title"), None, None, Some(None), None);
+
+        assert!(!update_changes_locked_external_field(&task, &op));
+    }
+
+    #[test]
+    fn unlinked_task_is_fully_editable() {
+        let task = task("plain", Some("a description"));
+        let op = lock_op(
+            &task,
+            Some("New title"),
+            Some(Some("A new description")),
+            Some(TaskState::Closed),
+            None,
+            None,
+        );
+
+        assert!(!update_changes_locked_external_field(&task, &op));
     }
 
     fn section(name: &str, position: &str) -> Section {
