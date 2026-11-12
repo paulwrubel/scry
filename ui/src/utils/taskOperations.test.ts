@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
+import type { ExternalMetadata } from '@/generated/ExternalMetadata';
 import type { Note } from '@/generated/Note';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
@@ -212,6 +213,94 @@ describe('updateTaskOperation', () => {
     });
 
     expect(operation).toMatchObject({ tags: ['three', 'two'], title: null });
+  });
+
+  it('does not send locked title or description when only tags change', () => {
+    const identity: ExternalIdentity = {
+      provider: 'github',
+      owner: 'acme',
+      repo: 'widgets',
+      number: 123,
+    };
+    const metadata: ExternalMetadata = {
+      provider: 'github',
+      title: 'Title',
+      description: 'Body\n',
+      kind: 'issue',
+      state: 'open',
+      reason: null,
+      draft: null,
+      updated_at: CREATED_AT,
+      error: null,
+    };
+    const linked = task({
+      id: TASK_ID,
+      title: 'Title',
+      description: 'Body\n',
+      priority: 'low',
+      tags: ['one'],
+      external_identity: identity,
+      external_metadata: metadata,
+    });
+
+    const operation = updateTaskOperation(linked, {
+      title: 'Title',
+      description: 'Body\n',
+      priority: 'low',
+      tags: ['one', 'two'],
+    });
+
+    expect(operation).toMatchObject({
+      kind: 'update_task',
+      id: TASK_ID,
+      title: null,
+      tags: ['one', 'two'],
+      state: null,
+    });
+    expect(operation?.kind === 'update_task' && operation.description).toBeUndefined();
+  });
+
+  it('does not send a locked title when only tags change', () => {
+    const identity: ExternalIdentity = {
+      provider: 'github',
+      owner: 'acme',
+      repo: 'widgets',
+      number: 123,
+    };
+    const metadata: ExternalMetadata = {
+      provider: 'github',
+      title: 'Title ',
+      description: null,
+      kind: 'issue',
+      state: 'open',
+      reason: null,
+      draft: null,
+      updated_at: CREATED_AT,
+      error: null,
+    };
+    const linked = task({
+      id: TASK_ID,
+      title: 'Title ',
+      priority: 'low',
+      tags: ['one'],
+      external_identity: identity,
+      external_metadata: metadata,
+    });
+
+    const operation = updateTaskOperation(linked, {
+      title: 'Title ',
+      description: '',
+      priority: 'low',
+      tags: ['one', 'two'],
+    });
+
+    expect(operation).toMatchObject({
+      kind: 'update_task',
+      id: TASK_ID,
+      title: null,
+      tags: ['one', 'two'],
+      state: null,
+    });
   });
 });
 

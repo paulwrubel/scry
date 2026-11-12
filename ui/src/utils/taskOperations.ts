@@ -67,8 +67,10 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
   const nextDescription = description.length === 0 ? null : description;
   const tags = normalizeTags(patch.tags);
 
-  const titleChanged = title !== task.title;
-  const descriptionChanged = nextDescription !== task.description;
+  const titleLocked = (task.external_metadata?.title ?? null) !== null;
+  const descriptionLocked = (task.external_metadata?.description ?? null) !== null;
+  const titleChanged = !titleLocked && title !== task.title;
+  const descriptionChanged = !descriptionLocked && nextDescription !== task.description;
   const priorityChanged = patch.priority !== task.priority;
   const tagsChanged = !sameTags(tags, task.tags);
 
