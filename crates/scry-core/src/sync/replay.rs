@@ -178,6 +178,8 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 state: *task_state,
                 tags: tags.clone(),
                 created_at: *created_at,
+                external_identity: None,
+                external_metadata: None,
             };
             if let Some(snapshot) = state
                 .projects

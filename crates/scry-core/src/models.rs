@@ -108,21 +108,13 @@ pub enum ExternalIdentity {
 #[serde(tag = "provider", rename_all = "snake_case")]
 pub enum ExternalMetadata {
     Github {
-        #[serde(default)]
         title: Option<String>,
-        #[serde(default)]
         description: Option<String>,
-        #[serde(default)]
         kind: Option<String>,
-        #[serde(default)]
         state: Option<String>,
-        #[serde(default)]
         reason: Option<String>,
-        #[serde(default)]
         draft: Option<bool>,
-        #[serde(default)]
         updated_at: Option<DateTime<Utc>>,
-        #[serde(default)]
         error: Option<String>,
     },
 }
@@ -364,6 +356,8 @@ pub struct Task {
     pub state: TaskState,
     pub tags: Tags,
     pub created_at: DateTime<Utc>,
+    pub external_identity: Option<ExternalIdentity>,
+    pub external_metadata: Option<ExternalMetadata>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

@@ -212,6 +212,8 @@ impl ProjectService {
             state: TaskState::Open,
             tags: input.tags.unwrap_or_default(),
             created_at: Utc::now(),
+            external_identity: None,
+            external_metadata: None,
         };
 
         let mut ops = Vec::new();
@@ -264,6 +266,8 @@ impl ProjectService {
             state: source.state,
             tags: source.tags,
             created_at: Utc::now(),
+            external_identity: None,
+            external_metadata: None,
         };
 
         let op = new_operation(
@@ -1781,6 +1785,8 @@ impl ProjectService {
                     state: *state,
                     tags: tags.clone(),
                     created_at: *created_at,
+                    external_identity: None,
+                    external_metadata: None,
                 };
                 task_transition = Some((None, task.clone()));
                 self.store
@@ -2879,6 +2885,8 @@ mod tests {
             state: TaskState::Open,
             tags: Tags::from(vec!["alpha"]),
             created_at: Utc::now(),
+            external_identity: None,
+            external_metadata: None,
         }
     }
 
@@ -2894,6 +2902,8 @@ mod tests {
             state: TaskState::Open,
             tags: Tags::default(),
             created_at: Utc::now(),
+            external_identity: None,
+            external_metadata: None,
         }
     }
 

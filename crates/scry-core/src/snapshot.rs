@@ -976,6 +976,8 @@ mod tests {
             state: TaskState::Open,
             tags: Tags::default(),
             created_at: at(),
+            external_identity: None,
+            external_metadata: None,
         }
     }
 
@@ -1169,6 +1171,8 @@ mod import_tests {
             state: TaskState::Open,
             tags: Tags::default(),
             created_at: at(),
+            external_identity: None,
+            external_metadata: None,
         }
     }
 

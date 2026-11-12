@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    tags,\n                    created_at\n                FROM tasks\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    tags,\n                    created_at,\n                    external_identity,\n                    external_metadata\n                FROM tasks\n                WHERE section_id = $1\n                ORDER BY position ASC, id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -112,6 +112,28 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "external_identity",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "external_identity"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "external_metadata",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "external_metadata"
+          }
+        }
       }
     ],
     "parameters": {
@@ -129,8 +151,10 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true
     ]
   },
-  "hash": "ede0dc2052e0b4f1c1b8bd5d5d6f168d6860d5ee2eca8f3a6e6c9a64a10cbb9d"
+  "hash": "2a4ec41266f5a423a853459505f53d7e2037c920d35cd2f432a0a321e8bb997e"
 }
