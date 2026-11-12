@@ -4,17 +4,19 @@ import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import { DEFAULT_TASK_FILTER } from '@/utils/taskFilter';
 import type { TaskFilter } from '@/utils/taskFilter';
-import type { BoardGroup } from './board';
+import type { BoardGroup, DragLayout, TaskSlot } from './board';
 import {
   buildBoard,
   CLOSED_NO_SECTION_GROUP,
   dropPosition,
   groupKey,
+  insertionIndexForPointer,
   insertPosition,
   isNoSectionGroupKey,
   itemsFromGroups,
   OPEN_NO_SECTION_GROUP,
   planSectionMove,
+  previewAtPointer,
   sectionIdFromGroup,
   sectionTasks,
 } from './board';
@@ -70,6 +72,21 @@ function filter(overrides: Partial<TaskFilter> = {}): TaskFilter {
 
 function shape(groups: BoardGroup[]): [string, string[]][] {
   return groups.map((group) => [groupKey(group), group.tasks.map((candidate) => candidate.id)]);
+}
+
+function taskSlot(id: string, top: number, height = 46): TaskSlot {
+  return { id, top, bottom: top + height };
+}
+
+function dragLayout(
+  groups: Record<string, TaskSlot[]>,
+  draggedHeight: number,
+  gap = 8,
+): DragLayout {
+  return {
+    groups: Object.fromEntries(Object.entries(groups).map(([key, slots]) => [key, { gap, slots }])),
+    draggedHeight,
+  };
 }
 
 describe('groupKey', () => {
@@ -416,5 +433,109 @@ describe('planSectionMove', () => {
   it('returns null for out-of-range indexes', () => {
     expect(planSectionMove(sections, -1, 1)).toBeNull();
     expect(planSectionMove(sections, 0, 3)).toBeNull();
+  });
+});
+
+describe('insertionIndexForPointer', () => {
+  const slots = [taskSlot('a', 0), taskSlot('b', 54)];
+
+  it('returns 0 for empty slots', () => {
+    expect(insertionIndexForPointer([], 0, 46, 8)).toBe(0);
+  });
+
+  it('returns the nearest placeholder slot', () => {
+    expect(insertionIndexForPointer(slots, 0, 46, 8)).toBe(0);
+    expect(insertionIndexForPointer(slots, 80, 46, 8)).toBe(1);
+    expect(insertionIndexForPointer(slots, 200, 46, 8)).toBe(2);
+  });
+
+  it('keeps a tall card above a slot whose center it already passed', () => {
+    // placeholder centers are 42, 96 and 150, so 60 sits nearest the first one
+    expect(insertionIndexForPointer(slots, 60, 84, 8)).toBe(0);
+  });
+
+  it('moves to the next slot once the anchor clears its center for a tall card', () => {
+    expect(insertionIndexForPointer(slots, 100, 84, 8)).toBe(1);
+  });
+
+  it('keeps the lower index on a tie', () => {
+    // 23 and 77 are equidistant from 50
+    expect(insertionIndexForPointer(slots, 50, 46, 8)).toBe(0);
+  });
+});
+
+describe('previewAtPointer', () => {
+  const layout = dragLayout(
+    {
+      backlog: [taskSlot('a', 0), taskSlot('b', 54)],
+      doing: [taskSlot('c', 0), taskSlot('d', 54)],
+    },
+    46,
+  );
+
+  it('moves a task to another group at the nearest slot', () => {
+    const items = { backlog: ['a', 'b'], doing: ['c', 'd'] };
+
+    expect(previewAtPointer(items, layout, 'doing', 'a', 80)).toEqual({
+      backlog: ['b'],
+      doing: ['c', 'a', 'd'],
+    });
+  });
+
+  it('inserts at the start of the destination above every slot', () => {
+    const items = { backlog: ['a', 'b'], doing: ['c', 'd'] };
+
+    expect(previewAtPointer(items, layout, 'doing', 'a', 0)).toEqual({
+      backlog: ['b'],
+      doing: ['a', 'c', 'd'],
+    });
+  });
+
+  it('appends below every destination slot', () => {
+    const items = { backlog: ['a', 'b'], doing: ['c', 'd'] };
+
+    expect(previewAtPointer(items, layout, 'doing', 'a', 300)).toEqual({
+      backlog: ['b'],
+      doing: ['c', 'd', 'a'],
+    });
+  });
+
+  it('closes the gap left by a same-group drag', () => {
+    const items = { backlog: ['a', 'b'] };
+    const sameGroup = dragLayout({ backlog: [taskSlot('a', 0), taskSlot('b', 54)] }, 46);
+
+    expect(previewAtPointer(items, sameGroup, 'backlog', 'a', 60)).toEqual({
+      backlog: ['b', 'a'],
+    });
+  });
+
+  it('returns the same object when the preview does not change', () => {
+    const items = { backlog: ['a', 'b'] };
+    const sameGroup = dragLayout({ backlog: [taskSlot('a', 0), taskSlot('b', 54)] }, 46);
+
+    expect(previewAtPointer(items, sameGroup, 'backlog', 'a', 0)).toBe(items);
+  });
+
+  it('returns the same object for an unknown destination', () => {
+    const items = { backlog: ['a', 'b'], doing: ['c', 'd'] };
+
+    expect(previewAtPointer(items, layout, 'missing', 'a', 80)).toBe(items);
+  });
+
+  it('does not mutate the input items or the layout slots', () => {
+    const items = { backlog: ['a', 'b'], doing: ['c', 'd'] };
+    const mutable = dragLayout(
+      {
+        backlog: [taskSlot('a', 0), taskSlot('b', 54)],
+        doing: [taskSlot('c', 0), taskSlot('d', 54)],
+      },
+      46,
+    );
+
+    previewAtPointer(items, mutable, 'doing', 'a', 80);
+
+    expect(items).toEqual({ backlog: ['a', 'b'], doing: ['c', 'd'] });
+    expect(mutable.groups.backlog.slots).toEqual([taskSlot('a', 0), taskSlot('b', 54)]);
+    expect(mutable.groups.doing.slots).toEqual([taskSlot('c', 0), taskSlot('d', 54)]);
   });
 });

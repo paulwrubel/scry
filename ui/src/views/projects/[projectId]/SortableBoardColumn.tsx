@@ -61,6 +61,7 @@ export function SortableBoardColumn(props: SortableBoardColumnProps) {
     <BoardColumn
       nodeRef={(element) => ref(element)}
       isDragging={isDragging}
+      draggable={sectionsSortable}
       projectId={project.id}
       group={groupKey(group)}
       title={section.name}

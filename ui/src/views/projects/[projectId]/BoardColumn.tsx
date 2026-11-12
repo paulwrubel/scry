@@ -1,4 +1,3 @@
-import { CollisionPriority } from '@dnd-kit/abstract';
 import { useDroppable } from '@dnd-kit/react';
 import { Badge, Card } from 'flowbite-react';
 import type { CardTheme } from 'flowbite-react';
@@ -31,6 +30,7 @@ export type BoardColumnProps = {
   onColorChange?: (color: Color | null) => void;
   nodeRef?: (element: HTMLDivElement | null) => void;
   isDragging?: boolean;
+  draggable?: boolean;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 };
@@ -59,6 +59,7 @@ export function BoardColumn(props: BoardColumnProps) {
     onColorChange,
     nodeRef,
     isDragging,
+    draggable = false,
     collapsed = false,
     onToggleCollapsed,
   } = props;
@@ -67,11 +68,10 @@ export function BoardColumn(props: BoardColumnProps) {
   const bodyId = `${group}-tasks`;
   const collapsible = onToggleCollapsed !== undefined;
 
-  const { ref, isDropTarget } = useDroppable({
+  const { ref } = useDroppable({
     id: group,
     type: 'column',
     accept: 'item',
-    collisionPriority: CollisionPriority.Low,
     disabled: !(droppable ?? true) || collapsed,
   });
 
@@ -89,8 +89,8 @@ export function BoardColumn(props: BoardColumnProps) {
         ref={nodeRef}
         theme={columnTheme}
         className={`flex min-h-0 w-full min-w-0 shrink-0 flex-col md:h-full md:w-96 ${
-          isDragging ? 'opacity-80' : ''
-        }`}
+          draggable ? 'cursor-grab active:cursor-grabbing' : ''
+        } ${isDragging ? 'opacity-80' : ''}`}
       >
         <div
           role={collapsible ? 'button' : undefined}
@@ -182,7 +182,6 @@ export function BoardColumn(props: BoardColumnProps) {
                     showCreate={showCreate}
                     onCreate={onCreate}
                     dropRef={ref}
-                    isDropTarget={isDropTarget}
                   />
                 </div>
               </motion.div>
@@ -199,7 +198,6 @@ export function BoardColumn(props: BoardColumnProps) {
               showCreate={showCreate}
               onCreate={onCreate}
               dropRef={ref}
-              isDropTarget={isDropTarget}
             />
           </div>
         )}

@@ -26,6 +26,7 @@ export function SortableTaskCard(props: SortableTaskCardProps) {
       task={task}
       showPriority={showPriority}
       nodeRef={ref}
+      draggable
       dragging={isDragging}
     />
   );

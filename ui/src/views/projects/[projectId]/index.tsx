@@ -1,7 +1,6 @@
 import { PointerActivationConstraints } from '@dnd-kit/dom';
-import { move } from '@dnd-kit/helpers';
 import { DragDropProvider, KeyboardSensor, PointerSensor } from '@dnd-kit/react';
-import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react';
+import type { DragEndEvent } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
 import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
@@ -40,12 +39,13 @@ import {
   OPEN_NO_SECTION_GROUP,
   buildBoard,
   dropPosition,
+  groupContaining,
   groupKey,
-  isNoSectionGroupKey,
   itemsFromGroups,
   planSectionMove,
   sectionIdFromGroup,
 } from './board';
+import { useTaskDragPreview } from './useTaskDragPreview';
 
 const defaultActivationConstraints = PointerSensor.defaults.activationConstraints;
 
@@ -69,7 +69,6 @@ export function BoardPage() {
   const replica = useReplica();
   const [searchParams, setSearchParams] = useSearchParams();
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
-  const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
   const isDesktop = useIsDesktop();
   const { collapsedSections, toggleCollapsedSection } = useCollapsedSections(projectId ?? '');
 
@@ -84,6 +83,18 @@ export function BoardPage() {
 
   const filter = useMemo(() => parseTaskFilter(searchParams), [searchParams]);
 
+  const narrowing = isTaskFilterNarrowing(filter);
+  const canReorder =
+    optimisticProject !== undefined &&
+    optimisticProject.task_sorting_mode === 'manual' &&
+    !narrowing;
+  const baseGroups = useMemo(
+    () => (optimisticProject === undefined ? [] : buildBoard(optimisticProject, filter)),
+    [optimisticProject, filter],
+  );
+  const { dragItems, handleDragStart, handleDragMove, handleDragOver, resetDragPreview } =
+    useTaskDragPreview(baseGroups, canReorder);
+
   if (optimisticProject === undefined) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
@@ -95,9 +106,6 @@ export function BoardPage() {
   }
 
   const project = optimisticProject;
-  const narrowing = isTaskFilterNarrowing(filter);
-  const canReorder = project.task_sorting_mode === 'manual' && !narrowing;
-  const baseGroups = buildBoard(project, filter);
   const tasksById = new Map(project.tasks.map((task) => [task.id, task]));
 
   const groups = baseGroups.map((group) => {
@@ -195,50 +203,12 @@ export function BoardPage() {
     }
   }
 
-  function handleDragStart(event: DragStartEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
-      return;
-    }
-    setDragItems(itemsFromGroups(baseGroups));
-  }
-
-  function handleDragOver(event: DragOverEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
-      return;
-    }
-
-    const sourceId = event.operation.source?.id;
-    if (sourceId === undefined) {
-      return;
-    }
-
-    // Match main: let React own the cross-section move; keep dnd-kit's
-    // optimistic DOM sorting disabled so React is the single reorder path.
-    event.preventDefault();
-    setDragItems((current) => {
-      if (current === null) {
-        return current;
-      }
-
-      const next = move(current, event);
-      const origin = groupContaining(current, String(sourceId));
-      const destination = groupContaining(next, String(sourceId));
-
-      // The No Section columns are read-only targets: tasks may leave them but
-      // must not be dropped into either one from another group.
-      if (origin !== destination && destination !== null && isNoSectionGroupKey(destination)) {
-        return current;
-      }
-
-      return next;
-    });
-  }
-
   function handleDragEnd(event: DragEndEvent) {
     const { source } = event.operation;
+    const finalItems = dragItems;
+    resetDragPreview();
 
     if (event.canceled) {
-      setDragItems(null);
       return;
     }
 
@@ -257,9 +227,6 @@ export function BoardPage() {
       }
       return;
     }
-
-    const finalItems = dragItems;
-    setDragItems(null);
 
     if (!canReorder || finalItems === null) {
       return;
@@ -321,11 +288,12 @@ export function BoardPage() {
               aria-label="Task sorting"
               className="w-40 md:w-56"
               value={project.task_sorting_mode}
-              onChange={(event) =>
-                void handleProjectUpdate({
-                  task_sorting_mode: event.target.value as TaskSortingMode,
-                })
-              }
+              onChange={(event) => {
+                const mode = SORTING_MODES.find((option) => option.value === event.target.value);
+                if (mode !== undefined) {
+                  void handleProjectUpdate({ task_sorting_mode: mode.value });
+                }
+              }}
             >
               {SORTING_MODES.map((mode) => (
                 <option key={mode.value} value={mode.value}>
@@ -389,6 +357,7 @@ export function BoardPage() {
           KeyboardSensor,
         ]}
         onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
@@ -465,13 +434,4 @@ function applyPendingMove(project: ProjectSnapshot, pending: PendingMove): Proje
         : task,
     ),
   };
-}
-
-function groupContaining(items: Record<string, string[]>, taskId: string): string | null {
-  for (const [key, ids] of Object.entries(items)) {
-    if (ids.includes(taskId)) {
-      return key;
-    }
-  }
-  return null;
 }
