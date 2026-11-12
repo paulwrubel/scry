@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Note } from '@/generated/Note';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
@@ -8,6 +9,7 @@ import {
   createNoteOperation,
   deleteNoteOperation,
   deleteTaskOperation,
+  externalIdentityOperation,
   moveTaskOperation,
   nextTaskPosition,
   setTaskStateOperation,
@@ -33,6 +35,16 @@ export function useTaskMutations(task: Task, project: ProjectSnapshot) {
       }
     },
     [project, replica, task],
+  );
+
+  const saveExternalIdentity = useCallback(
+    async (identity: ExternalIdentity | null) => {
+      const operation = externalIdentityOperation(task, identity);
+      if (operation !== null) {
+        await replica.enqueue(operation);
+      }
+    },
+    [replica, task],
   );
 
   const toggleState = useCallback(async () => {
@@ -73,5 +85,13 @@ export function useTaskMutations(task: Task, project: ProjectSnapshot) {
     [replica],
   );
 
-  return { saveFields, toggleState, deleteTask, createNote, updateNote, deleteNote };
+  return {
+    saveFields,
+    saveExternalIdentity,
+    toggleState,
+    deleteTask,
+    createNote,
+    updateNote,
+    deleteNote,
+  };
 }

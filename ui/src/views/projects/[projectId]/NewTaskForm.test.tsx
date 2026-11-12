@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import { NewTaskForm } from './NewTaskForm';
 
 afterEach(cleanup);
+
+const inputLabel = 'Task title or GitHub URL';
 
 describe('NewTaskForm', () => {
   it('adds a trimmed task and keeps the form open', async () => {
@@ -11,15 +14,56 @@ describe('NewTaskForm', () => {
     render(<NewTaskForm onCreate={onCreate} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
-    fireEvent.change(screen.getByLabelText('Task title'), {
+    fireEvent.change(screen.getByLabelText(inputLabel), {
       target: { value: '  New task  ' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     await waitFor(() => {
-      expect(onCreate).toHaveBeenCalledWith('New task');
+      expect(onCreate).toHaveBeenCalledWith('New task', null);
     });
-    expect((screen.getByLabelText('Task title') as HTMLInputElement).value).toBe('');
+    // Testing Library returns HTMLElement, but the accessible label identifies a text input
+    expect((screen.getByLabelText(inputLabel) as HTMLInputElement).value).toBe('');
+  });
+
+  it('creates a placeholder task from a GitHub URL', async () => {
+    const onCreate = vi.fn(async (_title: string, _identity: ExternalIdentity | null) => undefined);
+    render(<NewTaskForm onCreate={onCreate} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(inputLabel), {
+      target: { value: 'https://github.com/acme/widgets/pull/123/files' },
+    });
+    const add = screen.getByRole('button', { name: 'Add' });
+    await waitFor(() => {
+      expect(add.hasAttribute('disabled')).toBe(false);
+    });
+    fireEvent.click(add);
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledWith('acme/widgets#123', {
+        provider: 'github',
+        owner: 'acme',
+        repo: 'widgets',
+        number: 123,
+      });
+      // Testing Library returns HTMLElement, but the accessible label identifies a text input
+      expect((screen.getByLabelText(inputLabel) as HTMLInputElement).value).toBe('');
+    });
+  });
+
+  it('disables Add for a non-GitHub URL', async () => {
+    render(<NewTaskForm onCreate={vi.fn(async () => undefined)} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(inputLabel), {
+      target: { value: 'https://gitlab.com/acme/widgets/issues/123' },
+    });
+
+    expect(
+      await screen.findByText('Only GitHub issue or pull request URLs are supported.'),
+    ).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Add' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('puts Cancel before Add in the footer', () => {
@@ -36,7 +80,7 @@ describe('NewTaskForm', () => {
     render(<NewTaskForm onCreate={vi.fn(async () => undefined)} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
-    fireEvent.change(screen.getByLabelText('Task title'), {
+    fireEvent.change(screen.getByLabelText(inputLabel), {
       target: { value: 'Discard me' },
     });
     fireEvent.pointerDown(document.body);
@@ -49,7 +93,7 @@ describe('NewTaskForm', () => {
     render(<NewTaskForm onCreate={vi.fn(async () => undefined)} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
-    fireEvent.pointerDown(screen.getByLabelText('Task title'));
+    fireEvent.pointerDown(screen.getByLabelText(inputLabel));
 
     expect(screen.getByRole('button', { name: 'Add' })).toBeDefined();
   });

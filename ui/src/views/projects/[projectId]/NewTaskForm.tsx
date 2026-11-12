@@ -1,14 +1,23 @@
 import { Button } from 'flowbite-react';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import { useAppForm } from '@/hooks/useAppForm';
+import { parseTaskInput } from '@/utils/taskInput';
 
 const schema = z.object({
-  title: z.string().trim().min(1, 'A task needs a title.'),
+  task: z
+    .string()
+    .trim()
+    .min(1, 'Enter a task title or GitHub URL.')
+    .refine(
+      (value) => parseTaskInput(value) !== null,
+      'Only GitHub issue or pull request URLs are supported.',
+    ),
 });
 
-type NewTaskFormProps = {
-  onCreate: (title: string) => Promise<void>;
+export type NewTaskFormProps = {
+  onCreate: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>;
 };
 
 export function NewTaskForm(props: NewTaskFormProps) {
@@ -19,12 +28,16 @@ export function NewTaskForm(props: NewTaskFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
 
   const form = useAppForm({
-    defaultValues: { title: '' },
+    defaultValues: { task: '' },
     validators: { onChange: schema, onMount: schema },
     onSubmit: async ({ value }) => {
-      const submitted = value.title;
-      await onCreate(submitted.trim());
-      if (form.getFieldValue('title') === submitted) {
+      const submitted = value.task;
+      const parsed = parseTaskInput(value.task);
+      if (parsed === null) {
+        return;
+      }
+      await onCreate(parsed.title, parsed.externalIdentity);
+      if (form.getFieldValue('task') === submitted) {
         form.reset();
         void form.validate('change');
       }
@@ -81,12 +94,12 @@ export function NewTaskForm(props: NewTaskFormProps) {
       onKeyDown={handleKeyDown}
       className="flex shrink-0 flex-col gap-2"
     >
-      <form.AppField name="title">
+      <form.AppField name="task">
         {(field) => (
           <field.FormTextField
-            label="Task title"
+            label="Task title or GitHub URL"
             hideLabel
-            placeholder="Task title"
+            placeholder="Task title or GitHub URL"
             sizing="sm"
             autoFocus
             inputRef={inputRef}

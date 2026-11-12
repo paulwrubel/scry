@@ -107,6 +107,20 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
   - Manage with `scry automation list`, `scry automation set --when <trigger> <action>`, and `scry automation remove --when <trigger>`. Use `--section <name>` with `--when enters`, and `--move-to <name>` for the action target.
 - **Active project** works like a kubectl context. `scry project use <name>` verifies the name with the server and stores the choice per machine in `$XDG_STATE_HOME/scry/state.toml` (or the `state_file` config option), not in the backend. Task commands use it unless you pass `-p/--project`.
 
+## External task links
+
+A task can carry an optional GitHub identity: `external_identity` records the owner, repository, and issue or PR number, and `external_metadata` holds the last fetched GitHub title, description, and lifecycle. Both are ordinary task fields, so they survive export, import, and snapshot round-trips.
+
+GitHub's title, description, and lifecycle are mirrored into the metadata. While the metadata marks a field as externally owned, Scry treats it as read-only. The server never contacts GitHub.
+
+- `scry add --external-url https://github.com/owner/repo/issues/123` creates a linked task. The title is optional and defaults to an `owner/repo#123` placeholder.
+- `scry update <handle> --external-url <url>` links or relinks a task; `scry update <handle> --clear-external-url` unlinks it.
+- `scry sync --provider github` reads the snapshot, queries GitHub through an authenticated `gh`, and writes the metadata back as normal task updates.
+
+Run `scry sync` from cron or launchd. The web UI shows the last-synced time and any error. Syncing is one-way: closing a task in Scry never closes the GitHub item.
+
+The web UI accepts a GitHub issue or PR URL in the add box. The detail view can add, change, or remove the link, and the linked title, description, and lifecycle controls are read-only.
+
 ## Docker
 
 Each release publishes `ghcr.io/paulwrubel/scry`, tagged with its version and `latest`. The image is runtime-only: the web UI is embedded in the `scry-api` binary at build time, and the image runs `scry-api`, which serves the API and web UI on port 8000. Create a `scry.toml` pointing at your PostgreSQL server:

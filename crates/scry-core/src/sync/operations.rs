@@ -1,6 +1,7 @@
 use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
 use crate::models::{
-    AutomationAction, AutomationTrigger, Color, Priority, Tags, TaskSortingMode, TaskState,
+    AutomationAction, AutomationTrigger, Color, ExternalIdentity, ExternalMetadata, Priority, Tags,
+    TaskSortingMode, TaskState,
 };
 use crate::position::Position;
 use chrono::{DateTime, Utc};
@@ -174,9 +175,14 @@ pub enum OperationKind {
         state: TaskState,
         tags: Tags,
         created_at: DateTime<Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        external_identity: Option<ExternalIdentity>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        external_metadata: Option<Box<ExternalMetadata>>,
     },
-    /// Covers title, description, priority, tags, and state: section and position
-    /// belong to [`OperationKind::MoveTask`].
+    /// Covers title, description, priority, tags, state, external identity, and
+    /// external metadata: section and position belong to
+    /// [`OperationKind::MoveTask`].
     /// `description` distinguishes all three states: `None` leaves it,
     /// `Some(None)` clears it, `Some(Some(text))` sets it.
     /// `Some(tags)` sets them, empty `Tags` clears them, `None` leaves them.
@@ -193,6 +199,20 @@ pub enum OperationKind {
         priority: Option<Priority>,
         tags: Option<Tags>,
         state: Option<TaskState>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(type = "ExternalIdentity | null"))]
+        external_identity: Option<Option<ExternalIdentity>>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(type = "ExternalMetadata | null"))]
+        external_metadata: Option<Option<Box<ExternalMetadata>>>,
     },
     /// `section_id` and `position` are always set together; `None` means the
     /// task moves to No section.
@@ -302,6 +322,144 @@ mod tests {
             serde_json::to_value(&operation).unwrap().get("description"),
             Some(&json!("hello"))
         );
+    }
+
+    #[test]
+    fn absent_external_task_fields_are_unchanged() {
+        let operation: Operation = serde_json::from_value(update_task_op(None, false)).unwrap();
+        let OperationKind::UpdateTask {
+            external_identity,
+            external_metadata,
+            ..
+        } = &operation.kind
+        else {
+            panic!("expected UpdateTask");
+        };
+        assert!(external_identity.is_none());
+        assert!(external_metadata.is_none());
+    }
+
+    #[test]
+    fn null_external_task_fields_clear() {
+        let mut value = update_task_op(None, false);
+        value["external_identity"] = json!(null);
+        value["external_metadata"] = json!(null);
+
+        let operation: Operation = serde_json::from_value(value).unwrap();
+        let OperationKind::UpdateTask {
+            external_identity,
+            external_metadata,
+            ..
+        } = &operation.kind
+        else {
+            panic!("expected UpdateTask");
+        };
+        assert_eq!(external_identity, &Some(None));
+        assert_eq!(external_metadata, &Some(None));
+    }
+
+    #[test]
+    fn object_external_task_fields_set() {
+        let mut value = update_task_op(None, false);
+        value["external_identity"] = json!({
+            "provider": "github",
+            "owner": "acme",
+            "repo": "widgets",
+            "number": 42
+        });
+        value["external_metadata"] = json!({
+            "provider": "github",
+            "title": "Fix login",
+            "description": "Users cannot sign in",
+            "kind": "issue",
+            "state": "open",
+            "reason": "reopened",
+            "draft": false,
+            "updated_at": "2026-01-01T00:00:00Z",
+            "error": null
+        });
+
+        let operation: Operation = serde_json::from_value(value).unwrap();
+        let OperationKind::UpdateTask {
+            external_identity,
+            external_metadata,
+            ..
+        } = &operation.kind
+        else {
+            panic!("expected UpdateTask");
+        };
+        assert_eq!(
+            external_identity,
+            &Some(Some(ExternalIdentity::Github {
+                owner: "acme".to_string(),
+                repo: "widgets".to_string(),
+                number: 42,
+            }))
+        );
+        let Some(Some(metadata)) = external_metadata else {
+            panic!("expected external metadata");
+        };
+        let ExternalMetadata::Github {
+            title: Some(title),
+            state: Some(state),
+            draft: Some(false),
+            ..
+        } = metadata.as_ref()
+        else {
+            panic!("expected GitHub metadata");
+        };
+        assert_eq!(title.as_str(), "Fix login");
+        assert_eq!(state.as_str(), "open");
+    }
+
+    #[test]
+    fn external_task_fields_serialize_in_three_states() {
+        let mut operation: Operation = serde_json::from_value(update_task_op(None, false)).unwrap();
+
+        let absent = serde_json::to_value(&operation).unwrap();
+        assert!(absent.get("external_identity").is_none());
+        assert!(absent.get("external_metadata").is_none());
+
+        if let OperationKind::UpdateTask {
+            external_identity,
+            external_metadata,
+            ..
+        } = &mut operation.kind
+        {
+            *external_identity = Some(None);
+            *external_metadata = Some(None);
+        }
+        let cleared = serde_json::to_value(&operation).unwrap();
+        assert_eq!(cleared.get("external_identity"), Some(&json!(null)));
+        assert_eq!(cleared.get("external_metadata"), Some(&json!(null)));
+
+        let identity = ExternalIdentity::Github {
+            owner: "acme".to_string(),
+            repo: "widgets".to_string(),
+            number: 42,
+        };
+        let metadata = ExternalMetadata::Github {
+            title: Some("Fix login".to_string()),
+            description: None,
+            kind: Some("issue".to_string()),
+            state: Some("open".to_string()),
+            reason: None,
+            draft: Some(false),
+            updated_at: None,
+            error: None,
+        };
+        if let OperationKind::UpdateTask {
+            external_identity,
+            external_metadata,
+            ..
+        } = &mut operation.kind
+        {
+            *external_identity = Some(Some(identity.clone()));
+            *external_metadata = Some(Some(Box::new(metadata.clone())));
+        }
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized.get("external_identity"), Some(&json!(identity)));
+        assert_eq!(serialized.get("external_metadata"), Some(&json!(metadata)));
     }
 
     #[test]

@@ -6,7 +6,8 @@ use scry_core::error::StorageError;
 use scry_core::ids::{AutomationId, Handle, NoteId, ProjectId, SectionId, TaskId};
 use scry_core::models::{
     Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Entity, EntityType,
-    Note, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
+    ExternalIdentity, ExternalMetadata, Note, Priority, Project, ProjectSnapshot, Section, Tags,
+    Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
 use scry_core::store::Store;
@@ -159,6 +160,8 @@ struct TaskRow {
     state: String,
     tags: String,
     created_at: DateTime<Utc>,
+    external_identity: Option<serde_json::Value>,
+    external_metadata: Option<serde_json::Value>,
 }
 
 impl TryFrom<TaskRow> for Task {
@@ -176,6 +179,21 @@ impl TryFrom<TaskRow> for Task {
             }
         };
 
+        let external_identity: Option<ExternalIdentity> = row
+            .external_identity
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| {
+                StorageError::Database(format!("invalid task external_identity: {error}"))
+            })?;
+        let external_metadata: Option<ExternalMetadata> = row
+            .external_metadata
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| {
+                StorageError::Database(format!("invalid task external_metadata: {error}"))
+            })?;
+
         Ok(Task {
             id: row.id,
             project_id: row.project_id,
@@ -189,6 +207,8 @@ impl TryFrom<TaskRow> for Task {
             state,
             tags: Tags::from(row.tags.as_str()),
             created_at: row.created_at,
+            external_identity,
+            external_metadata,
         })
     }
 }
@@ -298,10 +318,27 @@ impl Store for PostgresStore {
     ) -> Result<Task, StorageError> {
         let mut conn = self.connection(tx).await?;
 
+        let external_identity = task
+            .external_identity
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!("failed to serialize task external_identity: {}", e))
+            })?;
+        let external_metadata = task
+            .external_metadata
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!("failed to serialize task external_metadata: {}", e))
+            })?;
+
         match sqlx::query!(
             r#"
-                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, tags, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, tags, created_at, external_identity, external_metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
             task.id,
             task.project_id,
@@ -313,6 +350,8 @@ impl Store for PostgresStore {
             task.state.as_str(),
             task.tags.to_string(),
             task.created_at,
+            external_identity,
+            external_metadata,
         )
         .execute(&mut *conn)
         .await
@@ -347,7 +386,9 @@ impl Store for PostgresStore {
                     position,
                     state,
                     tags,
-                    created_at
+                    created_at,
+                    external_identity,
+                    external_metadata
                 FROM tasks
                 WHERE id = $1
             "#,
@@ -429,7 +470,9 @@ impl Store for PostgresStore {
                     position,
                     state,
                     tags,
-                    created_at
+                    created_at,
+                    external_identity,
+                    external_metadata
                 FROM tasks
                 WHERE project_id = $1
                 ORDER BY position ASC, id ASC
@@ -470,7 +513,9 @@ impl Store for PostgresStore {
                     position,
                     state,
                     tags,
-                    created_at
+                    created_at,
+                    external_identity,
+                    external_metadata
                 FROM tasks
                 WHERE section_id = $1
                 ORDER BY position ASC, id ASC
@@ -498,11 +543,28 @@ impl Store for PostgresStore {
     ) -> Result<Task, StorageError> {
         let mut conn = self.connection(tx).await?;
 
+        let external_identity = task
+            .external_identity
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!("failed to serialize task external_identity: {}", e))
+            })?;
+        let external_metadata = task
+            .external_metadata
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!("failed to serialize task external_metadata: {}", e))
+            })?;
+
         match sqlx::query!(
             r#"
                 UPDATE tasks
-                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7
-                WHERE id = $8
+                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7, external_identity = $8, external_metadata = $9
+                WHERE id = $10
             "#,
             &task.title,
             task.description.as_deref(),
@@ -511,6 +573,8 @@ impl Store for PostgresStore {
             task.position.as_str(),
             task.state.as_str(),
             task.tags.to_string(),
+            external_identity,
+            external_metadata,
             task.id,
         )
         .execute(&mut *conn)

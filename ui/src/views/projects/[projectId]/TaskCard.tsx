@@ -1,9 +1,11 @@
 import { Badge } from 'flowbite-react';
 import { useRef } from 'react';
 import type { CSSProperties } from 'react';
+import { SiGithub } from 'react-icons/si';
 import { Link, useLocation } from 'react-router-dom';
 import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
+import { externalError, githubUrl } from '@/utils/external';
 import { tagBadgeStyle } from '@/utils/tagColor';
 
 const PRIORITY_DOT_CLASS: Record<Priority, string> = {
@@ -32,9 +34,27 @@ export function TaskCard(props: TaskCardProps) {
   const moved = useRef(false);
 
   const closed = task.state === 'closed';
-  const hasBadges = task.tags.length > 0;
+  const url = githubUrl(task);
+  const githubError = externalError(task);
+  const hasBadges = task.tags.length > 0 || githubError !== null;
   const description = task.description?.trim() ?? '';
   const hasDescription = description.length > 0;
+
+  const titleLink = (
+    <Link
+      to={`/projects/${projectId}/tasks/${task.id}${location.search}`}
+      draggable={false}
+      className="flex w-fit max-w-full min-w-0 items-center gap-2"
+    >
+      <span
+        className={`min-w-0 text-sm wrap-break-word hover:text-blue-400 hover:underline ${
+          closed ? 'text-faint line-through' : ''
+        }`}
+      >
+        {task.title}
+      </span>
+    </Link>
+  );
 
   return (
     <div
@@ -68,19 +88,25 @@ export function TaskCard(props: TaskCardProps) {
     >
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 items-start justify-between gap-2">
-          <Link
-            to={`/projects/${projectId}/tasks/${task.id}${location.search}`}
-            draggable={false}
-            className="flex w-fit max-w-full min-w-0 items-center gap-2"
-          >
-            <span
-              className={`min-w-0 text-sm wrap-break-word hover:text-blue-400 hover:underline ${
-                closed ? 'text-faint line-through' : ''
-              }`}
-            >
-              {task.title}
-            </span>
-          </Link>
+          {url === null ? (
+            titleLink
+          ) : (
+            <div className="flex min-w-0 items-center gap-1.5">
+              {titleLink}
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                draggable={false}
+                aria-label="Open GitHub item"
+                title="Open GitHub item"
+                className="text-muted hover:text-zinc-200"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <SiGithub aria-hidden="true" className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          )}
           {showPriority ? (
             <span
               role="img"
@@ -102,6 +128,7 @@ export function TaskCard(props: TaskCardProps) {
                 {tag}
               </Badge>
             ))}
+            {githubError === null ? null : <Badge color="failure">GitHub: {githubError}</Badge>}
           </div>
         ) : null}
       </div>

@@ -549,6 +549,8 @@ pub fn plan_import(
                     state: incoming_task.state,
                     tags: incoming_task.tags.clone(),
                     created_at: incoming_task.created_at,
+                    external_identity: incoming_task.external_identity.clone(),
+                    external_metadata: incoming_task.external_metadata.clone().map(Box::new),
                 }));
                 plan.report.tasks += 1;
                 continue;
@@ -581,6 +583,8 @@ pub fn plan_import(
                         priority,
                         tags,
                         state,
+                        external_identity: None,
+                        external_metadata: None,
                     }));
                 }
 
@@ -610,6 +614,8 @@ pub fn plan_import(
                 state: incoming_task.state,
                 tags: incoming_task.tags.clone(),
                 created_at: incoming_task.created_at,
+                external_identity: incoming_task.external_identity.clone(),
+                external_metadata: incoming_task.external_metadata.clone().map(Box::new),
             }));
             plan.report.tasks += 1;
         }
@@ -919,7 +925,10 @@ fn remap_automation_action(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Note, Priority, Project, Section, Tags, Task, TaskSortingMode, TaskState};
+    use crate::models::{
+        ExternalIdentity, ExternalMetadata, Note, Priority, Project, Section, Tags, Task,
+        TaskSortingMode, TaskState,
+    };
     use crate::position::Position;
     use chrono::{DateTime, Utc};
     use serde_json::json;
@@ -976,6 +985,8 @@ mod tests {
             state: TaskState::Open,
             tags: Tags::default(),
             created_at: at(),
+            external_identity: None,
+            external_metadata: None,
         }
     }
 
@@ -1118,12 +1129,65 @@ mod tests {
             original.projects[0].automations
         );
     }
+
+    #[test]
+    fn linked_task_round_trips_external_fields() {
+        let identity = ExternalIdentity::Github {
+            owner: "acme".to_string(),
+            repo: "widgets".to_string(),
+            number: 42,
+        };
+        let metadata = ExternalMetadata::Github {
+            title: Some("Widget".to_string()),
+            description: Some("A widget".to_string()),
+            kind: Some("issue".to_string()),
+            state: Some("closed".to_string()),
+            reason: Some("completed".to_string()),
+            draft: None,
+            updated_at: Some(at()),
+            error: None,
+        };
+
+        let mut document = full_project_doc(PROJECT_ID, "alpha");
+        document.tasks[0].external_identity = Some(identity.clone());
+        document.tasks[0].external_metadata = Some(metadata.clone());
+
+        let original = snapshot_file(vec![document]);
+        let serialized = serde_json::to_string(&original).expect("snapshot file should serialize");
+        let parsed = parse_file(&serialized).expect("current version should parse");
+
+        let task = &parsed.projects[0].tasks[0];
+        assert_eq!(task.external_identity.as_ref(), Some(&identity));
+        assert_eq!(task.external_metadata.as_ref(), Some(&metadata));
+    }
+
+    #[test]
+    fn old_task_json_defaults_external_fields() {
+        let task: Task = serde_json::from_value(json!({
+            "id": TASK_ID,
+            "project_id": PROJECT_ID,
+            "title": "old",
+            "description": null,
+            "priority": "medium",
+            "section_id": null,
+            "position": "a0",
+            "state": "open",
+            "tags": [],
+            "created_at": "1970-01-01T00:00:00Z"
+        }))
+        .expect("a task without external fields should deserialize");
+
+        assert!(task.external_identity.is_none());
+        assert!(task.external_metadata.is_none());
+    }
 }
 
 #[cfg(test)]
 mod import_tests {
     use super::*;
-    use crate::models::{Priority, ProjectSnapshot, TaskSortingMode, TaskState};
+    use crate::models::{
+        ExternalIdentity, ExternalMetadata, Priority, ProjectSnapshot, TaskSortingMode, TaskState,
+    };
     use crate::position::Position;
     use chrono::{DateTime, Utc};
 
@@ -1169,6 +1233,8 @@ mod import_tests {
             state: TaskState::Open,
             tags: Tags::default(),
             created_at: at(),
+            external_identity: None,
+            external_metadata: None,
         }
     }
 
@@ -1235,6 +1301,59 @@ mod import_tests {
                 )
             })
             .count()
+    }
+
+    #[test]
+    fn created_tasks_carry_external_fields() {
+        let project_id = uuid(1);
+        let section_id = uuid(2);
+        let task_id = uuid(3);
+
+        let identity = ExternalIdentity::Github {
+            owner: "acme".to_string(),
+            repo: "widgets".to_string(),
+            number: 42,
+        };
+        let metadata = ExternalMetadata::Github {
+            title: Some("Widget".to_string()),
+            description: Some("A widget".to_string()),
+            kind: Some("issue".to_string()),
+            state: Some("open".to_string()),
+            reason: None,
+            draft: Some(false),
+            updated_at: Some(at()),
+            error: None,
+        };
+
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![section(section_id, project_id, "todo")],
+            vec![Task {
+                external_identity: Some(identity.clone()),
+                external_metadata: Some(metadata.clone()),
+                ..task(task_id, project_id, Some(section_id), "task")
+            }],
+            vec![],
+        )]);
+
+        let state = import_state(vec![], vec![], vec![], vec![]);
+        let plan = plan_import(&incoming, &state, ImportMode::Merge).unwrap();
+
+        let (created_identity, created_metadata) = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::CreateTask {
+                    external_identity,
+                    external_metadata,
+                    ..
+                } => Some((external_identity, external_metadata)),
+                _ => None,
+            })
+            .expect("import should create the task");
+
+        assert_eq!(created_identity.as_ref(), Some(&identity));
+        assert_eq!(created_metadata.as_deref(), Some(&metadata));
     }
 
     #[test]

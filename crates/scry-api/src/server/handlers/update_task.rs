@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use scry_core::ids::Handle;
-use scry_core::models::{Priority, SectionId, Tags};
+use scry_core::models::{ExternalIdentity, ExternalMetadata, Priority, SectionId, Tags, TaskState};
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -22,6 +22,19 @@ pub struct UpdateTaskRequest {
     pub new_section: Option<String>,
     #[serde(default)]
     pub clear_section: bool,
+    pub state: Option<TaskState>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "scry_core::sync::double_option"
+    )]
+    pub external_identity: Option<Option<ExternalIdentity>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "scry_core::sync::double_option"
+    )]
+    pub external_metadata: Option<Option<ExternalMetadata>>,
 }
 
 /// Update a task from the request body.
@@ -63,6 +76,9 @@ pub async fn update_task(
         priority: body.priority,
         tags: body.tags.map(Tags::from),
         section,
+        state: body.state,
+        external_identity: body.external_identity,
+        external_metadata: body.external_metadata,
     };
 
     match state.service.update_task_by_id(task.id, input).await {

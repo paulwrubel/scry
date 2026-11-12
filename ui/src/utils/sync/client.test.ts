@@ -470,6 +470,8 @@ function task(overrides: Partial<Task> = {}): Task {
     state: 'open',
     tags: [],
     created_at: '2026-01-01T00:00:01Z',
+    external_identity: null,
+    external_metadata: null,
     ...overrides,
   };
 }

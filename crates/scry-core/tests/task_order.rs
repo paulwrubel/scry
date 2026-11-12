@@ -17,6 +17,8 @@ fn task(id: u128, title: &str, position: &str, priority: Priority) -> Task {
         state: TaskState::Open,
         tags: Tags::default(),
         created_at: DateTime::<Utc>::from_timestamp(0, 0).expect("valid timestamp"),
+        external_identity: None,
+        external_metadata: None,
     }
 }
 

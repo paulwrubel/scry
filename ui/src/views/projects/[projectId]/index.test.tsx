@@ -71,6 +71,8 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     state: 'open',
     tags: [],
     created_at: CREATED_AT,
+    external_identity: null,
+    external_metadata: null,
     ...overrides,
   };
 }
@@ -549,7 +551,7 @@ describe('BoardPage', () => {
     renderBoard(project, enqueue);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
-    fireEvent.change(screen.getByLabelText('Task title'), {
+    fireEvent.change(screen.getByLabelText('Task title or GitHub URL'), {
       target: { value: '  New task  ' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -637,7 +639,7 @@ describe('BoardPage', () => {
     expect(screen.getByRole('heading', { name: 'Open (No Section)' })).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
-    fireEvent.change(screen.getByLabelText('Task title'), {
+    fireEvent.change(screen.getByLabelText('Task title or GitHub URL'), {
       target: { value: 'New loose task' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -854,7 +856,7 @@ describe('mobile quick add', () => {
     expect(addButtons).toHaveLength(1);
 
     fireEvent.click(addButtons[0]);
-    fireEvent.change(screen.getByLabelText('Task title'), {
+    fireEvent.change(screen.getByLabelText('Task title or GitHub URL'), {
       target: { value: 'Mobile task' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));

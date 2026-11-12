@@ -1,8 +1,8 @@
 use chrono::DateTime;
 use chrono::Utc;
 use scry_core::models::{
-    Note, Priority, Project, ProjectId, ProjectSnapshot, Section, SectionId, Tags, Task, TaskId,
-    TaskSortingMode, TaskState,
+    ExternalIdentity, ExternalMetadata, Note, Priority, Project, ProjectId, ProjectSnapshot,
+    Section, SectionId, Tags, Task, TaskId, TaskSortingMode, TaskState,
 };
 use scry_core::ordering::compare_tasks;
 use scry_core::position::Position;
@@ -38,6 +38,8 @@ pub struct TaskWithNotes {
     pub(crate) tags: Tags,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) notes: Vec<Note>,
+    pub(crate) external_identity: Option<ExternalIdentity>,
+    pub(crate) external_metadata: Option<ExternalMetadata>,
 }
 
 impl TaskWithNotes {
@@ -54,6 +56,8 @@ impl TaskWithNotes {
             tags: task.tags.clone(),
             created_at: task.created_at,
             notes: notes.into_iter().collect(),
+            external_identity: task.external_identity.clone(),
+            external_metadata: task.external_metadata.clone(),
         }
     }
 }
@@ -77,6 +81,8 @@ impl From<&TaskWithNotes> for Task {
             state: value.state,
             tags: value.tags.clone(),
             created_at: value.created_at,
+            external_identity: value.external_identity.clone(),
+            external_metadata: value.external_metadata.clone(),
         }
     }
 }
@@ -267,6 +273,8 @@ mod tests {
             state,
             tags: Tags::default(),
             created_at: ts("2026-01-01T00:00:00Z"),
+            external_identity: None,
+            external_metadata: None,
         }
     }
 

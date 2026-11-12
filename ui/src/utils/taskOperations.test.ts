@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Note } from '@/generated/Note';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
@@ -7,6 +8,7 @@ import {
   createTaskOperation,
   deleteNoteOperation,
   deleteTaskOperation,
+  externalIdentityOperation,
   moveTaskOperation,
   nextTaskPosition,
   setTaskStateOperation,
@@ -44,6 +46,8 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     state: 'open',
     tags: [],
     created_at: CREATED_AT,
+    external_identity: null,
+    external_metadata: null,
     ...overrides,
   };
 }
@@ -119,6 +123,23 @@ describe('createTaskOperation', () => {
     expect(operation.kind === 'create_task' && operation.id).not.toBe(operation.operation_id);
     expect(operation.kind === 'create_task' && operation.created_at).toMatch(/Z$/);
   });
+
+  it('includes the external identity when provided', () => {
+    const identity: ExternalIdentity = {
+      provider: 'github',
+      owner: 'acme',
+      repo: 'widgets',
+      number: 123,
+    };
+
+    const operation = createTaskOperation(projectSnapshot(), null, 'New task', identity);
+
+    expect(operation).toMatchObject({
+      kind: 'create_task',
+      external_identity: identity,
+      external_metadata: null,
+    });
+  });
 });
 
 describe('updateTaskOperation', () => {
@@ -191,6 +212,47 @@ describe('updateTaskOperation', () => {
     });
 
     expect(operation).toMatchObject({ tags: ['three', 'two'], title: null });
+  });
+});
+
+describe('externalIdentityOperation', () => {
+  const identity: ExternalIdentity = {
+    provider: 'github',
+    owner: 'acme',
+    repo: 'widgets',
+    number: 123,
+  };
+
+  it('links an unlinked task', () => {
+    const operation = externalIdentityOperation(task({ id: TASK_ID, title: 'Title' }), identity);
+
+    expect(operation).toMatchObject({
+      kind: 'update_task',
+      id: TASK_ID,
+      external_identity: identity,
+      external_metadata: null,
+    });
+  });
+
+  it('clears a linked task', () => {
+    const linked = task({ id: TASK_ID, title: 'Title', external_identity: identity });
+
+    expect(externalIdentityOperation(linked, null)).toMatchObject({
+      kind: 'update_task',
+      id: TASK_ID,
+      external_identity: null,
+      external_metadata: null,
+    });
+  });
+
+  it('returns null when the identity is unchanged', () => {
+    const linked = task({ id: TASK_ID, title: 'Title', external_identity: identity });
+
+    expect(externalIdentityOperation(linked, { ...identity })).toBeNull();
+  });
+
+  it('returns null for an unlinked task with no identity', () => {
+    expect(externalIdentityOperation(task({ id: TASK_ID, title: 'Title' }), null)).toBeNull();
   });
 });
 

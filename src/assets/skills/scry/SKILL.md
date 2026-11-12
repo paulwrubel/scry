@@ -22,18 +22,18 @@ license: MIT
 
 ## Task commands
 
-| Command                                                                                                                                              | Purpose                    |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `scry --json add <title> [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>]`                       | Add a task                 |
-| `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                           | List tasks                 |
-| `scry --json show <id\|handle>`                                                                                                                      | Show a task with its notes |
-| `scry --json move <id\|handle> [<section>] [--no-section] [--top\|--first\|--bottom\|--last\|--before <id>\|--after <id>]`                           | Move or place a task       |
-| `scry --json update <id\|handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section]` | Update task properties     |
-| `scry --json close <id\|handle>...`                                                                                                                  | Close tasks                |
-| `scry --json open <id\|handle>...`                                                                                                                   | Reopen tasks               |
-| `scry --json duplicate <id\|handle>`                                                                                                                 | Duplicate a task           |
-| `scry --json note add <id\|handle> <contents>`                                                                                                       | Add a note to a task       |
-| `scry --json delete <id\|handle>`                                                                                                                    | Delete a task permanently  |
+| Command                                                                                                                                                                                           | Purpose                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `scry --json add [<title>] [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>] [--external-url <url>]`                                           | Add a task                 |
+| `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                                                                        | List tasks                 |
+| `scry --json show <id\|handle>`                                                                                                                                                                   | Show a task with its notes |
+| `scry --json move <id\|handle> [<section>] [--no-section] [--top\|--first\|--bottom\|--last\|--before <id>\|--after <id>]`                                                                        | Move or place a task       |
+| `scry --json update <id\|handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section] [--external-url <url>\|--clear-external-url]` | Update task properties     |
+| `scry --json close <id\|handle>...`                                                                                                                                                               | Close tasks                |
+| `scry --json open <id\|handle>...`                                                                                                                                                                | Reopen tasks               |
+| `scry --json duplicate <id\|handle>`                                                                                                                                                              | Duplicate a task           |
+| `scry --json note add <id\|handle> <contents>`                                                                                                                                                    | Add a note to a task       |
+| `scry --json delete <id\|handle>`                                                                                                                                                                 | Delete a task permanently  |
 
 Task arguments accept a full UUID or a unique handle prefix of at least 4 hex characters
 (case-insensitive, dashes optional at the canonical UUID positions).
@@ -49,6 +49,15 @@ Sections are optional. `--section` must match an existing section name exactly, 
 one; without either, the task goes to No section. `--no-section` clears a task's section. `move` appends by
 default; add `--top`/`--first`, `--bottom`/`--last`, `--before <id>`, or `--after <id>` to place it instead.
 Order is only visible when the project uses `manual` sorting. `close` and `open` never move a task.
+
+## External links
+
+`--external-url` takes a GitHub issue or PR URL. With `add`, the title is optional and defaults to
+`owner/repo#123`. `update --clear-external-url` unlinks the task.
+
+`scry --json sync [--provider github]` mirrors GitHub's title, description, and state into the task.
+It requires an authenticated `gh` and is one-way. A linked task's title, description, and lifecycle are
+read-only; moving, priority, tags, and notes still work.
 
 ## Project and section commands
 
@@ -80,11 +89,11 @@ with no sections. `project update --sort` accepts `alphabetical`, `alphabetical-
 
 ## Automation commands
 
-| Command | Purpose |
-| --- | --- |
-| `scry --json automation list` | List a project's automations |
-| `scry --json automation set --when <trigger> [--section <name>] <action>` | Create or update a rule |
-| `scry --json automation remove --when <trigger> [--section <name>]` | Remove a rule |
+| Command                                                                   | Purpose                      |
+| ------------------------------------------------------------------------- | ---------------------------- |
+| `scry --json automation list`                                             | List a project's automations |
+| `scry --json automation set --when <trigger> [--section <name>] <action>` | Create or update a rule      |
+| `scry --json automation remove --when <trigger> [--section <name>]`       | Remove a rule                |
 
 Triggers are `created`, `closed`, `opened`, and `enters` (with `--section`). Actions are `--move-to <section>`,
 `--no-section`, `--close`, `--open`, or `--priority <level>`. `set` updates the existing rule for a trigger.

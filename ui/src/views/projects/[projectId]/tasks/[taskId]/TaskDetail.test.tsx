@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
+import type { ExternalMetadata } from '@/generated/ExternalMetadata';
 import type { Note } from '@/generated/Note';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
@@ -15,6 +17,28 @@ import { TaskDetail } from './TaskDetail';
 const PROJECT_ID = 'project-1';
 const TASK_ID = 'task-1';
 const CREATED_AT = '2026-01-01T00:00:00Z';
+
+const GITHUB_IDENTITY: ExternalIdentity = {
+  provider: 'github',
+  owner: 'acme',
+  repo: 'widgets',
+  number: 123,
+};
+
+function metadata(overrides: Partial<ExternalMetadata> = {}): ExternalMetadata {
+  return {
+    provider: 'github',
+    title: 'Issue title',
+    description: 'Issue body',
+    kind: 'issue',
+    state: 'open',
+    reason: null,
+    draft: false,
+    updated_at: '2026-02-01T12:00:00Z',
+    error: null,
+    ...overrides,
+  };
+}
 
 function section(id: string, name: string, position: string): Section {
   return {
@@ -37,6 +61,8 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     state: 'open',
     tags: [],
     created_at: CREATED_AT,
+    external_identity: null,
+    external_metadata: null,
     ...overrides,
   };
 }
@@ -378,5 +404,55 @@ describe('TaskDetail', () => {
         expect.objectContaining({ kind: 'delete_note', id: 'note-1' }),
       );
     });
+  });
+
+  it('locks synced fields and shows the GitHub link', () => {
+    renderTask(
+      projectSnapshot({
+        tasks: [
+          task({
+            id: TASK_ID,
+            title: 'Write tests',
+            description: 'Details',
+            section_id: 'backlog',
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata(),
+          }),
+        ],
+      }),
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.queryByRole('button', { name: 'Edit title' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit description' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Close task' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'acme/widgets#123' }).getAttribute('href')).toBe(
+      'https://github.com/acme/widgets/issues/123',
+    );
+    expect(screen.getByText(/Last synced/)).toBeDefined();
+  });
+
+  it('shows the GitHub error badge', () => {
+    renderTask(
+      projectSnapshot({
+        tasks: [
+          task({
+            id: TASK_ID,
+            title: 'Write tests',
+            section_id: 'backlog',
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata({
+              title: null,
+              description: null,
+              state: null,
+              error: 'not_found',
+            }),
+          }),
+        ],
+      }),
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.getByText('GitHub: not_found')).toBeDefined();
   });
 });

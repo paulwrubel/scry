@@ -552,6 +552,8 @@ function extraTask(id: string, title: string): Task {
     state: 'open',
     tags: [],
     created_at: '2026-01-01T00:00:05Z',
+    external_identity: null,
+    external_metadata: null,
   };
 }
 
@@ -602,6 +604,8 @@ function sampleState(): ClientState {
     state: 'open',
     tags: ['alpha', 'beta'],
     created_at: '2026-01-01T00:00:02Z',
+    external_identity: null,
+    external_metadata: null,
   };
   const taskB: Task = {
     id: TASK_B_ID,
@@ -614,6 +618,8 @@ function sampleState(): ClientState {
     state: 'closed',
     tags: [],
     created_at: '2026-01-01T00:00:03Z',
+    external_identity: null,
+    external_metadata: null,
   };
   const note: Note = {
     id: NOTE_ID,
@@ -668,6 +674,8 @@ function orderedState(): ClientState {
     state: 'open',
     tags: ['first'],
     created_at: '2026-03-01T00:00:02Z',
+    external_identity: null,
+    external_metadata: null,
   };
   const taskB: Task = {
     id: 'aaa-task',
@@ -680,6 +688,8 @@ function orderedState(): ClientState {
     state: 'closed',
     tags: [],
     created_at: '2026-03-01T00:00:03Z',
+    external_identity: null,
+    external_metadata: null,
   };
   const note: Note = {
     id: 'zzz-note',

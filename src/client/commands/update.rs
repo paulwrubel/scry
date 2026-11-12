@@ -1,6 +1,7 @@
 //! `update`.
 
-use scry_core::models::{Priority, Section, SectionId, Task};
+use scry_core::github::parse_github_identity;
+use scry_core::models::{ExternalIdentity, ExternalMetadata, Priority, Section, SectionId, Task};
 use serde::Serialize;
 
 use crate::client::{Client, TaskDetails};
@@ -17,6 +18,8 @@ pub struct UpdateTask<'a> {
     pub section: Option<&'a str>,
     pub new_section: Option<&'a str>,
     pub no_section: bool,
+    pub external_url: Option<&'a str>,
+    pub clear_external_url: bool,
 }
 
 /// Update a task.
@@ -32,11 +35,29 @@ pub async fn update(
         && input.section.is_none()
         && input.new_section.is_none()
         && !input.no_section
+        && input.external_url.is_none()
+        && !input.clear_external_url
     {
         return Err(AppError::Usage(
             "No flags provided. Use 'scry update --help' for available options.".to_string(),
         ));
     }
+
+    let (external_identity, external_metadata) =
+        match (input.external_url, input.clear_external_url) {
+            (Some(url), false) => {
+                let identity = parse_github_identity(url)
+                    .map_err(|error| AppError::Usage(error.to_string()))?;
+                (Some(Some(identity)), Some(None))
+            }
+            (None, true) => (Some(None), Some(None)),
+            (None, false) => (None, None),
+            (Some(_), true) => {
+                return Err(AppError::Usage(
+                    "specify at most one of --external-url or --clear-external-url".to_string(),
+                ));
+            }
+        };
 
     let detail: TaskDetails = client
         .get_json(&["tasks", input.handle], &[("include_handle", "true")])
@@ -76,6 +97,10 @@ pub async fn update(
         #[serde(skip_serializing_if = "Option::is_none")]
         new_section: Option<&'a str>,
         clear_section: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        external_identity: Option<Option<ExternalIdentity>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        external_metadata: Option<Option<ExternalMetadata>>,
     }
 
     let body = UpdateTaskRequest {
@@ -86,6 +111,8 @@ pub async fn update(
         section_id,
         new_section: input.new_section,
         clear_section: input.no_section,
+        external_identity,
+        external_metadata,
     };
 
     let task: Task = client

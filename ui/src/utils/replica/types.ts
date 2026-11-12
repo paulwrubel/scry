@@ -3,7 +3,7 @@ import type { Operation } from '@/generated/Operation';
 
 export const REPLICA_DATABASE = 'scry-replica';
 export const REPLICA_DATABASE_VERSION = 2;
-export const CONFIRMED_SCHEMA_VERSION = 2;
+export const CONFIRMED_SCHEMA_VERSION = 3;
 
 export type ReplicaOptions = {
   databaseName?: string;

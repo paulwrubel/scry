@@ -84,6 +84,9 @@ pub use section_set_color::section_set_color;
 mod show;
 pub use show::show;
 
+mod sync;
+pub use sync::{Provider, sync};
+
 mod update;
 pub use update::{UpdateTask, update};
 

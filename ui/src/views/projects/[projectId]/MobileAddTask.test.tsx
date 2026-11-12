@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import { MobileAddTask } from './MobileAddTask';
 
-function renderTask(onCreate: (title: string) => Promise<void>) {
+const inputLabel = 'Task title or GitHub URL';
+
+function renderTask(
+  onCreate: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>,
+) {
   render(<MobileAddTask onCreate={onCreate} />);
 }
 
@@ -20,41 +25,66 @@ afterEach(() => {
 
 describe('MobileAddTask', () => {
   it('opens the sheet and adds a task without closing', async () => {
-    const onCreate = vi.fn(async (_title: string) => undefined);
+    const onCreate = vi.fn(async (_title: string, _identity: ExternalIdentity | null) => undefined);
     renderTask(onCreate);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
-    fireEvent.change(screen.getByLabelText('Task title'), {
+    fireEvent.change(screen.getByLabelText(inputLabel), {
       target: { value: '  Mobile task  ' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     await waitFor(() => {
-      expect(onCreate).toHaveBeenCalledWith('Mobile task');
+      expect(onCreate).toHaveBeenCalledWith('Mobile task', null);
     });
-    expect((screen.getByLabelText('Task title') as HTMLInputElement).value).toBe('');
+    // Testing Library returns HTMLElement, but the accessible label identifies a text input
+    expect((screen.getByLabelText(inputLabel) as HTMLInputElement).value).toBe('');
     expect(screen.getByRole('button', { name: 'Add' })).toBeDefined();
   });
 
+  it('creates a placeholder task from a GitHub URL', async () => {
+    const onCreate = vi.fn(async (_title: string, _identity: ExternalIdentity | null) => undefined);
+    renderTask(onCreate);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(inputLabel), {
+      target: { value: 'https://github.com/acme/widgets/issues/123' },
+    });
+    const add = screen.getByRole('button', { name: 'Add' });
+    await waitFor(() => {
+      expect(add.hasAttribute('disabled')).toBe(false);
+    });
+    fireEvent.click(add);
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledWith('acme/widgets#123', {
+        provider: 'github',
+        owner: 'acme',
+        repo: 'widgets',
+        number: 123,
+      });
+    });
+  });
+
   it('shows an error and keeps the sheet open when creation fails', async () => {
-    const onCreate = vi.fn(async (_title: string) => {
+    const onCreate = vi.fn(async (_title: string, _identity: ExternalIdentity | null) => {
       throw new Error('offline');
     });
     renderTask(onCreate);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
-    fireEvent.change(screen.getByLabelText('Task title'), { target: { value: 'Task' } });
+    fireEvent.change(screen.getByLabelText(inputLabel), { target: { value: 'Task' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     expect(await screen.findByText('Could not add this task.')).toBeDefined();
-    expect(screen.getByLabelText('Task title')).toBeDefined();
+    expect(screen.getByLabelText(inputLabel)).toBeDefined();
   });
 
   it('closes the sheet on Escape', () => {
     renderTask(vi.fn(async () => undefined));
 
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
-    fireEvent.change(screen.getByLabelText('Task title'), { target: { value: 'Task' } });
+    fireEvent.change(screen.getByLabelText(inputLabel), { target: { value: 'Task' } });
 
     fireEvent.keyDown(document, { key: 'Escape' });
 

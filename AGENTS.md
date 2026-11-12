@@ -18,6 +18,7 @@
 - **Runtime config is not the compile DB.** `database_url` comes only from `scry.toml` / `scry.secret.toml` (or `--config`/`--secrets`), with no DB environment override and no auto-created file; a missing URL is a startup error, and only `postgres://`/`postgresql://` is accepted. Point it at a scratch database when running locally. TLS relies on sqlx's `tls-rustls` feature; do not remove it.
 - **Corporate TLS needs native roots.** The CLI's reqwest client (`src/client/http.rs`) is built with `rustls-tls-native-roots` and `system-proxy` in `Cargo.toml`, so TLS validates against the operating system trust store — managed machines trust their intercepting CA (ZScaler) — and macOS system proxy settings are honoured. `SSL_CERT_FILE` and `SSL_CERT_DIR` override which roots load. Plain `rustls-tls` means webpki-roots only and silently breaks those machines, so neither feature may be dropped when the client is refactored.
 - **Migrations auto-run on every startup.** They are embedded via `sqlx::migrate!("../../migrations")`. Add reversible pairs with `sqlx migrate add -r <name>`, fill both files, and keep new migrations additive and backward-compatible. There is no legacy data path: a database from before the UUID/position rewrite must be recreated. The snapshot import format is version 1 with no upgrade path.
+- **External task links are CLI-synced metadata.** `external_identity` and `external_metadata` are nullable JSONB columns on `tasks`. `crates/scry-core/src/github.rs` owns URL parsing and state mapping, and `ui/src/contract/github.ts` is its hand-maintained TypeScript mirror. Only `src/client/commands/sync.rs` talks to GitHub: `scry sync` shells out to an authenticated `gh`, and the server never contacts GitHub. `ProjectService` enforces the per-field lock, so changing a linked task's title, description, or state requires the update to include `external_metadata`.
 
 ## Architecture map
 
@@ -34,7 +35,7 @@
 ## Cross-language contract
 
 - Wire types derive `ts_rs::TS` behind the `ts` feature. `just generate-bindings` targets `scry-api`, writing and formatting `ui/src/generated/` (machine-owned — never hand-edit); `just check-bindings` fails on drift.
-- The TypeScript ports in `ui/src/contract/` (`positions`, `handles`, `task-order`, `op-replay`) mirror Rust and are maintained by hand. There is no shared fixture system: when changing one side, update the other implementation and its tests in the same change.
+- The TypeScript ports in `ui/src/contract/` (`positions`, `handles`, `task-order`, `op-replay`, `github`) mirror Rust and are maintained by hand. There is no shared fixture system: when changing one side, update the other implementation and its tests in the same change.
 - `crates/scry-core/src/sync/replay.rs` is the reference client model (confirmed state plus outbox replay); the server never calls it, and `ui/src/contract/op-replay.ts` mirrors it.
 
 ## Release

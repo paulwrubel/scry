@@ -83,6 +83,42 @@ impl TaskState {
     }
 }
 
+/// Identifies a GitHub issue or pull request that a task tracks.
+///
+/// It deliberately does not record whether the number is an issue or a pull,
+/// because the number namespace is shared and the kind can change server-side.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "provider", rename_all = "snake_case")]
+pub enum ExternalIdentity {
+    Github {
+        owner: String,
+        repo: String,
+        number: u64,
+    },
+}
+
+/// The most recent GitHub metadata fetched for an [`ExternalIdentity`].
+///
+/// `kind` is `"issue"` or `"pull"` and `state` is `"open"`, `"closed"`, or
+/// `"merged"`; both are kept as plain strings because GitHub owns those
+/// vocabularies and new values must not break deserialization.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "provider", rename_all = "snake_case")]
+pub enum ExternalMetadata {
+    Github {
+        title: Option<String>,
+        description: Option<String>,
+        kind: Option<String>,
+        state: Option<String>,
+        reason: Option<String>,
+        draft: Option<bool>,
+        updated_at: Option<DateTime<Utc>>,
+        error: Option<String>,
+    },
+}
+
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Tags(pub(crate) Vec<String>);
@@ -320,6 +356,8 @@ pub struct Task {
     pub state: TaskState,
     pub tags: Tags,
     pub created_at: DateTime<Utc>,
+    pub external_identity: Option<ExternalIdentity>,
+    pub external_metadata: Option<ExternalMetadata>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

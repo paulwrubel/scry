@@ -1,6 +1,7 @@
 //! `add`.
 
-use scry_core::models::{Priority, Section, SectionId};
+use scry_core::github::{parse_github_identity, placeholder_title};
+use scry_core::models::{ExternalIdentity, Priority, Section, SectionId};
 use serde::Serialize;
 
 use crate::client::{Client, TaskDetails};
@@ -13,12 +14,13 @@ use super::project_by_name;
 /// Input for the `add` command.
 pub struct AddTask<'a> {
     pub project: Option<&'a str>,
-    pub title: &'a str,
+    pub title: Option<&'a str>,
     pub description: Option<&'a str>,
     pub priority: Option<Priority>,
     pub tags: Option<&'a str>,
     pub section: Option<&'a str>,
     pub new_section: Option<&'a str>,
+    pub external_url: Option<&'a str>,
 }
 
 /// Add a task to a project.
@@ -28,6 +30,20 @@ pub async fn add(
     input: AddTask<'_>,
     output_json: bool,
 ) -> Result<(), AppError> {
+    let external_identity = input
+        .external_url
+        .map(parse_github_identity)
+        .transpose()
+        .map_err(|error| AppError::Usage(error.to_string()))?;
+
+    let title = match input.title {
+        Some(title) => title.to_string(),
+        None => external_identity
+            .as_ref()
+            .map(placeholder_title)
+            .ok_or_else(|| AppError::Usage("a title or --external-url is required".to_string()))?,
+    };
+
     let project = project_by_name(client, config, input.project).await?;
 
     let (section_id, new_section_name) = match (input.section, input.new_section) {
@@ -68,15 +84,18 @@ pub async fn add(
         section_id: Option<SectionId>,
         #[serde(skip_serializing_if = "Option::is_none")]
         new_section: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        external_identity: Option<ExternalIdentity>,
     }
 
     let body = CreateTaskRequest {
-        title: input.title,
+        title: &title,
         description: input.description,
         priority: input.priority,
         tags,
         section_id,
         new_section: new_section_name,
+        external_identity,
     };
 
     let project_id = project.id.to_string();

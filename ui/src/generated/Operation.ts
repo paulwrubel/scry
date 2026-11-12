@@ -3,6 +3,8 @@ import type { AutomationAction } from './AutomationAction';
 import type { AutomationTrigger } from './AutomationTrigger';
 import type { Color } from './Color';
 import type { ColorChange } from './ColorChange';
+import type { ExternalIdentity } from './ExternalIdentity';
+import type { ExternalMetadata } from './ExternalMetadata';
 import type { Position } from './Position';
 import type { Priority } from './Priority';
 import type { Tags } from './Tags';
@@ -65,6 +67,8 @@ export type Operation = {
       state: TaskState;
       tags: Tags;
       created_at: string;
+      external_identity?: ExternalIdentity | null;
+      external_metadata?: ExternalMetadata | null;
     }
   | {
       kind: 'update_task';
@@ -74,6 +78,8 @@ export type Operation = {
       priority: Priority | null;
       tags: Tags | null;
       state: TaskState | null;
+      external_identity?: ExternalIdentity | null;
+      external_metadata?: ExternalMetadata | null;
     }
   | { kind: 'move_task'; id: string; section_id: string | null; position: Position }
   | { kind: 'delete_task'; id: string }

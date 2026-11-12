@@ -7,6 +7,7 @@ import { Alert, Select, ToggleSwitch } from 'flowbite-react';
 import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { Color } from '@/generated/Color';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import { useCollapsedSections } from '@/hooks/useCollapsedSections';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
@@ -129,8 +130,12 @@ export function BoardPage() {
   }
   const dragDisabledReason = dragDisabledReasons.join(' and ');
 
-  async function handleCreate(sectionId: string | null, title: string) {
-    await replica.enqueue(createTaskOperation(project, sectionId, title));
+  async function handleCreate(
+    sectionId: string | null,
+    title: string,
+    externalIdentity: ExternalIdentity | null,
+  ) {
+    await replica.enqueue(createTaskOperation(project, sectionId, title, externalIdentity));
   }
 
   async function handleProjectUpdate(patch: {
@@ -399,7 +404,7 @@ export function BoardPage() {
               showPriority={project.show_priority}
               canReorder={canReorder}
               showCreate={isDesktop}
-              onCreate={(title) => handleCreate(null, title)}
+              onCreate={(title, identity) => handleCreate(null, title, identity)}
               collapsed={!isDesktop && collapsedSections.has(OPEN_NO_SECTION_GROUP)}
               onToggleCollapsed={
                 isDesktop ? undefined : () => toggleCollapsedSection(OPEN_NO_SECTION_GROUP)
@@ -444,7 +449,9 @@ export function BoardPage() {
           <NewSectionCard onAdd={handleAddSection} />
         </div>
       </DragDropProvider>
-      {isDesktop ? null : <MobileAddTask onCreate={(title) => handleCreate(null, title)} />}
+      {isDesktop ? null : (
+        <MobileAddTask onCreate={(title, identity) => handleCreate(null, title, identity)} />
+      )}
     </div>
   );
 }
