@@ -37,6 +37,7 @@ describe('MobileAddTask', () => {
     await waitFor(() => {
       expect(onCreate).toHaveBeenCalledWith('Mobile task', null);
     });
+    // Testing Library returns HTMLElement, but the accessible label identifies a text input
     expect((screen.getByLabelText(inputLabel) as HTMLInputElement).value).toBe('');
     expect(screen.getByRole('button', { name: 'Add' })).toBeDefined();
   });
@@ -49,9 +50,9 @@ describe('MobileAddTask', () => {
     fireEvent.change(screen.getByLabelText(inputLabel), {
       target: { value: 'https://github.com/acme/widgets/issues/123' },
     });
-    const add = screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement;
+    const add = screen.getByRole('button', { name: 'Add' });
     await waitFor(() => {
-      expect(add.disabled).toBe(false);
+      expect(add.hasAttribute('disabled')).toBe(false);
     });
     fireEvent.click(add);
 

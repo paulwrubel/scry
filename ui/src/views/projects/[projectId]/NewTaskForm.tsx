@@ -16,7 +16,7 @@ const schema = z.object({
     ),
 });
 
-type NewTaskFormProps = {
+export type NewTaskFormProps = {
   onCreate: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>;
 };
 

@@ -22,6 +22,7 @@ describe('NewTaskForm', () => {
     await waitFor(() => {
       expect(onCreate).toHaveBeenCalledWith('New task', null);
     });
+    // Testing Library returns HTMLElement, but the accessible label identifies a text input
     expect((screen.getByLabelText(inputLabel) as HTMLInputElement).value).toBe('');
   });
 
@@ -33,9 +34,9 @@ describe('NewTaskForm', () => {
     fireEvent.change(screen.getByLabelText(inputLabel), {
       target: { value: 'https://github.com/acme/widgets/pull/123/files' },
     });
-    const add = screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement;
+    const add = screen.getByRole('button', { name: 'Add' });
     await waitFor(() => {
-      expect(add.disabled).toBe(false);
+      expect(add.hasAttribute('disabled')).toBe(false);
     });
     fireEvent.click(add);
 
@@ -46,6 +47,7 @@ describe('NewTaskForm', () => {
         repo: 'widgets',
         number: 123,
       });
+      // Testing Library returns HTMLElement, but the accessible label identifies a text input
       expect((screen.getByLabelText(inputLabel) as HTMLInputElement).value).toBe('');
     });
   });
@@ -61,7 +63,7 @@ describe('NewTaskForm', () => {
     expect(
       await screen.findByText('Only GitHub issue or pull request URLs are supported.'),
     ).toBeDefined();
-    expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Add' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('puts Cancel before Add in the footer', () => {

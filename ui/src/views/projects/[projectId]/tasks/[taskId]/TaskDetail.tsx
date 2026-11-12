@@ -13,7 +13,7 @@ import { TaskFields } from './TaskFields';
 import { TaskHeader } from './TaskHeader';
 import { TaskMeta } from './TaskMeta';
 
-type TaskDetailProps = {
+export type TaskDetailProps = {
   project: ProjectSnapshot;
   task: Task;
   handle: string;

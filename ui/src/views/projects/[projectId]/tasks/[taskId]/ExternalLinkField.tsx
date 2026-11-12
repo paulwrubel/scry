@@ -1,10 +1,12 @@
-import { Badge, Button, TextInput } from 'flowbite-react';
+import { Badge, Button } from 'flowbite-react';
 import { useState } from 'react';
 import { HiPencil, HiTrash } from 'react-icons/hi2';
 import { SiGithub } from 'react-icons/si';
+import { z } from 'zod';
 import { parseGithubIdentity } from '@/contract/github';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Task } from '@/generated/Task';
+import { useAppForm } from '@/hooks/useAppForm';
 import {
   externalError,
   githubIdentity,
@@ -16,7 +18,17 @@ import {
 const ICON_BUTTON_CLASS =
   'text-muted inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50';
 
-type ExternalLinkFieldProps = {
+const schema = z.object({
+  url: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || parseGithubIdentity(value) !== null,
+      'Enter a valid GitHub issue or pull request URL.',
+    ),
+});
+
+export type ExternalLinkFieldProps = {
   task: Task;
   onSave: (identity: ExternalIdentity | null) => Promise<void>;
 };
@@ -31,54 +43,46 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
   const syncedAt = lastSyncedAt(task);
 
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(url ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function startEditing() {
-    setDraft(url ?? '');
-    setError(null);
-    setEditing(true);
-  }
-
-  function cancelEditing() {
-    setEditing(false);
-    setError(null);
-  }
-
-  async function save() {
-    const trimmed = draft.trim();
-
-    if (trimmed.length === 0) {
+  const form = useAppForm({
+    defaultValues: { url: url ?? '' },
+    validators: { onChange: schema, onMount: schema },
+    onSubmit: async ({ value }) => {
+      const trimmed = value.url.trim();
       setSaving(true);
       setError(null);
       try {
-        await onSave(null);
+        if (trimmed === '') {
+          await onSave(null);
+        } else {
+          const nextIdentity = parseGithubIdentity(trimmed);
+          if (nextIdentity === null) {
+            return;
+          }
+          await onSave(nextIdentity);
+        }
         setEditing(false);
       } catch {
         setError('Could not save the GitHub link.');
       } finally {
         setSaving(false);
       }
-      return;
-    }
+    },
+  });
 
-    const nextIdentity = parseGithubIdentity(trimmed);
-    if (nextIdentity === null) {
-      setError('Enter a valid GitHub issue or pull request URL.');
-      return;
-    }
-
-    setSaving(true);
+  function startEditing() {
+    form.reset();
+    form.setFieldValue('url', url ?? '');
     setError(null);
-    try {
-      await onSave(nextIdentity);
-      setEditing(false);
-    } catch {
-      setError('Could not save the GitHub link.');
-    } finally {
-      setSaving(false);
-    }
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    form.reset();
+    setError(null);
+    setEditing(false);
   }
 
   async function remove() {
@@ -96,41 +100,55 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
   if (editing) {
     return (
       <div className="flex flex-col gap-1">
-        <TextInput
-          aria-label="GitHub URL"
-          autoFocus
-          value={draft}
-          placeholder="https://github.com/owner/repo/issues/1"
-          onChange={(event) => setDraft(event.target.value)}
+        <form
+          className="flex flex-col gap-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit();
+          }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              void save();
-            } else if (event.key === 'Escape') {
+            if (event.key === 'Escape') {
               event.preventDefault();
               cancelEditing();
             }
           }}
-        />
-        <div className="flex items-center gap-2">
-          <Button
-            size="xs"
-            color="alternative"
-            aria-label="Cancel GitHub link edit"
-            disabled={saving}
-            onClick={cancelEditing}
+        >
+          <form.AppField name="url">
+            {(field) => (
+              <field.FormTextField
+                label="GitHub URL"
+                hideLabel
+                autoFocus
+                placeholder="https://github.com/owner/repo/issues/1"
+              />
+            )}
+          </form.AppField>
+          <form.Subscribe
+            selector={(state) => ({ isValid: state.isValid, isSubmitting: state.isSubmitting })}
           >
-            Cancel
-          </Button>
-          <Button
-            size="xs"
-            aria-label="Save GitHub link"
-            disabled={saving}
-            onClick={() => void save()}
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </div>
+            {({ isValid, isSubmitting }) => (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="xs"
+                  color="alternative"
+                  aria-label="Cancel GitHub link edit"
+                  disabled={saving}
+                  onClick={cancelEditing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="xs"
+                  aria-label="Save GitHub link"
+                  disabled={!isValid || isSubmitting}
+                >
+                  {saving ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            )}
+          </form.Subscribe>
+        </form>
         {error === null ? null : (
           <p className="text-danger text-sm" role="alert">
             {error}

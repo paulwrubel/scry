@@ -436,9 +436,13 @@ function applyTaskValues(task: Task, values: Record<string, unknown>): void {
     task.position = values.position;
   }
   if ('external_identity' in values) {
+    // change field values are serialized Task fields, so their JSON shape
+    // matches the generated types even though the map is untyped
     task.external_identity = values.external_identity as ExternalIdentity | null;
   }
   if ('external_metadata' in values) {
+    // change field values are serialized Task fields, so their JSON shape
+    // matches the generated types even though the map is untyped
     task.external_metadata = values.external_metadata as ExternalMetadata | null;
   }
 }
