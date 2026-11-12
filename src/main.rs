@@ -57,9 +57,15 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Add a new task
+    #[command(group(
+        clap::ArgGroup::new("task_source")
+            .required(true)
+            .multiple(true)
+            .args(["title", "external_url"])
+    ))]
     Add {
-        /// The task title
-        title: String,
+        /// The task title (optional when --external-url is provided)
+        title: Option<String>,
         /// The task description
         #[arg(long)]
         description: Option<String>,
@@ -75,6 +81,9 @@ enum Command {
         /// Create a new section for the task
         #[arg(long, conflicts_with = "section")]
         new_section: Option<String>,
+        /// Link the task to a GitHub issue or pull request
+        #[arg(long, value_name = "URL")]
+        external_url: Option<String>,
     },
     /// Move a task to a section or place it within its group
     #[command(group(
@@ -128,6 +137,12 @@ enum Command {
         /// Move the task to No section
         #[arg(long, conflicts_with_all = ["section", "new_section"])]
         no_section: bool,
+        /// Link or relink the task to a GitHub issue or pull request
+        #[arg(long, value_name = "URL", conflicts_with = "clear_external_url")]
+        external_url: Option<String>,
+        /// Remove the external identity and metadata
+        #[arg(long, conflicts_with = "external_url")]
+        clear_external_url: bool,
     },
     /// Duplicate an existing task
     Duplicate {
@@ -523,6 +538,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             tags,
             section,
             new_section,
+            external_url,
         }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::add(
@@ -530,12 +546,13 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 &config,
                 client::AddTask {
                     project: cli.project.as_deref(),
-                    title,
+                    title: title.as_deref(),
                     description: description.as_deref(),
                     priority: *priority,
                     tags: tags.as_deref(),
                     section: section.as_deref(),
                     new_section: new_section.as_deref(),
+                    external_url: external_url.as_deref(),
                 },
                 output_json,
             )
@@ -550,6 +567,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             section,
             new_section,
             no_section,
+            external_url,
+            clear_external_url,
         }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::update(
@@ -563,6 +582,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     section: section.as_deref(),
                     new_section: new_section.as_deref(),
                     no_section: *no_section,
+                    external_url: external_url.as_deref(),
+                    clear_external_url: *clear_external_url,
                 },
                 output_json,
             )
