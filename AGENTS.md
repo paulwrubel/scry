@@ -5,7 +5,7 @@
 ## Commands
 
 - `just` lists targets. `just validate` is the full local gate: builds the UI, then runs Rust test/check/clippy with default features, binding drift checks, and UI lint/prettier/type-check/Vitest. `check-bindings` depends on `generate-bindings`, which runs `prettier --write` over the whole `ui/` package, so the gate can rewrite working-tree formatting; only `ui/src/generated` is actually drift-checked.
-- Rust: `just test` (`cargo-test`), `just check`, `just clippy` (all `--workspace`). One test: `cargo test -p scry <name>`, `cargo test -p scry-api <name>`, or `cargo test -p scry-core <name>`. Keep clippy clean at `-D warnings`; CI pins Rust 1.98.1 because clippy 1.99 false-positives on `#[async_trait]`.
+- Rust: `just test` (`cargo-test`), `just check`, `just clippy` (all `--workspace`). One test: `cargo test -p scry <name>`, `cargo test -p scry-api <name>`, or `cargo test -p scry-core <name>`. Keep clippy clean at `-D warnings`; CI and release builds track stable, so a new stable can surface new lints.
 - CI variants `cargo-test-ci`, `cargo-check-ci`, and `cargo-clippy-ci` add `--no-default-features` and need no UI build. `.github/workflows/ci.yml` is currently `workflow_dispatch` only.
 - UI (from `ui/`, or via the `just` wrappers): `npm run build|lint|prettier-check|type-check|test`. One Vitest file: `npm test -- <pattern>`. Node comes from `ui/.nvmrc` (26.x); `just setup-ui-env` installs it through nvm and runs `npm install`.
 - Dev stack: `just run` (Docker app + Postgres), `just run-local` (host `scry-api` against Docker Postgres), `just run-ui` (Docker + Vite on :5173), `just run-postgres`, `just pg-down`, `just pg-reset`, `just view-logs`, `just clean`. The dev admin password is `admin` in `scry.dev-secrets.toml`.
