@@ -2,10 +2,11 @@ import { Badge } from 'flowbite-react';
 import { useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { SiGithub } from 'react-icons/si';
+import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { Link, useLocation } from 'react-router-dom';
 import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
-import { externalError, githubUrl } from '@/utils/external';
+import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/external';
 import { tagBadgeStyle } from '@/utils/tagColor';
 
 const PRIORITY_DOT_CLASS: Record<Priority, string> = {
@@ -35,26 +36,18 @@ export function TaskCard(props: TaskCardProps) {
 
   const closed = task.state === 'closed';
   const url = githubUrl(task);
+  const kind = githubKind(task);
+  const GitHubIcon = kind === 'pull' ? VscGitPullRequest : kind === 'issue' ? VscIssues : SiGithub;
+  const githubLinkLabel =
+    kind === 'pull'
+      ? 'Open GitHub pull request'
+      : kind === 'issue'
+        ? 'Open GitHub issue'
+        : 'Open GitHub item';
   const githubError = externalError(task);
   const hasBadges = task.tags.length > 0 || githubError !== null;
   const description = task.description?.trim() ?? '';
   const hasDescription = description.length > 0;
-
-  const titleLink = (
-    <Link
-      to={`/projects/${projectId}/tasks/${task.id}${location.search}`}
-      draggable={false}
-      className="flex w-fit max-w-full min-w-0 items-center gap-2"
-    >
-      <span
-        className={`min-w-0 text-sm wrap-break-word hover:text-blue-400 hover:underline ${
-          closed ? 'text-faint line-through' : ''
-        }`}
-      >
-        {task.title}
-      </span>
-    </Link>
-  );
 
   return (
     <div
@@ -88,33 +81,43 @@ export function TaskCard(props: TaskCardProps) {
     >
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 items-start justify-between gap-2">
-          {url === null ? (
-            titleLink
-          ) : (
-            <div className="flex min-w-0 items-center gap-1.5">
-              {titleLink}
+          <Link
+            to={`/projects/${projectId}/tasks/${task.id}${location.search}`}
+            draggable={false}
+            className="flex min-w-0 flex-1 items-center gap-2"
+          >
+            <span
+              className={`min-w-0 text-sm wrap-break-word hover:text-blue-400 hover:underline ${
+                closed ? 'text-faint line-through' : ''
+              }`}
+            >
+              {task.title}
+            </span>
+          </Link>
+          <div className="mt-1 flex shrink-0 items-center gap-1.5">
+            {url === null ? null : (
               <a
                 href={url}
                 target="_blank"
                 rel="noreferrer"
                 draggable={false}
-                aria-label="Open GitHub item"
-                title="Open GitHub item"
-                className="text-muted hover:text-zinc-200"
+                aria-label={githubLinkLabel}
+                title={githubLinkLabel}
+                className={`${githubIconColor(task)} hover:text-zinc-200`}
                 onClick={(event) => event.stopPropagation()}
               >
-                <SiGithub aria-hidden="true" className="h-3.5 w-3.5" />
+                <GitHubIcon aria-hidden="true" className="h-3.5 w-3.5" />
               </a>
-            </div>
-          )}
-          {showPriority ? (
-            <span
-              role="img"
-              aria-label={`${task.priority} priority`}
-              title={task.priority}
-              className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20 ${PRIORITY_DOT_CLASS[task.priority]}`}
-            />
-          ) : null}
+            )}
+            {showPriority ? (
+              <span
+                role="img"
+                aria-label={`${task.priority} priority`}
+                title={task.priority}
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20 ${PRIORITY_DOT_CLASS[task.priority]}`}
+              />
+            ) : null}
+          </div>
         </div>
         {hasDescription ? (
           <p className="text-faint line-clamp-2 text-xs wrap-break-word whitespace-pre-wrap">

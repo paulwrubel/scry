@@ -2,6 +2,7 @@ import { Badge, Button } from 'flowbite-react';
 import { useState } from 'react';
 import { HiPencil, HiTrash } from 'react-icons/hi2';
 import { SiGithub } from 'react-icons/si';
+import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { z } from 'zod';
 import { parseGithubIdentity } from '@/contract/github';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
@@ -9,7 +10,9 @@ import type { Task } from '@/generated/Task';
 import { useAppForm } from '@/hooks/useAppForm';
 import {
   externalError,
+  githubIconColor,
   githubIdentity,
+  githubKind,
   githubLabel,
   githubUrl,
   lastSyncedAt,
@@ -39,6 +42,9 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
   const identity = githubIdentity(task);
   const url = githubUrl(task);
   const label = githubLabel(task);
+  const kind = githubKind(task);
+  const KindIcon = kind === 'pull' ? VscGitPullRequest : kind === 'issue' ? VscIssues : SiGithub;
+  const kindLabel = kind === 'pull' ? 'Pull request' : kind === 'issue' ? 'Issue' : 'GitHub';
   const syncError = externalError(task);
   const syncedAt = lastSyncedAt(task);
 
@@ -170,7 +176,7 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
       ) : (
         <>
           <div className="flex min-w-0 items-center gap-2">
-            <SiGithub aria-hidden="true" className="text-muted h-4 w-4 shrink-0" />
+            <KindIcon aria-hidden="true" className={`${githubIconColor(task)} h-4 w-4 shrink-0`} />
             <a
               href={url}
               target="_blank"
@@ -179,6 +185,7 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
             >
               {label}
             </a>
+            <Badge color="gray">{kindLabel}</Badge>
             <button
               type="button"
               aria-label="Edit GitHub link"

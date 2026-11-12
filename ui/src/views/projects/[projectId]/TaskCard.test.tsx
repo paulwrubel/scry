@@ -86,7 +86,9 @@ describe('TaskCard', () => {
     );
 
     const link = screen.getByRole('link', { name: 'Task title' });
-    expect(link.nextElementSibling).toBe(screen.getByRole('img', { name: 'medium priority' }));
+    const controls = link.nextElementSibling;
+    expect(controls).not.toBeNull();
+    expect(controls?.contains(screen.getByRole('img', { name: 'medium priority' }))).toBe(true);
   });
 
   it('renders no extra description text for a null description', () => {
@@ -99,7 +101,7 @@ describe('TaskCard', () => {
     expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
-  it('renders a GitHub link for a linked task', () => {
+  it('renders a GitHub issue link for a linked task', () => {
     render(
       <MemoryRouter initialEntries={['/projects/project-1']}>
         <TaskCard
@@ -110,8 +112,84 @@ describe('TaskCard', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: 'Open GitHub item' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Open GitHub issue' }).getAttribute('href')).toBe(
       'https://github.com/acme/widgets/issues/123',
+    );
+  });
+
+  it('renders a GitHub pull request link for a linked pull request', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/project-1']}>
+        <TaskCard
+          projectId="project-1"
+          task={{
+            ...task,
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata({ kind: 'pull' }),
+          }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('link', { name: 'Open GitHub pull request' }).getAttribute('href'),
+    ).toBe('https://github.com/acme/widgets/pull/123');
+  });
+
+  it('colors the GitHub icon by external state', () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <TaskCard
+          projectId="project-1"
+          task={{
+            ...task,
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata({ state: 'open' }),
+          }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Open GitHub issue' }).className).toContain(
+      'text-green-400',
+    );
+
+    rerender(
+      <MemoryRouter>
+        <TaskCard
+          projectId="project-1"
+          task={{
+            ...task,
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata({ state: 'closed' }),
+          }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Open GitHub issue' }).className).toContain(
+      'text-purple-400',
+    );
+
+    rerender(
+      <MemoryRouter>
+        <TaskCard
+          projectId="project-1"
+          task={{
+            ...task,
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata({ kind: 'pull', state: 'closed' }),
+          }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Open GitHub pull request' }).className).toContain(
+      'text-red-400',
     );
   });
 
