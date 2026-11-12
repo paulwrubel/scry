@@ -90,6 +90,15 @@ export function itemsFromGroups(groups: BoardGroup[]): Record<string, string[]> 
   );
 }
 
+export function groupContaining(items: Record<string, string[]>, taskId: string): string | null {
+  for (const [key, ids] of Object.entries(items)) {
+    if (ids.includes(taskId)) {
+      return key;
+    }
+  }
+  return null;
+}
+
 export type TaskSlot = {
   id: string;
   /** Top edge in the column's scroll-content space. */
