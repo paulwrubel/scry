@@ -36,7 +36,7 @@ export function BoardColumnBody(props: BoardColumnBodyProps) {
       <div
         ref={dropRef}
         data-column-drag-ignore
-        className={`flex min-h-10 flex-1 flex-col gap-2 overflow-visible rounded-md pr-1 md:overflow-y-auto ${
+        className={`flex min-h-10 flex-1 cursor-default flex-col gap-2 overflow-visible rounded-md pr-1 md:overflow-y-auto ${
           isDropTarget ? 'ring-line-hover ring-1' : ''
         }`}
       >

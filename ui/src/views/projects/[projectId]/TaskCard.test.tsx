@@ -49,6 +49,16 @@ const task: Task = {
 afterEach(cleanup);
 
 describe('TaskCard', () => {
+  it('shows a grab cursor when draggable', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <TaskCard projectId="project-1" task={task} showPriority={false} draggable />
+      </MemoryRouter>,
+    );
+
+    expect(container.firstElementChild?.className).toContain('cursor-grab');
+  });
+
   it('carries the active filter query into the task link', () => {
     render(
       <MemoryRouter initialEntries={['/projects/project-1?tags=bug']}>
