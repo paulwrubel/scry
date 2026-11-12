@@ -32,8 +32,10 @@ export function BoardColumnBody(props: BoardColumnBodyProps) {
 
   return (
     <>
+      {/* Column drag starts from the header; the list and its scrollbar stay local. */}
       <div
         ref={dropRef}
+        data-column-drag-ignore
         className={`flex min-h-10 flex-1 flex-col gap-2 overflow-visible rounded-md pr-1 md:overflow-y-auto ${
           isDropTarget ? 'ring-line-hover ring-1' : ''
         }`}
