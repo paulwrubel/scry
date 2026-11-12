@@ -131,7 +131,8 @@ mod tests {
 mod export_bindings {
     use scry_core::models::{
         Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, EntityType,
-        Note, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskSortingMode, TaskState,
+        ExternalIdentity, ExternalMetadata, Note, Priority, Project, ProjectSnapshot, Section,
+        Tags, Task, TaskSortingMode, TaskState,
     };
     use scry_core::position::Position;
     use scry_core::snapshot::Snapshot;
@@ -172,6 +173,8 @@ mod export_bindings {
         Project::export_all(&config).expect("failed to export Project");
         Section::export_all(&config).expect("failed to export Section");
         Task::export_all(&config).expect("failed to export Task");
+        ExternalIdentity::export_all(&config).expect("failed to export ExternalIdentity");
+        ExternalMetadata::export_all(&config).expect("failed to export ExternalMetadata");
         Note::export_all(&config).expect("failed to export Note");
         Automation::export_all(&config).expect("failed to export Automation");
         AutomationTrigger::export_all(&config).expect("failed to export AutomationTrigger");

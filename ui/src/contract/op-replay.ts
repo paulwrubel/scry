@@ -2,6 +2,8 @@ import type { Automation } from '../generated/Automation';
 import type { AutomationAction } from '../generated/AutomationAction';
 import type { Change } from '../generated/Change';
 import type { Color } from '../generated/Color';
+import type { ExternalIdentity } from '../generated/ExternalIdentity';
+import type { ExternalMetadata } from '../generated/ExternalMetadata';
 import type { Note } from '../generated/Note';
 import type { Operation } from '../generated/Operation';
 import type { Priority } from '../generated/Priority';
@@ -141,6 +143,8 @@ function applyOperation(state: ClientState, operation: Operation): void {
         state: operation.state,
         tags: operation.tags,
         created_at: operation.created_at,
+        external_identity: operation.external_identity ?? null,
+        external_metadata: operation.external_metadata ?? null,
       };
       const snapshot = findProject(state, task.project_id);
       if (snapshot) {
@@ -167,6 +171,12 @@ function applyOperation(state: ClientState, operation: Operation): void {
       }
       if (operation.state !== undefined && operation.state !== null) {
         task.state = operation.state;
+      }
+      if (operation.external_identity !== undefined) {
+        task.external_identity = operation.external_identity;
+      }
+      if (operation.external_metadata !== undefined) {
+        task.external_metadata = operation.external_metadata;
       }
       return;
     }
@@ -424,6 +434,12 @@ function applyTaskValues(task: Task, values: Record<string, unknown>): void {
   }
   if (typeof values.position === 'string') {
     task.position = values.position;
+  }
+  if ('external_identity' in values) {
+    task.external_identity = values.external_identity as ExternalIdentity | null;
+  }
+  if ('external_metadata' in values) {
+    task.external_metadata = values.external_metadata as ExternalMetadata | null;
   }
 }
 

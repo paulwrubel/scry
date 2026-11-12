@@ -32,6 +32,8 @@ function projectSnapshot(): ProjectSnapshot {
         state: 'open',
         tags: [],
         created_at: CREATED_AT,
+        external_identity: null,
+        external_metadata: null,
       },
     ],
     notes: [],

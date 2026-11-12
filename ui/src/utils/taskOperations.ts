@@ -44,6 +44,8 @@ export function createTaskOperation(
     state: 'open',
     tags: [],
     created_at: new Date().toISOString(),
+    external_identity: null,
+    external_metadata: null,
   };
 }
 
