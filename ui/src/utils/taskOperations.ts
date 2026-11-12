@@ -1,4 +1,5 @@
 import { keyBetween } from '@/contract/positions';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Note } from '@/generated/Note';
 import type { Operation } from '@/generated/Operation';
 import type { Priority } from '@/generated/Priority';
@@ -29,6 +30,7 @@ export function createTaskOperation(
   project: ProjectSnapshot,
   sectionId: string | null,
   title: string,
+  externalIdentity: ExternalIdentity | null = null,
 ): Operation {
   return {
     operation_id: newId(),
@@ -44,7 +46,7 @@ export function createTaskOperation(
     state: 'open',
     tags: [],
     created_at: new Date().toISOString(),
-    external_identity: null,
+    external_identity: externalIdentity,
     external_metadata: null,
   };
 }

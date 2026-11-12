@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Note } from '@/generated/Note';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
@@ -120,6 +121,23 @@ describe('createTaskOperation', () => {
     });
     expect(operation.kind === 'create_task' && operation.id).not.toBe(operation.operation_id);
     expect(operation.kind === 'create_task' && operation.created_at).toMatch(/Z$/);
+  });
+
+  it('includes the external identity when provided', () => {
+    const identity: ExternalIdentity = {
+      provider: 'github',
+      owner: 'acme',
+      repo: 'widgets',
+      number: 123,
+    };
+
+    const operation = createTaskOperation(projectSnapshot(), null, 'New task', identity);
+
+    expect(operation).toMatchObject({
+      kind: 'create_task',
+      external_identity: identity,
+      external_metadata: null,
+    });
   });
 });
 

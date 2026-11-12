@@ -4,11 +4,20 @@ import type { DeepPartial } from 'flowbite-react/types';
 import { useEffect, useRef, useState } from 'react';
 import { HiPlus } from 'react-icons/hi2';
 import { z } from 'zod';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import { useAppForm } from '@/hooks/useAppForm';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
+import { parseTaskInput } from '@/utils/taskInput';
 
 const schema = z.object({
-  title: z.string().trim().min(1, 'A task needs a title.'),
+  task: z
+    .string()
+    .trim()
+    .min(1, 'Enter a task title or GitHub URL.')
+    .refine(
+      (value) => parseTaskInput(value) !== null,
+      'Only GitHub issue or pull request URLs are supported.',
+    ),
 });
 
 const sheetTheme: DeepPartial<DrawerTheme> = {
@@ -24,7 +33,7 @@ const sheetTheme: DeepPartial<DrawerTheme> = {
 };
 
 export type MobileAddTaskProps = {
-  onCreate: (title: string) => Promise<void>;
+  onCreate: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>;
 };
 
 export function MobileAddTask(props: MobileAddTaskProps) {
@@ -36,15 +45,19 @@ export function MobileAddTask(props: MobileAddTaskProps) {
   const bottomInset = useVisualViewportInset();
 
   const form = useAppForm({
-    defaultValues: { title: '' },
+    defaultValues: { task: '' },
     validators: { onChange: schema, onMount: schema },
     listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
-      const submitted = value.title;
+      const submitted = value.task;
+      const parsed = parseTaskInput(value.task);
+      if (parsed === null) {
+        return;
+      }
       setError(null);
       try {
-        await onCreate(submitted.trim());
-        if (form.getFieldValue('title') === submitted) {
+        await onCreate(parsed.title, parsed.externalIdentity);
+        if (form.getFieldValue('task') === submitted) {
           form.reset();
           void form.validate('change');
         }
@@ -97,12 +110,12 @@ export function MobileAddTask(props: MobileAddTaskProps) {
             className="flex items-center gap-2"
           >
             <div className="min-w-0 flex-1">
-              <form.AppField name="title">
+              <form.AppField name="task">
                 {(field) => (
                   <field.FormTextField
-                    label="Task title"
+                    label="Task title or GitHub URL"
                     hideLabel
-                    placeholder="Task title"
+                    placeholder="Task title or GitHub URL"
                     inputRef={inputRef}
                   />
                 )}

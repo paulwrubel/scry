@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Task } from '@/generated/Task';
 import { NewTaskForm } from './NewTaskForm';
 import { SortableTaskCard } from './SortableTaskCard';
@@ -11,7 +12,7 @@ export type BoardColumnBodyProps = {
   showPriority: boolean;
   canReorder: boolean;
   showCreate: boolean;
-  onCreate?: (title: string) => Promise<void>;
+  onCreate?: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>;
   dropRef: ComponentProps<'div'>['ref'];
   isDropTarget: boolean;
 };

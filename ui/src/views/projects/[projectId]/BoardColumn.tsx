@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { HiChevronDown, HiChevronUp, HiLockClosed, HiTrash } from 'react-icons/hi2';
 import { RenamableLabel } from '@/components/RenamableLabel';
 import type { Color } from '@/generated/Color';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Task } from '@/generated/Task';
 import { BoardColumnBody } from './BoardColumnBody';
 import { DeleteSectionModal } from './DeleteSectionModal';
@@ -25,7 +26,7 @@ export type BoardColumnProps = {
   blockingAutomations?: readonly string[];
   onRename?: (name: string) => void;
   onDelete?: () => void;
-  onCreate?: (title: string) => Promise<void>;
+  onCreate?: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>;
   showCreate?: boolean;
   onColorChange?: (color: Color | null) => void;
   nodeRef?: (element: HTMLDivElement | null) => void;

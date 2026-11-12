@@ -1,5 +1,6 @@
 import { useSortable } from '@dnd-kit/react/sortable';
 import type { Color } from '@/generated/Color';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import { automationReferencesSection, describeAutomation } from '@/utils/automationOperations';
@@ -17,7 +18,11 @@ export type SortableBoardColumnProps = {
   showCreate: boolean;
   collapsed: boolean;
   onToggleCollapsed?: () => void;
-  onCreate: (sectionId: string, title: string) => Promise<void>;
+  onCreate: (
+    sectionId: string,
+    title: string,
+    externalIdentity: ExternalIdentity | null,
+  ) => Promise<void>;
   onRename: (sectionId: string, name: string) => void;
   onColorChange: (sectionId: string, color: Color | null) => void;
   onDelete: (sectionId: string) => void;
@@ -70,7 +75,7 @@ export function SortableBoardColumn(props: SortableBoardColumnProps) {
       onRename={(name) => onRename(section.id, name)}
       onColorChange={(color) => onColorChange(section.id, color)}
       onDelete={() => onDelete(section.id)}
-      onCreate={(title) => onCreate(section.id, title)}
+      onCreate={(title, identity) => onCreate(section.id, title, identity)}
     />
   );
 }
