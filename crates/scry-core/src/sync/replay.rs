@@ -198,6 +198,8 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             priority,
             tags,
             state: task_state,
+            external_identity,
+            external_metadata,
         } => {
             if let Some(task) = find_task_mut(state, *id) {
                 if let Some(title) = title {
@@ -214,6 +216,12 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(task_state) = task_state {
                     task.state = *task_state;
+                }
+                if let Some(identity) = external_identity {
+                    task.external_identity = identity.clone();
+                }
+                if let Some(metadata) = external_metadata {
+                    task.external_metadata = metadata.as_deref().cloned();
                 }
             }
         }
@@ -459,6 +467,12 @@ fn apply_task_values(task: &mut Task, values: &serde_json::Value) {
         && let Ok(state) = serde_json::from_value::<TaskState>(state.clone())
     {
         task.state = state;
+    }
+    if let Some(identity) = values.get("external_identity") {
+        task.external_identity = serde_json::from_value(identity.clone()).ok();
+    }
+    if let Some(metadata) = values.get("external_metadata") {
+        task.external_metadata = serde_json::from_value(metadata.clone()).ok();
     }
     if let Some(section_id) = values.get("section_id") {
         task.section_id = section_id

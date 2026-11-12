@@ -583,6 +583,8 @@ pub fn plan_import(
                         priority,
                         tags,
                         state,
+                        external_identity: None,
+                        external_metadata: None,
                     }));
                 }
 

@@ -114,6 +114,9 @@ pub struct TaskPatch {
     pub priority: Option<Priority>,
     pub tags: Option<Tags>,
     pub section: SectionInput,
+    pub state: Option<TaskState>,
+    pub external_identity: Option<Option<ExternalIdentity>>,
+    pub external_metadata: Option<Option<ExternalMetadata>>,
 }
 
 /// A task after a create, duplicate, or move.
@@ -354,6 +357,9 @@ impl ProjectService {
             || patch.description.is_some()
             || patch.priority.is_some()
             || patch.tags.is_some()
+            || patch.state.is_some()
+            || patch.external_identity.is_some()
+            || patch.external_metadata.is_some()
         {
             let description = patch
                 .description
@@ -364,7 +370,11 @@ impl ProjectService {
                 description,
                 priority: patch.priority,
                 tags: patch.tags,
-                state: None,
+                state: patch.state,
+                external_identity: patch.external_identity,
+                external_metadata: patch
+                    .external_metadata
+                    .map(|metadata| metadata.map(Box::new)),
             };
             // apply exactly the op's fields to the returned model
             task_field_updates(&mut task, &kind);
@@ -469,6 +479,8 @@ impl ProjectService {
                 priority: None,
                 tags: None,
                 state: Some(task.state),
+                external_identity: None,
+                external_metadata: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
@@ -490,6 +502,8 @@ impl ProjectService {
                 priority: None,
                 tags: None,
                 state: Some(task.state),
+                external_identity: None,
+                external_metadata: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
@@ -2460,6 +2474,8 @@ fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldValues {
             priority,
             tags,
             state,
+            external_identity,
+            external_metadata,
             ..
         } => {
             if let Some(title) = title {
@@ -2481,6 +2497,14 @@ fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldValues {
             if let Some(state) = state {
                 task.state = *state;
                 fields.insert("state".into(), json!(state));
+            }
+            if let Some(identity) = external_identity {
+                task.external_identity = identity.clone();
+                fields.insert("external_identity".into(), json!(identity));
+            }
+            if let Some(metadata) = external_metadata {
+                task.external_metadata = metadata.as_deref().cloned();
+                fields.insert("external_metadata".into(), json!(metadata));
             }
         }
         OperationKind::MoveTask {
@@ -2555,6 +2579,8 @@ fn update_task_state_operation(id: TaskId, state: TaskState) -> OperationKind {
         priority: None,
         tags: None,
         state: Some(state),
+        external_identity: None,
+        external_metadata: None,
     }
 }
 
@@ -2566,6 +2592,8 @@ fn update_task_priority_operation(id: TaskId, priority: Priority) -> OperationKi
         priority: Some(priority),
         tags: None,
         state: None,
+        external_identity: None,
+        external_metadata: None,
     }
 }
 
@@ -2925,6 +2953,8 @@ mod tests {
             priority: None,
             tags: None,
             state: None,
+            external_identity: None,
+            external_metadata: None,
         };
 
         let fields = task_field_updates(&mut task, &op);
@@ -2952,6 +2982,8 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                external_identity: None,
+                external_metadata: None,
             },
         );
         let fields = task_field_updates(
@@ -2963,11 +2995,78 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                external_identity: None,
+                external_metadata: None,
             },
         );
 
         assert_eq!(task.title, "second");
         assert_eq!(fields["title"], json!("second"));
+    }
+
+    fn github_metadata() -> ExternalMetadata {
+        ExternalMetadata::Github {
+            title: Some("Fix login".to_string()),
+            description: Some("Users cannot sign in".to_string()),
+            kind: Some("issue".to_string()),
+            state: Some("open".to_string()),
+            reason: Some("reopened".to_string()),
+            draft: Some(false),
+            updated_at: Some(Utc::now()),
+            error: None,
+        }
+    }
+
+    #[test]
+    fn update_task_sets_and_clears_external_fields() {
+        let mut task = task("t", None);
+        let id = task.id;
+        let identity = ExternalIdentity::Github {
+            owner: "acme".to_string(),
+            repo: "widgets".to_string(),
+            number: 42,
+        };
+        let metadata = github_metadata();
+
+        let fields = task_field_updates(
+            &mut task,
+            &OperationKind::UpdateTask {
+                id,
+                title: None,
+                description: None,
+                priority: None,
+                tags: None,
+                state: None,
+                external_identity: Some(Some(identity.clone())),
+                external_metadata: Some(Some(Box::new(metadata.clone()))),
+            },
+        );
+
+        assert_eq!(task.external_identity, Some(identity.clone()));
+        assert_eq!(task.external_metadata, Some(metadata.clone()));
+        let fields = fields.as_object().expect("the field map is an object");
+        assert_eq!(fields["external_identity"], json!(identity));
+        assert_eq!(fields["external_metadata"], json!(metadata));
+
+        let fields = task_field_updates(
+            &mut task,
+            &OperationKind::UpdateTask {
+                id,
+                title: None,
+                description: None,
+                priority: None,
+                tags: None,
+                state: None,
+                external_identity: Some(None),
+                external_metadata: Some(None),
+            },
+        );
+
+        assert_eq!(task.external_identity, None);
+        assert_eq!(task.external_metadata, None);
+        let fields = fields.as_object().expect("the field map is an object");
+        assert_eq!(fields["external_identity"], json!(null));
+        assert_eq!(fields["external_metadata"], json!(null));
     }
 
     fn section(name: &str, position: &str) -> Section {
@@ -3521,6 +3620,8 @@ mod tests {
             priority: None,
             tags: None,
             state: Some(TaskState::Closed),
+            external_identity: None,
+            external_metadata: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&close_op, Some(&open), &closed),
@@ -3534,6 +3635,8 @@ mod tests {
             priority: None,
             tags: None,
             state: Some(TaskState::Open),
+            external_identity: None,
+            external_metadata: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&reopen_op, Some(&closed), &open),

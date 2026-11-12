@@ -2,6 +2,6 @@
 //! optional client timestamp attached to operations.
 
 pub mod ack;
-mod double_option;
+pub mod double_option;
 pub mod operations;
 pub mod replay;
