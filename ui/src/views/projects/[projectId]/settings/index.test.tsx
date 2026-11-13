@@ -25,7 +25,7 @@ function projectSnapshot(id: string, name: string): ProjectSnapshot {
     created_at: CREATED_AT,
     sections: [],
     tasks: [],
-    notes: [],
+    comments: [],
     automations: [],
   };
 }

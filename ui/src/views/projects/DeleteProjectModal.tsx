@@ -40,7 +40,7 @@ export function DeleteProjectModal(props: DeleteProjectModalProps) {
       <ModalBody>
         <p className="text-sm">
           Delete “{project.name}”? This permanently deletes the project and all of its sections,
-          tasks, and notes.
+          tasks, and comments.
         </p>
         {error === null ? null : (
           <p className="text-danger mt-4 text-sm" role="alert">

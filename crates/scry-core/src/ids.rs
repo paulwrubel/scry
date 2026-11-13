@@ -11,7 +11,7 @@ pub const MAX_HANDLE_LENGTH: usize = 32;
 pub type ProjectId = Uuid;
 pub type SectionId = Uuid;
 pub type TaskId = Uuid;
-pub type NoteId = Uuid;
+pub type CommentId = Uuid;
 pub type AutomationId = Uuid;
 
 const CANONICAL_DASH_POSITIONS: [usize; 4] = [8, 12, 16, 20];

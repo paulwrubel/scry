@@ -7,7 +7,7 @@ use uuid::Uuid;
 const PROJECT_ID: &str = "11111111-1111-4111-8111-111111111111";
 const SECTION_ID: &str = "22222222-2222-4222-8222-222222222222";
 const TASK_ID: &str = "44444444-4444-4444-8444-444444444444";
-const NOTE_ID: &str = "66666666-6666-4666-8666-666666666666";
+const COMMENT_ID: &str = "66666666-6666-4666-8666-666666666666";
 const AUTOMATION_ID: &str = "88888888-8888-4888-8888-888888888888";
 const OPERATION_ID: &str = "c0000000-0000-4000-8000-000000000001";
 const NOW: &str = "2026-01-01T00:00:00Z";
@@ -39,8 +39,8 @@ fn confirmed() -> ClientState {
                 "tags": ["one"],
                 "created_at": NOW
             }],
-            "notes": [{
-                "id": NOTE_ID,
+            "comments": [{
+                "id": COMMENT_ID,
                 "task_id": TASK_ID,
                 "contents": "note one",
                 "created_at": NOW
@@ -164,7 +164,7 @@ fn replay_operations_applies_update_task() {
     assert_eq!(task.title, "local");
     assert_eq!(task.priority, Priority::Elevated);
     assert_eq!(task.state, TaskState::Closed);
-    assert_eq!(state.projects[0].notes[0].contents, "note one");
+    assert_eq!(state.projects[0].comments[0].contents, "note one");
     assert_eq!(only_task(&confirmed).title, "first");
 }
 

@@ -179,80 +179,80 @@ flowchart LR
   class st_get_task_by_id,st_get_all_tasks_by_project_id,st_get_all_tasks_by_section_id,st_get_all_task_ids,st_find_task_ids_by_handle storeNode
 ```
 
-## 3. Notes
+## 3. Comments
 
-Adding, listing, fetching, updating, and deleting notes. Notes have no handler for handle resolution; `get_note_handle` and `get_note_by_handle` exist for the CLI and for future note-prefix entry points.
+Adding, listing, fetching, updating, and deleting comments. Comments have no handler for handle resolution; `get_comment_handle` and `get_comment_by_handle` exist for the CLI and for future comment-prefix entry points.
 
 ```mermaid
 flowchart LR
   subgraph http["HTTP handlers"]
-    h_create_note["create_note  POST /tasks/{id}/notes"]
-    h_get_note["get_note  GET /notes/{id}"]
-    h_get_notes_by_task["get_notes_by_task  GET /tasks/{id}/notes"]
-    h_get_notes_by_project["get_notes_by_project  GET /projects/{project_id}/notes"]
-    h_update_note["update_note  PUT /notes/{id}"]
-    h_delete_note["delete_note  DELETE /notes/{id}"]
+    h_create_comment["create_comment  POST /tasks/{id}/comments"]
+    h_get_comment["get_comment  GET /comments/{id}"]
+    h_get_comments_by_task["get_comments_by_task  GET /tasks/{id}/comments"]
+    h_get_comments_by_project["get_comments_by_project  GET /projects/{project_id}/comments"]
+    h_update_comment["update_comment  PUT /comments/{id}"]
+    h_delete_comment["delete_comment  DELETE /comments/{id}"]
   end
 
   subgraph svc["ProjectService"]
-    add_note[add_note]
-    add_note_to_task[add_note_to_task]
-    get_note[get_note]
-    list_notes_by_project_id[list_notes_by_project_id]
-    list_notes_by_task_id[list_notes_by_task_id]
-    update_note[update_note]
-    delete_note[delete_note]
-    get_note_handle[get_note_handle]
-    get_note_by_handle[get_note_by_handle]
+    add_comment[add_comment]
+    add_comment_to_task[add_comment_to_task]
+    get_comment[get_comment]
+    list_comments_by_project_id[list_comments_by_project_id]
+    list_comments_by_task_id[list_comments_by_task_id]
+    update_comment[update_comment]
+    delete_comment[delete_comment]
+    get_comment_handle[get_comment_handle]
+    get_comment_by_handle[get_comment_by_handle]
   end
 
   subgraph helpers["internal helpers"]
     require_task_in_project[require_task_in_project]
     require_task[require_task]
     require_project[require_project]
-    require_note[require_note]
+    require_comment[require_comment]
   end
 
   subgraph store["Store"]
-    st_create_note[create_note]
-    st_get_note_by_id[get_note_by_id]
-    st_get_all_notes_by_project_id[get_all_notes_by_project_id]
-    st_get_all_notes_by_task_id[get_all_notes_by_task_id]
-    st_update_note[update_note]
-    st_delete_note[delete_note]
-    st_find_note_ids_by_handle[find_note_ids_by_handle]
-    st_get_all_note_ids[get_all_note_ids]
+    st_create_comment[create_comment]
+    st_get_comment_by_id[get_comment_by_id]
+    st_get_all_comments_by_project_id[get_all_comments_by_project_id]
+    st_get_all_comments_by_task_id[get_all_comments_by_task_id]
+    st_update_comment[update_comment]
+    st_delete_comment[delete_comment]
+    st_find_comment_ids_by_handle[find_comment_ids_by_handle]
+    st_get_all_comment_ids[get_all_comment_ids]
     st_get_task_by_id[get_task_by_id]
     st_get_project_by_id[get_project_by_id]
   end
 
-  h_create_note ==> add_note
-  h_get_note ==> get_note
-  h_get_notes_by_task ==> list_notes_by_task_id
-  h_get_notes_by_project ==> list_notes_by_project_id
-  h_update_note ==> update_note
-  h_delete_note ==> delete_note
+  h_create_comment ==> add_comment
+  h_get_comment ==> get_comment
+  h_get_comments_by_task ==> list_comments_by_task_id
+  h_get_comments_by_project ==> list_comments_by_project_id
+  h_update_comment ==> update_comment
+  h_delete_comment ==> delete_comment
 
-  add_note -.-> require_task
-  add_note -.-> require_project
-  add_note -.-> add_note_to_task
-  add_note_to_task -.-> require_task_in_project
-  add_note_to_task --> st_create_note
-  list_notes_by_project_id --> st_get_all_notes_by_project_id
-  list_notes_by_task_id --> st_get_all_notes_by_task_id
-  get_note --> st_get_note_by_id
-  update_note --> st_update_note
-  delete_note --> st_delete_note
-  get_note_handle --> st_get_all_note_ids
-  get_note_by_handle --> st_find_note_ids_by_handle
-  get_note_by_handle -.-> require_note
-  require_note --> st_get_note_by_id
+  add_comment -.-> require_task
+  add_comment -.-> require_project
+  add_comment -.-> add_comment_to_task
+  add_comment_to_task -.-> require_task_in_project
+  add_comment_to_task --> st_create_comment
+  list_comments_by_project_id --> st_get_all_comments_by_project_id
+  list_comments_by_task_id --> st_get_all_comments_by_task_id
+  get_comment --> st_get_comment_by_id
+  update_comment --> st_update_comment
+  delete_comment --> st_delete_comment
+  get_comment_handle --> st_get_all_comment_ids
+  get_comment_by_handle --> st_find_comment_ids_by_handle
+  get_comment_by_handle -.-> require_comment
+  require_comment --> st_get_comment_by_id
   require_task_in_project --> st_get_task_by_id
   require_project --> st_get_project_by_id
   require_task --> st_get_task_by_id
 
   classDef storeNode fill:#eef3fb,stroke:#5b7fae,stroke-width:1px
-  class st_create_note,st_get_note_by_id,st_get_all_notes_by_project_id,st_get_all_notes_by_task_id,st_update_note,st_delete_note,st_find_note_ids_by_handle,st_get_all_note_ids,st_get_task_by_id,st_get_project_by_id storeNode
+  class st_create_comment,st_get_comment_by_id,st_get_all_comments_by_project_id,st_get_all_comments_by_task_id,st_update_comment,st_delete_comment,st_find_comment_ids_by_handle,st_get_all_comment_ids,st_get_task_by_id,st_get_project_by_id storeNode
 ```
 
 ## 4. Sections
@@ -442,7 +442,7 @@ flowchart LR
     st_begin_apply[begin_apply]
     st_get_all_sections_by_project_id[get_all_sections_by_project_id]
     st_get_all_tasks_by_project_id[get_all_tasks_by_project_id]
-    st_get_all_notes_by_project_id[get_all_notes_by_project_id]
+    st_get_all_comments_by_project_id[get_all_comments_by_project_id]
     st_is_tombstoned[is_tombstoned]
   end
 
@@ -458,14 +458,14 @@ flowchart LR
   import --> st_get_all_projects
   import --> st_get_all_sections_by_project_id
   import --> st_get_all_tasks_by_project_id
-  import --> st_get_all_notes_by_project_id
+  import --> st_get_all_comments_by_project_id
   import --> st_is_tombstoned
   bk_build --> st_last_change_seq
   bk_build --> st_get_all_projects
   bk_build --> st_get_project_snapshot
 
   classDef storeNode fill:#eef3fb,stroke:#5b7fae,stroke-width:1px
-  class st_get_all_projects,st_get_project_snapshot,st_last_change_seq,st_begin_apply,st_get_all_sections_by_project_id,st_get_all_tasks_by_project_id,st_get_all_notes_by_project_id,st_is_tombstoned storeNode
+  class st_get_all_projects,st_get_project_snapshot,st_last_change_seq,st_begin_apply,st_get_all_sections_by_project_id,st_get_all_tasks_by_project_id,st_get_all_comments_by_project_id,st_is_tombstoned storeNode
 ```
 
 ## 7. Automations
@@ -482,7 +482,7 @@ Automation rules are project-scoped and single-step. The service validates a rul
 ## Coverage
 
 - The six diagrams plus the Automations section cover every `Store` trait method and every REST handler in `crates/scry-api/src/server/handlers.rs` except `index`, which only reports server metadata.
-- `get_note_by_id`, `get_all_notes_by_task_id`, `update_note`, `delete_note` and `find_note_ids_by_handle` are marked `dead_code` on the trait and are reached only by the note scaffolding methods `get_note`, `list_notes_by_task_id`, `update_note`, `delete_note` and `get_note_by_handle`.
+- `get_comment_by_id`, `get_all_comments_by_task_id`, `update_comment`, `delete_comment` and `find_comment_ids_by_handle` are marked `dead_code` on the trait and are reached only by the comment scaffolding methods `get_comment`, `list_comments_by_task_id`, `update_comment`, `delete_comment` and `get_comment_by_handle`.
 
 ## Notes
 

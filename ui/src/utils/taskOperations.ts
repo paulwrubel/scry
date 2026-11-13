@@ -1,6 +1,6 @@
 import { keyBetween } from '@/contract/positions';
+import type { Comment } from '@/generated/Comment';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
-import type { Note } from '@/generated/Note';
 import type { Operation } from '@/generated/Operation';
 import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
@@ -160,7 +160,7 @@ export function deleteTaskOperation(task: Task): Operation {
   };
 }
 
-export function createNoteOperation(task: Task, contents: string): Operation | null {
+export function createCommentOperation(task: Task, contents: string): Operation | null {
   const text = contents.trim();
   if (text.length === 0) {
     return null;
@@ -169,7 +169,7 @@ export function createNoteOperation(task: Task, contents: string): Operation | n
   return {
     operation_id: newId(),
     operation_version: 1,
-    kind: 'create_note',
+    kind: 'create_comment',
     id: newId(),
     task_id: task.id,
     contents: text,
@@ -177,27 +177,27 @@ export function createNoteOperation(task: Task, contents: string): Operation | n
   };
 }
 
-export function updateNoteOperation(note: Note, contents: string): Operation | null {
+export function updateCommentOperation(comment: Comment, contents: string): Operation | null {
   const text = contents.trim();
-  if (text.length === 0 || text === note.contents) {
+  if (text.length === 0 || text === comment.contents) {
     return null;
   }
 
   return {
     operation_id: newId(),
     operation_version: 1,
-    kind: 'update_note',
-    id: note.id,
+    kind: 'update_comment',
+    id: comment.id,
     contents: text,
   };
 }
 
-export function deleteNoteOperation(note: Note): Operation {
+export function deleteCommentOperation(comment: Comment): Operation {
   return {
     operation_id: newId(),
     operation_version: 1,
-    kind: 'delete_note',
-    id: note.id,
+    kind: 'delete_comment',
+    id: comment.id,
   };
 }
 

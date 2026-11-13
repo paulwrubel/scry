@@ -19,7 +19,7 @@ export function DeleteTaskModal(props: DeleteTaskModalProps) {
       <ModalHeader>Delete task</ModalHeader>
       <ModalBody>
         <p className="text-sm">
-          Delete “{task.title}”? This permanently deletes the task and its notes.
+          Delete “{task.title}”? This permanently deletes the task and its comments.
         </p>
       </ModalBody>
       <ModalFooter className="justify-between">

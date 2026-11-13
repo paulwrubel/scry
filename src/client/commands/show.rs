@@ -8,7 +8,7 @@ use crate::state::DATETIME_FORMAT_STR;
 use chrono::Local;
 use scry_core::models::Section;
 
-/// Show one task with its notes.
+/// Show one task with its comments.
 pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<(), AppError> {
     let detail: TaskDetails = client
         .get_json(
@@ -71,13 +71,13 @@ pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<()
     );
     println!();
 
-    for note in detail.notes.unwrap_or_default() {
-        let note_created_at = note
+    for comment in detail.comments.unwrap_or_default() {
+        let comment_created_at = comment
             .created_at
             .with_timezone(&Local)
             .format(DATETIME_FORMAT_STR);
-        println!("{}", note_created_at);
-        println!("{}", note.contents);
+        println!("{}", comment_created_at);
+        println!("{}", comment.contents);
         println!();
     }
 

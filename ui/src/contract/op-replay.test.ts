@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Automation } from '../generated/Automation';
 import type { AutomationAction } from '../generated/AutomationAction';
 import type { Change } from '../generated/Change';
-import type { Note } from '../generated/Note';
+import type { Comment } from '../generated/Comment';
 import type { Operation } from '../generated/Operation';
 import type { ProjectSnapshot } from '../generated/ProjectSnapshot';
 import type { Section } from '../generated/Section';
@@ -13,7 +13,7 @@ import { applyChanges, replayOperations, visibleState } from './op-replay';
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const SECTION_ID = '22222222-2222-4222-8222-222222222222';
 const TASK_ID = '44444444-4444-4444-8444-444444444444';
-const NOTE_ID = '66666666-6666-4666-8666-666666666666';
+const COMMENT_ID = '66666666-6666-4666-8666-666666666666';
 const AUTOMATION_ID = '88888888-8888-4888-8888-888888888888';
 const CREATED_AT = '2026-01-01T00:00:00Z';
 
@@ -26,10 +26,10 @@ const section: Section = {
   created_at: CREATED_AT,
 };
 
-const note: Note = {
-  id: NOTE_ID,
+const comment: Comment = {
+  id: COMMENT_ID,
   task_id: TASK_ID,
-  contents: 'note',
+  contents: 'comment',
   created_at: CREATED_AT,
 };
 
@@ -58,7 +58,7 @@ function snapshot(title: string): ProjectSnapshot {
     created_at: CREATED_AT,
     sections: [section],
     tasks: [task(title)],
-    notes: [note],
+    comments: [comment],
     automations: [],
   };
 }

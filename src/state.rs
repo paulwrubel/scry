@@ -1,7 +1,7 @@
 use chrono::DateTime;
 use chrono::Utc;
 use scry_core::models::{
-    ExternalIdentity, ExternalMetadata, Note, Priority, Project, ProjectId, ProjectSnapshot,
+    Comment, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectId, ProjectSnapshot,
     Section, SectionId, Tags, Task, TaskId, TaskSortingMode, TaskState,
 };
 use scry_core::ordering::compare_tasks;
@@ -15,18 +15,18 @@ pub const DATETIME_FORMAT_STR: &str = "%b %-d, %Y at %-I:%M%P";
 pub struct ProjectState {
     project: Project,
     pub(crate) sections_with_tasks: Vec<SectionWithTasks>,
-    pub(crate) closed_tasks: Vec<TaskWithNotes>,
+    pub(crate) closed_tasks: Vec<TaskWithComments>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SectionWithTasks {
     // None represents the No section group
     pub(crate) section: Option<Section>,
-    pub(crate) tasks_with_notes: Vec<TaskWithNotes>,
+    pub(crate) tasks_with_comments: Vec<TaskWithComments>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct TaskWithNotes {
+pub struct TaskWithComments {
     pub(crate) id: TaskId,
     pub(crate) project_id: ProjectId,
     pub(crate) title: String,
@@ -37,13 +37,13 @@ pub struct TaskWithNotes {
     pub(crate) position: Position,
     pub(crate) tags: Tags,
     pub(crate) created_at: DateTime<Utc>,
-    pub(crate) notes: Vec<Note>,
+    pub(crate) comments: Vec<Comment>,
     pub(crate) external_identity: Option<ExternalIdentity>,
     pub(crate) external_metadata: Option<ExternalMetadata>,
 }
 
-impl TaskWithNotes {
-    pub fn new(task: &Task, notes: impl IntoIterator<Item = Note>) -> Self {
+impl TaskWithComments {
+    pub fn new(task: &Task, comments: impl IntoIterator<Item = Comment>) -> Self {
         Self {
             id: task.id,
             project_id: task.project_id,
@@ -55,21 +55,21 @@ impl TaskWithNotes {
             position: task.position.clone(),
             tags: task.tags.clone(),
             created_at: task.created_at,
-            notes: notes.into_iter().collect(),
+            comments: comments.into_iter().collect(),
             external_identity: task.external_identity.clone(),
             external_metadata: task.external_metadata.clone(),
         }
     }
 }
 
-impl From<TaskWithNotes> for Task {
-    fn from(value: TaskWithNotes) -> Self {
+impl From<TaskWithComments> for Task {
+    fn from(value: TaskWithComments) -> Self {
         (&value).into()
     }
 }
 
-impl From<&TaskWithNotes> for Task {
-    fn from(value: &TaskWithNotes) -> Self {
+impl From<&TaskWithComments> for Task {
+    fn from(value: &TaskWithComments) -> Self {
         Self {
             id: value.id,
             project_id: value.project_id,
@@ -93,14 +93,17 @@ impl ProjectState {
             project,
             sections,
             tasks,
-            notes,
+            comments,
             ..
         } = snapshot;
 
-        let task_with_notes = |task: &Task| {
-            TaskWithNotes::new(
+        let task_with_comments = |task: &Task| {
+            TaskWithComments::new(
                 task,
-                notes.iter().filter(|note| note.task_id == task.id).cloned(),
+                comments
+                    .iter()
+                    .filter(|comment| comment.task_id == task.id)
+                    .cloned(),
             )
         };
 
@@ -116,7 +119,10 @@ impl ProjectState {
                 sort_tasks(&mut section_tasks);
                 SectionWithTasks {
                     section: Some(section.clone()),
-                    tasks_with_notes: section_tasks.into_iter().map(task_with_notes).collect(),
+                    tasks_with_comments: section_tasks
+                        .into_iter()
+                        .map(task_with_comments)
+                        .collect(),
                 }
             })
             .collect();
@@ -129,7 +135,10 @@ impl ProjectState {
         if !unsectioned_tasks.is_empty() {
             sections_with_tasks.push(SectionWithTasks {
                 section: None,
-                tasks_with_notes: unsectioned_tasks.into_iter().map(task_with_notes).collect(),
+                tasks_with_comments: unsectioned_tasks
+                    .into_iter()
+                    .map(task_with_comments)
+                    .collect(),
             });
         }
 
@@ -138,7 +147,7 @@ impl ProjectState {
             .filter(|task| task.state == TaskState::Closed)
             .collect();
         sort_tasks(&mut closed);
-        let closed_tasks = closed.into_iter().map(task_with_notes).collect();
+        let closed_tasks = closed.into_iter().map(task_with_comments).collect();
 
         Self {
             project,
@@ -149,7 +158,7 @@ impl ProjectState {
 
     pub fn with_substring_filter(self, filter: String) -> Self {
         let filter = filter.to_lowercase();
-        let matches = |task: &TaskWithNotes| {
+        let matches = |task: &TaskWithComments| {
             task.title.to_lowercase().contains(&filter)
                 || task
                     .tags
@@ -161,23 +170,26 @@ impl ProjectState {
             .sections_with_tasks
             .into_iter()
             .filter_map(|swt| {
-                let tasks_with_notes: Vec<TaskWithNotes> =
-                    swt.tasks_with_notes.into_iter().filter(matches).collect();
+                let tasks_with_comments: Vec<TaskWithComments> = swt
+                    .tasks_with_comments
+                    .into_iter()
+                    .filter(matches)
+                    .collect();
 
                 // drop the No section group once filtering empties it, but keep
                 // real sections even when they end up empty
-                if swt.section.is_none() && tasks_with_notes.is_empty() {
+                if swt.section.is_none() && tasks_with_comments.is_empty() {
                     None
                 } else {
                     Some(SectionWithTasks {
                         section: swt.section,
-                        tasks_with_notes,
+                        tasks_with_comments,
                     })
                 }
             })
             .collect();
 
-        let closed_tasks: Vec<TaskWithNotes> =
+        let closed_tasks: Vec<TaskWithComments> =
             self.closed_tasks.into_iter().filter(matches).collect();
 
         Self {
@@ -195,7 +207,7 @@ impl ProjectState {
         self.sections_with_tasks.iter()
     }
 
-    pub fn closed_tasks(&self) -> &[TaskWithNotes] {
+    pub fn closed_tasks(&self) -> &[TaskWithComments] {
         &self.closed_tasks
     }
 }
@@ -207,7 +219,7 @@ fn sort_tasks(tasks: &mut [&Task]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scry_core::ids::{NoteId, ProjectId, SectionId, TaskId};
+    use scry_core::ids::{CommentId, ProjectId, SectionId, TaskId};
     use uuid::Uuid;
 
     fn project_id(value: u128) -> ProjectId {
@@ -222,7 +234,7 @@ mod tests {
         Uuid::from_u128(value)
     }
 
-    fn note_id(value: u128) -> NoteId {
+    fn comment_id(value: u128) -> CommentId {
         Uuid::from_u128(value)
     }
 
@@ -302,7 +314,11 @@ mod tests {
             .sections_with_tasks
             .iter()
             .map(|group| {
-                let ids = group.tasks_with_notes.iter().map(|task| task.id).collect();
+                let ids = group
+                    .tasks_with_comments
+                    .iter()
+                    .map(|task| task.id)
+                    .collect();
                 (group.section.as_ref().map(|section| section.id), ids)
             })
             .collect()
@@ -312,7 +328,13 @@ mod tests {
         state
             .section_groups()
             .find(|group| group.section.as_ref().map(|section| section.id) == section_id)
-            .map(|group| group.tasks_with_notes.iter().map(|task| task.id).collect())
+            .map(|group| {
+                group
+                    .tasks_with_comments
+                    .iter()
+                    .map(|task| task.id)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -339,8 +361,8 @@ mod tests {
                 open_task(task_id(3), "unsectioned", None, "a0", Priority::Normal),
                 open_task(task_id(4), "also unsectioned", None, "a1", Priority::Normal),
             ],
-            notes: vec![Note {
-                id: note_id(100),
+            comments: vec![Comment {
+                id: comment_id(100),
                 task_id: task_id(2),
                 contents: "belongs to first".to_string(),
                 created_at: ts("2026-01-02T00:00:00Z"),
@@ -361,18 +383,18 @@ mod tests {
 
         let first = state
             .section_groups()
-            .flat_map(|group| group.tasks_with_notes.iter())
+            .flat_map(|group| group.tasks_with_comments.iter())
             .find(|task| task.id == task_id(2))
             .expect("task 2 exists");
-        assert_eq!(first.notes.len(), 1);
-        assert_eq!(first.notes[0].contents, "belongs to first");
+        assert_eq!(first.comments.len(), 1);
+        assert_eq!(first.comments[0].contents, "belongs to first");
 
         let second = state
             .section_groups()
-            .flat_map(|group| group.tasks_with_notes.iter())
+            .flat_map(|group| group.tasks_with_comments.iter())
             .find(|task| task.id == task_id(1))
             .expect("task 1 exists");
-        assert!(second.notes.is_empty());
+        assert!(second.comments.is_empty());
     }
 
     #[test]
@@ -390,7 +412,7 @@ mod tests {
                 ),
                 closed_task(task_id(2), "closed unsectioned", None, "a0"),
             ],
-            notes: vec![],
+            comments: vec![],
             automations: Vec::new(),
         };
 
@@ -420,7 +442,7 @@ mod tests {
                 closed_task(task_id(4), "closed late a", Some(section_id(10)), "a0"),
                 closed_task(task_id(5), "closed late b", None, "a1"),
             ],
-            notes: vec![],
+            comments: vec![],
             automations: Vec::new(),
         };
 
@@ -467,7 +489,7 @@ mod tests {
                     Priority::Elevated,
                 ),
             ],
-            notes: vec![],
+            comments: vec![],
             automations: Vec::new(),
         }
     }
@@ -507,7 +529,7 @@ mod tests {
                 tagged,
                 open_task(task_id(3), "read docs", None, "a0", Priority::Normal),
             ],
-            notes: vec![],
+            comments: vec![],
             automations: Vec::new(),
         };
 

@@ -85,7 +85,7 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
 
 ## Backup and restore
 
-`scry export > backup.json` writes every project, with its sections, tasks, notes, and automations, as JSON; `scry import < backup.json` merges it back. Put `-p <name>` before `export` to back up a single project.
+`scry export > backup.json` writes every project, with its sections, tasks, comments, and automations, as JSON; `scry import < backup.json` merges it back. Put `-p <name>` before `export` to back up a single project.
 
 ## Core concepts
 

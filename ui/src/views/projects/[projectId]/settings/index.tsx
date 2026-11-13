@@ -67,7 +67,8 @@ export function ProjectSettingsPage() {
         <div className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">Danger zone</h2>
           <p className="text-sm text-zinc-300">
-            Deleting this project permanently deletes its sections, tasks, notes, and automations.
+            Deleting this project permanently deletes its sections, tasks, comments, and
+            automations.
           </p>
           <div>
             <Button color="red" onClick={() => setDeleteOpen(true)}>

@@ -14,11 +14,11 @@ The Replica uses `idb`, a small promise wrapper around IndexedDB, rather than ra
 
 One IndexedDB database named `scry-replica` holds:
 
-- `projects`, `sections`, `tasks`, and `notes`, each keyed by the entity's UUID `id`;
+- `projects`, `sections`, `tasks`, and `comments`, each keyed by the entity's UUID `id`;
 - `outbox`, with an auto-increment `seq` key and a unique `operation_id` index;
-- `meta`, holding `schema_version`, `needs_bootstrap`, and the four order arrays (`project_order`, `section_order`, `task_order`, `note_order`).
+- `meta`, holding `schema_version`, `needs_bootstrap`, and the four order arrays (`project_order`, `section_order`, `task_order`, `comment_order`).
 
-IndexedDB returns records in key order, and UUID keys do not carry the order of `ClientState` arrays. The order arrays record that order so a reload can rebuild each project's `sections`, `tasks`, and `notes` exactly as they were persisted. Any entity not present in an order array is appended, so a partially written or hand-edited database still hydrates.
+IndexedDB returns records in key order, and UUID keys do not carry the order of `ClientState` arrays. The order arrays record that order so a reload can rebuild each project's `sections`, `tasks`, and `comments` exactly as they were persisted. Any entity not present in an order array is appended, so a partially written or hand-edited database still hydrates.
 
 ## Read and write path
 
@@ -30,7 +30,7 @@ Confirmed writes and outbox writes use separate transactions, so no atomicity is
 
 `CONFIRMED_SCHEMA_VERSION` versions the shape of the confirmed state. When the stored version does not match, the Replica clears only the four confirmed stores, writes the current version and `needs_bootstrap = true`, and returns an empty confirmed state. The `outbox` is left untouched, so pending operations survive the wipe and replay against the next bootstrap. `bootstrap` writes `needs_bootstrap = false` along with the fresh confirmed state.
 
-IndexedDB structural upgrades are separate from this version and run through the `upgrade` callback. A future structural upgrade must preserve the `outbox` store and its contents.
+IndexedDB structural upgrades are separate from this version and run through the `upgrade` callback. A future structural upgrade must preserve the `outbox` store and its contents unless the operation wire format itself is being replaced, as in the version 3 notes-to-comments upgrade, which cleared the outbox.
 
 ## Outbox
 

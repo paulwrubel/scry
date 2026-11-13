@@ -4,7 +4,7 @@ import type { Change } from '../generated/Change';
 import type { Color } from '../generated/Color';
 import type { ExternalIdentity } from '../generated/ExternalIdentity';
 import type { ExternalMetadata } from '../generated/ExternalMetadata';
-import type { Note } from '../generated/Note';
+import type { Comment } from '../generated/Comment';
 import type { Operation } from '../generated/Operation';
 import type { Priority } from '../generated/Priority';
 import type { Project } from '../generated/Project';
@@ -62,7 +62,7 @@ function applyOperation(state: ClientState, operation: Operation): void {
       if (existing) {
         setProject(existing, project);
       } else {
-        state.projects.push({ ...project, sections: [], tasks: [], notes: [], automations: [] });
+        state.projects.push({ ...project, sections: [], tasks: [], comments: [], automations: [] });
       }
       return;
     }
@@ -183,28 +183,28 @@ function applyOperation(state: ClientState, operation: Operation): void {
       removeTask(state, operation.id);
       return;
     }
-    case 'create_note': {
-      const note: Note = {
+    case 'create_comment': {
+      const comment: Comment = {
         id: operation.id,
         task_id: operation.task_id,
         contents: operation.contents,
         created_at: operation.created_at,
       };
-      const snapshot = findProjectForTask(state, note.task_id);
+      const snapshot = findProjectForTask(state, comment.task_id);
       if (snapshot) {
-        upsertNote(snapshot, note);
+        upsertComment(snapshot, comment);
       }
       return;
     }
-    case 'update_note': {
-      const note = findNote(state, operation.id);
-      if (note) {
-        note.contents = operation.contents;
+    case 'update_comment': {
+      const comment = findComment(state, operation.id);
+      if (comment) {
+        comment.contents = operation.contents;
       }
       return;
     }
-    case 'delete_note': {
-      removeNote(state, operation.id);
+    case 'delete_comment': {
+      removeComment(state, operation.id);
       return;
     }
     case 'create_automation': {
@@ -246,8 +246,8 @@ function applyChange(state: ClientState, change: Change): void {
     case 'task':
       applyTaskChange(state, change);
       return;
-    case 'note':
-      applyNoteChange(state, change);
+    case 'comment':
+      applyCommentChange(state, change);
       return;
     case 'automation':
       applyAutomationChange(state, change);
@@ -263,7 +263,7 @@ function applyProjectChange(state: ClientState, change: Change): void {
       if (existing) {
         setProject(existing, project);
       } else {
-        state.projects.push({ ...project, sections: [], tasks: [], notes: [], automations: [] });
+        state.projects.push({ ...project, sections: [], tasks: [], comments: [], automations: [] });
       }
       return;
     }
@@ -329,25 +329,25 @@ function applyTaskChange(state: ClientState, change: Change): void {
   }
 }
 
-function applyNoteChange(state: ClientState, change: Change): void {
+function applyCommentChange(state: ClientState, change: Change): void {
   switch (change.kind) {
     case 'create': {
-      const note = change.field_values as unknown as Note;
-      const snapshot = findProjectForTask(state, note.task_id);
+      const comment = change.field_values as unknown as Comment;
+      const snapshot = findProjectForTask(state, comment.task_id);
       if (snapshot) {
-        upsertNote(snapshot, note);
+        upsertComment(snapshot, comment);
       }
       return;
     }
     case 'update': {
-      const note = findNote(state, change.entity_id);
-      if (note && typeof change.field_values.contents === 'string') {
-        note.contents = change.field_values.contents;
+      const comment = findComment(state, change.entity_id);
+      if (comment && typeof change.field_values.contents === 'string') {
+        comment.contents = change.field_values.contents;
       }
       return;
     }
     case 'delete': {
-      removeNote(state, change.entity_id);
+      removeComment(state, change.entity_id);
       return;
     }
   }
@@ -457,12 +457,12 @@ function upsertTask(snapshot: ProjectSnapshot, task: Task): void {
   }
 }
 
-function upsertNote(snapshot: ProjectSnapshot, note: Note): void {
-  const index = snapshot.notes.findIndex((existing) => existing.id === note.id);
+function upsertComment(snapshot: ProjectSnapshot, comment: Comment): void {
+  const index = snapshot.comments.findIndex((existing) => existing.id === comment.id);
   if (index === -1) {
-    snapshot.notes.push(note);
+    snapshot.comments.push(comment);
   } else {
-    snapshot.notes[index] = note;
+    snapshot.comments[index] = comment;
   }
 }
 
@@ -503,11 +503,11 @@ function findTask(state: ClientState, id: string): Task | undefined {
   return undefined;
 }
 
-function findNote(state: ClientState, id: string): Note | undefined {
+function findComment(state: ClientState, id: string): Comment | undefined {
   for (const snapshot of state.projects) {
-    const note = snapshot.notes.find((existing) => existing.id === id);
-    if (note) {
-      return note;
+    const comment = snapshot.comments.find((existing) => existing.id === id);
+    if (comment) {
+      return comment;
     }
   }
   return undefined;
@@ -543,15 +543,15 @@ function removeTask(state: ClientState, id: string): void {
     const index = snapshot.tasks.findIndex((task) => task.id === id);
     if (index !== -1) {
       snapshot.tasks.splice(index, 1);
-      snapshot.notes = snapshot.notes.filter((note) => note.task_id !== id);
+      snapshot.comments = snapshot.comments.filter((comment) => comment.task_id !== id);
       return;
     }
   }
 }
 
-function removeNote(state: ClientState, id: string): void {
+function removeComment(state: ClientState, id: string): void {
   for (const snapshot of state.projects) {
-    snapshot.notes = snapshot.notes.filter((note) => note.id !== id);
+    snapshot.comments = snapshot.comments.filter((comment) => comment.id !== id);
   }
 }
 

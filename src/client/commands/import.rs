@@ -31,8 +31,8 @@ pub async fn import(client: &Client, mode: ImportMode, output_json: bool) -> Res
         print_json(&report)?;
     } else {
         println!(
-            "Imported {} project(s), {} section(s), {} task(s), {} note(s), {} automation(s)",
-            report.projects, report.sections, report.tasks, report.notes, report.automations
+            "Imported {} project(s), {} section(s), {} task(s), {} comment(s), {} automation(s)",
+            report.projects, report.sections, report.tasks, report.comments, report.automations
         );
     }
 

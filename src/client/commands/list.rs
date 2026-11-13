@@ -56,10 +56,10 @@ pub async fn list(
         project: detail.project,
         sections: detail.sections,
         tasks: detail.tasks.iter().map(|task| task.task.clone()).collect(),
-        notes: detail
+        comments: detail
             .tasks
             .iter()
-            .flat_map(|task| task.notes.clone().unwrap_or_default())
+            .flat_map(|task| task.comments.clone().unwrap_or_default())
             .collect(),
         automations: Vec::new(),
     };
@@ -83,7 +83,7 @@ pub async fn list(
     if output_json {
         let mut tasks: Vec<Task> = groups
             .iter()
-            .flat_map(|group| group.tasks_with_notes.iter().map(Task::from))
+            .flat_map(|group| group.tasks_with_comments.iter().map(Task::from))
             .collect();
         if include_closed {
             tasks.extend(state.closed_tasks().iter().map(Task::from));
@@ -103,7 +103,7 @@ pub async fn list(
         let header = format!(
             "{} ({}):",
             section_label(&group.section),
-            group.tasks_with_notes.len()
+            group.tasks_with_comments.len()
         );
         anstream::println!(
             "{}",
@@ -113,7 +113,7 @@ pub async fn list(
             )
         );
 
-        for task in &group.tasks_with_notes {
+        for task in &group.tasks_with_comments {
             anstream::println!("{}", task_line(task, &handles));
         }
     }

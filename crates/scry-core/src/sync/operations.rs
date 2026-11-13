@@ -1,4 +1,4 @@
-use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
+use crate::ids::{AutomationId, CommentId, ProjectId, SectionId, TaskId};
 use crate::models::{
     AutomationAction, AutomationTrigger, Color, ExternalIdentity, ExternalMetadata, Priority, Tags,
     TaskState,
@@ -220,18 +220,18 @@ pub enum OperationKind {
     DeleteTask {
         id: TaskId,
     },
-    CreateNote {
-        id: NoteId,
+    CreateComment {
+        id: CommentId,
         task_id: TaskId,
         contents: String,
         created_at: DateTime<Utc>,
     },
-    UpdateNote {
-        id: NoteId,
+    UpdateComment {
+        id: CommentId,
         contents: String,
     },
-    DeleteNote {
-        id: NoteId,
+    DeleteComment {
+        id: CommentId,
     },
     CreateAutomation {
         id: AutomationId,

@@ -3,11 +3,11 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use scry_core::error::StorageError;
-use scry_core::ids::{AutomationId, Handle, NoteId, ProjectId, SectionId, TaskId};
+use scry_core::ids::{AutomationId, CommentId, Handle, ProjectId, SectionId, TaskId};
 use scry_core::models::{
-    Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Entity, EntityType,
-    ExternalIdentity, ExternalMetadata, Note, Priority, Project, ProjectSnapshot, Section, Tags,
-    Task, TaskState,
+    Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Comment, Entity,
+    EntityType, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectSnapshot, Section,
+    Tags, Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
 use scry_core::store::Store;
@@ -225,13 +225,13 @@ fn project_from_fields(
     })
 }
 
-fn note_from_fields(
-    id: NoteId,
+fn comment_from_fields(
+    id: CommentId,
     task_id: TaskId,
     contents: String,
     created_at: DateTime<Utc>,
-) -> Result<Note, StorageError> {
-    Ok(Note {
+) -> Result<Comment, StorageError> {
+    Ok(Comment {
         id,
         task_id,
         contents,
@@ -571,18 +571,18 @@ impl Store for PostgresStore {
     ) -> Result<(), StorageError> {
         let mut conn = self.transaction(tx).await?;
 
-        // notes go explicitly, like every other delete here, so the statement
+        // comments go explicitly, like every other delete here, so the statement
         // does not depend on the foreign key's cascade
         sqlx::query!(
             r#"
-                DELETE FROM notes
+                DELETE FROM comments
                 WHERE task_id = $1
             "#,
             id,
         )
         .execute(&mut *conn)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to delete notes: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to delete comments: {}", e)))?;
 
         let result = sqlx::query!(
             r#"
@@ -605,41 +605,44 @@ impl Store for PostgresStore {
         conn.commit().await
     }
 
-    async fn create_note(
+    async fn create_comment(
         &self,
-        note: Note,
+        comment: Comment,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Note, StorageError> {
+    ) -> Result<Comment, StorageError> {
         let mut conn = self.connection(tx).await?;
 
         match sqlx::query!(
             r#"
-                INSERT INTO notes (id, task_id, contents, created_at)
+                INSERT INTO comments (id, task_id, contents, created_at)
                 VALUES ($1, $2, $3, $4)
             "#,
-            note.id,
-            note.task_id,
-            &note.contents,
-            note.created_at,
+            comment.id,
+            comment.task_id,
+            &comment.contents,
+            comment.created_at,
         )
         .execute(&mut *conn)
         .await
         {
             Ok(result) => match result.rows_affected() {
-                1 => Ok(note),
+                1 => Ok(comment),
                 n => Err(StorageError::Database(format!(
-                    "failed to add note: expected 1 row affected, got {n}"
+                    "failed to add comment: expected 1 row affected, got {n}"
                 ))),
             },
-            Err(e) => Err(StorageError::Database(format!("failed to add note: {}", e))),
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to add comment: {}",
+                e
+            ))),
         }
     }
 
-    async fn get_note_by_id(
+    async fn get_comment_by_id(
         &self,
-        id: NoteId,
+        id: CommentId,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Option<Note>, StorageError> {
+    ) -> Result<Option<Comment>, StorageError> {
         let mut conn = self.connection(tx).await?;
 
         match sqlx::query!(
@@ -649,7 +652,7 @@ impl Store for PostgresStore {
                     task_id,
                     contents,
                     created_at
-                FROM notes
+                FROM comments
                 WHERE id = $1
             "#,
             id,
@@ -657,7 +660,7 @@ impl Store for PostgresStore {
         .fetch_optional(&mut *conn)
         .await
         {
-            Ok(Some(row)) => Ok(Some(note_from_fields(
+            Ok(Some(row)) => Ok(Some(comment_from_fields(
                 row.id,
                 row.task_id,
                 row.contents,
@@ -665,17 +668,17 @@ impl Store for PostgresStore {
             )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
-                "failed to show note: {}",
+                "failed to show comment: {}",
                 e
             ))),
         }
     }
 
-    async fn get_all_notes_by_task_id(
+    async fn get_all_comments_by_task_id(
         &self,
         task_id: TaskId,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Vec<Note>, StorageError> {
+    ) -> Result<Vec<Comment>, StorageError> {
         let mut conn = self.connection(tx).await?;
 
         match sqlx::query!(
@@ -685,7 +688,7 @@ impl Store for PostgresStore {
                     task_id,
                     contents,
                     created_at
-                FROM notes
+                FROM comments
                 WHERE task_id = $1
                 ORDER BY created_at ASC
             "#,
@@ -696,33 +699,33 @@ impl Store for PostgresStore {
         {
             Ok(rows) => rows
                 .into_iter()
-                .map(|r| note_from_fields(r.id, r.task_id, r.contents, r.created_at))
-                .collect::<Result<Vec<Note>, _>>(),
+                .map(|r| comment_from_fields(r.id, r.task_id, r.contents, r.created_at))
+                .collect::<Result<Vec<Comment>, _>>(),
             Err(e) => Err(StorageError::Database(format!(
-                "failed to list notes: {}",
+                "failed to list comments: {}",
                 e
             ))),
         }
     }
 
-    async fn get_all_notes_by_project_id(
+    async fn get_all_comments_by_project_id(
         &self,
         project_id: ProjectId,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Vec<Note>, StorageError> {
+    ) -> Result<Vec<Comment>, StorageError> {
         let mut conn = self.connection(tx).await?;
 
         match sqlx::query!(
             r#"
                 SELECT
-                    n.id,
-                    n.task_id,
-                    n.contents,
-                    n.created_at
-                FROM notes n
-                JOIN tasks t ON t.id = n.task_id
+                    c.id,
+                    c.task_id,
+                    c.contents,
+                    c.created_at
+                FROM comments c
+                JOIN tasks t ON t.id = c.task_id
                 WHERE t.project_id = $1
-                ORDER BY n.created_at ASC
+                ORDER BY c.created_at ASC
             "#,
             project_id,
         )
@@ -731,55 +734,55 @@ impl Store for PostgresStore {
         {
             Ok(rows) => rows
                 .into_iter()
-                .map(|r| note_from_fields(r.id, r.task_id, r.contents, r.created_at))
-                .collect::<Result<Vec<Note>, _>>(),
+                .map(|r| comment_from_fields(r.id, r.task_id, r.contents, r.created_at))
+                .collect::<Result<Vec<Comment>, _>>(),
             Err(e) => Err(StorageError::Database(format!(
-                "failed to list notes: {}",
+                "failed to list comments: {}",
                 e
             ))),
         }
     }
 
-    async fn update_note(
+    async fn update_comment(
         &self,
-        note: Note,
+        comment: Comment,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Note, StorageError> {
+    ) -> Result<Comment, StorageError> {
         let mut conn = self.connection(tx).await?;
 
         match sqlx::query!(
             r#"
-                UPDATE notes
+                UPDATE comments
                 SET contents = $1
                 WHERE id = $2
             "#,
-            &note.contents,
-            note.id,
+            &comment.contents,
+            comment.id,
         )
         .execute(&mut *conn)
         .await
         {
             Ok(result) => match result.rows_affected() {
-                1 => Ok(note),
-                _ => Err(StorageError::NotFound("note not found".to_string())),
+                1 => Ok(comment),
+                _ => Err(StorageError::NotFound("comment not found".to_string())),
             },
             Err(e) => Err(StorageError::Database(format!(
-                "failed to update note: {}",
+                "failed to update comment: {}",
                 e
             ))),
         }
     }
 
-    async fn delete_note(
+    async fn delete_comment(
         &self,
-        id: NoteId,
+        id: CommentId,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError> {
         let mut conn = self.connection(tx).await?;
 
         match sqlx::query!(
             r#"
-                DELETE FROM notes
+                DELETE FROM comments
                 WHERE id = $1
             "#,
             id,
@@ -789,21 +792,21 @@ impl Store for PostgresStore {
         {
             Ok(result) => match result.rows_affected() {
                 1 => Ok(()),
-                _ => Err(StorageError::NotFound("note not found".to_string())),
+                _ => Err(StorageError::NotFound("comment not found".to_string())),
             },
             Err(e) => Err(StorageError::Database(format!(
-                "failed to delete note: {}",
+                "failed to delete comment: {}",
                 e
             ))),
         }
     }
 
-    async fn find_note_ids_by_handle(
+    async fn find_comment_ids_by_handle(
         &self,
         handle: &Handle,
         limit: i64,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Vec<NoteId>, StorageError> {
+    ) -> Result<Vec<CommentId>, StorageError> {
         let mut conn = self.connection(tx).await?;
         let (low, high) = handle.range();
 
@@ -811,7 +814,7 @@ impl Store for PostgresStore {
         let ids: Vec<Uuid> = sqlx::query_scalar!(
             r#"
                 SELECT id
-                FROM notes
+                FROM comments
                 WHERE id BETWEEN $1 AND $2
                 ORDER BY id ASC
                 LIMIT $3
@@ -822,21 +825,21 @@ impl Store for PostgresStore {
         )
         .fetch_all(&mut *conn)
         .await
-        .map_err(|e| StorageError::Database(format!("failed to find notes: {}", e)))?;
+        .map_err(|e| StorageError::Database(format!("failed to find comments: {}", e)))?;
 
         Ok(ids)
     }
 
-    async fn get_all_note_ids(
+    async fn get_all_comment_ids(
         &self,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Vec<NoteId>, StorageError> {
+    ) -> Result<Vec<CommentId>, StorageError> {
         let mut conn = self.connection(tx).await?;
 
-        let ids: Vec<Uuid> = sqlx::query_scalar!("SELECT id FROM notes")
+        let ids: Vec<Uuid> = sqlx::query_scalar!("SELECT id FROM comments")
             .fetch_all(&mut *conn)
             .await
-            .map_err(|e| StorageError::Database(format!("failed to list note ids: {}", e)))?;
+            .map_err(|e| StorageError::Database(format!("failed to list comment ids: {}", e)))?;
 
         Ok(ids)
     }
@@ -1417,12 +1420,12 @@ impl Store for PostgresStore {
         // latency when Postgres is reached over the network. A missing project
         // still pays for the four child reads, which is fine on the rare 404 path.
         // a caller's transaction is one connection, so those reads serialize.
-        let (project, sections, tasks, notes, automations) = match tx {
+        let (project, sections, tasks, comments, automations) = match tx {
             None => tokio::try_join!(
                 self.get_project_by_id(project_id, None),
                 self.get_all_sections_by_project_id(project_id, None),
                 self.get_all_tasks_by_project_id(project_id, None),
-                self.get_all_notes_by_project_id(project_id, None),
+                self.get_all_comments_by_project_id(project_id, None),
                 self.get_all_automations_by_project_id(project_id, None),
             )?,
             Some(tx) => {
@@ -1433,13 +1436,13 @@ impl Store for PostgresStore {
                 let tasks = self
                     .get_all_tasks_by_project_id(project_id, Some(&mut *tx))
                     .await?;
-                let notes = self
-                    .get_all_notes_by_project_id(project_id, Some(&mut *tx))
+                let comments = self
+                    .get_all_comments_by_project_id(project_id, Some(&mut *tx))
                     .await?;
                 let automations = self
                     .get_all_automations_by_project_id(project_id, Some(&mut *tx))
                     .await?;
-                (project, sections, tasks, notes, automations)
+                (project, sections, tasks, comments, automations)
             }
         };
         let project = project.ok_or_else(|| {
@@ -1450,7 +1453,7 @@ impl Store for PostgresStore {
             project,
             sections,
             tasks,
-            notes,
+            comments,
             automations,
         })
     }
@@ -1559,7 +1562,7 @@ impl Store for PostgresStore {
     ) -> Result<(), StorageError> {
         let mut conn = self.transaction(tx).await?;
 
-        // tasks go first so their notes cascade before the sections lose the
+        // tasks go first so their comments cascade before the sections lose the
         // tasks' section references
         sqlx::query!(
             r#"

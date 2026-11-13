@@ -2,12 +2,12 @@ use crate::error::ServiceError;
 use chrono::Utc;
 use scry_core::error::StorageError;
 use scry_core::ids::{
-    AutomationId, Handle, MIN_HANDLE_LENGTH, NoteId, ProjectId, SectionId, TaskId,
+    AutomationId, CommentId, Handle, MIN_HANDLE_LENGTH, ProjectId, SectionId, TaskId,
     distinguishing_prefixes, shortest_handle, shortest_handles,
 };
 use scry_core::models::{
-    Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Entity, EntityType,
-    ExternalIdentity, ExternalMetadata, FieldValues, MAX_AUTOMATION_ACTIONS, Note, Priority,
+    Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Comment, Entity,
+    EntityType, ExternalIdentity, ExternalMetadata, FieldValues, MAX_AUTOMATION_ACTIONS, Priority,
     Project, ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, key_between, n_keys_between};
@@ -509,9 +509,13 @@ impl ProjectService {
         Ok(task)
     }
 
-    pub async fn add_note(&self, task_id: TaskId, contents: String) -> Result<Note, ServiceError> {
+    pub async fn add_comment(
+        &self,
+        task_id: TaskId,
+        contents: String,
+    ) -> Result<Comment, ServiceError> {
         self.require_task(task_id).await?;
-        let note = Note {
+        let comment = Comment {
             id: Uuid::new_v4(),
             task_id,
             contents,
@@ -519,54 +523,60 @@ impl ProjectService {
         };
         let op = new_operation(
             Uuid::new_v4(),
-            OperationKind::CreateNote {
-                id: note.id,
-                task_id: note.task_id,
-                contents: note.contents.clone(),
-                created_at: note.created_at,
+            OperationKind::CreateComment {
+                id: comment.id,
+                task_id: comment.task_id,
+                contents: comment.contents.clone(),
+                created_at: comment.created_at,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
-        Ok(note)
+        Ok(comment)
     }
 
-    pub async fn list_notes_by_project_id(
+    pub async fn list_comments_by_project_id(
         &self,
         project_id: ProjectId,
-    ) -> Result<Vec<Note>, ServiceError> {
+    ) -> Result<Vec<Comment>, ServiceError> {
         Ok(self
             .store
-            .get_all_notes_by_project_id(project_id, None)
+            .get_all_comments_by_project_id(project_id, None)
             .await?)
     }
 
-    pub async fn list_notes_by_task_id(&self, task_id: TaskId) -> Result<Vec<Note>, ServiceError> {
-        Ok(self.store.get_all_notes_by_task_id(task_id, None).await?)
+    pub async fn list_comments_by_task_id(
+        &self,
+        task_id: TaskId,
+    ) -> Result<Vec<Comment>, ServiceError> {
+        Ok(self
+            .store
+            .get_all_comments_by_task_id(task_id, None)
+            .await?)
     }
 
-    pub async fn get_note(&self, id: NoteId) -> Result<Option<Note>, ServiceError> {
-        Ok(self.store.get_note_by_id(id, None).await?)
+    pub async fn get_comment(&self, id: CommentId) -> Result<Option<Comment>, ServiceError> {
+        Ok(self.store.get_comment_by_id(id, None).await?)
     }
 
-    pub async fn update_note(&self, note: Note) -> Result<Note, ServiceError> {
-        let existing = self.require_note(note.id).await?;
+    pub async fn update_comment(&self, comment: Comment) -> Result<Comment, ServiceError> {
+        let existing = self.require_comment(comment.id).await?;
         let op = new_operation(
             Uuid::new_v4(),
-            OperationKind::UpdateNote {
-                id: note.id,
-                contents: note.contents.clone(),
+            OperationKind::UpdateComment {
+                id: comment.id,
+                contents: comment.contents.clone(),
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
-        Ok(Note {
-            contents: note.contents,
+        Ok(Comment {
+            contents: comment.contents,
             ..existing
         })
     }
 
-    pub async fn delete_note(&self, id: NoteId) -> Result<(), ServiceError> {
-        self.require_note(id).await?;
-        let op = new_operation(Uuid::new_v4(), OperationKind::DeleteNote { id });
+    pub async fn delete_comment(&self, id: CommentId) -> Result<(), ServiceError> {
+        self.require_comment(id).await?;
+        let op = new_operation(Uuid::new_v4(), OperationKind::DeleteComment { id });
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
         Ok(())
     }
@@ -606,23 +616,26 @@ impl ProjectService {
         }
     }
 
-    // the current API has no note-prefix entry point; this exists so note handles
-    // resolve like task handles wherever note ids are later accepted
+    // the current API has no comment-prefix entry point; this exists so comment
+    // handles resolve like task handles wherever comment ids are later accepted
     #[allow(dead_code)]
-    pub async fn get_note_by_handle(&self, handle: &Handle) -> Result<Note, ServiceError> {
-        let matches = self.store.find_note_ids_by_handle(handle, 2, None).await?;
+    pub async fn get_comment_by_handle(&self, handle: &Handle) -> Result<Comment, ServiceError> {
+        let matches = self
+            .store
+            .find_comment_ids_by_handle(handle, 2, None)
+            .await?;
         match matches.len() {
-            0 => Err(ServiceError::NoteHandleNotFound {
+            0 => Err(ServiceError::CommentHandleNotFound {
                 handle: handle.to_string(),
             }),
-            1 => self.require_note(matches[0]).await,
+            1 => self.require_comment(matches[0]).await,
             _ => {
                 let all = self
                     .store
-                    .find_note_ids_by_handle(handle, i64::MAX, None)
+                    .find_comment_ids_by_handle(handle, i64::MAX, None)
                     .await?;
                 let candidates = distinguishing_prefixes(&all, handle.len());
-                Err(ServiceError::AmbiguousNoteHandle {
+                Err(ServiceError::AmbiguousCommentHandle {
                     handle: handle.to_string(),
                     candidates,
                 })
@@ -1174,7 +1187,7 @@ impl ProjectService {
         let projects = self.store.get_all_projects(Some(&mut **tx)).await?;
         let mut sections = Vec::new();
         let mut tasks = Vec::new();
-        let mut notes = Vec::new();
+        let mut comments = Vec::new();
         let mut automations = Vec::new();
 
         for project in &projects {
@@ -1188,9 +1201,9 @@ impl ProjectService {
                     .get_all_tasks_by_project_id(project.id, Some(&mut **tx))
                     .await?,
             );
-            notes.extend(
+            comments.extend(
                 self.store
-                    .get_all_notes_by_project_id(project.id, Some(&mut **tx))
+                    .get_all_comments_by_project_id(project.id, Some(&mut **tx))
                     .await?,
             );
             automations.extend(
@@ -1217,9 +1230,9 @@ impl ProjectService {
             );
             referenced.extend(
                 document
-                    .notes
+                    .comments
                     .iter()
-                    .map(|note| (EntityType::Note, note.id)),
+                    .map(|comment| (EntityType::Comment, comment.id)),
             );
             referenced.extend(
                 document
@@ -1244,7 +1257,7 @@ impl ProjectService {
             projects,
             sections,
             tasks,
-            notes,
+            comments,
             automations,
             tombstones,
         })
@@ -1822,7 +1835,7 @@ impl ProjectService {
                 }
                 seqs.into_iter().max()
             }
-            OperationKind::CreateNote {
+            OperationKind::CreateComment {
                 id,
                 task_id,
                 contents,
@@ -1856,24 +1869,32 @@ impl ProjectService {
                     ));
                 }
 
-                let note = Note {
+                let comment = Comment {
                     id: *id,
                     task_id: *task_id,
                     contents: contents.clone(),
                     created_at: *created_at,
                 };
                 self.store
-                    .create_note(note.clone(), Some(&mut **tx))
+                    .create_comment(comment.clone(), Some(&mut **tx))
                     .await?;
 
-                let field_values = serde_json::to_value(&note).expect("a note serializes to JSON");
+                let field_values =
+                    serde_json::to_value(&comment).expect("a comment serializes to JSON");
                 Some(
-                    self.record_change(tx, op, Entity::Note(*id), ChangeKind::Create, field_values)
-                        .await?,
+                    self.record_change(
+                        tx,
+                        op,
+                        Entity::Comment(*id),
+                        ChangeKind::Create,
+                        field_values,
+                    )
+                    .await?,
                 )
             }
-            OperationKind::UpdateNote { id, .. } => {
-                let Some(mut note) = self.store.get_note_by_id(*id, Some(&mut **tx)).await? else {
+            OperationKind::UpdateComment { id, .. } => {
+                let Some(mut comment) = self.store.get_comment_by_id(*id, Some(&mut **tx)).await?
+                else {
                     return Ok((
                         OperationAcknowledgment::rejected(
                             op.operation_id,
@@ -1883,20 +1904,26 @@ impl ProjectService {
                     ));
                 };
 
-                let field_values = note_field_updates(&mut note, &op.kind);
-                self.store.update_note(note, Some(&mut **tx)).await?;
+                let field_values = comment_field_updates(&mut comment, &op.kind);
+                self.store.update_comment(comment, Some(&mut **tx)).await?;
                 Some(
-                    self.record_change(tx, op, Entity::Note(*id), ChangeKind::Update, field_values)
-                        .await?,
+                    self.record_change(
+                        tx,
+                        op,
+                        Entity::Comment(*id),
+                        ChangeKind::Update,
+                        field_values,
+                    )
+                    .await?,
                 )
             }
-            OperationKind::DeleteNote { id } => {
+            OperationKind::DeleteComment { id } => {
                 let existed = self
                     .store
-                    .get_note_by_id(*id, Some(&mut **tx))
+                    .get_comment_by_id(*id, Some(&mut **tx))
                     .await?
                     .is_some();
-                let entities = self.affected_entities(tx, Entity::Note(*id)).await?;
+                let entities = self.affected_entities(tx, Entity::Comment(*id)).await?;
                 let deleted_at = Utc::now();
 
                 let mut seqs = Vec::with_capacity(entities.len());
@@ -1911,7 +1938,7 @@ impl ProjectService {
                 }
 
                 if existed {
-                    self.store.delete_note(*id, Some(&mut **tx)).await?;
+                    self.store.delete_comment(*id, Some(&mut **tx)).await?;
                 }
                 seqs.into_iter().max()
             }
@@ -2096,9 +2123,9 @@ impl ProjectService {
                     .store
                     .get_all_tasks_by_project_id(project_id, Some(&mut **tx))
                     .await?;
-                let notes = self
+                let comments = self
                     .store
-                    .get_all_notes_by_project_id(project_id, Some(&mut **tx))
+                    .get_all_comments_by_project_id(project_id, Some(&mut **tx))
                     .await?;
                 let automations = self
                     .store
@@ -2111,7 +2138,11 @@ impl ProjectService {
                         .map(|section| Entity::Section(section.id)),
                 );
                 entities.extend(tasks.into_iter().map(|task| Entity::Task(task.id)));
-                entities.extend(notes.into_iter().map(|note| Entity::Note(note.id)));
+                entities.extend(
+                    comments
+                        .into_iter()
+                        .map(|comment| Entity::Comment(comment.id)),
+                );
                 entities.extend(
                     automations
                         .into_iter()
@@ -2119,14 +2150,18 @@ impl ProjectService {
                 );
             }
             Entity::Task(task_id) => {
-                let notes = self
+                let comments = self
                     .store
-                    .get_all_notes_by_task_id(task_id, Some(&mut **tx))
+                    .get_all_comments_by_task_id(task_id, Some(&mut **tx))
                     .await?;
-                entities.extend(notes.into_iter().map(|note| Entity::Note(note.id)));
+                entities.extend(
+                    comments
+                        .into_iter()
+                        .map(|comment| Entity::Comment(comment.id)),
+                );
             }
             // a section's tasks survive and are relocated instead of tombstoned
-            Entity::Section(_) | Entity::Note(_) | Entity::Automation(_) => {}
+            Entity::Section(_) | Entity::Comment(_) | Entity::Automation(_) => {}
         }
 
         Ok(entities)
@@ -2352,10 +2387,13 @@ impl ProjectService {
         })
     }
 
-    async fn require_note(&self, id: NoteId) -> Result<Note, ServiceError> {
-        self.store.get_note_by_id(id, None).await?.ok_or_else(|| {
-            ServiceError::Storage(StorageError::NotFound(format!("note {id} not found")))
-        })
+    async fn require_comment(&self, id: CommentId) -> Result<Comment, ServiceError> {
+        self.store
+            .get_comment_by_id(id, None)
+            .await?
+            .ok_or_else(|| {
+                ServiceError::Storage(StorageError::NotFound(format!("comment {id} not found")))
+            })
     }
 
     async fn require_section(&self, id: SectionId) -> Result<Section, ServiceError> {
@@ -2411,9 +2449,9 @@ fn subject(op: &OperationKind) -> Entity {
         | OperationKind::UpdateTask { id, .. }
         | OperationKind::MoveTask { id, .. }
         | OperationKind::DeleteTask { id } => Entity::Task(*id),
-        OperationKind::CreateNote { id, .. }
-        | OperationKind::UpdateNote { id, .. }
-        | OperationKind::DeleteNote { id } => Entity::Note(*id),
+        OperationKind::CreateComment { id, .. }
+        | OperationKind::UpdateComment { id, .. }
+        | OperationKind::DeleteComment { id } => Entity::Comment(*id),
         OperationKind::CreateAutomation { id, .. }
         | OperationKind::UpdateAutomation { id, .. }
         | OperationKind::DeleteAutomation { id } => Entity::Automation(*id),
@@ -2884,14 +2922,14 @@ fn task_placement_position(
     }
 }
 
-fn note_field_updates(note: &mut Note, op: &OperationKind) -> FieldValues {
+fn comment_field_updates(comment: &mut Comment, op: &OperationKind) -> FieldValues {
     let mut fields = Map::new();
 
-    let OperationKind::UpdateNote { contents, .. } = op else {
+    let OperationKind::UpdateComment { contents, .. } = op else {
         return Value::Object(fields);
     };
 
-    note.contents = contents.clone();
+    comment.contents = contents.clone();
     fields.insert("contents".into(), json!(contents));
 
     Value::Object(fields)
@@ -3841,14 +3879,14 @@ mod tests {
             None
         );
 
-        let note_op = OperationKind::CreateNote {
+        let comment_op = OperationKind::CreateComment {
             id: Uuid::new_v4(),
             task_id: id,
-            contents: "note".to_string(),
+            contents: "comment".to_string(),
             created_at: Utc::now(),
         };
         assert_eq!(
-            automation_trigger_for_task_change(&note_op, None, &created),
+            automation_trigger_for_task_change(&comment_op, None, &created),
             None
         );
     }

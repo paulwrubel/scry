@@ -70,9 +70,9 @@ export type OperationKind =
     }
   | { kind: 'move_task'; id: string; section_id: string | null; position: Position }
   | { kind: 'delete_task'; id: string }
-  | { kind: 'create_note'; id: string; task_id: string; contents: string; created_at: string }
-  | { kind: 'update_note'; id: string; contents: string }
-  | { kind: 'delete_note'; id: string }
+  | { kind: 'create_comment'; id: string; task_id: string; contents: string; created_at: string }
+  | { kind: 'update_comment'; id: string; contents: string }
+  | { kind: 'delete_comment'; id: string }
   | {
       kind: 'create_automation';
       id: string;

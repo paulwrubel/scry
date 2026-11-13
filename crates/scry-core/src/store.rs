@@ -1,7 +1,7 @@
 use crate::error::StorageError;
-use crate::ids::{AutomationId, Handle, NoteId, ProjectId, SectionId, TaskId};
+use crate::ids::{AutomationId, CommentId, Handle, ProjectId, SectionId, TaskId};
 use crate::models::{
-    Automation, Change, Entity, EntityType, Note, Project, ProjectSnapshot, Section, Task,
+    Automation, Change, Comment, Entity, EntityType, Project, ProjectSnapshot, Section, Task,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -89,77 +89,77 @@ pub trait Store: Send + Sync {
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError>;
 
-    /// Add a note to a task.
-    async fn create_note(
+    /// Add a comment to a task.
+    async fn create_comment(
         &self,
-        note: Note,
+        comment: Comment,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Note, StorageError>;
+    ) -> Result<Comment, StorageError>;
 
-    // The note read/update/delete methods below are not wired into the UI yet;
-    // they are scaffolding for the future note editing and deletion features.
+    // The comment read/update/delete methods below are not wired into the UI yet;
+    // they are scaffolding for the future comment editing and deletion features.
     #[allow(dead_code)]
-    async fn get_note_by_id(
+    async fn get_comment_by_id(
         &self,
-        id: NoteId,
+        id: CommentId,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Option<Note>, StorageError>;
+    ) -> Result<Option<Comment>, StorageError>;
 
-    /// List notes assigned to a Task
+    /// List comments assigned to a Task
     ///
     /// Results are ordered by created date ascending.
     #[allow(dead_code)]
-    async fn get_all_notes_by_task_id(
+    async fn get_all_comments_by_task_id(
         &self,
         task_id: TaskId,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Vec<Note>, StorageError>;
+    ) -> Result<Vec<Comment>, StorageError>;
 
-    /// List all notes in a project
+    /// List all comments in a project
     ///
     /// Results are ordered by created date ascending.
-    async fn get_all_notes_by_project_id(
+    async fn get_all_comments_by_project_id(
         &self,
         project_id: ProjectId,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Vec<Note>, StorageError>;
+    ) -> Result<Vec<Comment>, StorageError>;
 
-    /// Edit an existing note
+    /// Edit an existing comment
     #[allow(dead_code)]
-    async fn update_note(
+    async fn update_comment(
         &self,
-        note: Note,
+        comment: Comment,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Note, StorageError>;
+    ) -> Result<Comment, StorageError>;
 
-    /// Delete a note
+    /// Delete a comment
     #[allow(dead_code)]
-    async fn delete_note(
+    async fn delete_comment(
         &self,
-        id: NoteId,
+        id: CommentId,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError>;
 
-    /// Find note ids whose UUID begins with a handle prefix.
+    /// Find comment ids whose UUID begins with a handle prefix.
     ///
     /// The prefix is compared against the normalized dashless form, at most
     /// `limit` ids are returned in ascending UUID order, and callers pass a small
     /// limit to detect an ambiguous prefix.
-    async fn find_note_ids_by_handle(
+    async fn find_comment_ids_by_handle(
         &self,
         handle: &Handle,
         limit: i64,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Vec<NoteId>, StorageError>;
+    ) -> Result<Vec<CommentId>, StorageError>;
 
-    /// Return every note id in the database.
+    /// Return every comment id in the database.
     ///
     /// Display handles are unique per entity type across the whole database, so
     /// computing them requires the complete id set.
-    async fn get_all_note_ids(
+    async fn get_all_comment_ids(
         &self,
         tx: Option<&mut PgConnection>,
-    ) -> Result<Vec<NoteId>, StorageError>;
+    ) -> Result<Vec<CommentId>, StorageError>;
 
     async fn create_section(
         &self,
@@ -259,7 +259,7 @@ pub trait Store: Send + Sync {
         tx: Option<&mut PgConnection>,
     ) -> Result<Option<Project>, StorageError>;
 
-    /// Load a project with all of its sections, tasks, and notes in one call.
+    /// Load a project with all of its sections, tasks, and comments in one call.
     ///
     /// Returns `StorageError::NotFound` when the project does not exist.
     async fn get_project_snapshot(

@@ -1,6 +1,6 @@
 //! Wire types returned by the REST API.
 
-use scry_core::models::{Note, Project, Section, Task};
+use scry_core::models::{Comment, Project, Section, Task};
 use serde::{Deserialize, Serialize};
 
 /// A project with its sections and tasks, as returned by `?detailed=true`.
@@ -12,13 +12,13 @@ pub struct ProjectDetail {
     pub tasks: Vec<TaskDetails>,
 }
 
-/// A task with optional notes and display handle.
+/// A task with optional comments and display handle.
 #[derive(Deserialize, Serialize)]
 pub struct TaskDetails {
     #[serde(flatten)]
     pub task: Task,
     #[serde(default)]
-    pub notes: Option<Vec<Note>>,
+    pub comments: Option<Vec<Comment>>,
     #[serde(default)]
     pub handle: Option<String>,
 }

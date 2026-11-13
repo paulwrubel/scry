@@ -60,7 +60,7 @@ function project(automations: Automation[] = []): ProjectSnapshot {
     created_at: CREATED_AT,
     sections: [SECTION_A, SECTION_B],
     tasks: [],
-    notes: [],
+    comments: [],
     automations,
   };
 }

@@ -109,7 +109,7 @@ mod tests {
     fn change_round_trips() {
         let change = Change {
             seq: 7,
-            entity_type: EntityType::Note,
+            entity_type: EntityType::Comment,
             entity_id: Uuid::new_v4(),
             kind: ChangeKind::Create,
             operation_id: Uuid::new_v4(),
@@ -130,9 +130,9 @@ mod tests {
 #[cfg(all(test, feature = "ts"))]
 mod export_bindings {
     use scry_core::models::{
-        Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, EntityType,
-        ExternalIdentity, ExternalMetadata, Note, Priority, Project, ProjectSnapshot, Section,
-        Tags, Task, TaskSortingMode, TaskState,
+        Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Comment,
+        EntityType, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectSnapshot,
+        Section, Tags, Task, TaskSortingMode, TaskState,
     };
     use scry_core::position::Position;
     use scry_core::snapshot::Snapshot;
@@ -175,7 +175,7 @@ mod export_bindings {
         Task::export_all(&config).expect("failed to export Task");
         ExternalIdentity::export_all(&config).expect("failed to export ExternalIdentity");
         ExternalMetadata::export_all(&config).expect("failed to export ExternalMetadata");
-        Note::export_all(&config).expect("failed to export Note");
+        Comment::export_all(&config).expect("failed to export Comment");
         Automation::export_all(&config).expect("failed to export Automation");
         AutomationTrigger::export_all(&config).expect("failed to export AutomationTrigger");
         AutomationAction::export_all(&config).expect("failed to export AutomationAction");

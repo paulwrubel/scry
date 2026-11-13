@@ -7,7 +7,7 @@ import { useTaskMutations } from '@/hooks/useTaskMutations';
 import type { TaskFieldPatch } from '@/utils/taskOperations';
 import { DeleteTaskModal } from './DeleteTaskModal';
 import { ExternalLinkField } from './ExternalLinkField';
-import { NotesSection } from './NotesSection';
+import { CommentsSection } from './CommentsSection';
 import { TaskActions } from './TaskActions';
 import { TaskFields } from './TaskFields';
 import { TaskHeader } from './TaskHeader';
@@ -31,12 +31,12 @@ export function TaskDetail(props: TaskDetailProps) {
     saveExternalIdentity,
     toggleState,
     deleteTask,
-    createNote,
-    updateNote,
-    deleteNote,
+    createComment,
+    updateComment,
+    deleteComment,
   } = useTaskMutations(task, project);
 
-  const notes = project.notes.filter((note) => note.task_id === task.id);
+  const comments = project.comments.filter((comment) => comment.task_id === task.id);
 
   function patch(overrides: Partial<TaskFieldPatch>): TaskFieldPatch {
     return {
@@ -96,12 +96,12 @@ export function TaskDetail(props: TaskDetailProps) {
           <TaskFields task={task} onSaveDescription={saveDescription} onSaveTags={saveTags} />
         </Card>
         <Card>
-          <NotesSection
+          <CommentsSection
             key={task.id}
-            notes={notes}
-            onCreate={createNote}
-            onUpdate={updateNote}
-            onDelete={deleteNote}
+            comments={comments}
+            onCreate={createComment}
+            onUpdate={updateComment}
+            onDelete={deleteComment}
           />
         </Card>
         <div className="border-line mt-auto flex flex-wrap items-center gap-2 border-t pt-4">

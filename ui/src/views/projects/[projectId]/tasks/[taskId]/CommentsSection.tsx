@@ -1,28 +1,30 @@
 import { Button } from 'flowbite-react';
 import { useState } from 'react';
 import { z } from 'zod';
-import type { Note } from '@/generated/Note';
+import type { Comment } from '@/generated/Comment';
 import { useAppForm } from '@/hooks/useAppForm';
 
 const schema = z.object({
-  contents: z.string().trim().min(1, 'A note cannot be empty.'),
+  contents: z.string().trim().min(1, 'A comment cannot be empty.'),
 });
 
-export type NotesSectionProps = {
-  notes: Note[];
+export type CommentsSectionProps = {
+  comments: Comment[];
   onCreate: (contents: string) => Promise<void>;
-  onUpdate: (note: Note, contents: string) => Promise<void>;
-  onDelete: (note: Note) => Promise<void>;
+  onUpdate: (comment: Comment, contents: string) => Promise<void>;
+  onDelete: (comment: Comment) => Promise<void>;
 };
 
-export function NotesSection(props: NotesSectionProps) {
-  const { notes, onCreate, onUpdate, onDelete } = props;
+export function CommentsSection(props: CommentsSectionProps) {
+  const { comments, onCreate, onUpdate, onDelete } = props;
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const ordered = [...notes].sort((left, right) => left.created_at.localeCompare(right.created_at));
+  const ordered = [...comments].sort((left, right) =>
+    left.created_at.localeCompare(right.created_at),
+  );
 
   const createForm = useAppForm({
     defaultValues: { contents: '' },
@@ -35,7 +37,7 @@ export function NotesSection(props: NotesSectionProps) {
         createForm.reset();
         void createForm.validate('change');
       } catch {
-        setError('Could not save this note.');
+        setError('Could not save this comment.');
       }
     },
   });
@@ -45,26 +47,26 @@ export function NotesSection(props: NotesSectionProps) {
     validators: { onChange: schema, onMount: schema },
     listeners: { onChange: () => setError(null) },
     onSubmit: async ({ value }) => {
-      const note = notes.find((item) => item.id === editingId);
-      if (note === undefined) {
+      const comment = comments.find((item) => item.id === editingId);
+      if (comment === undefined) {
         return;
       }
 
       setError(null);
       try {
-        await onUpdate(note, value.contents.trim());
+        await onUpdate(comment, value.contents.trim());
         setEditingId(null);
         editForm.reset();
       } catch {
-        setError('Could not save this note.');
+        setError('Could not save this comment.');
       }
     },
   });
 
-  function startEditing(note: Note) {
+  function startEditing(comment: Comment) {
     editForm.reset();
-    editForm.setFieldValue('contents', note.contents);
-    setEditingId(note.id);
+    editForm.setFieldValue('contents', comment.contents);
+    setEditingId(comment.id);
     setConfirmingId(null);
   }
 
@@ -73,26 +75,26 @@ export function NotesSection(props: NotesSectionProps) {
     editForm.reset();
   }
 
-  async function handleDelete(note: Note) {
+  async function handleDelete(comment: Comment) {
     setError(null);
     try {
-      await onDelete(note);
+      await onDelete(comment);
       setConfirmingId(null);
     } catch {
-      setError('Could not delete this note.');
+      setError('Could not delete this comment.');
     }
   }
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">Notes</h2>
-      {ordered.length === 0 ? <p className="text-faint text-sm">No notes yet.</p> : null}
-      {ordered.map((note) => (
+      <h2 className="text-lg font-semibold">Comments</h2>
+      {ordered.length === 0 ? <p className="text-faint text-sm">No comments yet.</p> : null}
+      {ordered.map((comment) => (
         <div
-          key={note.id}
+          key={comment.id}
           className="border-line-strong bg-surface flex flex-col gap-2 rounded-lg border p-3"
         >
-          {editingId === note.id ? (
+          {editingId === comment.id ? (
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -101,7 +103,7 @@ export function NotesSection(props: NotesSectionProps) {
               className="flex flex-col gap-2"
             >
               <editForm.AppField name="contents">
-                {(field) => <field.FormTextAreaField label="Note contents" rows={3} />}
+                {(field) => <field.FormTextAreaField label="Comment contents" rows={3} />}
               </editForm.AppField>
               <div className="flex gap-2">
                 <editForm.Subscribe
@@ -112,7 +114,7 @@ export function NotesSection(props: NotesSectionProps) {
                 >
                   {({ isValid, submitting }) => (
                     <Button type="submit" size="xs" disabled={submitting || !isValid}>
-                      Save note
+                      Save comment
                     </Button>
                   )}
                 </editForm.Subscribe>
@@ -123,16 +125,16 @@ export function NotesSection(props: NotesSectionProps) {
             </form>
           ) : (
             <>
-              <p className="text-sm whitespace-pre-wrap">{note.contents}</p>
-              <p className="text-faint text-xs">{new Date(note.created_at).toLocaleString()}</p>
-              {confirmingId === note.id ? (
+              <p className="text-sm whitespace-pre-wrap">{comment.contents}</p>
+              <p className="text-faint text-xs">{new Date(comment.created_at).toLocaleString()}</p>
+              {confirmingId === comment.id ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-muted text-sm">Delete this note?</span>
+                  <span className="text-muted text-sm">Delete this comment?</span>
                   <Button
                     size="xs"
                     color="red"
-                    aria-label="Confirm delete note"
-                    onClick={() => void handleDelete(note)}
+                    aria-label="Confirm delete comment"
+                    onClick={() => void handleDelete(comment)}
                   >
                     Confirm
                   </Button>
@@ -145,16 +147,16 @@ export function NotesSection(props: NotesSectionProps) {
                   <Button
                     size="xs"
                     color="alternative"
-                    aria-label="Edit note"
-                    onClick={() => startEditing(note)}
+                    aria-label="Edit comment"
+                    onClick={() => startEditing(comment)}
                   >
                     Edit
                   </Button>
                   <Button
                     size="xs"
                     color="red"
-                    aria-label="Delete note"
-                    onClick={() => setConfirmingId(note.id)}
+                    aria-label="Delete comment"
+                    onClick={() => setConfirmingId(comment.id)}
                   >
                     Delete
                   </Button>
@@ -173,7 +175,7 @@ export function NotesSection(props: NotesSectionProps) {
       >
         <createForm.AppField name="contents">
           {(field) => (
-            <field.FormTextAreaField label="New note" placeholder="Add a note" rows={2} />
+            <field.FormTextAreaField label="New comment" placeholder="Add a comment" rows={2} />
           )}
         </createForm.AppField>
         <div>
@@ -185,7 +187,7 @@ export function NotesSection(props: NotesSectionProps) {
           >
             {({ isValid, submitting }) => (
               <Button type="submit" size="xs" disabled={submitting || !isValid}>
-                Add note
+                Add comment
               </Button>
             )}
           </createForm.Subscribe>
