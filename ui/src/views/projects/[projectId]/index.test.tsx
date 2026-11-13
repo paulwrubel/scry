@@ -711,6 +711,57 @@ describe('BoardPage', () => {
   });
 });
 
+describe('show priority', () => {
+  it('toggles priority display from the mobile toolbar button', () => {
+    viewport.isDesktop = false;
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog', priority: 'high' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?state=open',
+    );
+
+    expect(screen.queryByRole('img', { name: 'high priority' })).toBeNull();
+
+    const toggle = screen.getByRole('switch', { name: 'Show priority' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(toggle);
+
+    expect(screen.getByTestId('search').textContent).toBe('state=open&show_priority=true');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('img', { name: 'high priority' })).toBeDefined();
+
+    fireEvent.click(toggle);
+
+    expect(screen.getByTestId('search').textContent).toBe('state=open');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByRole('img', { name: 'high priority' })).toBeNull();
+  });
+
+  it('keeps the labelled switch on desktop', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?show_priority=true',
+    );
+
+    const toggle = screen.getByRole('switch', { name: 'Show priority' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('button', { name: 'Show priority' })).toBeNull();
+    expect(screen.getByRole('img', { name: 'medium priority' })).toBeDefined();
+  });
+});
+
 describe('collapsible sections', () => {
   function collapseButton(name: string) {
     return screen.getByRole('button', { name });
