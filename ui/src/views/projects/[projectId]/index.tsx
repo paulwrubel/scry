@@ -83,7 +83,7 @@ export function BoardPage() {
     [optimisticProject, filter, sortMode],
   );
   const { dragItems, handleDragStart, handleDragMove, handleDragOver, resetDragPreview } =
-    useTaskDragPreview(baseGroups);
+    useTaskDragPreview(baseGroups, sortMode === 'priority');
 
   if (optimisticProject === undefined) {
     return (
@@ -238,6 +238,18 @@ export function BoardPage() {
     const located = groupIds.indexOf(taskId);
     const index = located === -1 ? source.index : located;
     const afterId = groupIds[index + 1] ?? null;
+    if (sortMode === 'priority') {
+      const peers = project.tasks.filter(
+        (candidate) =>
+          candidate.section_id === sectionId &&
+          candidate.priority === task.priority &&
+          candidate.id !== task.id,
+      );
+      // a lone priority task has no within-group order to change
+      if (sectionId === task.section_id && peers.length === 0) {
+        return;
+      }
+    }
     const position =
       sortMode === 'priority'
         ? dropPositionForPriority(project, sectionId, task.priority, taskId, afterId)

@@ -590,3 +590,57 @@ describe('previewAtPointer', () => {
     expect(mutable.groups.doing.slots).toEqual([taskSlot('c', 0), taskSlot('d', 54)]);
   });
 });
+
+describe('previewAtPointer with a priority scope', () => {
+  const layout = dragLayout(
+    {
+      backlog: [
+        taskSlot('high-a', 0),
+        taskSlot('high-b', 54),
+        taskSlot('medium-a', 108),
+        taskSlot('medium-b', 162),
+      ],
+      doing: [taskSlot('high-c', 0), taskSlot('low-a', 54)],
+    },
+    46,
+  );
+  const scope = {
+    priority: 'medium' as const,
+    priorityOf: (id: string) => {
+      if (id.startsWith('high')) {
+        return 'high' as const;
+      }
+      if (id.startsWith('low')) {
+        return 'low' as const;
+      }
+      return 'medium' as const;
+    },
+  };
+
+  it('inserts at the top of its own band when hovered over the band above', () => {
+    const items = { backlog: ['high-a', 'high-b', 'medium-a', 'medium-b'], doing: [] };
+
+    expect(previewAtPointer(items, layout, 'backlog', 'medium-b', 0, scope)).toEqual({
+      backlog: ['high-a', 'high-b', 'medium-b', 'medium-a'],
+      doing: [],
+    });
+  });
+
+  it('never opens a gap between tasks of another priority', () => {
+    const items = { backlog: ['high-a', 'high-b', 'medium-a', 'medium-b'], doing: [] };
+
+    expect(previewAtPointer(items, layout, 'backlog', 'medium-b', 80, scope)).toEqual({
+      backlog: ['high-a', 'high-b', 'medium-b', 'medium-a'],
+      doing: [],
+    });
+  });
+
+  it('places a new priority band by rank when the destination has no peer', () => {
+    const items = { backlog: ['medium-a'], doing: ['high-c', 'low-a'] };
+
+    expect(previewAtPointer(items, layout, 'doing', 'medium-a', 80, scope)).toEqual({
+      backlog: [],
+      doing: ['high-c', 'medium-a', 'low-a'],
+    });
+  });
+});
