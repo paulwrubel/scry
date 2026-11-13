@@ -32,20 +32,28 @@ describe('compareTasks', () => {
     expect(compareTasks('manual', second, first)).toBeGreaterThan(0);
   });
 
-  it('orders alphabetical tasks by title', () => {
-    const alpha = task({ title: 'alpha' });
-    const beta = task({ id: SECOND_ID, title: 'beta' });
-
-    expect(compareTasks('alphabetical', alpha, beta)).toBeLessThan(0);
-    expect(compareTasks('alphabetical', beta, alpha)).toBeGreaterThan(0);
-  });
-
   it('orders priority tasks by rank', () => {
     const critical = task({ priority: 'critical' });
     const low = task({ id: SECOND_ID, priority: 'low' });
 
     expect(compareTasks('priority', critical, low)).toBeLessThan(0);
     expect(compareTasks('priority', low, critical)).toBeGreaterThan(0);
+  });
+
+  it('orders same-priority tasks by position', () => {
+    const first = task({ position: 'a0' });
+    const second = task({ id: SECOND_ID, position: 'a1' });
+
+    expect(compareTasks('priority', first, second)).toBeLessThan(0);
+    expect(compareTasks('priority', second, first)).toBeGreaterThan(0);
+  });
+
+  it('breaks same-priority position ties by id', () => {
+    const first = task();
+    const second = task({ id: SECOND_ID });
+
+    expect(compareTasks('priority', first, second)).toBeLessThan(0);
+    expect(compareTasks('priority', second, first)).toBeGreaterThan(0);
   });
 
   it('breaks ties by id', () => {

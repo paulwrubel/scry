@@ -41,19 +41,6 @@ fn manual_mode_orders_by_position() {
 }
 
 #[test]
-fn alphabetical_mode_orders_by_title() {
-    let tasks = vec![
-        task(1, "beta", "a0", Priority::Medium),
-        task(2, "alpha", "a0", Priority::Medium),
-    ];
-
-    assert_eq!(
-        sorted_ids(TaskSortingMode::Alphabetical, tasks),
-        vec![Uuid::from_u128(2), Uuid::from_u128(1)]
-    );
-}
-
-#[test]
 fn priority_mode_orders_by_priority() {
     let tasks = vec![
         task(1, "first", "a0", Priority::Minimal),
@@ -67,12 +54,34 @@ fn priority_mode_orders_by_priority() {
 }
 
 #[test]
+fn priority_mode_orders_same_priority_by_position() {
+    let tasks = vec![
+        task(1, "first", "a1", Priority::High),
+        task(2, "second", "a0", Priority::High),
+    ];
+
+    assert_eq!(
+        sorted_ids(TaskSortingMode::Priority, tasks),
+        vec![Uuid::from_u128(2), Uuid::from_u128(1)]
+    );
+}
+
+#[test]
+fn priority_mode_breaks_position_ties_by_id() {
+    let tasks = vec![
+        task(2, "second", "a0", Priority::High),
+        task(1, "first", "a0", Priority::High),
+    ];
+
+    assert_eq!(
+        sorted_ids(TaskSortingMode::Priority, tasks),
+        vec![Uuid::from_u128(1), Uuid::from_u128(2)]
+    );
+}
+
+#[test]
 fn ids_break_ties_in_every_mode() {
-    for mode in [
-        TaskSortingMode::Manual,
-        TaskSortingMode::Alphabetical,
-        TaskSortingMode::Priority,
-    ] {
+    for mode in [TaskSortingMode::Manual, TaskSortingMode::Priority] {
         let left = task(1, "same", "a0", Priority::Medium);
         let right = task(2, "same", "a0", Priority::Medium);
 

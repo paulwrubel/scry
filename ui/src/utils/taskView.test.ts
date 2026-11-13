@@ -43,18 +43,18 @@ describe('applyTaskSortingMode', () => {
   it('preserves unrelated params', () => {
     const params = new URLSearchParams('state=open&tags=bug&q=fix');
 
-    const next = applyTaskSortingMode(params, 'alphabetical');
+    const next = applyTaskSortingMode(params, 'priority');
 
     expect(next.get('state')).toBe('open');
     expect(next.get('tags')).toBe('bug');
     expect(next.get('q')).toBe('fix');
-    expect(next.get('sort')).toBe('alphabetical');
+    expect(next.get('sort')).toBe('priority');
   });
 
   it('replaces an existing sort value without duplicating it', () => {
-    const next = applyTaskSortingMode(new URLSearchParams('sort=manual'), 'created');
+    const next = applyTaskSortingMode(new URLSearchParams('sort=manual'), 'priority');
 
-    expect(next.getAll('sort')).toEqual(['created']);
+    expect(next.getAll('sort')).toEqual(['priority']);
   });
 
   it('does not mutate the input params', () => {
