@@ -3,7 +3,7 @@ import type * as DndKitReact from '@dnd-kit/react';
 import type * as DndKitSortable from '@dnd-kit/react/sortable';
 import type * as MediaQuery from '@/hooks/useMediaQuery';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
@@ -82,7 +82,6 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     id: 'project-1',
     name: 'Project',
     description: null,
-    task_sorting_mode: 'manual',
     show_priority: false,
     created_at: CREATED_AT,
     sections: [],
@@ -91,6 +90,11 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     automations: [],
     ...overrides,
   };
+}
+
+function SearchProbe() {
+  const [params] = useSearchParams();
+  return <span data-testid="search">{params.toString()}</span>;
 }
 
 function renderBoard(
@@ -121,6 +125,7 @@ function renderBoard(
   render(
     <ReplicaContext.Provider value={context}>
       <MemoryRouter initialEntries={[path]}>
+        <SearchProbe />
         <Routes>
           <Route path="/projects/:projectId" element={<BoardPage />} />
         </Routes>
@@ -455,7 +460,6 @@ describe('BoardPage', () => {
 
   it('explains that filters disable drag-and-drop', () => {
     const project = projectSnapshot({
-      task_sorting_mode: 'manual',
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
     });
@@ -471,7 +475,6 @@ describe('BoardPage', () => {
 
   it('explains that a non-manual sort mode disables drag-and-drop', () => {
     const project = projectSnapshot({
-      task_sorting_mode: 'priority',
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
     });
@@ -479,6 +482,7 @@ describe('BoardPage', () => {
     renderBoard(
       project,
       vi.fn(async () => undefined),
+      '/projects/project-1?sort=priority',
     );
 
     expect(screen.getByText('task drag-and-drop disabled due to sort mode')).toBeDefined();
@@ -486,7 +490,6 @@ describe('BoardPage', () => {
 
   it('explains when both sort mode and filters disable drag-and-drop', () => {
     const project = projectSnapshot({
-      task_sorting_mode: 'priority',
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
     });
@@ -494,7 +497,7 @@ describe('BoardPage', () => {
     renderBoard(
       project,
       vi.fn(async () => undefined),
-      '/projects/project-1?state=open',
+      '/projects/project-1?sort=priority&state=open',
     );
 
     expect(
@@ -504,7 +507,6 @@ describe('BoardPage', () => {
 
   it('does not show the drag-and-drop warning for manual sort with no filters', () => {
     const project = projectSnapshot({
-      task_sorting_mode: 'manual',
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
     });
@@ -517,9 +519,89 @@ describe('BoardPage', () => {
     expect(screen.queryByText(/task drag-and-drop disabled/)).toBeNull();
   });
 
+  it('orders tasks on the board from the sort URL param', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [
+        task({ id: 'low', title: 'Low', section_id: 'backlog', position: 'a0', priority: 'low' }),
+        task({
+          id: 'critical',
+          title: 'Critical',
+          section_id: 'backlog',
+          position: 'a1',
+          priority: 'critical',
+        }),
+      ],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?sort=priority',
+    );
+
+    const low = screen.getByText('Low');
+    const critical = screen.getByText('Critical');
+
+    expect(critical.compareDocumentPosition(low) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('updates the sort URL param without enqueueing an operation', () => {
+    const enqueue = vi.fn(async (_operation: Operation) => undefined);
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog' })],
+    });
+
+    renderBoard(project, enqueue);
+
+    const sort = screen.getByRole('combobox', { name: 'Task sorting' }) as HTMLSelectElement;
+    fireEvent.change(sort, { target: { value: 'priority' } });
+
+    expect(screen.getByTestId('search').textContent).toBe('sort=priority');
+    expect(sort.value).toBe('priority');
+    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'update_project' }));
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('removes the sort param when switching back to manual while preserving other params', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?sort=priority&state=open',
+    );
+
+    const sort = screen.getByRole('combobox', { name: 'Task sorting' }) as HTMLSelectElement;
+    fireEvent.change(sort, { target: { value: 'manual' } });
+
+    expect(screen.getByTestId('search').textContent).toBe('state=open');
+    expect(sort.value).toBe('manual');
+  });
+
+  it('falls back to manual for an invalid sort param', () => {
+    const project = projectSnapshot({
+      sections: [section('backlog', 'Backlog', 'a0')],
+      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog' })],
+    });
+
+    renderBoard(
+      project,
+      vi.fn(async () => undefined),
+      '/projects/project-1?sort=banana',
+    );
+
+    const sort = screen.getByRole('combobox', { name: 'Task sorting' }) as HTMLSelectElement;
+    expect(sort.value).toBe('manual');
+    expect(screen.queryByText(/task drag-and-drop disabled/)).toBeNull();
+  });
+
   it('orders the toolbar warning before filter, sort, and show priority', () => {
     const project = projectSnapshot({
-      task_sorting_mode: 'manual',
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
     });

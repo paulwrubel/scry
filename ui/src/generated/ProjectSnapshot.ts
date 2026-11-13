@@ -3,7 +3,6 @@ import type { Automation } from './Automation';
 import type { Note } from './Note';
 import type { Section } from './Section';
 import type { Task } from './Task';
-import type { TaskSortingMode } from './TaskSortingMode';
 
 /**
  * A project together with all of its sections, tasks, notes, and automations.
@@ -22,7 +21,6 @@ export type ProjectSnapshot = {
   id: string;
   name: string;
   description: string | null;
-  task_sorting_mode: TaskSortingMode;
   show_priority: boolean;
   created_at: string;
 };

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT id, name, description, task_sorting_mode, show_priority, created_at\n                FROM projects\n                ORDER BY name ASC\n            ",
+  "query": "\n                SELECT id, name, description, show_priority, created_at\n                FROM projects\n                WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -38,17 +38,6 @@
       },
       {
         "ordinal": 3,
-        "name": "task_sorting_mode",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "projects",
-            "name": "task_sorting_mode"
-          }
-        }
-      },
-      {
-        "ordinal": 4,
         "name": "show_priority",
         "type_info": "Bool",
         "origin": {
@@ -59,7 +48,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -71,16 +60,17 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
       false,
       true,
       false,
-      false,
       false
     ]
   },
-  "hash": "382cc47c135160fe4049a80c8753e2d4943d6d50cb32a01f890913dc941cc987"
+  "hash": "166e34fb42650dfe9cb8f7448d886e6356f47fee0f3dd527bf541ed1ce9215b6"
 }

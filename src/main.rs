@@ -15,7 +15,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::AppError;
 use scry_core::ids::Handle;
-use scry_core::models::{Color, Priority, TaskSortingMode};
+use scry_core::models::{Color, Priority};
 use scry_core::snapshot::ImportMode;
 use std::path::{Path, PathBuf};
 
@@ -265,9 +265,6 @@ enum ProjectCommand {
         /// New description (empty string clears it)
         #[arg(long)]
         description: Option<String>,
-        /// Set the task sorting mode
-        #[arg(long)]
-        sort: Option<TaskSortingMode>,
         /// Show the priority level in task listings
         #[arg(long, conflicts_with = "hide_priority")]
         show_priority: bool,
@@ -689,7 +686,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Some(Command::Project(ProjectCommand::Update {
             name,
             description,
-            sort,
             show_priority,
             hide_priority,
         })) => {
@@ -709,7 +705,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 client::UpdateProject {
                     name: name.as_deref(),
                     description: description.as_deref(),
-                    sort: *sort,
                     show_priority,
                 },
                 output_json,

@@ -278,7 +278,6 @@ impl From<&str> for TaskSortingMode {
 #[derive(Debug, Clone, Copy)]
 pub struct ProjectTemplate {
     pub name: &'static str,
-    pub task_sorting_mode: TaskSortingMode,
     pub show_priority: bool,
     pub sections: &'static [ProjectTemplateSection],
 }
@@ -293,13 +292,11 @@ pub struct ProjectTemplateSection {
 pub const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
     ProjectTemplate {
         name: "todolist",
-        task_sorting_mode: TaskSortingMode::Manual,
         show_priority: false,
         sections: &[],
     },
     ProjectTemplate {
         name: "kanban",
-        task_sorting_mode: TaskSortingMode::Priority,
         show_priority: true,
         sections: &[
             ProjectTemplateSection {
@@ -327,7 +324,6 @@ pub struct Project {
     pub id: ProjectId,
     pub name: String,
     pub description: Option<String>,
-    pub task_sorting_mode: TaskSortingMode,
     pub show_priority: bool,
     pub created_at: DateTime<Utc>,
 }

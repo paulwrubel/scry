@@ -324,21 +324,14 @@ pub fn plan_import(
         let (target_project_id, project_reminted) = if let Some(live_project) = live_project {
             let name = changed(&live_project.name, &chosen_name);
             let description = changed(&live_project.description, &description);
-            let task_sorting_mode =
-                changed(&live_project.task_sorting_mode, &incoming.task_sorting_mode);
             let show_priority = changed(&live_project.show_priority, &incoming.show_priority);
 
-            if name.is_some()
-                || description.is_some()
-                || task_sorting_mode.is_some()
-                || show_priority.is_some()
-            {
+            if name.is_some() || description.is_some() || show_priority.is_some() {
                 plan.operations
                     .push(operation(OperationKind::UpdateProject {
                         id: live_project.id,
                         name,
                         description,
-                        task_sorting_mode,
                         show_priority,
                     }));
             }
@@ -362,7 +355,6 @@ pub fn plan_import(
                     id: project_id,
                     name: chosen_name.clone(),
                     description,
-                    task_sorting_mode: incoming.task_sorting_mode,
                     show_priority: incoming.show_priority,
                     created_at: incoming.created_at,
                 }));
@@ -926,8 +918,7 @@ fn remap_automation_action(
 mod tests {
     use super::*;
     use crate::models::{
-        ExternalIdentity, ExternalMetadata, Note, Priority, Project, Section, Tags, Task,
-        TaskSortingMode, TaskState,
+        ExternalIdentity, ExternalMetadata, Note, Priority, Project, Section, Tags, Task, TaskState,
     };
     use crate::position::Position;
     use chrono::{DateTime, Utc};
@@ -956,7 +947,6 @@ mod tests {
             id: uuid(id),
             name: name.to_string(),
             description: None,
-            task_sorting_mode: TaskSortingMode::Manual,
             show_priority: false,
             created_at: at(),
         }
@@ -1180,14 +1170,47 @@ mod tests {
         assert!(task.external_identity.is_none());
         assert!(task.external_metadata.is_none());
     }
+
+    #[test]
+    fn old_project_json_with_task_sorting_mode_still_deserializes() {
+        let document: ProjectSnapshot = serde_json::from_value(json!({
+            "id": PROJECT_ID,
+            "name": "alpha",
+            "description": null,
+            "task_sorting_mode": "priority",
+            "show_priority": false,
+            "created_at": "1970-01-01T00:00:00Z",
+            "sections": [],
+            "tasks": [],
+            "notes": [],
+            "automations": []
+        }))
+        .expect("a snapshot carrying the removed task_sorting_mode field should deserialize");
+
+        assert_eq!(document.project.id, uuid(PROJECT_ID));
+        assert_eq!(document.project.name, "alpha");
+        assert_eq!(document.project.created_at, at());
+    }
+
+    #[test]
+    fn serialized_project_snapshot_omits_task_sorting_mode() {
+        let serialized = serde_json::to_value(full_project_doc(PROJECT_ID, "alpha"))
+            .expect("snapshot document should serialize");
+
+        assert!(
+            serialized
+                .as_object()
+                .expect("project document should be an object")
+                .get("task_sorting_mode")
+                .is_none()
+        );
+    }
 }
 
 #[cfg(test)]
 mod import_tests {
     use super::*;
-    use crate::models::{
-        ExternalIdentity, ExternalMetadata, Priority, ProjectSnapshot, TaskSortingMode, TaskState,
-    };
+    use crate::models::{ExternalIdentity, ExternalMetadata, Priority, ProjectSnapshot, TaskState};
     use crate::position::Position;
     use chrono::{DateTime, Utc};
 
@@ -1204,7 +1227,6 @@ mod import_tests {
             id,
             name: name.to_string(),
             description: None,
-            task_sorting_mode: TaskSortingMode::Alphabetical,
             show_priority: false,
             created_at: at(),
         }

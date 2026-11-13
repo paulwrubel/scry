@@ -80,7 +80,6 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     id: PROJECT_ID,
     name: 'Project',
     description: null,
-    task_sorting_mode: 'manual',
     show_priority: false,
     created_at: CREATED_AT,
     sections: [section('backlog', 'Backlog', 'a0'), section('doing', 'Doing', 'a1')],

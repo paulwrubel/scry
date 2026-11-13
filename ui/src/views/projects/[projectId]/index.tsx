@@ -11,7 +11,6 @@ import { useCollapsedSections } from '@/hooks/useCollapsedSections';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
-import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
 import { updateProjectOperation } from '@/utils/projectOperations';
 import {
@@ -29,6 +28,7 @@ import {
 } from '@/utils/taskFilter';
 import type { TaskFilter } from '@/utils/taskFilter';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
+import { applyTaskSortingMode, parseTaskSortingMode, TASK_SORTING_OPTIONS } from '@/utils/taskView';
 import { BoardColumn } from './BoardColumn';
 import { MobileAddTask } from './MobileAddTask';
 import { NewSectionCard } from './NewSectionCard';
@@ -48,14 +48,6 @@ import {
 import { useTaskDragPreview } from './useTaskDragPreview';
 
 const defaultActivationConstraints = PointerSensor.defaults.activationConstraints;
-
-const SORTING_MODES: { label: string; value: TaskSortingMode }[] = [
-  { label: 'Alphabetical', value: 'alphabetical' },
-  { label: 'Alphabetical (case-insensitive)', value: 'alphabetical-case-insensitive' },
-  { label: 'Creation order', value: 'created' },
-  { label: 'Manual', value: 'manual' },
-  { label: 'Priority', value: 'priority' },
-];
 
 type PendingMove = {
   taskId: string;
@@ -82,15 +74,13 @@ export function BoardPage() {
   }, [found, pendingMove]);
 
   const filter = useMemo(() => parseTaskFilter(searchParams), [searchParams]);
+  const sortMode = useMemo(() => parseTaskSortingMode(searchParams), [searchParams]);
 
   const narrowing = isTaskFilterNarrowing(filter);
-  const canReorder =
-    optimisticProject !== undefined &&
-    optimisticProject.task_sorting_mode === 'manual' &&
-    !narrowing;
+  const canReorder = optimisticProject !== undefined && sortMode === 'manual' && !narrowing;
   const baseGroups = useMemo(
-    () => (optimisticProject === undefined ? [] : buildBoard(optimisticProject, filter)),
-    [optimisticProject, filter],
+    () => (optimisticProject === undefined ? [] : buildBoard(optimisticProject, filter, sortMode)),
+    [optimisticProject, filter, sortMode],
   );
   const { dragItems, handleDragStart, handleDragMove, handleDragOver, resetDragPreview } =
     useTaskDragPreview(baseGroups, canReorder);
@@ -130,7 +120,7 @@ export function BoardPage() {
   );
   const visibleTaskCount = baseGroups.reduce((total, group) => total + group.tasks.length, 0);
   const dragDisabledReasons: string[] = [];
-  if (project.task_sorting_mode !== 'manual') {
+  if (sortMode !== 'manual') {
     dragDisabledReasons.push('sort mode');
   }
   if (narrowing) {
@@ -146,14 +136,10 @@ export function BoardPage() {
     await replica.enqueue(createTaskOperation(project, sectionId, title, externalIdentity));
   }
 
-  async function handleProjectUpdate(patch: {
-    task_sorting_mode?: TaskSortingMode;
-    show_priority?: boolean;
-  }) {
+  async function handleProjectUpdate(patch: { show_priority?: boolean }) {
     const operation = updateProjectOperation(project, {
       name: project.name,
       description: project.description ?? '',
-      task_sorting_mode: project.task_sorting_mode,
       show_priority: project.show_priority,
       ...patch,
     });
@@ -287,15 +273,19 @@ export function BoardPage() {
               sizing="sm"
               aria-label="Task sorting"
               className="w-40 md:w-56"
-              value={project.task_sorting_mode}
+              value={sortMode}
               onChange={(event) => {
-                const mode = SORTING_MODES.find((option) => option.value === event.target.value);
+                const mode = TASK_SORTING_OPTIONS.find(
+                  (option) => option.value === event.target.value,
+                );
                 if (mode !== undefined) {
-                  void handleProjectUpdate({ task_sorting_mode: mode.value });
+                  setSearchParams(applyTaskSortingMode(searchParams, mode.value), {
+                    replace: true,
+                  });
                 }
               }}
             >
-              {SORTING_MODES.map((mode) => (
+              {TASK_SORTING_OPTIONS.map((mode) => (
                 <option key={mode.value} value={mode.value}>
                   {mode.label}
                 </option>

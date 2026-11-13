@@ -113,7 +113,7 @@ impl ProjectState {
                         task.state == TaskState::Open && task.section_id == Some(section.id)
                     })
                     .collect();
-                sort_tasks(&mut section_tasks, project.task_sorting_mode);
+                sort_tasks(&mut section_tasks);
                 SectionWithTasks {
                     section: Some(section.clone()),
                     tasks_with_notes: section_tasks.into_iter().map(task_with_notes).collect(),
@@ -125,7 +125,7 @@ impl ProjectState {
             .iter()
             .filter(|task| task.state == TaskState::Open && task.section_id.is_none())
             .collect();
-        sort_tasks(&mut unsectioned_tasks, project.task_sorting_mode);
+        sort_tasks(&mut unsectioned_tasks);
         if !unsectioned_tasks.is_empty() {
             sections_with_tasks.push(SectionWithTasks {
                 section: None,
@@ -137,7 +137,7 @@ impl ProjectState {
             .iter()
             .filter(|task| task.state == TaskState::Closed)
             .collect();
-        sort_tasks(&mut closed, project.task_sorting_mode);
+        sort_tasks(&mut closed);
         let closed_tasks = closed.into_iter().map(task_with_notes).collect();
 
         Self {
@@ -200,8 +200,8 @@ impl ProjectState {
     }
 }
 
-fn sort_tasks(tasks: &mut [&Task], mode: TaskSortingMode) {
-    tasks.sort_by(|left, right| compare_tasks(mode, left, right));
+fn sort_tasks(tasks: &mut [&Task]) {
+    tasks.sort_by(|left, right| compare_tasks(TaskSortingMode::Manual, left, right));
 }
 
 #[cfg(test)]
@@ -232,12 +232,11 @@ mod tests {
             .with_timezone(&Utc)
     }
 
-    fn project(mode: TaskSortingMode) -> Project {
+    fn project() -> Project {
         Project {
             id: project_id(1),
             name: "Test Project".to_string(),
             description: None,
-            task_sorting_mode: mode,
             show_priority: false,
             created_at: ts("2026-01-01T00:00:00Z"),
         }
@@ -321,7 +320,7 @@ mod tests {
     #[test]
     fn groups_open_tasks_by_section_and_keeps_empty_sections() {
         let snapshot = ProjectSnapshot {
-            project: project(TaskSortingMode::Manual),
+            project: project(),
             sections: vec![section(section_id(10), "a0"), section(section_id(11), "a1")],
             tasks: vec![
                 open_task(
@@ -380,7 +379,7 @@ mod tests {
     #[test]
     fn no_section_group_is_only_present_for_open_unsectioned_tasks() {
         let snapshot = ProjectSnapshot {
-            project: project(TaskSortingMode::Manual),
+            project: project(),
             sections: vec![section(section_id(10), "a0")],
             tasks: vec![
                 open_task(
@@ -406,9 +405,9 @@ mod tests {
     }
 
     #[test]
-    fn closed_tasks_are_kept_out_of_sections_and_follow_the_sorting_mode() {
+    fn closed_tasks_are_kept_out_of_sections() {
         let snapshot = ProjectSnapshot {
-            project: project(TaskSortingMode::Manual),
+            project: project(),
             sections: vec![section(section_id(10), "a0")],
             tasks: vec![
                 open_task(
@@ -442,9 +441,9 @@ mod tests {
         );
     }
 
-    fn sorting_snapshot(mode: TaskSortingMode) -> ProjectSnapshot {
+    fn sorting_snapshot() -> ProjectSnapshot {
         ProjectSnapshot {
-            project: project(mode),
+            project: project(),
             sections: vec![section(section_id(10), "a0")],
             tasks: vec![
                 open_task(
@@ -475,73 +474,8 @@ mod tests {
     }
 
     #[test]
-    fn manual_sorting_orders_by_position_then_id() {
-        let state = ProjectState::from_snapshot(sorting_snapshot(TaskSortingMode::Manual));
-
-        assert_eq!(
-            section_open_ids(&state, Some(section_id(10))),
-            vec![task_id(2), task_id(3), task_id(1)]
-        );
-    }
-
-    #[test]
-    fn priority_sorting_orders_by_priority_then_id() {
-        let state = ProjectState::from_snapshot(sorting_snapshot(TaskSortingMode::Priority));
-
-        assert_eq!(
-            section_open_ids(&state, Some(section_id(10))),
-            vec![task_id(2), task_id(1), task_id(3)]
-        );
-    }
-
-    #[test]
-    fn case_insensitive_alphabetical_sorting_breaks_ties_by_id() {
-        let state = ProjectState::from_snapshot(sorting_snapshot(
-            TaskSortingMode::AlphabeticalCaseInsensitive,
-        ));
-
-        assert_eq!(
-            section_open_ids(&state, Some(section_id(10))),
-            vec![task_id(2), task_id(3), task_id(1)]
-        );
-    }
-
-    #[test]
-    fn created_sorting_orders_by_created_at_then_id() {
-        let mut newest = open_task(
-            task_id(1),
-            "newest",
-            Some(section_id(10)),
-            "a0",
-            Priority::Medium,
-        );
-        newest.created_at = ts("2026-01-03T00:00:00Z");
-        let mut oldest_second = open_task(
-            task_id(3),
-            "oldest second",
-            Some(section_id(10)),
-            "a0",
-            Priority::Medium,
-        );
-        oldest_second.created_at = ts("2026-01-01T00:00:00Z");
-        let mut oldest_first = open_task(
-            task_id(2),
-            "oldest first",
-            Some(section_id(10)),
-            "a0",
-            Priority::Medium,
-        );
-        oldest_first.created_at = ts("2026-01-01T00:00:00Z");
-
-        let snapshot = ProjectSnapshot {
-            project: project(TaskSortingMode::Created),
-            sections: vec![section(section_id(10), "a0")],
-            tasks: vec![newest, oldest_second, oldest_first],
-            notes: vec![],
-            automations: Vec::new(),
-        };
-
-        let state = ProjectState::from_snapshot(snapshot);
+    fn tasks_are_ordered_by_position_then_id() {
+        let state = ProjectState::from_snapshot(sorting_snapshot());
 
         assert_eq!(
             section_open_ids(&state, Some(section_id(10))),
@@ -561,7 +495,7 @@ mod tests {
         tagged.tags = Tags::from("Urgent,backend");
 
         let snapshot = ProjectSnapshot {
-            project: project(TaskSortingMode::Manual),
+            project: project(),
             sections: vec![section(section_id(10), "a0"), section(section_id(11), "a1")],
             tasks: vec![
                 open_task(

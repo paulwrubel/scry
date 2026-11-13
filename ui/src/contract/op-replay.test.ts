@@ -55,7 +55,6 @@ function snapshot(title: string): ProjectSnapshot {
     id: PROJECT_ID,
     name: 'project',
     description: null,
-    task_sorting_mode: 'manual',
     show_priority: true,
     created_at: CREATED_AT,
     sections: [section],
@@ -259,6 +258,51 @@ describe('op replay', () => {
     const result = applyChanges(state(), [serverProjectDelete()]);
 
     expect(result.projects).toHaveLength(0);
+  });
+
+  it('replays a legacy create_project operation carrying task_sorting_mode', () => {
+    const legacy = {
+      operation_id: 'op-legacy',
+      operation_version: 1,
+      kind: 'create_project',
+      id: PROJECT_ID,
+      name: 'Legacy project',
+      description: null,
+      task_sorting_mode: 'priority',
+      show_priority: true,
+      created_at: CREATED_AT,
+    } as unknown as Operation;
+
+    const result = replayOperations({ projects: [] }, [legacy]);
+
+    expect(result.projects).toHaveLength(1);
+    expect(result.projects[0]).toMatchObject({
+      id: PROJECT_ID,
+      name: 'Legacy project',
+      description: null,
+      show_priority: true,
+    });
+  });
+
+  it('replays a legacy update_project operation carrying task_sorting_mode', () => {
+    const legacy = {
+      operation_id: 'op-legacy',
+      operation_version: 1,
+      kind: 'update_project',
+      id: PROJECT_ID,
+      name: 'Renamed',
+      description: 'Updated',
+      task_sorting_mode: 'priority',
+      show_priority: false,
+    } as unknown as Operation;
+
+    const result = replayOperations(state(), [legacy]);
+
+    expect(result.projects[0]).toMatchObject({
+      name: 'Renamed',
+      description: 'Updated',
+      show_priority: false,
+    });
   });
 });
 

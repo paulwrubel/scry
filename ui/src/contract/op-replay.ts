@@ -11,7 +11,6 @@ import type { Project } from '../generated/Project';
 import type { ProjectSnapshot } from '../generated/ProjectSnapshot';
 import type { Section } from '../generated/Section';
 import type { Task } from '../generated/Task';
-import type { TaskSortingMode } from '../generated/TaskSortingMode';
 import type { TaskState } from '../generated/TaskState';
 
 export type ClientState = {
@@ -57,7 +56,6 @@ function applyOperation(state: ClientState, operation: Operation): void {
         id: operation.id,
         name: operation.name,
         description: operation.description,
-        task_sorting_mode: operation.task_sorting_mode,
         show_priority: operation.show_priority,
         created_at: operation.created_at,
       };
@@ -79,9 +77,6 @@ function applyOperation(state: ClientState, operation: Operation): void {
       }
       if (operation.description !== undefined) {
         snapshot.description = operation.description;
-      }
-      if (operation.task_sorting_mode !== undefined && operation.task_sorting_mode !== null) {
-        snapshot.task_sorting_mode = operation.task_sorting_mode;
       }
       if (operation.show_priority !== undefined && operation.show_priority !== null) {
         snapshot.show_priority = operation.show_priority;
@@ -393,9 +388,6 @@ function applyProjectValues(snapshot: ProjectSnapshot, values: Record<string, un
   if ('description' in values) {
     snapshot.description = typeof values.description === 'string' ? values.description : null;
   }
-  if (typeof values.task_sorting_mode === 'string') {
-    snapshot.task_sorting_mode = values.task_sorting_mode as TaskSortingMode;
-  }
   if (typeof values.show_priority === 'boolean') {
     snapshot.show_priority = values.show_priority;
   }
@@ -451,7 +443,6 @@ function setProject(snapshot: ProjectSnapshot, project: Project): void {
   snapshot.id = project.id;
   snapshot.name = project.name;
   snapshot.description = project.description;
-  snapshot.task_sorting_mode = project.task_sorting_mode;
   snapshot.show_priority = project.show_priority;
   snapshot.created_at = project.created_at;
 }

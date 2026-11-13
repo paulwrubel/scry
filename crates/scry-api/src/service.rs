@@ -8,7 +8,7 @@ use scry_core::ids::{
 use scry_core::models::{
     Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Entity, EntityType,
     ExternalIdentity, ExternalMetadata, FieldValues, MAX_AUTOMATION_ACTIONS, Note, Priority,
-    Project, ProjectSnapshot, ProjectTemplate, Section, Tags, Task, TaskSortingMode, TaskState,
+    Project, ProjectSnapshot, ProjectTemplate, Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, key_between, n_keys_between};
 use scry_core::snapshot::{
@@ -131,7 +131,6 @@ pub struct TaskChangeResult {
 pub struct UpdateProject {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub task_sorting_mode: Option<TaskSortingMode>,
     pub show_priority: Option<bool>,
 }
 
@@ -169,16 +168,13 @@ pub enum TaskPlacement {
     After(TaskId),
 }
 
-/// How a new project's sorting mode, priority flag, and sections are chosen.
+/// How a new project's priority flag and sections are chosen.
 #[derive(Debug, Clone, Copy)]
 pub enum ProjectSetup {
-    /// Adopt the template's sorting mode, priority flag, and sections.
+    /// Adopt the template's priority flag and sections.
     Template(ProjectTemplate),
     /// Use these settings and seed no sections.
-    Explicit {
-        task_sorting_mode: TaskSortingMode,
-        show_priority: bool,
-    },
+    Explicit { show_priority: bool },
 }
 
 /// Frontend-agnostic, high-level operations over one project. Resolves names to
@@ -1041,23 +1037,15 @@ impl ProjectService {
         description: Option<String>,
         setup: ProjectSetup,
     ) -> Result<Project, ServiceError> {
-        let (task_sorting_mode, show_priority, template_sections) = match setup {
-            ProjectSetup::Template(template) => (
-                template.task_sorting_mode,
-                template.show_priority,
-                Some(template.sections),
-            ),
-            ProjectSetup::Explicit {
-                task_sorting_mode,
-                show_priority,
-            } => (task_sorting_mode, show_priority, None),
+        let (show_priority, template_sections) = match setup {
+            ProjectSetup::Template(template) => (template.show_priority, Some(template.sections)),
+            ProjectSetup::Explicit { show_priority } => (show_priority, None),
         };
 
         let project = Project {
             id: Uuid::new_v4(),
             name,
             description: description.filter(|description| !description.is_empty()),
-            task_sorting_mode,
             show_priority,
             created_at: Utc::now(),
         };
@@ -1076,7 +1064,6 @@ impl ProjectService {
                 id: project.id,
                 name: project.name.clone(),
                 description: project.description.clone(),
-                task_sorting_mode: project.task_sorting_mode,
                 show_priority: project.show_priority,
                 created_at: project.created_at,
             },
@@ -1135,17 +1122,12 @@ impl ProjectService {
         let updated = Project {
             name: update.name.clone().unwrap_or_else(|| project.name.clone()),
             description,
-            task_sorting_mode: update
-                .task_sorting_mode
-                .unwrap_or(project.task_sorting_mode),
             show_priority: update.show_priority.unwrap_or(project.show_priority),
             ..project.clone()
         };
 
-        let changed = update.name.is_some()
-            || update.description.is_some()
-            || update.task_sorting_mode.is_some()
-            || update.show_priority.is_some();
+        let changed =
+            update.name.is_some() || update.description.is_some() || update.show_priority.is_some();
         if changed {
             let description = update
                 .description
@@ -1156,7 +1138,6 @@ impl ProjectService {
                     id: project.id,
                     name: update.name,
                     description,
-                    task_sorting_mode: update.task_sorting_mode,
                     show_priority: update.show_priority,
                 },
             );
@@ -1436,7 +1417,6 @@ impl ProjectService {
                 id,
                 name,
                 description,
-                task_sorting_mode,
                 show_priority,
                 created_at,
             } => {
@@ -1461,7 +1441,6 @@ impl ProjectService {
                     description: description
                         .clone()
                         .filter(|description| !description.is_empty()),
-                    task_sorting_mode: *task_sorting_mode,
                     show_priority: *show_priority,
                     created_at: *created_at,
                 };
@@ -2688,7 +2667,6 @@ fn project_field_updates(project: &mut Project, op: &OperationKind) -> FieldValu
     let OperationKind::UpdateProject {
         name,
         description,
-        task_sorting_mode,
         show_priority,
         ..
     } = op
@@ -2703,10 +2681,6 @@ fn project_field_updates(project: &mut Project, op: &OperationKind) -> FieldValu
     if let Some(description) = description {
         project.description = description.clone();
         fields.insert("description".into(), json!(description));
-    }
-    if let Some(task_sorting_mode) = task_sorting_mode {
-        project.task_sorting_mode = *task_sorting_mode;
-        fields.insert("task_sorting_mode".into(), json!(task_sorting_mode));
     }
     if let Some(show_priority) = show_priority {
         project.show_priority = *show_priority;

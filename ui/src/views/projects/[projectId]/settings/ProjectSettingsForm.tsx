@@ -34,7 +34,6 @@ export function ProjectSettingsForm(props: ProjectSettingsFormProps) {
         await saveFields({
           name: value.name,
           description: value.description,
-          task_sorting_mode: project.task_sorting_mode,
           show_priority: project.show_priority,
         });
       } catch {
