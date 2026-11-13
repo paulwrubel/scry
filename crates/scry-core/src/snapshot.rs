@@ -965,7 +965,7 @@ mod tests {
             project_id,
             title: "task".to_string(),
             description: None,
-            priority: Priority::Medium,
+            priority: Priority::Normal,
             section_id,
             position: position("a0"),
             state: TaskState::Open,
@@ -1154,7 +1154,7 @@ mod tests {
             "project_id": PROJECT_ID,
             "title": "old",
             "description": null,
-            "priority": "medium",
+            "priority": "normal",
             "section_id": null,
             "position": "a0",
             "state": "open",
@@ -1165,6 +1165,31 @@ mod tests {
 
         assert!(task.external_identity.is_none());
         assert!(task.external_metadata.is_none());
+    }
+
+    #[test]
+    fn legacy_priority_names_deserialize() {
+        let parse = |priority: &str| -> Task {
+            serde_json::from_value(json!({
+                "id": TASK_ID,
+                "project_id": PROJECT_ID,
+                "title": "old",
+                "description": null,
+                "priority": priority,
+                "section_id": null,
+                "position": "a0",
+                "state": "open",
+                "tags": [],
+                "created_at": "1970-01-01T00:00:00Z"
+            }))
+            .expect("a task with a legacy priority name should deserialize")
+        };
+
+        assert_eq!(parse("critical").priority, Priority::Critical);
+        assert_eq!(parse("high").priority, Priority::Elevated);
+        assert_eq!(parse("medium").priority, Priority::Normal);
+        assert_eq!(parse("low").priority, Priority::Normal);
+        assert_eq!(parse("minimal").priority, Priority::Normal);
     }
 
     #[test]
@@ -1258,7 +1283,7 @@ mod import_tests {
             project_id,
             title: title.to_string(),
             description: None,
-            priority: Priority::Medium,
+            priority: Priority::Normal,
             section_id,
             position: Position::parse("a0").unwrap(),
             state: TaskState::Open,

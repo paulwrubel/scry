@@ -32,7 +32,7 @@ fn confirmed() -> ClientState {
                 "project_id": PROJECT_ID,
                 "title": "first",
                 "description": null,
-                "priority": "medium",
+                "priority": "normal",
                 "section_id": SECTION_ID,
                 "position": "a0",
                 "state": "open",
@@ -57,7 +57,7 @@ fn update_task_operation() -> Operation {
         "kind": "update_task",
         "id": TASK_ID,
         "title": "local",
-        "priority": "high",
+        "priority": "elevated",
         "state": "closed"
     }))
     .unwrap()
@@ -122,7 +122,7 @@ fn update_automation_operation() -> Operation {
         "operation_version": 1,
         "kind": "update_automation",
         "id": AUTOMATION_ID,
-        "actions": [{ "kind": "set_priority", "priority": "high" }]
+        "actions": [{ "kind": "set_priority", "priority": "elevated" }]
     }))
     .unwrap()
 }
@@ -162,7 +162,7 @@ fn replay_operations_applies_update_task() {
     let task = only_task(&state);
 
     assert_eq!(task.title, "local");
-    assert_eq!(task.priority, Priority::High);
+    assert_eq!(task.priority, Priority::Elevated);
     assert_eq!(task.state, TaskState::Closed);
     assert_eq!(state.projects[0].notes[0].contents, "note one");
     assert_eq!(only_task(&confirmed).title, "first");
@@ -174,7 +174,7 @@ fn apply_changes_applies_update_task() {
     let task = only_task(&state);
 
     assert_eq!(task.title, "server");
-    assert_eq!(task.priority, Priority::Medium);
+    assert_eq!(task.priority, Priority::Normal);
     assert_eq!(task.state, TaskState::Open);
 }
 
@@ -252,7 +252,7 @@ fn replay_operations_updates_automation_actions() {
     assert_eq!(
         state.projects[0].automations[0].actions,
         vec![AutomationAction::SetPriority {
-            priority: Priority::High
+            priority: Priority::Elevated
         }]
     );
 }

@@ -1,6 +1,6 @@
 use anstyle::{AnsiColor, Style};
 use clap::ValueEnum;
-use scry_core::models::{Color, Priority};
+use scry_core::models::Color;
 
 /// When to colorize CLI output.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -40,20 +40,4 @@ pub fn status(color: Option<Color>, text: &str) -> String {
         ),
         None => text.to_string(),
     }
-}
-
-/// The short priority label (`pN`).
-pub fn priority(priority: Priority) -> String {
-    paint(
-        Style::new().fg_color(Some(AnsiColor::from(priority.color()).into())),
-        &format!("p{}", i64::from(priority)),
-    )
-}
-
-/// The long priority label (`pN - Name`).
-pub fn priority_long(priority: Priority) -> String {
-    paint(
-        Style::new().fg_color(Some(AnsiColor::from(priority.color()).into())),
-        &format!("p{} - {}", i64::from(priority), priority),
-    )
 }

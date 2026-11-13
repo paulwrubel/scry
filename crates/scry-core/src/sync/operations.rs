@@ -502,7 +502,7 @@ mod tests {
             "operation_version": OPERATION_VERSION,
             "kind": "update_automation",
             "id": Uuid::new_v4(),
-            "actions": [{ "kind": "set_priority", "priority": "high" }]
+            "actions": [{ "kind": "set_priority", "priority": "elevated" }]
         });
 
         let operation: Operation = serde_json::from_value(value.clone()).unwrap();
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(
             actions,
             &[AutomationAction::SetPriority {
-                priority: Priority::High
+                priority: Priority::Elevated
             }]
         );
 
