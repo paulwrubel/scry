@@ -4,18 +4,9 @@ export const TASK_SORTING_PARAM = 'sort';
 
 export const DEFAULT_TASK_SORTING_MODE: TaskSortingMode = 'manual';
 
-export const TASK_SORTING_MODES: readonly TaskSortingMode[] = [
-  'alphabetical',
-  'alphabetical-case-insensitive',
-  'created',
-  'manual',
-  'priority',
-];
+export const TASK_SORTING_MODES: readonly TaskSortingMode[] = ['manual', 'priority'];
 
 export const TASK_SORTING_OPTIONS: readonly { value: TaskSortingMode; label: string }[] = [
-  { value: 'alphabetical', label: 'Alphabetical' },
-  { value: 'alphabetical-case-insensitive', label: 'Alphabetical (case-insensitive)' },
-  { value: 'created', label: 'Creation order' },
   { value: 'manual', label: 'Manual' },
   { value: 'priority', label: 'Priority' },
 ];

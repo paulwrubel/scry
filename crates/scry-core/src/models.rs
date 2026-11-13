@@ -236,23 +236,6 @@ impl Priority {
 #[serde(rename_all = "kebab-case")]
 pub enum TaskSortingMode {
     #[default]
-    #[value(aliases([
-        "default",
-        "alpha",
-        "lex",
-        "lexical",
-        "lexicographical"
-    ]))]
-    Alphabetical,
-    #[value(aliases([
-        "alpha-nocase",
-        "alphanocase",
-        "alphaci",
-    ]))]
-    AlphabeticalCaseInsensitive,
-    /// Creation order, oldest first. `id` is kept as an alias for old configs.
-    #[value(alias = "id")]
-    Created,
     #[value(aliases(["none","position","pos"]))]
     Manual,
     #[value(aliases(["pri"]))]
