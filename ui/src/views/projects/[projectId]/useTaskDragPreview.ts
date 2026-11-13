@@ -1,17 +1,22 @@
 import type { DragMoveEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
 import { useRef, useState } from 'react';
-import type { BoardGroup, DragLayout, TaskSlot } from './board';
+import type { Priority } from '@/generated/Priority';
+import type { BoardGroup, BoundarySide, DragLayout, SoloHome, TaskSlot } from './board';
 import {
+  boundarySideForSlot,
   groupContaining,
   groupKey,
   isNoSectionGroupKey,
   itemsFromGroups,
-  previewAtPointer,
+  previewAtPointerDetailed,
+  soloPriorityHome,
 } from './board';
 
 export type TaskDragPreview = {
   dragItems: Record<string, string[]> | null;
+  draggedTaskId: string | null;
+  boundarySide: BoundarySide | null;
   handleDragStart: (event: DragStartEvent) => void;
   handleDragMove: (event: DragMoveEvent) => void;
   handleDragOver: (event: DragOverEvent) => void;
@@ -40,12 +45,19 @@ function captureDragLayout(groups: BoardGroup[], draggedHeight: number): DragLay
     }
     const containerRect = container.getBoundingClientRect();
     const scrollTop = container.scrollTop;
-    const slots: TaskSlot[] = group.tasks.flatMap((task, index) => {
-      const child = container.children.item(index);
-      if (!(child instanceof HTMLElement)) {
+    const elements = new Map<string, HTMLElement>();
+    for (const element of container.querySelectorAll<HTMLElement>('[data-task-id]')) {
+      const taskId = element.dataset.taskId;
+      if (taskId !== undefined) {
+        elements.set(taskId, element);
+      }
+    }
+    const slots: TaskSlot[] = group.tasks.flatMap((task) => {
+      const element = elements.get(task.id);
+      if (element === undefined) {
         return [];
       }
-      const rect = child.getBoundingClientRect();
+      const rect = element.getBoundingClientRect();
       const top = rect.top - containerRect.top + scrollTop;
       return [{ id: task.id, top, bottom: top + rect.height }];
     });
@@ -55,15 +67,33 @@ function captureDragLayout(groups: BoardGroup[], draggedHeight: number): DragLay
   return layout;
 }
 
-export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): TaskDragPreview {
+export function useTaskDragPreview(groups: BoardGroup[], priorityView: boolean): TaskDragPreview {
   const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [boundarySide, setBoundarySide] = useState<BoundarySide | null>(null);
   const dragLayoutRef = useRef<DragLayout | null>(null);
   const dragAnchorOffsetRef = useRef(0);
+  const dragAnchorOffsetXRef = useRef(0);
+  const dragItemsRef = useRef<Record<string, string[]> | null>(null);
+  const baseItemsRef = useRef<Record<string, string[]> | null>(null);
+  const soloHomeRef = useRef<{
+    home: SoloHome;
+    container: HTMLElement;
+    priority: Priority;
+  } | null>(null);
+  const homeLatchRef = useRef<{
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+  } | null>(null);
 
   function handleDragStart(event: DragStartEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
+    const sourceId = event.operation.source?.id;
+    setDraggedTaskId(sourceId === undefined ? null : String(sourceId));
     const sourceElement = event.operation.source?.element;
     const sourceRect =
       sourceElement instanceof HTMLElement ? sourceElement.getBoundingClientRect() : null;
@@ -71,8 +101,34 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
       sourceRect === null
         ? 0
         : sourceRect.top + sourceRect.height / 2 - event.operation.position.current.y;
+    dragAnchorOffsetXRef.current =
+      sourceRect === null
+        ? 0
+        : sourceRect.left + sourceRect.width / 2 - event.operation.position.current.x;
     dragLayoutRef.current = captureDragLayout(groups, sourceRect?.height ?? 0);
-    setDragItems(itemsFromGroups(groups));
+    setBoundarySide(null);
+    const items = itemsFromGroups(groups);
+    dragItemsRef.current = items;
+    baseItemsRef.current = items;
+    setDragItems(items);
+    soloHomeRef.current = null;
+    homeLatchRef.current = null;
+    if (priorityView && sourceId !== undefined) {
+      const group = groups.find((candidate) =>
+        candidate.tasks.some((task) => task.id === String(sourceId)),
+      );
+      if (group !== undefined) {
+        const task = group.tasks.find((candidate) => candidate.id === String(sourceId));
+        const home = soloPriorityHome(group, String(sourceId), dragLayoutRef.current);
+        const container = document.querySelector<HTMLElement>(
+          `[data-board-group="${CSS.escape(groupKey(group))}"]`,
+        );
+        soloHomeRef.current =
+          home === null || container === null || task === undefined
+            ? null
+            : { home, container, priority: task.priority };
+      }
+    }
   }
 
   function updateDragPreview(
@@ -80,6 +136,54 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
     pointer: { x: number; y: number },
     target: DragMoveEvent['operation']['target'],
   ): void {
+    // Order by the dragged card's midpoint, not the cursor: the offset is the
+    // grab point relative to the card center, captured when the drag started.
+    const anchorY = pointer.y + dragAnchorOffsetRef.current;
+    const anchorX = pointer.x + dragAnchorOffsetXRef.current;
+
+    // a solo priority band disappears once its only card leaves, so its
+    // rendered ghost band stays a live target for dropping the card back
+    const home = soloHomeRef.current;
+    if (home !== null) {
+      const containerRect = home.container.getBoundingClientRect();
+      const originalTop = containerRect.top - home.container.scrollTop + home.home.top;
+      const originalBottom = originalTop + home.home.height;
+      const ghost = home.container.querySelector<HTMLElement>(
+        `[data-ghost-band="${home.priority}"]`,
+      );
+      const ghostRect = ghost?.getBoundingClientRect();
+      // the preview reflow moves the ghost, so latch the union of the original
+      // slot and the rendered ghost until the pointer leaves it; otherwise the
+      // source band would reappear and disappear under the same pointer
+      const bounds = {
+        top: ghostRect === undefined ? originalTop : Math.min(originalTop, ghostRect.top - 8),
+        bottom:
+          ghostRect === undefined ? originalBottom : Math.max(originalBottom, ghostRect.bottom),
+        left: containerRect.left,
+        right: containerRect.right,
+      };
+      const inside = (area: typeof bounds) =>
+        anchorX >= area.left &&
+        anchorX <= area.right &&
+        anchorY >= area.top &&
+        anchorY <= area.bottom;
+      const latch = homeLatchRef.current;
+      if (latch !== null && !inside(latch)) {
+        homeLatchRef.current = null;
+      } else {
+        const homeArea = latch ?? bounds;
+        if (inside(homeArea)) {
+          homeLatchRef.current = homeArea;
+          if (baseItemsRef.current !== null) {
+            dragItemsRef.current = baseItemsRef.current;
+            setDragItems(baseItemsRef.current);
+          }
+          setBoundarySide(null);
+          return;
+        }
+      }
+    }
+
     const layout = dragLayoutRef.current;
     if (layout === null || target === null) {
       return;
@@ -100,25 +204,24 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
       return;
     }
 
-    // Order by the dragged card's midpoint, not the cursor: the offset is the
-    // grab point relative to the card center, captured when the drag started.
-    const anchorY = pointer.y + dragAnchorOffsetRef.current;
     const orderY = anchorY - container.getBoundingClientRect().top + container.scrollTop;
 
-    setDragItems((current) => {
-      if (current === null) {
-        return current;
-      }
-      const origin = groupContaining(current, String(sourceId));
-      if (origin !== destination && isNoSectionGroupKey(destination)) {
-        return current;
-      }
-      return previewAtPointer(current, layout, destination, String(sourceId), orderY);
-    });
+    const current = dragItemsRef.current;
+    if (current === null) {
+      return;
+    }
+    const origin = groupContaining(current, String(sourceId));
+    if (origin !== destination && isNoSectionGroupKey(destination)) {
+      return;
+    }
+    const result = previewAtPointerDetailed(current, layout, destination, String(sourceId), orderY);
+    dragItemsRef.current = result.items;
+    setDragItems(result.items);
+    setBoundarySide(boundarySideForSlot(result.slotCenter, orderY));
   }
 
   function handleDragMove(event: DragMoveEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
 
@@ -131,7 +234,7 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
   }
 
   function handleDragOver(event: DragOverEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
     event.preventDefault();
@@ -146,9 +249,24 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
 
   function resetDragPreview() {
     dragLayoutRef.current = null;
+    dragItemsRef.current = null;
+    baseItemsRef.current = null;
+    soloHomeRef.current = null;
+    homeLatchRef.current = null;
     dragAnchorOffsetRef.current = 0;
+    dragAnchorOffsetXRef.current = 0;
     setDragItems(null);
+    setDraggedTaskId(null);
+    setBoundarySide(null);
   }
 
-  return { dragItems, handleDragStart, handleDragMove, handleDragOver, resetDragPreview };
+  return {
+    dragItems,
+    draggedTaskId,
+    boundarySide,
+    handleDragStart,
+    handleDragMove,
+    handleDragOver,
+    resetDragPreview,
+  };
 }

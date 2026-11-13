@@ -4,18 +4,10 @@ import type { CSSProperties } from 'react';
 import { SiGithub } from 'react-icons/si';
 import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { Link, useLocation } from 'react-router-dom';
-import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
 import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/external';
+import { PRIORITY_DOT_CLASS } from '@/utils/priority';
 import { tagBadgeStyle } from '@/utils/tagColor';
-
-const PRIORITY_DOT_CLASS: Record<Priority, string> = {
-  critical: 'bg-red-600',
-  high: 'bg-orange-500',
-  medium: 'bg-yellow-300',
-  low: 'bg-purple-500',
-  minimal: 'bg-white',
-};
 
 export type TaskCardProps = {
   projectId: string;
@@ -53,6 +45,7 @@ export function TaskCard(props: TaskCardProps) {
     <div
       ref={nodeRef}
       data-column-drag-ignore
+      data-task-id={task.id}
       style={style}
       onPointerDownCapture={(event) => {
         moved.current = false;

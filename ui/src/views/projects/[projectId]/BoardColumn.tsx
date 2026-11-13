@@ -8,6 +8,7 @@ import { HiChevronDown, HiChevronUp, HiLockClosed, HiTrash } from 'react-icons/h
 import { RenamableLabel } from '@/components/RenamableLabel';
 import type { Color } from '@/generated/Color';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
+import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
 import { BoardColumnBody } from './BoardColumnBody';
 import { DeleteSectionModal } from './DeleteSectionModal';
@@ -21,7 +22,9 @@ export type BoardColumnProps = {
   color: Color | null;
   tasks: Task[];
   showPriority: boolean;
-  canReorder: boolean;
+  priorityView: boolean;
+  ghostPriority: Priority | null;
+  dragTarget: { taskId: string; priority: Priority } | null;
   blockingAutomations?: readonly string[];
   onRename?: (name: string) => void;
   onDelete?: () => void;
@@ -41,6 +44,14 @@ const columnTheme: DeepPartial<CardTheme> = {
   },
 };
 
+// only the bottom padding changes: the priority bands put half of the card inset
+// back as their own padding, and the header spacing stays exactly as manual
+const priorityColumnTheme: DeepPartial<CardTheme> = {
+  root: {
+    children: 'flex h-full min-h-0 flex-col justify-start gap-2 p-2 pb-1',
+  },
+};
+
 export function BoardColumn(props: BoardColumnProps) {
   const {
     projectId,
@@ -50,7 +61,9 @@ export function BoardColumn(props: BoardColumnProps) {
     color,
     tasks,
     showPriority,
-    canReorder,
+    priorityView,
+    ghostPriority,
+    dragTarget,
     blockingAutomations = [],
     onRename,
     onDelete,
@@ -87,7 +100,7 @@ export function BoardColumn(props: BoardColumnProps) {
     <>
       <Card
         ref={nodeRef}
-        theme={columnTheme}
+        theme={priorityView ? priorityColumnTheme : columnTheme}
         className={`flex min-h-0 w-full min-w-0 shrink-0 flex-col md:h-full md:w-96 ${
           draggable ? 'cursor-grab active:cursor-grabbing' : ''
         } ${isDragging ? 'opacity-80' : ''}`}
@@ -178,7 +191,9 @@ export function BoardColumn(props: BoardColumnProps) {
                     group={group}
                     tasks={tasks}
                     showPriority={showPriority}
-                    canReorder={canReorder}
+                    priorityView={priorityView}
+                    ghostPriority={ghostPriority}
+                    dragTarget={dragTarget}
                     showCreate={showCreate}
                     onCreate={onCreate}
                     dropRef={ref}
@@ -194,7 +209,9 @@ export function BoardColumn(props: BoardColumnProps) {
               group={group}
               tasks={tasks}
               showPriority={showPriority}
-              canReorder={canReorder}
+              priorityView={priorityView}
+              ghostPriority={ghostPriority}
+              dragTarget={dragTarget}
               showCreate={showCreate}
               onCreate={onCreate}
               dropRef={ref}

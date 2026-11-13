@@ -3,25 +3,8 @@ import { HiChevronDown } from 'react-icons/hi2';
 import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
+import { PRIORITIES, PRIORITY_DOT_CLASS, PRIORITY_LABELS } from '@/utils/priority';
 import { SECTION_COLOR_HEX } from '@/utils/sectionColor';
-
-const PRIORITY_LABELS: Record<Priority, string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  minimal: 'Minimal',
-};
-
-const PRIORITIES: Priority[] = ['critical', 'high', 'medium', 'low', 'minimal'];
-
-const PRIORITY_DOT_CLASS: Record<Priority, string> = {
-  critical: 'bg-red-600',
-  high: 'bg-orange-500',
-  medium: 'bg-yellow-300',
-  low: 'bg-purple-500',
-  minimal: 'bg-white',
-};
 
 const SELECT_CLASS =
   'border-line bg-panel text-zinc-200 cursor-pointer appearance-none rounded-full border py-1 pr-7 pl-7 text-xs outline-none disabled:cursor-not-allowed disabled:opacity-60';

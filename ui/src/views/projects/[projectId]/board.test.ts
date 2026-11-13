@@ -4,12 +4,16 @@ import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import { DEFAULT_TASK_FILTER } from '@/utils/taskFilter';
 import type { TaskFilter } from '@/utils/taskFilter';
-import type { BoardGroup, DragLayout, TaskSlot } from './board';
+import type { BoardGroup, DragLayout, PriorityGroup, TaskSlot } from './board';
 import {
+  boundarySideForSlot,
   buildBoard,
   CLOSED_NO_SECTION_GROUP,
+  dragPriority,
   dropPosition,
+  dropPositionForPriority,
   groupKey,
+  groupTasksByPriority,
   insertionIndexForPointer,
   insertPosition,
   isNoSectionGroupKey,
@@ -17,8 +21,11 @@ import {
   OPEN_NO_SECTION_GROUP,
   planSectionMove,
   previewAtPointer,
+  previewAtPointerDetailed,
   sectionIdFromGroup,
   sectionTasks,
+  soloPriorityHome,
+  withGhostPriority,
 } from './board';
 
 const CREATED_AT = '2026-01-01T00:00:00Z';
@@ -105,6 +112,91 @@ describe('groupKey', () => {
     expect(isNoSectionGroupKey(OPEN_NO_SECTION_GROUP)).toBe(true);
     expect(isNoSectionGroupKey(CLOSED_NO_SECTION_GROUP)).toBe(true);
     expect(isNoSectionGroupKey('backlog')).toBe(false);
+  });
+});
+
+describe('groupTasksByPriority', () => {
+  it('chunks tasks of the same priority together', () => {
+    const groups = groupTasksByPriority([
+      task({ id: 'a', title: 'A', priority: 'high' }),
+      task({ id: 'b', title: 'B', priority: 'high' }),
+    ]);
+
+    expect(groups.map((group) => [group.priority, group.tasks.map((item) => item.id)])).toEqual([
+      ['high', ['a', 'b']],
+    ]);
+  });
+
+  it('starts a new group when the priority changes', () => {
+    const groups = groupTasksByPriority([
+      task({ id: 'a', title: 'A', priority: 'high' }),
+      task({ id: 'b', title: 'B', priority: 'low' }),
+    ]);
+
+    expect(groups.map((group) => [group.priority, group.tasks.map((item) => item.id)])).toEqual([
+      ['high', ['a']],
+      ['low', ['b']],
+    ]);
+  });
+
+  it('keeps two separated runs of the same priority as separate groups', () => {
+    const groups = groupTasksByPriority([
+      task({ id: 'a', title: 'A', priority: 'high' }),
+      task({ id: 'b', title: 'B', priority: 'low' }),
+      task({ id: 'c', title: 'C', priority: 'high' }),
+    ]);
+
+    expect(groups.map((group) => [group.priority, group.tasks.map((item) => item.id)])).toEqual([
+      ['high', ['a']],
+      ['low', ['b']],
+      ['high', ['c']],
+    ]);
+  });
+
+  it('returns no groups for an empty list', () => {
+    expect(groupTasksByPriority([])).toEqual([]);
+  });
+
+  it('groups by an override without mutating the task', () => {
+    const b = task({ id: 'b', title: 'B', priority: 'high' });
+    const groups = groupTasksByPriority([task({ id: 'a', title: 'A', priority: 'high' }), b], {
+      b: 'medium',
+    });
+
+    expect(groups.map((group) => [group.priority, group.tasks.map((item) => item.id)])).toEqual([
+      ['high', ['a']],
+      ['medium', ['b']],
+    ]);
+    expect(b.priority).toBe('high');
+  });
+});
+
+describe('withGhostPriority', () => {
+  const bands: PriorityGroup[] = [
+    { priority: 'high', tasks: [] },
+    { priority: 'low', tasks: [] },
+  ];
+
+  it('inserts the ghost band at its sorted position', () => {
+    expect(withGhostPriority(bands, 'medium').map((band) => band.priority)).toEqual([
+      'high',
+      'medium',
+      'low',
+    ]);
+    expect(withGhostPriority(bands, 'minimal').map((band) => band.priority)).toEqual([
+      'high',
+      'low',
+      'minimal',
+    ]);
+    expect(withGhostPriority(bands, 'critical').map((band) => band.priority)).toEqual([
+      'critical',
+      'high',
+      'low',
+    ]);
+  });
+
+  it('leaves the bands alone when the priority already exists', () => {
+    expect(withGhostPriority(bands, 'high')).toBe(bands);
   });
 });
 
@@ -406,6 +498,258 @@ describe('dropPosition', () => {
     });
 
     expect(dropPosition(withClosed, 'backlog', 'a', 'b')).toBe('a1V');
+  });
+});
+
+describe('dragPriority', () => {
+  const project = projectSnapshot({
+    tasks: [
+      task({ id: 'a', title: 'A', priority: 'high', position: 'a0' }),
+      task({ id: 'b', title: 'B', priority: 'high', position: 'a1' }),
+      task({ id: 'c', title: 'C', priority: 'medium', position: 'a2' }),
+      task({ id: 'd', title: 'D', priority: 'low', position: 'a0' }),
+    ],
+  });
+  const baseItems = { backlog: ['a', 'b', 'c'], doing: ['d'] };
+
+  it('returns null in manual mode', () => {
+    expect(
+      dragPriority(project, 'manual', baseItems, { backlog: ['a', 'c', 'b'], doing: ['d'] }, 'b'),
+    ).toBeNull();
+  });
+
+  it('keeps the current priority when the drop is a no-op', () => {
+    expect(dragPriority(project, 'priority', baseItems, baseItems, 'b')).toBe('high');
+  });
+
+  it('keeps a same-slot priority when it is one of the boundary neighbours', () => {
+    const items = { backlog: ['a', 'b', 'c'] };
+
+    expect(dragPriority(project, 'priority', items, items, 'b')).toBe('high');
+  });
+
+  it('resolves a shared boundary by the pointer side', () => {
+    const mixed = projectSnapshot({
+      tasks: [
+        task({ id: 'a', title: 'A', priority: 'high', position: 'a0' }),
+        task({ id: 'c', title: 'C', priority: 'medium', position: 'a1' }),
+        task({ id: 'd', title: 'D', priority: 'low', position: 'a2' }),
+      ],
+    });
+    const items = { backlog: ['a', 'c', 'd'] };
+
+    expect(dragPriority(mixed, 'priority', items, items, 'c', 'above')).toBe('high');
+    expect(dragPriority(mixed, 'priority', items, items, 'c', 'below')).toBe('low');
+    expect(dragPriority(mixed, 'priority', items, items, 'c')).toBe('medium');
+  });
+
+  it('lets the pointer side override the current band at a same-slot boundary', () => {
+    // b starts between a (high) and c (medium), in the same slot it would be
+    // dropped in; the side still decides which band it joins
+    expect(dragPriority(project, 'priority', baseItems, baseItems, 'b', 'above')).toBe('high');
+    expect(dragPriority(project, 'priority', baseItems, baseItems, 'b', 'below')).toBe('medium');
+  });
+
+  it('uses the card below when the task moves down', () => {
+    expect(
+      dragPriority(project, 'priority', baseItems, { backlog: ['a', 'c', 'b'], doing: ['d'] }, 'b'),
+    ).toBe('medium');
+  });
+
+  it('keeps the current priority at the bottom of the task group', () => {
+    expect(
+      dragPriority(project, 'priority', baseItems, { backlog: ['b', 'a', 'c'], doing: ['d'] }, 'a'),
+    ).toBe('high');
+  });
+
+  it('keeps the current priority at the top of the task group', () => {
+    const twoMedium = projectSnapshot({
+      tasks: [
+        task({ id: 'a', title: 'A', priority: 'high', position: 'a0' }),
+        task({ id: 'c', title: 'C', priority: 'medium', position: 'a1' }),
+        task({ id: 'e', title: 'E', priority: 'medium', position: 'a2' }),
+      ],
+    });
+
+    expect(
+      dragPriority(
+        twoMedium,
+        'priority',
+        { backlog: ['a', 'c', 'e'] },
+        { backlog: ['a', 'e', 'c'] },
+        'e',
+      ),
+    ).toBe('medium');
+  });
+
+  it('uses the upper band for a task outside both boundary groups', () => {
+    expect(
+      dragPriority(
+        project,
+        'priority',
+        baseItems,
+        { backlog: ['a', 'b', 'd', 'c'], doing: [] },
+        'd',
+      ),
+    ).toBe('high');
+  });
+
+  it('uses the destination column rule on a cross-group drop', () => {
+    expect(
+      dragPriority(project, 'priority', baseItems, { backlog: ['a', 'c'], doing: ['d', 'b'] }, 'b'),
+    ).toBe('low');
+  });
+});
+
+describe('boundarySideForSlot', () => {
+  it('resolves above when the anchor is above the slot centre', () => {
+    expect(boundarySideForSlot(77, 67)).toBe('above');
+  });
+
+  it('resolves below when the anchor is below the slot centre', () => {
+    expect(boundarySideForSlot(77, 87)).toBe('below');
+  });
+
+  it('returns null exactly at the slot centre', () => {
+    expect(boundarySideForSlot(77, 77)).toBeNull();
+  });
+
+  it('returns null when there is no slot', () => {
+    expect(boundarySideForSlot(null, 77)).toBeNull();
+  });
+});
+
+describe('priority boundary reachability', () => {
+  it('reaches both sides without changing the insertion index', () => {
+    const layout = dragLayout(
+      {
+        backlog: [taskSlot('a', 0), taskSlot('mid', 54), taskSlot('b', 108)],
+      },
+      46,
+    );
+    const items = { backlog: ['a', 'mid', 'b'] };
+
+    const up = previewAtPointerDetailed(items, layout, 'backlog', 'mid', 67);
+    const down = previewAtPointerDetailed(items, layout, 'backlog', 'mid', 87);
+
+    // removing 'mid' leaves a 0-46 and b 54-100, so the slot centre is 77
+    expect(up.index).toBe(1);
+    expect(down.index).toBe(1);
+    expect(up.slotCenter).toBe(77);
+    expect(down.slotCenter).toBe(77);
+    expect(boundarySideForSlot(up.slotCenter, 67)).toBe('above');
+    expect(boundarySideForSlot(down.slotCenter, 87)).toBe('below');
+  });
+
+  it('ties at the centre of the slot the card was picked up from', () => {
+    const layout = dragLayout(
+      {
+        backlog: [taskSlot('a', 0), taskSlot('mid', 54), taskSlot('b', 108)],
+      },
+      46,
+    );
+
+    const preview = previewAtPointerDetailed(
+      { backlog: ['a', 'mid', 'b'] },
+      layout,
+      'backlog',
+      'mid',
+      77,
+    );
+
+    expect(preview.index).toBe(1);
+    expect(boundarySideForSlot(preview.slotCenter, 77)).toBeNull();
+  });
+});
+
+describe('soloPriorityHome', () => {
+  const group: BoardGroup = {
+    section: section('backlog', 'a0'),
+    state: null,
+    tasks: [task({ id: 'solo', title: 'Solo', priority: 'high', position: 'a0' })],
+  };
+  const layout = dragLayout({ backlog: [taskSlot('solo', 0)] }, 46);
+
+  it('returns the original slot top when the task is alone in its priority', () => {
+    expect(soloPriorityHome(group, 'solo', layout)).toEqual({ top: 0, height: 46 });
+  });
+
+  it('returns null when another task shares the priority', () => {
+    const shared: BoardGroup = {
+      ...group,
+      tasks: [
+        ...group.tasks,
+        task({ id: 'other', title: 'Other', priority: 'high', position: 'a1' }),
+      ],
+    };
+    const sharedLayout = dragLayout({ backlog: [taskSlot('solo', 0), taskSlot('other', 54)] }, 46);
+
+    expect(soloPriorityHome(shared, 'solo', sharedLayout)).toBeNull();
+  });
+
+  it('returns null when the original slot is missing', () => {
+    expect(soloPriorityHome(group, 'solo', dragLayout({ backlog: [] }, 46))).toBeNull();
+  });
+});
+
+describe('dropPositionForPriority', () => {
+  const project = projectSnapshot({
+    sections: [section('backlog', 'a0')],
+    tasks: [
+      task({
+        id: 'high-start',
+        title: 'High start',
+        section_id: 'backlog',
+        position: 'a0',
+        priority: 'high',
+      }),
+      task({
+        id: 'medium',
+        title: 'Medium',
+        section_id: 'backlog',
+        position: 'a1',
+        priority: 'medium',
+      }),
+      task({
+        id: 'high-end',
+        title: 'High end',
+        section_id: 'backlog',
+        position: 'a2',
+        priority: 'high',
+      }),
+    ],
+  });
+
+  it('inserts only among tasks of the target priority', () => {
+    expect(dropPositionForPriority(project, 'backlog', 'high', 'dragged', 'high-end')).toBe('a1');
+  });
+
+  it('appends when there is no next task', () => {
+    expect(dropPositionForPriority(project, 'backlog', 'high', 'dragged', null)).toBe('a3');
+  });
+
+  it('excludes the dragged task from the neighbour search', () => {
+    const withDragged = projectSnapshot({
+      sections: [section('backlog', 'a0')],
+      tasks: [
+        task({
+          id: 'dragged',
+          title: 'Dragged',
+          section_id: 'backlog',
+          position: 'a0',
+          priority: 'high',
+        }),
+        task({
+          id: 'next',
+          title: 'Next',
+          section_id: 'backlog',
+          position: 'a1',
+          priority: 'high',
+        }),
+      ],
+    });
+
+    expect(dropPositionForPriority(withDragged, 'backlog', 'high', 'dragged', 'next')).toBe('a0');
   });
 });
 

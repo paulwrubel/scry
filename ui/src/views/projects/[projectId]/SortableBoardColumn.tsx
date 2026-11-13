@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/react/sortable';
 import type { Color } from '@/generated/Color';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
+import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import { automationReferencesSection, describeAutomation } from '@/utils/automationOperations';
@@ -13,9 +14,11 @@ export type SortableBoardColumnProps = {
   group: SectionBoardGroup;
   index: number;
   project: ProjectSnapshot;
-  canReorder: boolean;
   sectionsSortable: boolean;
   showCreate: boolean;
+  priorityView: boolean;
+  ghostPriority: Priority | null;
+  dragTarget: { taskId: string; priority: Priority } | null;
   collapsed: boolean;
   onToggleCollapsed?: () => void;
   onCreate: (
@@ -33,9 +36,11 @@ export function SortableBoardColumn(props: SortableBoardColumnProps) {
     group,
     index,
     project,
-    canReorder,
     sectionsSortable,
     showCreate,
+    priorityView,
+    ghostPriority,
+    dragTarget,
     collapsed,
     onToggleCollapsed,
     onCreate,
@@ -68,7 +73,9 @@ export function SortableBoardColumn(props: SortableBoardColumnProps) {
       color={section.color}
       tasks={group.tasks}
       showPriority={project.show_priority}
-      canReorder={canReorder}
+      priorityView={priorityView}
+      ghostPriority={ghostPriority}
+      dragTarget={dragTarget}
       blockingAutomations={blockingAutomations}
       showCreate={showCreate}
       collapsed={collapsed}

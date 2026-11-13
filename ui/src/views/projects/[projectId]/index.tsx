@@ -7,9 +7,10 @@ import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { Color } from '@/generated/Color';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
+import type { Priority } from '@/generated/Priority';
+import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useCollapsedSections } from '@/hooks/useCollapsedSections';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
-import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
 import { updateProjectOperation } from '@/utils/projectOperations';
@@ -38,7 +39,9 @@ import {
   CLOSED_NO_SECTION_GROUP,
   OPEN_NO_SECTION_GROUP,
   buildBoard,
+  dragPriority,
   dropPosition,
+  dropPositionForPriority,
   groupContaining,
   groupKey,
   itemsFromGroups,
@@ -53,6 +56,7 @@ type PendingMove = {
   taskId: string;
   sectionId: string | null;
   position: string;
+  priority: Priority | null;
 };
 
 export function BoardPage() {
@@ -77,13 +81,19 @@ export function BoardPage() {
   const sortMode = useMemo(() => parseTaskSortingMode(searchParams), [searchParams]);
 
   const narrowing = isTaskFilterNarrowing(filter);
-  const canReorder = optimisticProject !== undefined && sortMode === 'manual' && !narrowing;
   const baseGroups = useMemo(
     () => (optimisticProject === undefined ? [] : buildBoard(optimisticProject, filter, sortMode)),
     [optimisticProject, filter, sortMode],
   );
-  const { dragItems, handleDragStart, handleDragMove, handleDragOver, resetDragPreview } =
-    useTaskDragPreview(baseGroups, canReorder);
+  const {
+    dragItems,
+    draggedTaskId,
+    boundarySide,
+    handleDragStart,
+    handleDragMove,
+    handleDragOver,
+    resetDragPreview,
+  } = useTaskDragPreview(baseGroups, sortMode === 'priority');
 
   if (optimisticProject === undefined) {
     return (
@@ -97,6 +107,36 @@ export function BoardPage() {
 
   const project = optimisticProject;
   const tasksById = new Map(project.tasks.map((task) => [task.id, task]));
+
+  const destinationKey =
+    draggedTaskId === null || dragItems === null ? null : groupContaining(dragItems, draggedTaskId);
+
+  const draggedTask =
+    draggedTaskId === null ? undefined : project.tasks.find((task) => task.id === draggedTaskId);
+  const originGroup =
+    draggedTask === undefined
+      ? undefined
+      : baseGroups.find((group) => group.tasks.some((task) => task.id === draggedTask.id));
+  const ghostGroupKey = originGroup === undefined ? null : groupKey(originGroup);
+  const soloGhostPriority =
+    sortMode === 'priority' &&
+    draggedTask !== undefined &&
+    originGroup !== undefined &&
+    originGroup.tasks.filter((task) => task.priority === draggedTask.priority).length === 1
+      ? draggedTask.priority
+      : null;
+
+  const provisionalPriority =
+    dragItems === null || draggedTaskId === null
+      ? null
+      : dragPriority(
+          project,
+          sortMode,
+          itemsFromGroups(baseGroups),
+          dragItems,
+          draggedTaskId,
+          boundarySide,
+        );
 
   const groups = baseGroups.map((group) => {
     const ids = dragItems?.[groupKey(group)];
@@ -119,14 +159,6 @@ export function BoardPage() {
     (group): group is SectionBoardGroup => group.section !== null,
   );
   const visibleTaskCount = baseGroups.reduce((total, group) => total + group.tasks.length, 0);
-  const dragDisabledReasons: string[] = [];
-  if (sortMode !== 'manual') {
-    dragDisabledReasons.push('sort mode');
-  }
-  if (narrowing) {
-    dragDisabledReasons.push('applied filters');
-  }
-  const dragDisabledReason = dragDisabledReasons.join(' and ');
 
   async function handleCreate(
     sectionId: string | null,
@@ -182,8 +214,13 @@ export function BoardPage() {
     void replica.enqueue(moveSectionOperation(sectionId, position));
   }
 
-  async function handleReorder(task: Task, sectionId: string | null, position: string) {
-    const operation = moveTaskOperation(task, sectionId, position);
+  async function handleReorder(
+    task: Task,
+    sectionId: string | null,
+    position: string,
+    priority: Priority | null,
+  ) {
+    const operation = moveTaskOperation(task, sectionId, position, priority);
     if (operation !== null) {
       await replica.enqueue(operation);
     }
@@ -214,7 +251,7 @@ export function BoardPage() {
       return;
     }
 
-    if (!canReorder || finalItems === null) {
+    if (finalItems === null) {
       return;
     }
 
@@ -228,11 +265,30 @@ export function BoardPage() {
       return;
     }
 
+    const task = project.tasks.find((candidate) => candidate.id === taskId);
+    if (task === undefined) {
+      return;
+    }
+
     const startingItems = itemsFromGroups(baseGroups);
     const originKey = groupContaining(startingItems, taskId);
     const originIndex = originKey === null ? -1 : startingItems[originKey].indexOf(taskId);
     const finalIndex = (finalItems[key] ?? []).indexOf(taskId);
-    if (key === originKey && finalIndex === originIndex) {
+    const priority = dragPriority(
+      project,
+      sortMode,
+      startingItems,
+      finalItems,
+      taskId,
+      boundarySide,
+    );
+    // a same-slot drop can still cross a priority boundary, so only bail when
+    // both the index and the resolved priority are unchanged
+    if (
+      key === originKey &&
+      finalIndex === originIndex &&
+      (priority === null || priority === task.priority)
+    ) {
       return;
     }
 
@@ -241,26 +297,19 @@ export function BoardPage() {
     const located = groupIds.indexOf(taskId);
     const index = located === -1 ? source.index : located;
     const afterId = groupIds[index + 1] ?? null;
-    const position = dropPosition(project, sectionId, taskId, afterId);
+    const position =
+      priority === null
+        ? dropPosition(project, sectionId, taskId, afterId)
+        : dropPositionForPriority(project, sectionId, priority, taskId, afterId);
 
-    const task = project.tasks.find((candidate) => candidate.id === taskId);
-    if (task === undefined) {
-      return;
-    }
-
-    setPendingMove({ taskId, sectionId, position });
-    void handleReorder(task, sectionId, position).finally(() => setPendingMove(null));
+    setPendingMove({ taskId, sectionId, position, priority });
+    void handleReorder(task, sectionId, position, priority).finally(() => setPendingMove(null));
   }
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
       <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
         <div className="flex shrink-0 items-center gap-2 md:ml-auto md:gap-4">
-          {dragDisabledReason !== '' ? (
-            <span className="hidden text-xs text-yellow-500/80 md:inline">
-              {`task drag-and-drop disabled due to ${dragDisabledReason}`}
-            </span>
-          ) : null}
           <TaskFilterPopover
             filter={filter}
             tasks={project.tasks}
@@ -361,7 +410,17 @@ export function BoardPage() {
               color={null}
               tasks={openNoSectionGroup.tasks}
               showPriority={project.show_priority}
-              canReorder={canReorder}
+              priorityView={sortMode === 'priority'}
+              ghostPriority={
+                ghostGroupKey === groupKey(openNoSectionGroup) ? soloGhostPriority : null
+              }
+              dragTarget={
+                provisionalPriority !== null &&
+                draggedTaskId !== null &&
+                groupKey(openNoSectionGroup) === destinationKey
+                  ? { taskId: draggedTaskId, priority: provisionalPriority }
+                  : null
+              }
               showCreate={isDesktop}
               onCreate={(title, identity) => handleCreate(null, title, identity)}
               collapsed={!isDesktop && collapsedSections.has(OPEN_NO_SECTION_GROUP)}
@@ -376,9 +435,17 @@ export function BoardPage() {
               group={group}
               index={index}
               project={project}
-              canReorder={canReorder}
               sectionsSortable={isDesktop}
               showCreate={isDesktop}
+              priorityView={sortMode === 'priority'}
+              ghostPriority={ghostGroupKey === groupKey(group) ? soloGhostPriority : null}
+              dragTarget={
+                provisionalPriority !== null &&
+                draggedTaskId !== null &&
+                groupKey(group) === destinationKey
+                  ? { taskId: draggedTaskId, priority: provisionalPriority }
+                  : null
+              }
               collapsed={!isDesktop && collapsedSections.has(group.section.id)}
               onToggleCollapsed={
                 isDesktop ? undefined : () => toggleCollapsedSection(group.section.id)
@@ -398,7 +465,17 @@ export function BoardPage() {
               color={null}
               tasks={closedNoSectionGroup.tasks}
               showPriority={project.show_priority}
-              canReorder={canReorder}
+              priorityView={sortMode === 'priority'}
+              ghostPriority={
+                ghostGroupKey === groupKey(closedNoSectionGroup) ? soloGhostPriority : null
+              }
+              dragTarget={
+                provisionalPriority !== null &&
+                draggedTaskId !== null &&
+                groupKey(closedNoSectionGroup) === destinationKey
+                  ? { taskId: draggedTaskId, priority: provisionalPriority }
+                  : null
+              }
               collapsed={!isDesktop && collapsedSections.has(CLOSED_NO_SECTION_GROUP)}
               onToggleCollapsed={
                 isDesktop ? undefined : () => toggleCollapsedSection(CLOSED_NO_SECTION_GROUP)
@@ -420,7 +497,12 @@ function applyPendingMove(project: ProjectSnapshot, pending: PendingMove): Proje
     ...project,
     tasks: project.tasks.map((task) =>
       task.id === pending.taskId
-        ? { ...task, section_id: pending.sectionId, position: pending.position }
+        ? {
+            ...task,
+            section_id: pending.sectionId,
+            position: pending.position,
+            priority: pending.priority ?? task.priority,
+          }
         : task,
     ),
   };
