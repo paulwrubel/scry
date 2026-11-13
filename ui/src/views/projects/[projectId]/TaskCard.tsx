@@ -9,12 +9,9 @@ import type { Task } from '@/generated/Task';
 import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/external';
 import { tagBadgeStyle } from '@/utils/tagColor';
 
-const PRIORITY_DOT_CLASS: Record<Priority, string> = {
+const PRIORITY_DOT_CLASS: Record<Exclude<Priority, 'normal'>, string> = {
   critical: 'bg-red-600',
-  high: 'bg-orange-500',
-  medium: 'bg-yellow-300',
-  low: 'bg-purple-500',
-  minimal: 'bg-white',
+  elevated: 'bg-yellow-300',
 };
 
 export type TaskCardProps = {
@@ -109,12 +106,12 @@ export function TaskCard(props: TaskCardProps) {
                 <GitHubIcon aria-hidden="true" className="h-3.5 w-3.5" />
               </a>
             )}
-            {showPriority ? (
+            {showPriority && (task.priority === 'critical' || task.priority === 'elevated') ? (
               <span
                 role="img"
                 aria-label={`${task.priority} priority`}
                 title={task.priority}
-                className={`h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20 ${PRIORITY_DOT_CLASS[task.priority]}`}
+                className={`h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT_CLASS[task.priority]}`}
               />
             ) : null}
           </div>

@@ -11,7 +11,7 @@ function task(overrides: Partial<Task> = {}): Task {
     project_id: '11111111-1111-4111-8111-111111111111',
     title: 'task',
     description: null,
-    priority: 'medium',
+    priority: 'normal',
     section_id: null,
     position: 'a0',
     state: 'open',
@@ -34,10 +34,10 @@ describe('compareTasks', () => {
 
   it('orders priority tasks by rank', () => {
     const critical = task({ priority: 'critical' });
-    const low = task({ id: SECOND_ID, priority: 'low' });
+    const normal = task({ id: SECOND_ID, priority: 'normal' });
 
-    expect(compareTasks('priority', critical, low)).toBeLessThan(0);
-    expect(compareTasks('priority', low, critical)).toBeGreaterThan(0);
+    expect(compareTasks('priority', critical, normal)).toBeLessThan(0);
+    expect(compareTasks('priority', normal, critical)).toBeGreaterThan(0);
   });
 
   it('orders same-priority tasks by position', () => {

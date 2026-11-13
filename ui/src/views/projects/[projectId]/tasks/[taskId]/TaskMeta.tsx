@@ -7,20 +7,15 @@ import { SECTION_COLOR_HEX } from '@/utils/sectionColor';
 
 const PRIORITY_LABELS: Record<Priority, string> = {
   critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  minimal: 'Minimal',
+  elevated: 'Elevated',
+  normal: 'Normal',
 };
 
-const PRIORITIES: Priority[] = ['critical', 'high', 'medium', 'low', 'minimal'];
+const PRIORITIES: Priority[] = ['critical', 'elevated', 'normal'];
 
-const PRIORITY_DOT_CLASS: Record<Priority, string> = {
+const PRIORITY_DOT_CLASS: Record<Exclude<Priority, 'normal'>, string> = {
   critical: 'bg-red-600',
-  high: 'bg-orange-500',
-  medium: 'bg-yellow-300',
-  low: 'bg-purple-500',
-  minimal: 'bg-white',
+  elevated: 'bg-yellow-300',
 };
 
 const SELECT_CLASS =
@@ -66,10 +61,12 @@ function PriorityBadge(props: { task: Task; onSave: (priority: Priority) => Prom
             </option>
           ))}
         </select>
-        <span
-          aria-hidden="true"
-          className={`pointer-events-none absolute top-1/2 left-2.5 h-2 w-2 -translate-y-1/2 rounded-full ring-1 ring-white/20 ${PRIORITY_DOT_CLASS[task.priority]}`}
-        />
+        {task.priority === 'critical' || task.priority === 'elevated' ? (
+          <span
+            aria-hidden="true"
+            className={`pointer-events-none absolute top-1/2 left-2.5 h-1.5 w-1.5 -translate-y-1/2 rounded-full ${PRIORITY_DOT_CLASS[task.priority]}`}
+          />
+        ) : null}
         <HiChevronDown aria-hidden="true" className={CHEVRON_CLASS} />
       </div>
       {error === null ? null : (

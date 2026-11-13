@@ -40,7 +40,7 @@ export function createTaskOperation(
     project_id: project.id,
     title,
     description: null,
-    priority: 'medium',
+    priority: 'normal',
     section_id: sectionId,
     position: nextTaskPosition(project.tasks, sectionId),
     state: 'open',

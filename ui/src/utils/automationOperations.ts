@@ -11,10 +11,8 @@ export const MAX_AUTOMATION_ACTIONS = 1;
 
 const PRIORITY_LABELS = {
   critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  minimal: 'Minimal',
+  elevated: 'Elevated',
+  normal: 'Normal',
 } as const;
 
 export function sameAutomationTrigger(a: AutomationTrigger, b: AutomationTrigger): boolean {

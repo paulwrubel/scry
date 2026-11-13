@@ -100,14 +100,14 @@ describe('automation equality', () => {
     ).toBe(false);
     expect(
       sameAutomationAction(
-        { kind: 'set_priority', priority: 'high' },
-        { kind: 'set_priority', priority: 'high' },
+        { kind: 'set_priority', priority: 'elevated' },
+        { kind: 'set_priority', priority: 'elevated' },
       ),
     ).toBe(true);
     expect(
       sameAutomationAction(
-        { kind: 'set_priority', priority: 'high' },
-        { kind: 'set_priority', priority: 'low' },
+        { kind: 'set_priority', priority: 'elevated' },
+        { kind: 'set_priority', priority: 'normal' },
       ),
     ).toBe(false);
   });
@@ -172,13 +172,16 @@ describe('automation labels', () => {
     );
     const close = automationActionLabel({ kind: 'close_task' }, sections);
     const open = automationActionLabel({ kind: 'open_task' }, sections);
-    const priority = automationActionLabel({ kind: 'set_priority', priority: 'high' }, sections);
+    const priority = automationActionLabel(
+      { kind: 'set_priority', priority: 'elevated' },
+      sections,
+    );
 
     expect(move).toBe('move to Todo');
     expect(noSection).toBe('move to No Section');
     expect(close).toBe('close it');
     expect(open).toBe('open it');
-    expect(priority).toBe('set priority to High');
+    expect(priority).toBe('set priority to Elevated');
   });
 
   it('describes a rule', () => {

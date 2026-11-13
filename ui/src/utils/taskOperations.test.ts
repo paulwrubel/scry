@@ -39,7 +39,7 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
   return {
     project_id: PROJECT_ID,
     description: null,
-    priority: 'medium',
+    priority: 'normal',
     section_id: null,
     position: 'a0',
     state: 'open',
@@ -113,7 +113,7 @@ describe('createTaskOperation', () => {
       project_id: PROJECT_ID,
       title: 'New task',
       description: null,
-      priority: 'medium',
+      priority: 'normal',
       section_id: 'backlog',
       position: 'a1',
       state: 'open',
@@ -146,7 +146,7 @@ describe('updateTaskOperation', () => {
     id: TASK_ID,
     title: 'Title',
     description: 'Description',
-    priority: 'low',
+    priority: 'normal',
     tags: ['one'],
   });
 
@@ -155,7 +155,7 @@ describe('updateTaskOperation', () => {
       updateTaskOperation(existing, {
         title: 'Title',
         description: 'Description',
-        priority: 'low',
+        priority: 'normal',
         tags: ['one'],
       }),
     ).toBeNull();
@@ -166,7 +166,7 @@ describe('updateTaskOperation', () => {
       updateTaskOperation(existing, {
         title: '   ',
         description: 'Description',
-        priority: 'low',
+        priority: 'normal',
         tags: ['one'],
       }),
     ).toBeNull();
@@ -176,7 +176,7 @@ describe('updateTaskOperation', () => {
     const operation = updateTaskOperation(existing, {
       title: 'New title',
       description: 'Description',
-      priority: 'low',
+      priority: 'normal',
       tags: ['one'],
     });
 
@@ -195,7 +195,7 @@ describe('updateTaskOperation', () => {
     const operation = updateTaskOperation(existing, {
       title: 'Title',
       description: '   ',
-      priority: 'low',
+      priority: 'normal',
       tags: ['one'],
     });
 
@@ -206,7 +206,7 @@ describe('updateTaskOperation', () => {
     const operation = updateTaskOperation(existing, {
       title: 'Title',
       description: 'Description',
-      priority: 'low',
+      priority: 'normal',
       tags: [' Two ', 'three', '', 'two'],
     });
 
@@ -235,7 +235,7 @@ describe('updateTaskOperation', () => {
       id: TASK_ID,
       title: 'Title',
       description: 'Body\n',
-      priority: 'low',
+      priority: 'normal',
       tags: ['one'],
       external_identity: identity,
       external_metadata: metadata,
@@ -244,7 +244,7 @@ describe('updateTaskOperation', () => {
     const operation = updateTaskOperation(linked, {
       title: 'Title',
       description: 'Body\n',
-      priority: 'low',
+      priority: 'normal',
       tags: ['one', 'two'],
     });
 
@@ -279,7 +279,7 @@ describe('updateTaskOperation', () => {
     const linked = task({
       id: TASK_ID,
       title: 'Title ',
-      priority: 'low',
+      priority: 'normal',
       tags: ['one'],
       external_identity: identity,
       external_metadata: metadata,
@@ -288,7 +288,7 @@ describe('updateTaskOperation', () => {
     const operation = updateTaskOperation(linked, {
       title: 'Title ',
       description: '',
-      priority: 'low',
+      priority: 'normal',
       tags: ['one', 'two'],
     });
 
