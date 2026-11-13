@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { HiPlusCircle } from 'react-icons/hi2';
 import { z } from 'zod';
 import { useAppForm } from '@/hooks/useAppForm';
+import { useCloseRequest } from '@/hooks/useCloseRequest';
 
 const schema = z.object({
   name: z.string().trim().min(1, 'A section needs a name.'),
@@ -42,6 +43,8 @@ export function NewSectionCard(props: NewSectionCardProps) {
     void form.validate('change');
     setOpen(false);
   }
+
+  useCloseRequest(open, close);
 
   return (
     <>

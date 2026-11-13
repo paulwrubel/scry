@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
 import type { Task } from '@/generated/Task';
+import { useCloseRequest } from '@/hooks/useCloseRequest';
 
 export type DeleteTaskModalProps = {
   task: Task;
@@ -10,6 +11,8 @@ export type DeleteTaskModalProps = {
 
 export function DeleteTaskModal(props: DeleteTaskModalProps) {
   const { task, show, onClose, onDelete } = props;
+
+  useCloseRequest(show, onClose);
 
   return (
     <Modal show={show} onClose={onClose}>

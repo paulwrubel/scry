@@ -1,11 +1,32 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Operation } from '@/generated/Operation';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
 import type { Replica } from '@/utils/replica';
 import { NewProjectModal } from './NewProjectModal';
+
+class FakeCloseWatcher extends EventTarget {
+  static instances: FakeCloseWatcher[] = [];
+
+  constructor() {
+    super();
+    FakeCloseWatcher.instances.push(this);
+  }
+
+  requestClose() {
+    this.close();
+  }
+
+  close() {
+    this.dispatchEvent(new Event('close'));
+  }
+
+  destroy() {
+    FakeCloseWatcher.instances = FakeCloseWatcher.instances.filter((instance) => instance !== this);
+  }
+}
 
 function renderModal(
   enqueue: (operation: Operation) => Promise<void>,
@@ -127,6 +148,35 @@ describe('NewProjectModal', () => {
     });
     await waitFor(() => {
       expect(createButton().disabled).toBe(false);
+    });
+  });
+
+  describe('platform close requests', () => {
+    beforeEach(() => {
+      FakeCloseWatcher.instances = [];
+      Object.defineProperty(globalThis, 'CloseWatcher', {
+        configurable: true,
+        writable: true,
+        value: FakeCloseWatcher,
+      });
+    });
+
+    afterEach(() => {
+      Reflect.deleteProperty(globalThis, 'CloseWatcher');
+    });
+
+    it('closes on a platform close request', () => {
+      const { onClose } = renderModal(vi.fn(async () => undefined));
+      const [watcher] = FakeCloseWatcher.instances;
+      if (watcher === undefined) {
+        throw new Error('expected a CloseWatcher to be created');
+      }
+
+      act(() => {
+        watcher.close();
+      });
+
+      expect(onClose).toHaveBeenCalledTimes(1);
     });
   });
 });

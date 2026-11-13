@@ -6,6 +6,7 @@ import { HiPlus } from 'react-icons/hi2';
 import { z } from 'zod';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import { useAppForm } from '@/hooks/useAppForm';
+import { useCloseRequest } from '@/hooks/useCloseRequest';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { parseTaskInput } from '@/utils/taskInput';
 
@@ -80,6 +81,8 @@ export function MobileAddTask(props: MobileAddTaskProps) {
     void form.validate('change');
     setError(null);
   }
+
+  useCloseRequest(open, close);
 
   return (
     <>

@@ -1,10 +1,17 @@
 import { Button, Card, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
 import { useState } from 'react';
+import { useCloseRequest } from '@/hooks/useCloseRequest';
 import { useInstallPrompt } from '@/providers/InstallPrompt';
 
 export function InstallSection() {
   const { canInstall, isInstalled, isIos, isMobile, promptInstall } = useInstallPrompt();
   const [showInstructions, setShowInstructions] = useState(false);
+
+  function closeInstructions() {
+    setShowInstructions(false);
+  }
+
+  useCloseRequest(showInstructions, closeInstructions);
 
   if (isInstalled || (!canInstall && !isIos && !isMobile)) {
     return null;
@@ -35,7 +42,7 @@ export function InstallSection() {
         )}
       </div>
 
-      <Modal show={showInstructions} onClose={() => setShowInstructions(false)}>
+      <Modal show={showInstructions} onClose={closeInstructions}>
         <ModalHeader>
           {isIos ? 'Install on iPhone or iPad' : 'Install from your browser'}
         </ModalHeader>
