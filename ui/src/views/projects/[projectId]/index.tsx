@@ -39,6 +39,7 @@ import {
   OPEN_NO_SECTION_GROUP,
   buildBoard,
   dropPosition,
+  dropPositionForPriority,
   groupContaining,
   groupKey,
   itemsFromGroups,
@@ -77,13 +78,12 @@ export function BoardPage() {
   const sortMode = useMemo(() => parseTaskSortingMode(searchParams), [searchParams]);
 
   const narrowing = isTaskFilterNarrowing(filter);
-  const canReorder = optimisticProject !== undefined && sortMode === 'manual' && !narrowing;
   const baseGroups = useMemo(
     () => (optimisticProject === undefined ? [] : buildBoard(optimisticProject, filter, sortMode)),
     [optimisticProject, filter, sortMode],
   );
   const { dragItems, handleDragStart, handleDragMove, handleDragOver, resetDragPreview } =
-    useTaskDragPreview(baseGroups, canReorder);
+    useTaskDragPreview(baseGroups, sortMode === 'priority');
 
   if (optimisticProject === undefined) {
     return (
@@ -119,14 +119,6 @@ export function BoardPage() {
     (group): group is SectionBoardGroup => group.section !== null,
   );
   const visibleTaskCount = baseGroups.reduce((total, group) => total + group.tasks.length, 0);
-  const dragDisabledReasons: string[] = [];
-  if (sortMode !== 'manual') {
-    dragDisabledReasons.push('sort mode');
-  }
-  if (narrowing) {
-    dragDisabledReasons.push('applied filters');
-  }
-  const dragDisabledReason = dragDisabledReasons.join(' and ');
 
   async function handleCreate(
     sectionId: string | null,
@@ -214,7 +206,7 @@ export function BoardPage() {
       return;
     }
 
-    if (!canReorder || finalItems === null) {
+    if (finalItems === null) {
       return;
     }
 
@@ -236,17 +228,32 @@ export function BoardPage() {
       return;
     }
 
+    const task = project.tasks.find((candidate) => candidate.id === taskId);
+    if (task === undefined) {
+      return;
+    }
+
     const sectionId = sectionIdFromGroup(key);
     const groupIds = finalItems[key] ?? [];
     const located = groupIds.indexOf(taskId);
     const index = located === -1 ? source.index : located;
     const afterId = groupIds[index + 1] ?? null;
-    const position = dropPosition(project, sectionId, taskId, afterId);
-
-    const task = project.tasks.find((candidate) => candidate.id === taskId);
-    if (task === undefined) {
-      return;
+    if (sortMode === 'priority') {
+      const peers = project.tasks.filter(
+        (candidate) =>
+          candidate.section_id === sectionId &&
+          candidate.priority === task.priority &&
+          candidate.id !== task.id,
+      );
+      // a lone priority task has no within-group order to change
+      if (sectionId === task.section_id && peers.length === 0) {
+        return;
+      }
     }
+    const position =
+      sortMode === 'priority'
+        ? dropPositionForPriority(project, sectionId, task.priority, taskId, afterId)
+        : dropPosition(project, sectionId, taskId, afterId);
 
     setPendingMove({ taskId, sectionId, position });
     void handleReorder(task, sectionId, position).finally(() => setPendingMove(null));
@@ -256,11 +263,6 @@ export function BoardPage() {
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
       <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
         <div className="flex shrink-0 items-center gap-2 md:ml-auto md:gap-4">
-          {dragDisabledReason !== '' ? (
-            <span className="hidden text-xs text-yellow-500/80 md:inline">
-              {`task drag-and-drop disabled due to ${dragDisabledReason}`}
-            </span>
-          ) : null}
           <TaskFilterPopover
             filter={filter}
             tasks={project.tasks}
@@ -361,7 +363,6 @@ export function BoardPage() {
               color={null}
               tasks={openNoSectionGroup.tasks}
               showPriority={project.show_priority}
-              canReorder={canReorder}
               showCreate={isDesktop}
               onCreate={(title, identity) => handleCreate(null, title, identity)}
               collapsed={!isDesktop && collapsedSections.has(OPEN_NO_SECTION_GROUP)}
@@ -376,7 +377,6 @@ export function BoardPage() {
               group={group}
               index={index}
               project={project}
-              canReorder={canReorder}
               sectionsSortable={isDesktop}
               showCreate={isDesktop}
               collapsed={!isDesktop && collapsedSections.has(group.section.id)}
@@ -398,7 +398,6 @@ export function BoardPage() {
               color={null}
               tasks={closedNoSectionGroup.tasks}
               showPriority={project.show_priority}
-              canReorder={canReorder}
               collapsed={!isDesktop && collapsedSections.has(CLOSED_NO_SECTION_GROUP)}
               onToggleCollapsed={
                 isDesktop ? undefined : () => toggleCollapsedSection(CLOSED_NO_SECTION_GROUP)

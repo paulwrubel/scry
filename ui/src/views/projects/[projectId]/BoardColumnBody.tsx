@@ -3,22 +3,19 @@ import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Task } from '@/generated/Task';
 import { NewTaskForm } from './NewTaskForm';
 import { SortableTaskCard } from './SortableTaskCard';
-import { TaskCard } from './TaskCard';
 
 export type BoardColumnBodyProps = {
   projectId: string;
   group: string;
   tasks: Task[];
   showPriority: boolean;
-  canReorder: boolean;
   showCreate: boolean;
   onCreate?: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>;
   dropRef: ComponentProps<'div'>['ref'];
 };
 
 export function BoardColumnBody(props: BoardColumnBodyProps) {
-  const { projectId, group, tasks, showPriority, canReorder, showCreate, onCreate, dropRef } =
-    props;
+  const { projectId, group, tasks, showPriority, showCreate, onCreate, dropRef } = props;
 
   return (
     <>
@@ -31,25 +28,16 @@ export function BoardColumnBody(props: BoardColumnBodyProps) {
       >
         {tasks.length === 0
           ? null
-          : canReorder
-            ? tasks.map((task, index) => (
-                <SortableTaskCard
-                  key={task.id}
-                  projectId={projectId}
-                  task={task}
-                  index={index}
-                  group={group}
-                  showPriority={showPriority}
-                />
-              ))
-            : tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  projectId={projectId}
-                  task={task}
-                  showPriority={showPriority}
-                />
-              ))}
+          : tasks.map((task, index) => (
+              <SortableTaskCard
+                key={task.id}
+                projectId={projectId}
+                task={task}
+                index={index}
+                group={group}
+                showPriority={showPriority}
+              />
+            ))}
       </div>
       {onCreate === undefined || !showCreate ? null : <NewTaskForm onCreate={onCreate} />}
     </>

@@ -1,5 +1,6 @@
 import { keyBetween } from '@/contract/positions';
 import { compareTasks } from '@/contract/task-order';
+import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
@@ -7,6 +8,8 @@ import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import type { TaskState } from '@/generated/TaskState';
 import type { TaskFilter } from '@/utils/taskFilter';
 import { matchesTaskFilter } from '@/utils/taskFilter';
+
+const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'minimal'];
 
 export type BoardGroup = {
   section: Section | null;
@@ -148,6 +151,12 @@ export function insertionIndexForPointer(
   return bestIndex;
 }
 
+/** Limits preview insertion to the dragged task's own priority peers. */
+export type PriorityScope = {
+  priority: Priority;
+  priorityOf: (id: string) => Priority | null;
+};
+
 /**
  * Returns the original `items` when the preview matches it exactly, so callers
  * can skip re-rendering.
@@ -158,6 +167,7 @@ export function previewAtPointer(
   destination: string,
   dragId: string,
   anchorY: number,
+  scope?: PriorityScope,
 ): Record<string, string[]> {
   const withoutDrag: Record<string, string[]> = {};
   for (const [group, ids] of Object.entries(items)) {
@@ -183,9 +193,39 @@ export function previewAtPointer(
     slots.push({ id: slot.id, top: slot.top - shift, bottom: slot.bottom - shift });
   }
 
-  const index = insertionIndexForPointer(slots, anchorY, layout.draggedHeight, groupLayout.gap);
+  // in priority view the dragged card only competes for slots among its own
+  // priority peers, so the preview cannot open a gap in another band
+  const scoped =
+    scope === undefined
+      ? slots
+      : slots.filter((slot) => scope.priorityOf(slot.id) === scope.priority);
+  const index = insertionIndexForPointer(scoped, anchorY, layout.draggedHeight, groupLayout.gap);
+
+  let insertAt = index;
+  if (scope !== undefined) {
+    const destinationIds = withoutDrag[destination];
+    if (scoped.length > 0) {
+      const before = scoped[index];
+      if (before !== undefined) {
+        insertAt = destinationIds.indexOf(before.id);
+      } else {
+        insertAt = destinationIds.indexOf(scoped[scoped.length - 1].id) + 1;
+      }
+    } else {
+      const rank = PRIORITY_ORDER.indexOf(scope.priority);
+      const at = destinationIds.findIndex((id) => {
+        const priority = scope.priorityOf(id);
+        return priority !== null && PRIORITY_ORDER.indexOf(priority) > rank;
+      });
+      insertAt = at === -1 ? destinationIds.length : at;
+    }
+    if (insertAt === -1) {
+      insertAt = destinationIds.length;
+    }
+  }
+
   const nextDestination = [...withoutDrag[destination]];
-  nextDestination.splice(index, 0, dragId);
+  nextDestination.splice(insertAt, 0, dragId);
 
   const next: Record<string, string[]> = { ...withoutDrag, [destination]: nextDestination };
 
@@ -241,6 +281,20 @@ export function dropPosition(
   afterId: string | null,
 ): string {
   const tasks = sectionTasks(project, sectionId).filter((task) => task.id !== taskId);
+  const at = afterId === null ? tasks.length : tasks.findIndex((task) => task.id === afterId);
+  return insertPosition(tasks, at === -1 ? tasks.length : at);
+}
+
+export function dropPositionForPriority(
+  project: ProjectSnapshot,
+  sectionId: string | null,
+  priority: Priority,
+  taskId: string,
+  afterId: string | null,
+): string {
+  const tasks = sectionTasks(project, sectionId).filter(
+    (task) => task.priority === priority && task.id !== taskId,
+  );
   const at = afterId === null ? tasks.length : tasks.findIndex((task) => task.id === afterId);
   return insertPosition(tasks, at === -1 ? tasks.length : at);
 }

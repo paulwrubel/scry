@@ -21,7 +21,6 @@ export type BoardColumnProps = {
   color: Color | null;
   tasks: Task[];
   showPriority: boolean;
-  canReorder: boolean;
   blockingAutomations?: readonly string[];
   onRename?: (name: string) => void;
   onDelete?: () => void;
@@ -50,7 +49,6 @@ export function BoardColumn(props: BoardColumnProps) {
     color,
     tasks,
     showPriority,
-    canReorder,
     blockingAutomations = [],
     onRename,
     onDelete,
@@ -178,7 +176,6 @@ export function BoardColumn(props: BoardColumnProps) {
                     group={group}
                     tasks={tasks}
                     showPriority={showPriority}
-                    canReorder={canReorder}
                     showCreate={showCreate}
                     onCreate={onCreate}
                     dropRef={ref}
@@ -194,7 +191,6 @@ export function BoardColumn(props: BoardColumnProps) {
               group={group}
               tasks={tasks}
               showPriority={showPriority}
-              canReorder={canReorder}
               showCreate={showCreate}
               onCreate={onCreate}
               dropRef={ref}

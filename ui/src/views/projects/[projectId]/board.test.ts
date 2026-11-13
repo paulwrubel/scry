@@ -9,6 +9,7 @@ import {
   buildBoard,
   CLOSED_NO_SECTION_GROUP,
   dropPosition,
+  dropPositionForPriority,
   groupKey,
   insertionIndexForPointer,
   insertPosition,
@@ -409,6 +410,54 @@ describe('dropPosition', () => {
   });
 });
 
+describe('dropPositionForPriority', () => {
+  const project = projectSnapshot({
+    sections: [section('backlog', 'a0'), section('doing', 'a1')],
+    tasks: [
+      task({
+        id: 'high-a',
+        title: 'High A',
+        section_id: 'backlog',
+        position: 'a0',
+        priority: 'high',
+      }),
+      task({
+        id: 'medium',
+        title: 'Medium',
+        section_id: 'backlog',
+        position: 'a1',
+        priority: 'medium',
+      }),
+      task({
+        id: 'high-b',
+        title: 'High B',
+        section_id: 'backlog',
+        position: 'a2',
+        priority: 'high',
+      }),
+      task({
+        id: 'doing-high',
+        title: 'Doing high',
+        section_id: 'doing',
+        position: 'a0',
+        priority: 'high',
+      }),
+    ],
+  });
+
+  it('inserts only among tasks of the same priority', () => {
+    expect(dropPositionForPriority(project, 'backlog', 'high', 'dragged', 'high-b')).toBe('a1');
+  });
+
+  it('appends within the priority when the next visible task is another priority', () => {
+    expect(dropPositionForPriority(project, 'backlog', 'high', 'dragged', 'medium')).toBe('a3');
+  });
+
+  it('finds the same priority in another section', () => {
+    expect(dropPositionForPriority(project, 'doing', 'high', 'dragged', null)).toBe('a1');
+  });
+});
+
 describe('planSectionMove', () => {
   const sections = [section('a', 'a0'), section('b', 'a1'), section('c', 'a2')];
 
@@ -539,5 +588,59 @@ describe('previewAtPointer', () => {
     expect(items).toEqual({ backlog: ['a', 'b'], doing: ['c', 'd'] });
     expect(mutable.groups.backlog.slots).toEqual([taskSlot('a', 0), taskSlot('b', 54)]);
     expect(mutable.groups.doing.slots).toEqual([taskSlot('c', 0), taskSlot('d', 54)]);
+  });
+});
+
+describe('previewAtPointer with a priority scope', () => {
+  const layout = dragLayout(
+    {
+      backlog: [
+        taskSlot('high-a', 0),
+        taskSlot('high-b', 54),
+        taskSlot('medium-a', 108),
+        taskSlot('medium-b', 162),
+      ],
+      doing: [taskSlot('high-c', 0), taskSlot('low-a', 54)],
+    },
+    46,
+  );
+  const scope = {
+    priority: 'medium' as const,
+    priorityOf: (id: string) => {
+      if (id.startsWith('high')) {
+        return 'high' as const;
+      }
+      if (id.startsWith('low')) {
+        return 'low' as const;
+      }
+      return 'medium' as const;
+    },
+  };
+
+  it('inserts at the top of its own band when hovered over the band above', () => {
+    const items = { backlog: ['high-a', 'high-b', 'medium-a', 'medium-b'], doing: [] };
+
+    expect(previewAtPointer(items, layout, 'backlog', 'medium-b', 0, scope)).toEqual({
+      backlog: ['high-a', 'high-b', 'medium-b', 'medium-a'],
+      doing: [],
+    });
+  });
+
+  it('never opens a gap between tasks of another priority', () => {
+    const items = { backlog: ['high-a', 'high-b', 'medium-a', 'medium-b'], doing: [] };
+
+    expect(previewAtPointer(items, layout, 'backlog', 'medium-b', 80, scope)).toEqual({
+      backlog: ['high-a', 'high-b', 'medium-b', 'medium-a'],
+      doing: [],
+    });
+  });
+
+  it('places a new priority band by rank when the destination has no peer', () => {
+    const items = { backlog: ['medium-a'], doing: ['high-c', 'low-a'] };
+
+    expect(previewAtPointer(items, layout, 'doing', 'medium-a', 80, scope)).toEqual({
+      backlog: [],
+      doing: ['high-c', 'medium-a', 'low-a'],
+    });
   });
 });

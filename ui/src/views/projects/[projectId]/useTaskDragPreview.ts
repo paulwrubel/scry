@@ -1,5 +1,6 @@
 import type { DragMoveEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
+import type { Priority } from '@/generated/Priority';
 import { useRef, useState } from 'react';
 import type { BoardGroup, DragLayout, TaskSlot } from './board';
 import {
@@ -55,13 +56,15 @@ function captureDragLayout(groups: BoardGroup[], draggedHeight: number): DragLay
   return layout;
 }
 
-export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): TaskDragPreview {
+export function useTaskDragPreview(groups: BoardGroup[], priorityView: boolean): TaskDragPreview {
   const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
   const dragLayoutRef = useRef<DragLayout | null>(null);
   const dragAnchorOffsetRef = useRef(0);
+  const priorityByIdRef = useRef<Map<string, Priority>>(new Map());
+  const draggedPriorityRef = useRef<Priority | null>(null);
 
   function handleDragStart(event: DragStartEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
     const sourceElement = event.operation.source?.element;
@@ -72,6 +75,17 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
         ? 0
         : sourceRect.top + sourceRect.height / 2 - event.operation.position.current.y;
     dragLayoutRef.current = captureDragLayout(groups, sourceRect?.height ?? 0);
+    const priorities = new Map<string, Priority>();
+    for (const group of groups) {
+      for (const task of group.tasks) {
+        priorities.set(task.id, task.priority);
+      }
+    }
+    priorityByIdRef.current = priorities;
+    draggedPriorityRef.current =
+      event.operation.source === null
+        ? null
+        : (priorities.get(String(event.operation.source.id)) ?? null);
     setDragItems(itemsFromGroups(groups));
   }
 
@@ -113,12 +127,19 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
       if (origin !== destination && isNoSectionGroupKey(destination)) {
         return current;
       }
-      return previewAtPointer(current, layout, destination, String(sourceId), orderY);
+      const scope =
+        priorityView && draggedPriorityRef.current !== null
+          ? {
+              priority: draggedPriorityRef.current,
+              priorityOf: (id: string) => priorityByIdRef.current.get(id) ?? null,
+            }
+          : undefined;
+      return previewAtPointer(current, layout, destination, String(sourceId), orderY, scope);
     });
   }
 
   function handleDragMove(event: DragMoveEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
 
@@ -131,7 +152,7 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
   }
 
   function handleDragOver(event: DragOverEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
     event.preventDefault();
@@ -147,6 +168,8 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
   function resetDragPreview() {
     dragLayoutRef.current = null;
     dragAnchorOffsetRef.current = 0;
+    priorityByIdRef.current = new Map();
+    draggedPriorityRef.current = null;
     setDragItems(null);
   }
 

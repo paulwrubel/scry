@@ -13,7 +13,6 @@ export type SortableBoardColumnProps = {
   group: SectionBoardGroup;
   index: number;
   project: ProjectSnapshot;
-  canReorder: boolean;
   sectionsSortable: boolean;
   showCreate: boolean;
   collapsed: boolean;
@@ -33,7 +32,6 @@ export function SortableBoardColumn(props: SortableBoardColumnProps) {
     group,
     index,
     project,
-    canReorder,
     sectionsSortable,
     showCreate,
     collapsed,
@@ -68,7 +66,6 @@ export function SortableBoardColumn(props: SortableBoardColumnProps) {
       color={section.color}
       tasks={group.tasks}
       showPriority={project.show_priority}
-      canReorder={canReorder}
       blockingAutomations={blockingAutomations}
       showCreate={showCreate}
       collapsed={collapsed}
