@@ -6,6 +6,30 @@ import { MobileAddTask } from './MobileAddTask';
 
 const inputLabel = 'Task title or GitHub URL';
 
+class FakeCloseWatcher extends EventTarget {
+  static instances: FakeCloseWatcher[] = [];
+
+  destroyed = false;
+
+  constructor() {
+    super();
+    FakeCloseWatcher.instances.push(this);
+  }
+
+  requestClose() {
+    this.close();
+  }
+
+  close() {
+    this.dispatchEvent(new Event('close'));
+  }
+
+  destroy() {
+    this.destroyed = true;
+    FakeCloseWatcher.instances = FakeCloseWatcher.instances.filter((instance) => instance !== this);
+  }
+}
+
 function renderTask(
   onCreate: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>,
 ) {
@@ -16,6 +40,7 @@ const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualVi
 
 afterEach(() => {
   cleanup();
+  Reflect.deleteProperty(globalThis, 'CloseWatcher');
   if (originalVisualViewport === undefined) {
     Reflect.deleteProperty(window, 'visualViewport');
   } else {
@@ -89,6 +114,30 @@ describe('MobileAddTask', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(screen.queryByRole('button', { name: 'Add' })).toBeNull();
+  });
+
+  it('closes the sheet on a platform close request', () => {
+    FakeCloseWatcher.instances = [];
+    Object.defineProperty(globalThis, 'CloseWatcher', {
+      configurable: true,
+      writable: true,
+      value: FakeCloseWatcher,
+    });
+    renderTask(vi.fn(async () => undefined));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(inputLabel), { target: { value: 'Draft' } });
+    const [watcher] = FakeCloseWatcher.instances;
+    if (watcher === undefined) {
+      throw new Error('expected a CloseWatcher to be created');
+    }
+
+    act(() => {
+      watcher.close();
+    });
+
+    expect(screen.queryByRole('button', { name: 'Add' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add task' })).toBeDefined();
   });
 
   it('lifts the sheet by the visual viewport inset', () => {
