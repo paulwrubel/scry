@@ -78,7 +78,16 @@ export type Operation = {
       external_identity?: ExternalIdentity | null;
       external_metadata?: ExternalMetadata | null;
     }
-  | { kind: 'move_task'; id: string; section_id: string | null; position: Position }
+  | {
+      kind: 'move_task';
+      id: string;
+      section_id: string | null;
+      position: Position;
+      /**
+       * `None` leaves the task's priority unchanged.
+       */
+      priority?: Priority | null;
+    }
   | { kind: 'delete_task'; id: string }
   | { kind: 'create_note'; id: string; task_id: string; contents: string; created_at: string }
   | { kind: 'update_note'; id: string; contents: string }

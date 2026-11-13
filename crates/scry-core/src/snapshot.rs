@@ -587,6 +587,7 @@ pub fn plan_import(
                         id: live_task.id,
                         section_id,
                         position: incoming_task.position.clone(),
+                        priority: None,
                     }));
                 }
 

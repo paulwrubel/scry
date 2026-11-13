@@ -103,6 +103,21 @@ fn move_section_operation(position: &str) -> Operation {
     .unwrap()
 }
 
+fn move_task_operation(priority: Option<&str>) -> Operation {
+    let mut value = json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "move_task",
+        "id": TASK_ID,
+        "section_id": null,
+        "position": "a1"
+    });
+    if let Some(priority) = priority {
+        value["priority"] = json!(priority);
+    }
+    serde_json::from_value(value).unwrap()
+}
+
 fn create_automation_operation() -> Operation {
     serde_json::from_value(json!({
         "operation_id": OPERATION_ID,
@@ -343,4 +358,31 @@ fn old_update_project_operation_with_task_sorting_mode_deserializes() {
         operation.kind,
         OperationKind::UpdateProject { .. }
     ));
+}
+
+#[test]
+fn replay_operations_applies_move_task_priority() {
+    let state = replay_operations(&confirmed(), &[move_task_operation(Some("high"))]);
+    let task = only_task(&state);
+
+    assert_eq!(task.section_id, None);
+    assert_eq!(task.position.as_str(), "a1");
+    assert_eq!(task.priority, Priority::High);
+}
+
+#[test]
+fn old_move_task_operation_without_priority_deserializes() {
+    // an outbox entry queued before the field existed must still replay
+    let operation = move_task_operation(None);
+    assert!(matches!(
+        operation.kind,
+        OperationKind::MoveTask { priority: None, .. }
+    ));
+
+    let state = replay_operations(&confirmed(), &[operation]);
+    let task = only_task(&state);
+
+    assert_eq!(task.section_id, None);
+    assert_eq!(task.position.as_str(), "a1");
+    assert_eq!(task.priority, Priority::Medium);
 }

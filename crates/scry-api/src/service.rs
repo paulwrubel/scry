@@ -345,6 +345,7 @@ impl ProjectService {
                     id: task.id,
                     section_id: task.section_id,
                     position: task.position.clone(),
+                    priority: None,
                 },
             ));
         }
@@ -459,6 +460,7 @@ impl ProjectService {
                 id: task.id,
                 section_id: task.section_id,
                 position: task.position.clone(),
+                priority: None,
             },
         ));
         self.apply_operations(&ops, ApplyMode::Atomic).await?;
@@ -880,6 +882,7 @@ impl ProjectService {
                     id: task.id,
                     section_id: Some(target.id),
                     position,
+                    priority: None,
                 },
             ));
         }
@@ -2344,6 +2347,7 @@ impl ProjectService {
                         id: current.id,
                         section_id: *section_id,
                         position,
+                        priority: None,
                     }
                 }
                 AutomationAction::CloseTask => {
@@ -2507,12 +2511,17 @@ fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldValues {
         OperationKind::MoveTask {
             section_id,
             position,
+            priority,
             ..
         } => {
             task.section_id = *section_id;
             task.position = position.clone();
             fields.insert("section_id".into(), json!(section_id));
             fields.insert("position".into(), json!(position));
+            if let Some(priority) = priority {
+                task.priority = *priority;
+                fields.insert("priority".into(), json!(priority));
+            }
         }
         // the caller only passes a task op; anything else leaves it untouched
         _ => {}
@@ -3869,6 +3878,7 @@ mod tests {
             id,
             section_id: Some(section_id),
             position: sectioned.position.clone(),
+            priority: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&enter_op, Some(&unsectioned), &sectioned),
@@ -3883,6 +3893,7 @@ mod tests {
             id,
             section_id: None,
             position: unsectioned.position.clone(),
+            priority: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&leave_op, Some(&sectioned), &unsectioned),

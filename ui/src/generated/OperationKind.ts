@@ -14,7 +14,8 @@ import type { TaskState } from './TaskState';
  * The operation vocabulary: one variant per `ProjectService` mutation, entity at a
  * time. Section merge is deliberately absent because it is a server-side rule
  * that emits ordinary operations. Moves stay separate so moving a task never
- * rewrites its other fields.
+ * rewrites its title, description, tags, or state, though a move may carry a
+ * new priority alongside its section and position.
  *
  * Create variants carry the client-generated id and `created_at` so
  * offline-created entities keep stable identity and Created ordering;
@@ -75,7 +76,16 @@ export type OperationKind =
       external_identity?: ExternalIdentity | null;
       external_metadata?: ExternalMetadata | null;
     }
-  | { kind: 'move_task'; id: string; section_id: string | null; position: Position }
+  | {
+      kind: 'move_task';
+      id: string;
+      section_id: string | null;
+      position: Position;
+      /**
+       * `None` leaves the task's priority unchanged.
+       */
+      priority?: Priority | null;
+    }
   | { kind: 'delete_task'; id: string }
   | { kind: 'create_note'; id: string; task_id: string; contents: string; created_at: string }
   | { kind: 'update_note'; id: string; contents: string }

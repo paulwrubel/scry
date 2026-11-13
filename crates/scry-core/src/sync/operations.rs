@@ -107,7 +107,8 @@ pub enum ColorChange {
 /// The operation vocabulary: one variant per `ProjectService` mutation, entity at a
 /// time. Section merge is deliberately absent because it is a server-side rule
 /// that emits ordinary operations. Moves stay separate so moving a task never
-/// rewrites its other fields.
+/// rewrites its title, description, tags, or state, though a move may carry a
+/// new priority alongside its section and position.
 ///
 /// Create variants carry the client-generated id and `created_at` so
 /// offline-created entities keep stable identity and Created ordering;
@@ -212,12 +213,16 @@ pub enum OperationKind {
         #[cfg_attr(feature = "ts", ts(type = "ExternalMetadata | null"))]
         external_metadata: Option<Option<Box<ExternalMetadata>>>,
     },
-    /// `section_id` and `position` are always set together; `None` means the
-    /// task moves to No section.
+    /// `section_id` and `position` are always set together; `None` on
+    /// `section_id` means the task moves to No section. `priority` is only set
+    /// when the move also changes it.
     MoveTask {
         id: TaskId,
         section_id: Option<SectionId>,
         position: Position,
+        /// `None` leaves the task's priority unchanged.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        priority: Option<Priority>,
     },
     DeleteTask {
         id: TaskId,

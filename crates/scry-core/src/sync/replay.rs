@@ -223,10 +223,14 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             id,
             section_id,
             position,
+            priority,
         } => {
             if let Some(task) = find_task_mut(state, *id) {
                 task.section_id = *section_id;
                 task.position = position.clone();
+                if let Some(priority) = priority {
+                    task.priority = *priority;
+                }
             }
         }
         OperationKind::DeleteTask { id } => {
