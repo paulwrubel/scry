@@ -177,19 +177,9 @@ pub fn distinguishing_prefixes(ids: &[Uuid], min_length: usize) -> Vec<String> {
 /// Namespace for scry-owned deterministic ids that are not scoped to a project.
 ///
 /// The built-in default project is `UUIDv5(scry_namespace(), "default")`; that
-/// value is pinned in the init migration. Template sections use the project UUID
-/// as their namespace instead.
+/// value is pinned in the init migration.
 pub fn scry_namespace() -> Uuid {
     Uuid::new_v5(&Uuid::NAMESPACE_DNS, b"scry")
-}
-
-/// Deterministic id for a section created from a project template.
-///
-/// The project UUID is the namespace, so the name only has to be unique within
-/// that project, matching the section-name uniqueness rule. Re-applying the same
-/// template to the same project therefore reuses the same section ids.
-pub fn template_section_id(project_id: ProjectId, name: &str) -> SectionId {
-    Uuid::new_v5(&project_id, name.trim().to_lowercase().as_bytes())
 }
 
 fn longest_common_prefix(left: &str, right: &str) -> usize {
@@ -432,19 +422,5 @@ mod tests {
             Uuid::parse_str("b4bf48f3-2fdb-5b9f-b55f-2f4ffc38bb08").unwrap(),
             Uuid::new_v5(&scry_namespace(), b"default")
         );
-    }
-
-    #[test]
-    fn template_section_ids_are_deterministic_per_project() {
-        let project = uuid_from_hex(SAMPLE_HEX);
-        let other = uuid_from_hex("9d2e4f5a8b6c1d2e3f4a5b6c4f3a2b1c");
-
-        let first = template_section_id(project, "In Progress");
-        let second = template_section_id(project, "  in progress  ");
-
-        assert_eq!(first, second);
-        assert_eq!(first, Uuid::new_v5(&project, b"in progress"));
-        assert_ne!(first, template_section_id(other, "In Progress"));
-        assert_ne!(first, template_section_id(project, "Review"));
     }
 }

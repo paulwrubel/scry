@@ -350,7 +350,7 @@ flowchart LR
 
 ## 5. Projects
 
-Project creation, listing, lookup, snapshot, update, and deletion. The read methods are thin pass-throughs to `Store`. `create_project` is the only writer that also creates sections, and only when given a `ProjectSetup::Template`. The update handler reads the project before writing it because `update_project` needs the row it is patching.
+Project creation, listing, lookup, snapshot, update, and deletion. The read methods are thin pass-throughs to `Store`. The update handler reads the project before writing it because `update_project` needs the row it is patching.
 
 ```mermaid
 flowchart LR
@@ -380,7 +380,6 @@ flowchart LR
 
   subgraph store["Store"]
     st_create_project[create_project]
-    st_create_section[create_section]
     st_get_project_by_id[get_project_by_id]
     st_get_project_by_name[get_project_by_name]
     st_get_all_projects[get_all_projects]
@@ -399,7 +398,6 @@ flowchart LR
   h_delete_project_by_id ==> delete_project_by_id
 
   create_project --> st_create_project
-  create_project --> st_create_section
   get_project --> st_get_project_by_id
   get_project_by_name --> st_get_project_by_name
   list_projects --> st_get_all_projects
@@ -410,7 +408,7 @@ flowchart LR
   require_project --> st_get_project_by_id
 
   classDef storeNode fill:#eef3fb,stroke:#5b7fae,stroke-width:1px
-  class st_create_project,st_create_section,st_get_project_by_id,st_get_project_by_name,st_get_all_projects,st_get_project_snapshot,st_update_project,st_delete_project_by_id storeNode
+  class st_create_project,st_get_project_by_id,st_get_project_by_name,st_get_all_projects,st_get_project_snapshot,st_update_project,st_delete_project_by_id storeNode
 ```
 
 ## 6. Snapshots and import

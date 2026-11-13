@@ -11,7 +11,6 @@ use crate::output::print_json;
 pub struct CreateProject<'a> {
     pub name: &'a str,
     pub description: Option<&'a str>,
-    pub template: Option<&'a str>,
 }
 
 /// Create a project.
@@ -24,7 +23,6 @@ pub async fn project_create(
     struct CreateProjectRequest<'a> {
         name: &'a str,
         description: Option<&'a str>,
-        template: Option<&'a str>,
     }
 
     let project: Project = client
@@ -34,7 +32,6 @@ pub async fn project_create(
             &CreateProjectRequest {
                 name: input.name,
                 description: input.description,
-                template: input.template,
             },
         )
         .await?;
@@ -43,9 +40,7 @@ pub async fn project_create(
         print_json(&project)?;
     } else {
         println!("Created project \"{}\"", project.name);
-        if input.template.is_none() {
-            println!("Note: sections are optional. Add one with 'scry section add <name>'.");
-        }
+        println!("Note: sections are optional. Add one with 'scry section add <name>'.");
         println!(
             "Make it active with 'scry project use \"{}\"'.",
             project.name
