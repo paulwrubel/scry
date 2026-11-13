@@ -235,7 +235,7 @@ In every product that supports dragging between groups, the drag changes the gro
 - Obsidian Bases Kanban: a cross-column drop writes the group property ([Obsidian Forum](https://forum.obsidian.md/t/bases-kanban-manual-card-ordering-within-a-column-drag-and-drop-persisted-to-a-property/119092)).
 - Todoist: "Drag tasks to relevant sections" ([Todoist](https://www.todoist.com/help/todoist/features/use-the-board-layout-in-todoist-AiAVsyEI)).
 
-This is the pattern #219 follows when a priority drag changes the task's priority. The precedent is strong, but it depends on the group being visually legible. In Linear, GitHub, Notion, and Todoist, the group is a column or lane with a header. In scry, priority is currently a comparator, not a lane.
+This is the pattern #219 follows when a priority drag changes the task's priority. The precedent is strong, but it depends on the group being visually legible. In Linear, GitHub, Notion, and Todoist, the group is a column or lane with a header. In scry, priority is a comparator rather than a separate column, so the destination has to be made legible in the UI.
 
 ### 3. Filtering is orthogonal to ordering, with one structural exception
 
@@ -279,17 +279,15 @@ Manual-only is a legitimate product position (Things, Trello), and priority is t
 
 ### #219: drag in priority and filtered views
 
-Cross-group drag changing the grouped property has strong precedent ([Linear](https://linear.app/docs/display-options); [GitHub](https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/customizing-the-board-layout); [Notion](https://www.notion.com/help/boards); [Todoist](https://www.todoist.com/help/todoist/features/use-the-board-layout-in-todoist-AiAVsyEI); [Obsidian](https://forum.obsidian.md/t/bases-kanban-manual-card-ordering-within-a-column-drag-and-drop-persisted-to-a-property/119092)). Scry's wrinkle is that priority is a comparator rather than an explicit lane, so the destination group is less visually obvious than a column header. The implementation should make the target priority legible during the drag; otherwise the property change will feel like a side effect.
+Cross-group drag changing the grouped property has strong precedent ([Linear](https://linear.app/docs/display-options); [GitHub](https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/customizing-the-board-layout); [Notion](https://www.notion.com/help/boards); [Todoist](https://www.todoist.com/help/todoist/features/use-the-board-layout-in-todoist-AiAVsyEI); [Obsidian](https://forum.obsidian.md/t/bases-kanban-manual-card-ordering-within-a-column-drag-and-drop-persisted-to-a-property/119092)). Scry's priority is a comparator rather than a separate column, so the implementation must make the target priority legible during the drag; otherwise the property change will feel like a side effect.
 
 Filtered reorder is justified. The Todoist restriction is structural, not a general law, and scry's section-scoped positions give a filtered view a well-defined coordinate space ([Todoist](https://www.todoist.com/help/articles/sort-or-group-tasks-in-todoist-WFWD0hrb); [`board.ts:233-242`](../ui/src/views/projects/%5BprojectId%5D/board.ts)). Hiding tasks should not disable reorder.
 
 Manual order should remain shared project data. GitHub Projects' model is the closest match: manual order is shared across unsorted views, while sort is per-view ([GitHub Community](https://github.com/orgs/community/discussions/15178)). That is also scry's model after #217, and it is the right one to preserve. Only the sort should be view-scoped; the positions should not be.
 
-A future option is to promote priority to a lane. If priority drag feels ambiguous in practice, the cleanest fix is the Linear/GitHub/Notion model: make priority a grouping dimension with explicit headers or columns, and let a cross-group drag change the group property. That is a larger UX change than #219 and should not be bundled into it.
-
 ## Decision
 
-No implementation decision is recorded in this ADR. This document establishes the prior-art baseline for the decisions tracked in #217 (view-scoped sort), #218 (manual + priority, position tiebreak), and #219 (drag in priority and filtered views).
+No implementation decision is recorded in this ADR. This document establishes the prior-art baseline for the decisions tracked in #217 (view-scoped sort), #218 (manual + priority, position tiebreak), and #219 (drag in priority and filtered views). The behavior for priority drags is not open: #219 specifies that a drag to another priority group changes the dragged task's priority, and the evidence above supports that choice.
 
 ## Consequences
 
@@ -298,7 +296,7 @@ No implementation decision is recorded in this ADR. This document establishes th
 - Filters should not gate reorder; they hide items and leave their positions alone.
 - A cross-group drag in priority view should be treated as a property change, consistent with Linear, GitHub Projects, Notion, Todoist, and Obsidian Bases.
 - Destructive one-shot sorting (Trello) and silent drag disabling (Jira, Todoist) are explicitly not the model.
-- If the priority-as-comparator interaction proves ambiguous, the fallback is to promote priority to a visible lane/group rather than adding more drag exceptions.
+- The implementation should make the target priority legible during the drag rather than add drag exceptions.
 
 ## References
 
