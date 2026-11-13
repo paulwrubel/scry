@@ -8,7 +8,6 @@ import type { ExternalMetadata } from './ExternalMetadata';
 import type { Position } from './Position';
 import type { Priority } from './Priority';
 import type { Tags } from './Tags';
-import type { TaskSortingMode } from './TaskSortingMode';
 import type { TaskState } from './TaskState';
 
 /**
@@ -30,7 +29,6 @@ export type Operation = {
       id: string;
       name: string;
       description: string | null;
-      task_sorting_mode: TaskSortingMode;
       show_priority: boolean;
       created_at: string;
     }
@@ -39,7 +37,6 @@ export type Operation = {
       id: string;
       name: string | null;
       description?: string | null;
-      task_sorting_mode: TaskSortingMode | null;
       show_priority: boolean | null;
     }
   | { kind: 'delete_project'; id: string }

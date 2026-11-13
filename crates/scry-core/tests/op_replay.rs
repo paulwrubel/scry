@@ -1,5 +1,5 @@
 use scry_core::models::{AutomationAction, AutomationTrigger, Change, Priority, Task, TaskState};
-use scry_core::sync::operations::Operation;
+use scry_core::sync::operations::{Operation, OperationKind};
 use scry_core::sync::replay::{ClientState, apply_changes, replay_operations, visible_state};
 use serde_json::json;
 use uuid::Uuid;
@@ -18,7 +18,6 @@ fn confirmed() -> ClientState {
             "id": PROJECT_ID,
             "name": "alpha",
             "description": null,
-            "task_sorting_mode": "manual",
             "show_priority": true,
             "created_at": NOW,
             "sections": [{
@@ -304,4 +303,44 @@ fn apply_changes_creates_updates_and_deletes_automation() {
 
     let deleted = apply_changes(&updated, &[automation_change("delete", json!({}))]);
     assert!(deleted.projects[0].automations.is_empty());
+}
+
+#[test]
+fn old_create_project_operation_with_task_sorting_mode_deserializes() {
+    // serde ignores fields the operation type no longer declares, so an
+    // outbox entry queued before the field was removed still replays
+    let operation: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "create_project",
+        "id": PROJECT_ID,
+        "name": "alpha",
+        "description": null,
+        "task_sorting_mode": "priority",
+        "show_priority": false,
+        "created_at": NOW
+    }))
+    .expect("an old create_project carrying task_sorting_mode should deserialize");
+
+    assert!(matches!(
+        operation.kind,
+        OperationKind::CreateProject { .. }
+    ));
+}
+
+#[test]
+fn old_update_project_operation_with_task_sorting_mode_deserializes() {
+    let operation: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "update_project",
+        "id": PROJECT_ID,
+        "task_sorting_mode": "priority"
+    }))
+    .expect("an old update_project carrying task_sorting_mode should deserialize");
+
+    assert!(matches!(
+        operation.kind,
+        OperationKind::UpdateProject { .. }
+    ));
 }

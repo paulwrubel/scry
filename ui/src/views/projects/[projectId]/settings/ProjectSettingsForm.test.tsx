@@ -16,7 +16,6 @@ function projectSnapshot(): ProjectSnapshot {
     id: PROJECT_ID,
     name: 'Project',
     description: null,
-    task_sorting_mode: 'manual',
     show_priority: false,
     created_at: CREATED_AT,
     sections: [],
@@ -130,7 +129,6 @@ describe('ProjectSettingsForm', () => {
         kind: 'update_project',
         id: PROJECT_ID,
         name: 'Renamed',
-        task_sorting_mode: null,
         show_priority: null,
       }),
     );

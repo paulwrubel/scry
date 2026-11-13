@@ -97,7 +97,6 @@ describe('NewProjectModal', () => {
       kind: 'create_project',
       name: 'New project',
       description: 'Details',
-      task_sorting_mode: 'manual',
       show_priority: false,
     });
     await waitFor(() => {

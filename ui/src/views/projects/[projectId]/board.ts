@@ -37,7 +37,11 @@ export function columnDragId(sectionId: string): string {
   return `column:${sectionId}`;
 }
 
-export function buildBoard(project: ProjectSnapshot, filter: TaskFilter): BoardGroup[] {
+export function buildBoard(
+  project: ProjectSnapshot,
+  filter: TaskFilter,
+  sort: TaskSortingMode,
+): BoardGroup[] {
   const visible = project.tasks.filter((task) => matchesTaskFilter(task, filter));
 
   const sections = [...project.sections].sort((left, right) => {
@@ -55,18 +59,18 @@ export function buildBoard(project: ProjectSnapshot, filter: TaskFilter): BoardG
     state: null,
     tasks: orderTasks(
       visible.filter((task) => task.section_id === section.id),
-      project.task_sorting_mode,
+      sort,
     ),
   }));
 
   const openNoSection = orderTasks(
     visible.filter((task) => task.section_id === null && task.state === 'open'),
-    project.task_sorting_mode,
+    sort,
   );
 
   const closedNoSection = orderTasks(
     visible.filter((task) => task.section_id === null && task.state === 'closed'),
-    project.task_sorting_mode,
+    sort,
   );
 
   const board: BoardGroup[] = [];

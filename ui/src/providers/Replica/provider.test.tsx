@@ -39,7 +39,6 @@ function SnapshotProbe() {
       id: 'project-1',
       name: 'Project',
       description: null,
-      task_sorting_mode: 'manual',
       show_priority: false,
       created_at: '2026-01-01T00:00:00Z',
     });

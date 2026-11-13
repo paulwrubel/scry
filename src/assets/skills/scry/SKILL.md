@@ -48,7 +48,7 @@ The array follows section order but is not grouped.
 Sections are optional. `--section` must match an existing section name exactly, while `--new-section` creates
 one; without either, the task goes to No section. `--no-section` clears a task's section. `move` appends by
 default; add `--top`/`--first`, `--bottom`/`--last`, `--before <id>`, or `--after <id>` to place it instead.
-Order is only visible when the project uses `manual` sorting. `close` and `open` never move a task.
+`scry list` shows tasks in manual order. `close` and `open` never move a task.
 
 ## External links
 
@@ -61,31 +61,30 @@ read-only; moving, priority, tags, and notes still work.
 
 ## Project and section commands
 
-| Command                                                                                                               | Purpose                                        |
-| --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `scry --json project list`                                                                                            | List projects                                  |
-| `scry --json project current`                                                                                         | Show the active project                        |
-| `scry --json project show [name]`                                                                                     | Show project details                           |
-| `scry --json project use <name>`                                                                                      | Set the active project                         |
-| `scry --json project create [-t <template>] [--description <text>] <name>`                                            | Create a project                               |
-| `scry --json project update [--name <new>] [--description <text>] [--sort <mode>] [--show-priority\|--hide-priority]` | Update project properties                      |
-| `scry --json project delete <name> [-f]`                                                                              | Delete a project and its tasks                 |
-| `scry --json section list`                                                                                            | List a project's sections                      |
-| `scry --json section add <name> [--color <color>]`                                                                    | Add a section                                  |
-| `scry --json section move <name> (--top\|--bottom\|--before <name>\|--after <name>)`                                  | Reorder a section                              |
-| `scry --json section remove <name>`                                                                                   | Delete a section; its tasks move to No section |
-| `scry --json section rename <old> <new>`                                                                              | Rename a section                               |
-| `scry --json section merge <source> <target>`                                                                         | Merge source into target                       |
-| `scry --json section set-color <name> <color>`                                                                        | Set a section color                            |
-| `scry --json section reset-color <name>`                                                                              | Clear a section color                          |
+| Command                                                                                               | Purpose                                        |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `scry --json project list`                                                                            | List projects                                  |
+| `scry --json project current`                                                                         | Show the active project                        |
+| `scry --json project show [name]`                                                                     | Show project details                           |
+| `scry --json project use <name>`                                                                      | Set the active project                         |
+| `scry --json project create [-t <template>] [--description <text>] <name>`                            | Create a project                               |
+| `scry --json project update [--name <new>] [--description <text>] [--show-priority\|--hide-priority]` | Update project properties                      |
+| `scry --json project delete <name> [-f]`                                                              | Delete a project and its tasks                 |
+| `scry --json section list`                                                                            | List a project's sections                      |
+| `scry --json section add <name> [--color <color>]`                                                    | Add a section                                  |
+| `scry --json section move <name> (--top\|--bottom\|--before <name>\|--after <name>)`                  | Reorder a section                              |
+| `scry --json section remove <name>`                                                                   | Delete a section; its tasks move to No section |
+| `scry --json section rename <old> <new>`                                                              | Rename a section                               |
+| `scry --json section merge <source> <target>`                                                         | Merge source into target                       |
+| `scry --json section set-color <name> <color>`                                                        | Set a section color                            |
+| `scry --json section reset-color <name>`                                                              | Clear a section color                          |
 
 `section move` requires exactly one placement flag: `--top` (alias `--first`), `--bottom` (alias
 `--last`), `--before <name>`, or `--after <name>`.
 
-`project create -t <template>` seeds sections and settings: `todolist` has none and uses manual sorting;
-`kanban` has `backlog`, `in-progress`, and `review` and uses priority sorting. Without `-t` a project starts
-with no sections. `project update --sort` accepts `alphabetical`, `alphabetical-case-insensitive`, `created`,
-`manual`, or `priority`. An empty `--description` clears it.
+`project create -t <template>` seeds sections and settings: `todolist` has none; `kanban` has `backlog`,
+`in-progress`, and `review`. Both templates start with manual sorting. Without `-t` a project starts with
+no sections. An empty `--description` clears it.
 
 ## Automation commands
 

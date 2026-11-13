@@ -17,7 +17,6 @@ function projectSnapshot(id: string, name: string): ProjectSnapshot {
     id,
     name,
     description: null,
-    task_sorting_mode: 'manual',
     show_priority: false,
     created_at: CREATED_AT,
     sections: [],
@@ -114,7 +113,6 @@ describe('ProjectsPage', () => {
       kind: 'create_project',
       name: 'New project',
       description: 'Details',
-      task_sorting_mode: 'manual',
       show_priority: false,
     });
     await waitFor(() => {

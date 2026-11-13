@@ -57,7 +57,6 @@ function project(automations: Automation[] = []): ProjectSnapshot {
     id: PROJECT_ID,
     name: 'Project',
     description: null,
-    task_sorting_mode: 'manual',
     show_priority: false,
     created_at: CREATED_AT,
     sections: [SECTION_A, SECTION_B],

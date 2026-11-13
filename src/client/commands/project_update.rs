@@ -1,6 +1,6 @@
 //! `project update`.
 
-use scry_core::models::{Project, TaskSortingMode};
+use scry_core::models::Project;
 use serde::Serialize;
 
 use crate::client::Client;
@@ -14,7 +14,6 @@ use super::project_by_name;
 pub struct UpdateProject<'a> {
     pub name: Option<&'a str>,
     pub description: Option<&'a str>,
-    pub sort: Option<TaskSortingMode>,
     pub show_priority: Option<bool>,
 }
 
@@ -26,11 +25,7 @@ pub async fn project_update(
     input: UpdateProject<'_>,
     output_json: bool,
 ) -> Result<(), AppError> {
-    if input.name.is_none()
-        && input.description.is_none()
-        && input.sort.is_none()
-        && input.show_priority.is_none()
-    {
+    if input.name.is_none() && input.description.is_none() && input.show_priority.is_none() {
         return Err(AppError::Usage(
             "No flags provided. Use 'scry project update --help' for available options."
                 .to_string(),
@@ -43,14 +38,12 @@ pub async fn project_update(
     struct UpdateProjectRequest<'a> {
         name: &'a str,
         description: Option<&'a str>,
-        task_sorting_mode: TaskSortingMode,
         show_priority: bool,
     }
 
     let body = UpdateProjectRequest {
         name: input.name.unwrap_or(project.name.as_str()),
         description: input.description.or(project.description.as_deref()),
-        task_sorting_mode: input.sort.unwrap_or(project.task_sorting_mode),
         show_priority: input.show_priority.unwrap_or(project.show_priority),
     };
 

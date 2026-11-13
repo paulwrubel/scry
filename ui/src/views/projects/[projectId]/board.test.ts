@@ -55,7 +55,6 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     id: 'project-1',
     name: 'Project',
     description: null,
-    task_sorting_mode: 'manual',
     show_priority: false,
     created_at: CREATED_AT,
     sections: [],
@@ -115,7 +114,7 @@ describe('buildBoard', () => {
       sections: [section('second', 'a1'), section('first', 'a0')],
     });
 
-    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER, 'manual'))).toEqual([
       ['first', []],
       ['second', []],
     ]);
@@ -130,7 +129,7 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER, 'manual'))).toEqual([
       ['backlog', ['one']],
       ['doing', ['two']],
     ]);
@@ -145,7 +144,7 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER, 'manual'))).toEqual([
       ['no-section-open', ['loose']],
       ['backlog', ['sectioned']],
     ]);
@@ -157,7 +156,9 @@ describe('buildBoard', () => {
       tasks: [task({ id: 'sectioned', title: 'Sectioned', section_id: 'backlog' })],
     });
 
-    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([['backlog', ['sectioned']]]);
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER, 'manual'))).toEqual([
+      ['backlog', ['sectioned']],
+    ]);
   });
 
   it('puts closed tasks without a section last', () => {
@@ -170,7 +171,7 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER, 'manual'))).toEqual([
       [OPEN_NO_SECTION_GROUP, ['loose']],
       ['backlog', ['sectioned']],
       [CLOSED_NO_SECTION_GROUP, ['done']],
@@ -186,11 +187,11 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, filter({ states: ['open'] })))).toEqual([
+    expect(shape(buildBoard(project, filter({ states: ['open'] }), 'manual'))).toEqual([
       [OPEN_NO_SECTION_GROUP, ['loose']],
       ['backlog', []],
     ]);
-    expect(shape(buildBoard(project, filter({ states: ['closed'] })))).toEqual([
+    expect(shape(buildBoard(project, filter({ states: ['closed'] }), 'manual'))).toEqual([
       ['backlog', []],
       [CLOSED_NO_SECTION_GROUP, ['done']],
     ]);
@@ -211,26 +212,25 @@ describe('buildBoard', () => {
   });
 
   it('shows both open and closed tasks by default', () => {
-    expect(shape(buildBoard(statusProject, DEFAULT_TASK_FILTER))).toEqual([
+    expect(shape(buildBoard(statusProject, DEFAULT_TASK_FILTER, 'manual'))).toEqual([
       ['backlog', ['closed', 'open']],
     ]);
   });
 
   it('shows only open tasks when closed is deselected', () => {
-    expect(shape(buildBoard(statusProject, filter({ states: ['open'] })))).toEqual([
+    expect(shape(buildBoard(statusProject, filter({ states: ['open'] }), 'manual'))).toEqual([
       ['backlog', ['open']],
     ]);
   });
 
   it('shows only closed tasks when open is deselected', () => {
-    expect(shape(buildBoard(statusProject, filter({ states: ['closed'] })))).toEqual([
+    expect(shape(buildBoard(statusProject, filter({ states: ['closed'] }), 'manual'))).toEqual([
       ['backlog', ['closed']],
     ]);
   });
 
-  it('orders every group by the project sorting mode', () => {
+  it('orders every group by the explicit sort mode', () => {
     const project = projectSnapshot({
-      task_sorting_mode: 'priority',
       sections: [section('backlog', 'a0')],
       tasks: [
         task({ id: 'low', title: 'Low', section_id: 'backlog', priority: 'low' }),
@@ -238,7 +238,7 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual([
+    expect(shape(buildBoard(project, DEFAULT_TASK_FILTER, 'priority'))).toEqual([
       ['backlog', ['critical', 'low']],
     ]);
   });
@@ -265,7 +265,7 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, filter({ tags: ['bug', 'urgent'] })))).toEqual([
+    expect(shape(buildBoard(project, filter({ tags: ['bug', 'urgent'] }), 'manual'))).toEqual([
       ['backlog', ['bug', 'urgent']],
     ]);
   });
@@ -286,7 +286,9 @@ describe('buildBoard', () => {
       ],
     });
 
-    expect(shape(buildBoard(project, filter({ search: 'auth' })))).toEqual([['backlog', ['auth']]]);
+    expect(shape(buildBoard(project, filter({ search: 'auth' }), 'manual'))).toEqual([
+      ['backlog', ['auth']],
+    ]);
   });
 });
 
@@ -301,7 +303,7 @@ describe('itemsFromGroups', () => {
       ],
     });
 
-    expect(itemsFromGroups(buildBoard(project, DEFAULT_TASK_FILTER))).toEqual({
+    expect(itemsFromGroups(buildBoard(project, DEFAULT_TASK_FILTER, 'manual'))).toEqual({
       backlog: ['a', 'b'],
       [OPEN_NO_SECTION_GROUP]: ['c'],
     });

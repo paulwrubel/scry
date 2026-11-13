@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use scry_core::error::StorageError;
-use scry_core::models::{ProjectId, TaskSortingMode};
+use scry_core::models::ProjectId;
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -16,7 +16,6 @@ use crate::service::UpdateProject;
 pub struct UpdateProjectRequest {
     pub name: String,
     pub description: Option<String>,
-    pub task_sorting_mode: TaskSortingMode,
     pub show_priority: bool,
 }
 
@@ -27,7 +26,6 @@ impl From<UpdateProjectRequest> for UpdateProject {
             // An absent or null description keeps PUT's full-replace behavior:
             // it clears the field rather than leaving it alone.
             description: Some(request.description.unwrap_or_default()),
-            task_sorting_mode: Some(request.task_sorting_mode),
             show_priority: Some(request.show_priority),
         }
     }

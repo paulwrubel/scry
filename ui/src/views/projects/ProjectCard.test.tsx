@@ -11,7 +11,6 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     id: 'project-1',
     name: 'Project',
     description: 'A project description.',
-    task_sorting_mode: 'manual',
     show_priority: false,
     created_at: CREATED_AT,
     sections: [

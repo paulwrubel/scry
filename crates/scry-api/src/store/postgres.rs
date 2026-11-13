@@ -217,7 +217,6 @@ fn project_from_fields(
     id: ProjectId,
     name: String,
     description: Option<String>,
-    task_sorting_mode: String,
     show_priority: bool,
     created_at: DateTime<Utc>,
 ) -> Result<Project, StorageError> {
@@ -225,7 +224,6 @@ fn project_from_fields(
         id,
         name,
         description,
-        task_sorting_mode: task_sorting_mode.as_str().into(),
         show_priority,
         created_at,
     })
@@ -1378,13 +1376,12 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                INSERT INTO projects (id, name, description, task_sorting_mode, show_priority, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO projects (id, name, description, show_priority, created_at)
+                VALUES ($1, $2, $3, $4, $5)
             "#,
             project.id,
             &project.name,
             project.description.as_deref(),
-            project.task_sorting_mode.to_string(),
             project.show_priority,
             project.created_at,
         )
@@ -1417,7 +1414,7 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                SELECT id, name, description, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, show_priority, created_at
                 FROM projects
                 WHERE id = $1
             "#,
@@ -1430,7 +1427,6 @@ impl Store for PostgresStore {
                 r.id,
                 r.name,
                 r.description,
-                r.task_sorting_mode,
                 r.show_priority,
                 r.created_at,
             )?)),
@@ -1498,7 +1494,7 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                SELECT id, name, description, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, show_priority, created_at
                 FROM projects
                 WHERE name = $1
             "#,
@@ -1511,7 +1507,6 @@ impl Store for PostgresStore {
                 r.id,
                 r.name,
                 r.description,
-                r.task_sorting_mode,
                 r.show_priority,
                 r.created_at,
             )?)),
@@ -1531,7 +1526,7 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                SELECT id, name, description, task_sorting_mode, show_priority, created_at
+                SELECT id, name, description, show_priority, created_at
                 FROM projects
                 ORDER BY name ASC
             "#,
@@ -1542,14 +1537,7 @@ impl Store for PostgresStore {
             Ok(rows) => rows
                 .into_iter()
                 .map(|r| {
-                    project_from_fields(
-                        r.id,
-                        r.name,
-                        r.description,
-                        r.task_sorting_mode,
-                        r.show_priority,
-                        r.created_at,
-                    )
+                    project_from_fields(r.id, r.name, r.description, r.show_priority, r.created_at)
                 })
                 .collect::<Result<Vec<Project>, _>>(),
             Err(e) => Err(StorageError::Database(format!(
@@ -1569,12 +1557,11 @@ impl Store for PostgresStore {
         match sqlx::query!(
             r#"
                 UPDATE projects
-                SET name = $1, description = $2, task_sorting_mode = $3, show_priority = $4
-                WHERE id = $5
+                SET name = $1, description = $2, show_priority = $3
+                WHERE id = $4
             "#,
             &project.name,
             project.description.as_deref(),
-            &project.task_sorting_mode.to_string(),
             project.show_priority,
             project.id,
         )

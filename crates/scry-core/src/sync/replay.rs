@@ -66,7 +66,6 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             id,
             name,
             description,
-            task_sorting_mode,
             show_priority,
             created_at,
         } => {
@@ -74,7 +73,6 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 id: *id,
                 name: name.clone(),
                 description: description.clone(),
-                task_sorting_mode: *task_sorting_mode,
                 show_priority: *show_priority,
                 created_at: *created_at,
             };
@@ -88,7 +86,6 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             id,
             name,
             description,
-            task_sorting_mode,
             show_priority,
         } => {
             if let Some(snapshot) = state.projects.iter_mut().find(|p| p.project.id == *id) {
@@ -98,9 +95,6 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(description) = description {
                     project.description = description.clone();
-                }
-                if let Some(mode) = task_sorting_mode {
-                    project.task_sorting_mode = *mode;
                 }
                 if let Some(show_priority) = show_priority {
                     project.show_priority = *show_priority;
@@ -414,11 +408,6 @@ fn apply_project_values(project: &mut Project, values: &serde_json::Value) {
     }
     if let Some(description) = values.get("description") {
         project.description = description.as_str().map(str::to_string);
-    }
-    if let Some(mode) = values.get("task_sorting_mode")
-        && let Ok(mode) = serde_json::from_value(mode.clone())
-    {
-        project.task_sorting_mode = mode;
     }
     if let Some(show_priority) = values
         .get("show_priority")

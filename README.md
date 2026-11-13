@@ -91,7 +91,7 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
 
 - **Projects** group related tasks and own optional ordered sections. The built-in `default` project exists automatically.
 - **State**: every task is `open` or `closed`. Closing records whether it was `completed` or `cancelled` and when; reopening restores the task where it was.
-- **Task order**: tasks keep an explicit order within their section or **No section**. `scry move` can place one with `--top`/`--first`, `--bottom`/`--last`, `--before <handle>`, or `--after <handle>`; the order is visible when the project uses `manual` sorting.
+- **Task order**: tasks keep an explicit order within their section or **No section**. `scry move` can place one with `--top`/`--first`, `--bottom`/`--last`, `--before <handle>`, or `--after <handle>`; `scry list` shows tasks in manual order.
 - **Sections** are optional ordered groups within a project. Tasks without one appear under **No section**. New sections append and can be reordered with `scry section move` or by dragging in the web UI.
   - Create sections explicitly with `scry section add <name>` or `--new-section <name>`. `--section <name>` must match an existing name exactly.
   - Sections can carry an optional color. Set one with `scry section add <name> --color <color>` or `scry section set-color <name> <color>`, remove it with `scry section reset-color <name>`, or click the circle in the web UI column header. Colors are kebab-case: `red`, `light-blue`, `dark-gray`, and so on.

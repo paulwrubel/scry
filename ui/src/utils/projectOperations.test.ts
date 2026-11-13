@@ -11,7 +11,6 @@ function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
     id: 'project-1',
     name: 'Project',
     description: 'Details',
-    task_sorting_mode: 'manual',
     show_priority: false,
     created_at: '2026-01-01T00:00:00Z',
     sections: [],
@@ -25,7 +24,6 @@ function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
 const BASE = {
   name: 'Project',
   description: 'Details',
-  task_sorting_mode: 'manual' as const,
   show_priority: false,
 };
 
@@ -41,7 +39,6 @@ describe('updateProjectOperation', () => {
       kind: 'update_project',
       id: 'project-1',
       name: 'Renamed',
-      task_sorting_mode: null,
       show_priority: null,
     });
     if (operation === null || operation.kind !== 'update_project') {
@@ -56,18 +53,17 @@ describe('updateProjectOperation', () => {
     });
   });
 
-  it('sends sorting and priority changes', () => {
-    expect(
-      updateProjectOperation(project(), {
-        ...BASE,
-        task_sorting_mode: 'priority',
-        show_priority: true,
-      }),
-    ).toMatchObject({
+  it('sends priority changes', () => {
+    expect(updateProjectOperation(project(), { ...BASE, show_priority: true })).toMatchObject({
       name: null,
-      task_sorting_mode: 'priority',
       show_priority: true,
     });
+  });
+
+  it('does not include a task_sorting_mode key', () => {
+    const operation = updateProjectOperation(project(), { ...BASE, show_priority: true });
+
+    expect(operation).not.toHaveProperty('task_sorting_mode');
   });
 
   it('rejects an empty name', () => {
@@ -102,7 +98,6 @@ describe('createProjectOperation', () => {
     expect(operation).toMatchObject({
       name: 'New project',
       description: 'Details',
-      task_sorting_mode: 'manual',
       show_priority: false,
       operation_version: 1,
     });

@@ -1,7 +1,7 @@
 use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
 use crate::models::{
     AutomationAction, AutomationTrigger, Color, ExternalIdentity, ExternalMetadata, Priority, Tags,
-    TaskSortingMode, TaskState,
+    TaskState,
 };
 use crate::position::Position;
 use chrono::{DateTime, Utc};
@@ -120,7 +120,6 @@ pub enum OperationKind {
         id: ProjectId,
         name: String,
         description: Option<String>,
-        task_sorting_mode: TaskSortingMode,
         show_priority: bool,
         created_at: DateTime<Utc>,
     },
@@ -137,7 +136,6 @@ pub enum OperationKind {
         )]
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         description: Option<Option<String>>,
-        task_sorting_mode: Option<TaskSortingMode>,
         show_priority: Option<bool>,
     },
     DeleteProject {

@@ -33,7 +33,6 @@ pub async fn project_show(
         }
     }
     println!();
-    println!("Sort mode:    {}", project.task_sorting_mode);
     println!(
         "Priority:     {}",
         if project.show_priority {
