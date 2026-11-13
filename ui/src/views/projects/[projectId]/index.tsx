@@ -256,7 +256,7 @@ export function BoardPage() {
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto md:overflow-hidden">
       <div className="border-line flex max-w-full min-w-0 flex-wrap items-center gap-x-2 border-b px-4 py-3 md:gap-2 md:px-6 md:py-4">
-        <div className="flex shrink-0 items-center gap-2 md:ml-auto md:gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 md:ml-auto md:gap-4">
           <TaskFilterPopover
             filter={filter}
             tasks={project.tasks}
@@ -288,17 +288,15 @@ export function BoardPage() {
               ))}
             </Select>
           </label>
-          <div className="hidden md:block">
-            <ToggleSwitch
-              checked={showPriority}
-              onChange={(next) =>
-                setSearchParams(applyShowPriority(searchParams, next), { replace: true })
-              }
-              label="Show priority"
-              sizing="sm"
-              className="h-8 items-center [&>span]:mt-0"
-            />
-          </div>
+          <ToggleSwitch
+            checked={showPriority}
+            onChange={(next) =>
+              setSearchParams(applyShowPriority(searchParams, next), { replace: true })
+            }
+            label="Show priority"
+            sizing="sm"
+            className="min-h-11 items-center md:h-8 md:min-h-0 [&>span]:mt-0"
+          />
         </div>
       </div>
       {narrowing && visibleTaskCount === 0 ? (
