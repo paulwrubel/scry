@@ -82,7 +82,6 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     id: 'project-1',
     name: 'Project',
     description: null,
-    show_priority: false,
     created_at: CREATED_AT,
     sections: [],
     tasks: [],

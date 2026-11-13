@@ -55,7 +55,6 @@ function snapshot(title: string): ProjectSnapshot {
     id: PROJECT_ID,
     name: 'project',
     description: null,
-    show_priority: true,
     created_at: CREATED_AT,
     sections: [section],
     tasks: [task(title)],
@@ -260,7 +259,7 @@ describe('op replay', () => {
     expect(result.projects).toHaveLength(0);
   });
 
-  it('replays a legacy create_project operation carrying task_sorting_mode', () => {
+  it('replays a legacy create_project operation carrying removed fields', () => {
     const legacy = {
       operation_id: 'op-legacy',
       operation_version: 1,
@@ -280,11 +279,10 @@ describe('op replay', () => {
       id: PROJECT_ID,
       name: 'Legacy project',
       description: null,
-      show_priority: true,
     });
   });
 
-  it('replays a legacy update_project operation carrying task_sorting_mode', () => {
+  it('replays a legacy update_project operation carrying removed fields', () => {
     const legacy = {
       operation_id: 'op-legacy',
       operation_version: 1,
@@ -301,7 +299,6 @@ describe('op replay', () => {
     expect(result.projects[0]).toMatchObject({
       name: 'Renamed',
       description: 'Updated',
-      show_priority: false,
     });
   });
 });

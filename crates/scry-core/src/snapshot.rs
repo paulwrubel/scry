@@ -324,15 +324,13 @@ pub fn plan_import(
         let (target_project_id, project_reminted) = if let Some(live_project) = live_project {
             let name = changed(&live_project.name, &chosen_name);
             let description = changed(&live_project.description, &description);
-            let show_priority = changed(&live_project.show_priority, &incoming.show_priority);
 
-            if name.is_some() || description.is_some() || show_priority.is_some() {
+            if name.is_some() || description.is_some() {
                 plan.operations
                     .push(operation(OperationKind::UpdateProject {
                         id: live_project.id,
                         name,
                         description,
-                        show_priority,
                     }));
             }
 
@@ -355,7 +353,6 @@ pub fn plan_import(
                     id: project_id,
                     name: chosen_name.clone(),
                     description,
-                    show_priority: incoming.show_priority,
                     created_at: incoming.created_at,
                 }));
 
@@ -947,7 +944,6 @@ mod tests {
             id: uuid(id),
             name: name.to_string(),
             description: None,
-            show_priority: false,
             created_at: at(),
         }
     }
@@ -1205,6 +1201,20 @@ mod tests {
                 .is_none()
         );
     }
+
+    #[test]
+    fn serialized_project_snapshot_omits_show_priority() {
+        let serialized = serde_json::to_value(full_project_doc(PROJECT_ID, "alpha"))
+            .expect("snapshot document should serialize");
+
+        assert!(
+            serialized
+                .as_object()
+                .expect("project document should be an object")
+                .get("show_priority")
+                .is_none()
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1227,7 +1237,6 @@ mod import_tests {
             id,
             name: name.to_string(),
             description: None,
-            show_priority: false,
             created_at: at(),
         }
     }

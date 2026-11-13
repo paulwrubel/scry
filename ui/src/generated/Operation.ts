@@ -29,16 +29,9 @@ export type Operation = {
       id: string;
       name: string;
       description: string | null;
-      show_priority: boolean;
       created_at: string;
     }
-  | {
-      kind: 'update_project';
-      id: string;
-      name: string | null;
-      description?: string | null;
-      show_priority: boolean | null;
-    }
+  | { kind: 'update_project'; id: string; name: string | null; description?: string | null }
   | { kind: 'delete_project'; id: string }
   | {
       kind: 'create_section';

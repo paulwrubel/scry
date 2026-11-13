@@ -11,7 +11,6 @@ function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
     id: 'project-1',
     name: 'Project',
     description: 'Details',
-    show_priority: false,
     created_at: '2026-01-01T00:00:00Z',
     sections: [],
     tasks: [],
@@ -24,7 +23,6 @@ function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
 const BASE = {
   name: 'Project',
   description: 'Details',
-  show_priority: false,
 };
 
 describe('updateProjectOperation', () => {
@@ -39,7 +37,6 @@ describe('updateProjectOperation', () => {
       kind: 'update_project',
       id: 'project-1',
       name: 'Renamed',
-      show_priority: null,
     });
     if (operation === null || operation.kind !== 'update_project') {
       throw new Error('expected an update_project operation');
@@ -53,15 +50,8 @@ describe('updateProjectOperation', () => {
     });
   });
 
-  it('sends priority changes', () => {
-    expect(updateProjectOperation(project(), { ...BASE, show_priority: true })).toMatchObject({
-      name: null,
-      show_priority: true,
-    });
-  });
-
   it('does not include a task_sorting_mode key', () => {
-    const operation = updateProjectOperation(project(), { ...BASE, show_priority: true });
+    const operation = updateProjectOperation(project(), { ...BASE, name: 'Renamed' });
 
     expect(operation).not.toHaveProperty('task_sorting_mode');
   });
@@ -98,7 +88,6 @@ describe('createProjectOperation', () => {
     expect(operation).toMatchObject({
       name: 'New project',
       description: 'Details',
-      show_priority: false,
       operation_version: 1,
     });
     expect(operation.id).toEqual(expect.any(String));

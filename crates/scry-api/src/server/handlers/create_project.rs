@@ -13,7 +13,6 @@ use crate::server::ScryState;
 pub struct CreateProjectRequest {
     pub name: String,
     pub description: Option<String>,
-    pub show_priority: Option<bool>,
 }
 
 /// Create a project and return it.
@@ -23,11 +22,7 @@ pub async fn create_project(
 ) -> Response {
     match state
         .service
-        .create_project(
-            body.name,
-            body.description,
-            body.show_priority.unwrap_or_default(),
-        )
+        .create_project(body.name, body.description)
         .await
     {
         Ok(project) => Json(project).into_response(),

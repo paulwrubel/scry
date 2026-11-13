@@ -18,7 +18,6 @@ fn confirmed() -> ClientState {
             "id": PROJECT_ID,
             "name": "alpha",
             "description": null,
-            "show_priority": true,
             "created_at": NOW,
             "sections": [{
                 "id": SECTION_ID,
@@ -338,6 +337,46 @@ fn old_update_project_operation_with_task_sorting_mode_deserializes() {
         "task_sorting_mode": "priority"
     }))
     .expect("an old update_project carrying task_sorting_mode should deserialize");
+
+    assert!(matches!(
+        operation.kind,
+        OperationKind::UpdateProject { .. }
+    ));
+}
+
+#[test]
+fn old_create_project_operation_with_show_priority_deserializes() {
+    // serde ignores fields the operation type no longer declares, so an
+    // outbox entry queued while projects still persisted show_priority replays
+    let operation: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "create_project",
+        "id": PROJECT_ID,
+        "name": "alpha",
+        "description": null,
+        "show_priority": false,
+        "created_at": NOW
+    }))
+    .expect("an old create_project carrying show_priority should deserialize");
+
+    assert!(matches!(
+        operation.kind,
+        OperationKind::CreateProject { .. }
+    ));
+}
+
+#[test]
+fn old_update_project_operation_with_show_priority_deserializes() {
+    // same forward-compatibility guarantee for updates: queued ops still replay
+    let operation: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "update_project",
+        "id": PROJECT_ID,
+        "show_priority": true
+    }))
+    .expect("an old update_project carrying show_priority should deserialize");
 
     assert!(matches!(
         operation.kind,

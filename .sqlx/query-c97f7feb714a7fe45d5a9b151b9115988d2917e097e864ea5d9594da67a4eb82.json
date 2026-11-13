@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT id, name, description, show_priority, created_at\n                FROM projects\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT id, name, description, created_at\n                FROM projects\n                WHERE name = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -38,17 +38,6 @@
       },
       {
         "ordinal": 3,
-        "name": "show_priority",
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "projects",
-            "name": "show_priority"
-          }
-        }
-      },
-      {
-        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -61,16 +50,15 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
       false,
       false,
       true,
-      false,
       false
     ]
   },
-  "hash": "166e34fb42650dfe9cb8f7448d886e6356f47fee0f3dd527bf541ed1ce9215b6"
+  "hash": "c97f7feb714a7fe45d5a9b151b9115988d2917e097e864ea5d9594da67a4eb82"
 }

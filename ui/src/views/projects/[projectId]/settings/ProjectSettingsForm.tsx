@@ -34,7 +34,6 @@ export function ProjectSettingsForm(props: ProjectSettingsFormProps) {
         await saveFields({
           name: value.name,
           description: value.description,
-          show_priority: project.show_priority,
         });
       } catch {
         setError('Could not save this project.');

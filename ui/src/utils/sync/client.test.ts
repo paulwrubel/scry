@@ -436,7 +436,6 @@ function createProjectOperation(operationId: string, id: string): Operation {
     id,
     name: 'Project',
     description: null,
-    show_priority: false,
     created_at: '2026-01-01T00:00:00Z',
   };
 }
@@ -446,7 +445,6 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     id: PROJECT_ID,
     name: 'Project',
     description: null,
-    show_priority: false,
     created_at: '2026-01-01T00:00:00Z',
     sections: [],
     tasks: [],

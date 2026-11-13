@@ -131,7 +131,6 @@ pub struct TaskChangeResult {
 pub struct UpdateProject {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub show_priority: Option<bool>,
 }
 
 /// How an update changes a section's color.
@@ -1026,13 +1025,11 @@ impl ProjectService {
         &self,
         name: String,
         description: Option<String>,
-        show_priority: bool,
     ) -> Result<Project, ServiceError> {
         let project = Project {
             id: Uuid::new_v4(),
             name,
             description: description.filter(|description| !description.is_empty()),
-            show_priority,
             created_at: Utc::now(),
         };
 
@@ -1050,7 +1047,6 @@ impl ProjectService {
                 id: project.id,
                 name: project.name.clone(),
                 description: project.description.clone(),
-                show_priority: project.show_priority,
                 created_at: project.created_at,
             },
         )];
@@ -1090,12 +1086,10 @@ impl ProjectService {
         let updated = Project {
             name: update.name.clone().unwrap_or_else(|| project.name.clone()),
             description,
-            show_priority: update.show_priority.unwrap_or(project.show_priority),
             ..project.clone()
         };
 
-        let changed =
-            update.name.is_some() || update.description.is_some() || update.show_priority.is_some();
+        let changed = update.name.is_some() || update.description.is_some();
         if changed {
             let description = update
                 .description
@@ -1106,7 +1100,6 @@ impl ProjectService {
                     id: project.id,
                     name: update.name,
                     description,
-                    show_priority: update.show_priority,
                 },
             );
             self.apply_operations(&[op], ApplyMode::Atomic).await?;
@@ -1385,7 +1378,6 @@ impl ProjectService {
                 id,
                 name,
                 description,
-                show_priority,
                 created_at,
             } => {
                 if self
@@ -1409,7 +1401,6 @@ impl ProjectService {
                     description: description
                         .clone()
                         .filter(|description| !description.is_empty()),
-                    show_priority: *show_priority,
                     created_at: *created_at,
                 };
                 self.store
@@ -2633,10 +2624,7 @@ fn project_field_updates(project: &mut Project, op: &OperationKind) -> FieldValu
     let mut fields = Map::new();
 
     let OperationKind::UpdateProject {
-        name,
-        description,
-        show_priority,
-        ..
+        name, description, ..
     } = op
     else {
         return Value::Object(fields);
@@ -2649,10 +2637,6 @@ fn project_field_updates(project: &mut Project, op: &OperationKind) -> FieldValu
     if let Some(description) = description {
         project.description = description.clone();
         fields.insert("description".into(), json!(description));
-    }
-    if let Some(show_priority) = show_priority {
-        project.show_priority = *show_priority;
-        fields.insert("show_priority".into(), json!(show_priority));
     }
 
     Value::Object(fields)

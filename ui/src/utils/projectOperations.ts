@@ -5,7 +5,6 @@ import { newId } from '@/utils/uuid';
 export type ProjectFieldPatch = {
   name: string;
   description: string;
-  show_priority: boolean;
 };
 
 export type ProjectDraft = {
@@ -27,9 +26,8 @@ export function updateProjectOperation(
 
   const nameChanged = name !== project.name;
   const descriptionChanged = nextDescription !== project.description;
-  const priorityChanged = patch.show_priority !== project.show_priority;
 
-  if (!nameChanged && !descriptionChanged && !priorityChanged) {
+  if (!nameChanged && !descriptionChanged) {
     return null;
   }
 
@@ -40,7 +38,6 @@ export function updateProjectOperation(
     id: project.id,
     name: nameChanged ? name : null,
     description: descriptionChanged ? nextDescription : undefined,
-    show_priority: priorityChanged ? patch.show_priority : null,
   };
 }
 
@@ -55,7 +52,6 @@ export function createProjectOperation(draft: ProjectDraft): Operation {
     id: newId(),
     name,
     description: description.length === 0 ? null : description,
-    show_priority: false,
     created_at: new Date().toISOString(),
   };
 }

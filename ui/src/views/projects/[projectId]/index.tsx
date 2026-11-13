@@ -12,7 +12,6 @@ import { useIsDesktop } from '@/hooks/useMediaQuery';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
-import { updateProjectOperation } from '@/utils/projectOperations';
 import {
   createSectionOperation,
   deleteSectionOperation,
@@ -28,7 +27,13 @@ import {
 } from '@/utils/taskFilter';
 import type { TaskFilter } from '@/utils/taskFilter';
 import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
-import { applyTaskSortingMode, parseTaskSortingMode, TASK_SORTING_OPTIONS } from '@/utils/taskView';
+import {
+  applyShowPriority,
+  applyTaskSortingMode,
+  parseShowPriority,
+  parseTaskSortingMode,
+  TASK_SORTING_OPTIONS,
+} from '@/utils/taskView';
 import { BoardColumn } from './BoardColumn';
 import { MobileAddTask } from './MobileAddTask';
 import { NewSectionCard } from './NewSectionCard';
@@ -76,6 +81,7 @@ export function BoardPage() {
 
   const filter = useMemo(() => parseTaskFilter(searchParams), [searchParams]);
   const sortMode = useMemo(() => parseTaskSortingMode(searchParams), [searchParams]);
+  const showPriority = useMemo(() => parseShowPriority(searchParams), [searchParams]);
 
   const narrowing = isTaskFilterNarrowing(filter);
   const baseGroups = useMemo(
@@ -126,18 +132,6 @@ export function BoardPage() {
     externalIdentity: ExternalIdentity | null,
   ) {
     await replica.enqueue(createTaskOperation(project, sectionId, title, externalIdentity));
-  }
-
-  async function handleProjectUpdate(patch: { show_priority?: boolean }) {
-    const operation = updateProjectOperation(project, {
-      name: project.name,
-      description: project.description ?? '',
-      show_priority: project.show_priority,
-      ...patch,
-    });
-    if (operation !== null) {
-      await replica.enqueue(operation);
-    }
   }
 
   function handleFilterChange(next: TaskFilter) {
@@ -296,8 +290,10 @@ export function BoardPage() {
           </label>
           <div className="hidden md:block">
             <ToggleSwitch
-              checked={project.show_priority}
-              onChange={(showPriority) => void handleProjectUpdate({ show_priority: showPriority })}
+              checked={showPriority}
+              onChange={(next) =>
+                setSearchParams(applyShowPriority(searchParams, next), { replace: true })
+              }
               label="Show priority"
               sizing="sm"
               className="h-8 items-center [&>span]:mt-0"
@@ -362,7 +358,7 @@ export function BoardPage() {
               title="Open (No Section)"
               color={null}
               tasks={openNoSectionGroup.tasks}
-              showPriority={project.show_priority}
+              showPriority={showPriority}
               showCreate={isDesktop}
               onCreate={(title, identity) => handleCreate(null, title, identity)}
               collapsed={!isDesktop && collapsedSections.has(OPEN_NO_SECTION_GROUP)}
@@ -379,6 +375,7 @@ export function BoardPage() {
               project={project}
               sectionsSortable={isDesktop}
               showCreate={isDesktop}
+              showPriority={showPriority}
               collapsed={!isDesktop && collapsedSections.has(group.section.id)}
               onToggleCollapsed={
                 isDesktop ? undefined : () => toggleCollapsedSection(group.section.id)
@@ -397,7 +394,7 @@ export function BoardPage() {
               title="Closed (No Section)"
               color={null}
               tasks={closedNoSectionGroup.tasks}
-              showPriority={project.show_priority}
+              showPriority={showPriority}
               collapsed={!isDesktop && collapsedSections.has(CLOSED_NO_SECTION_GROUP)}
               onToggleCollapsed={
                 isDesktop ? undefined : () => toggleCollapsedSection(CLOSED_NO_SECTION_GROUP)

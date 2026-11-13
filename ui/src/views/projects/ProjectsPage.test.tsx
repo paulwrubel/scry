@@ -17,7 +17,6 @@ function projectSnapshot(id: string, name: string): ProjectSnapshot {
     id,
     name,
     description: null,
-    show_priority: false,
     created_at: CREATED_AT,
     sections: [],
     tasks: [],
@@ -113,7 +112,6 @@ describe('ProjectsPage', () => {
       kind: 'create_project',
       name: 'New project',
       description: 'Details',
-      show_priority: false,
     });
     await waitFor(() => {
       expect(setActiveProjectId).toHaveBeenCalledWith(operation.id);
