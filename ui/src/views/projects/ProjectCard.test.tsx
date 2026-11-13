@@ -38,7 +38,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
         external_metadata: null,
       },
     ],
-    notes: [],
+    comments: [],
     automations: [],
     ...overrides,
   };

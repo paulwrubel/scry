@@ -7,7 +7,7 @@ use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Response};
 use scry_core::error::StorageError;
 use scry_core::ids::TaskId;
-use scry_core::models::{Note, Project, ProjectId, Section};
+use scry_core::models::{Comment, Project, ProjectId, Section};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
@@ -47,9 +47,12 @@ pub async fn get_project(
             Err(error) => return AppError::from(error).into(),
         };
 
-        let mut notes_by_task: HashMap<TaskId, Vec<Note>> = HashMap::new();
-        for note in snapshot.notes {
-            notes_by_task.entry(note.task_id).or_default().push(note);
+        let mut comments_by_task: HashMap<TaskId, Vec<Comment>> = HashMap::new();
+        for comment in snapshot.comments {
+            comments_by_task
+                .entry(comment.task_id)
+                .or_default()
+                .push(comment);
         }
 
         let handles = if query.include_handles {
@@ -72,11 +75,11 @@ pub async fn get_project(
             .tasks
             .into_iter()
             .map(|task| {
-                let notes = notes_by_task.remove(&task.id).unwrap_or_default();
+                let comments = comments_by_task.remove(&task.id).unwrap_or_default();
                 let handle = handles.get(&task.id).cloned();
                 TaskDetails {
                     task,
-                    notes: Some(notes),
+                    comments: Some(comments),
                     handle,
                 }
             })

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientState } from '@/contract/op-replay';
 import type { Automation } from '@/generated/Automation';
 import type { Change } from '@/generated/Change';
-import type { Note } from '@/generated/Note';
+import type { Comment } from '@/generated/Comment';
 import type { Operation } from '@/generated/Operation';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
@@ -22,7 +22,7 @@ const SECTION_A_ID = 'section-a';
 const SECTION_B_ID = 'section-b';
 const TASK_A_ID = 'task-a';
 const TASK_B_ID = 'task-b';
-const NOTE_ID = 'note-a';
+const COMMENT_ID = 'comment-a';
 const AUTOMATION_ID = 'automation-a';
 
 let name = '';
@@ -46,19 +46,19 @@ describe('replica confirmed state', () => {
 
     const db = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
     const project = state.projects[0];
-    const { sections, tasks, notes, automations, ...projectRecord } = project;
+    const { sections, tasks, comments, automations, ...projectRecord } = project;
 
     expect(await db.get('projects', project.id)).toEqual(projectRecord);
     expect(await db.get('sections', SECTION_A_ID)).toEqual(sections[0]);
     expect(await db.get('sections', SECTION_B_ID)).toEqual(sections[1]);
     expect(await db.get('tasks', TASK_A_ID)).toEqual(tasks[0]);
     expect(await db.get('tasks', TASK_B_ID)).toEqual(tasks[1]);
-    expect(await db.get('notes', NOTE_ID)).toEqual(notes[0]);
+    expect(await db.get('comments', COMMENT_ID)).toEqual(comments[0]);
     expect(automations).toEqual([]);
     expect(await db.get('meta', 'project_order')).toEqual([PROJECT_ID]);
     expect(await db.get('meta', 'section_order')).toEqual([SECTION_A_ID, SECTION_B_ID]);
     expect(await db.get('meta', 'task_order')).toEqual([TASK_A_ID, TASK_B_ID]);
-    expect(await db.get('meta', 'note_order')).toEqual([NOTE_ID]);
+    expect(await db.get('meta', 'comment_order')).toEqual([COMMENT_ID]);
     expect(await db.get('meta', 'schema_version')).toBe(CONFIRMED_SCHEMA_VERSION);
     db.close();
 
@@ -113,7 +113,7 @@ describe('replica confirmed state', () => {
           created_at: '2026-02-01T00:00:00Z',
           sections: [],
           tasks: [],
-          notes: [],
+          comments: [],
           automations: [],
         },
       ],
@@ -435,6 +435,42 @@ describe('replica schema migration', () => {
     bootstrapped.close();
   });
 
+  it('version 3 creates comments and clears pending note operations', async () => {
+    const legacy = await openDB(name, 2, {
+      upgrade(db) {
+        db.createObjectStore('notes', { keyPath: 'id' });
+        const outbox = db.createObjectStore('outbox', {
+          autoIncrement: true,
+          keyPath: 'seq',
+        });
+        outbox.createIndex('operation_id', 'operation.operation_id', { unique: true });
+        db.createObjectStore('meta');
+      },
+    });
+    await legacy.put('notes', sampleState().projects[0].comments[0]);
+    await legacy.put('outbox', {
+      operation: {
+        operation_id: 'op-note',
+        operation_version: 1,
+        kind: 'create_note',
+        id: COMMENT_ID,
+        task_id: TASK_A_ID,
+        contents: 'legacy',
+        created_at: new Date(0).toISOString(),
+      },
+    });
+    legacy.close();
+
+    const replica = await openReplica({ databaseName: name });
+    expect(replica.outbox).toEqual([]);
+    replica.close();
+
+    const upgraded = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
+    expect(upgraded.objectStoreNames.contains('comments')).toBe(true);
+    expect(await upgraded.getAll('outbox')).toEqual([]);
+    upgraded.close();
+  });
+
   it('old operation versions survive reopen', async () => {
     const replica = await openReplica({ databaseName: name });
     await replica.bootstrap(sampleState());
@@ -619,10 +655,10 @@ function sampleState(): ClientState {
     external_identity: null,
     external_metadata: null,
   };
-  const note: Note = {
-    id: NOTE_ID,
+  const comment: Comment = {
+    id: COMMENT_ID,
     task_id: TASK_A_ID,
-    contents: 'A note',
+    contents: 'A comment',
     created_at: '2026-01-01T00:00:04Z',
   };
 
@@ -635,7 +671,7 @@ function sampleState(): ClientState {
         created_at: '2026-01-01T00:00:00Z',
         sections: [sectionA, sectionB],
         tasks: [taskA, taskB],
-        notes: [note],
+        comments: [comment],
         automations: [],
       },
     ],
@@ -687,10 +723,10 @@ function orderedState(): ClientState {
     external_identity: null,
     external_metadata: null,
   };
-  const note: Note = {
-    id: 'zzz-note',
+  const comment: Comment = {
+    id: 'zzz-comment',
     task_id: 'zzz-task',
-    contents: 'Note text',
+    contents: 'Comment text',
     created_at: '2026-03-01T00:00:04Z',
   };
 
@@ -703,7 +739,7 @@ function orderedState(): ClientState {
         created_at: '2026-03-01T00:00:00Z',
         sections: [sectionA, sectionB],
         tasks: [taskA, taskB],
-        notes: [note],
+        comments: [comment],
         automations: [],
       },
       {
@@ -713,7 +749,7 @@ function orderedState(): ClientState {
         created_at: '2026-03-01T00:00:05Z',
         sections: [],
         tasks: [],
-        notes: [],
+        comments: [],
         automations: [],
       },
     ],

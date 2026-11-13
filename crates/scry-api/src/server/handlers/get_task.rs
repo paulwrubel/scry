@@ -14,7 +14,7 @@ use super::TaskDetails;
 /// Query options for the task detail endpoint.
 #[derive(Deserialize, Default)]
 pub struct GetTaskQuery {
-    /// Include the task's notes.
+    /// Include the task's comments.
     #[serde(default)]
     pub detailed: bool,
     /// Include the task's display handle.
@@ -22,7 +22,7 @@ pub struct GetTaskQuery {
     pub include_handle: bool,
 }
 
-/// Fetch a task by handle, optionally with its notes and display handle.
+/// Fetch a task by handle, optionally with its comments and display handle.
 pub async fn get_task(
     State(state): State<ScryState>,
     Path(handle): Path<Handle>,
@@ -33,9 +33,9 @@ pub async fn get_task(
         Err(error) => return AppError::from(error).into(),
     };
 
-    let notes = if query.detailed {
-        match state.service.list_notes_by_task_id(task.id).await {
-            Ok(notes) => Some(notes),
+    let comments = if query.detailed {
+        match state.service.list_comments_by_task_id(task.id).await {
+            Ok(comments) => Some(comments),
             Err(error) => return AppError::from(error).into(),
         }
     } else {
@@ -53,7 +53,7 @@ pub async fn get_task(
 
     Json(TaskDetails {
         task,
-        notes,
+        comments,
         handle: display_handle,
     })
     .into_response()

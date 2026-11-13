@@ -34,7 +34,7 @@ function projectSnapshot(): ProjectSnapshot {
         external_metadata: null,
       },
     ],
-    notes: [],
+    comments: [],
     automations: [],
   };
 }

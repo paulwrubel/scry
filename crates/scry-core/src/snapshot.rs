@@ -1,8 +1,8 @@
 use crate::error::StorageError;
-use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
+use crate::ids::{AutomationId, CommentId, ProjectId, SectionId, TaskId};
 use crate::models::{
-    Automation, AutomationAction, AutomationTrigger, Color, EntityType, MAX_AUTOMATION_ACTIONS,
-    Note, Project, ProjectSnapshot, Section, Tags, Task,
+    Automation, AutomationAction, AutomationTrigger, Color, Comment, EntityType,
+    MAX_AUTOMATION_ACTIONS, Project, ProjectSnapshot, Section, Tags, Task,
 };
 use crate::store::Store;
 use crate::sync::operations::{
@@ -13,8 +13,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use uuid::Uuid;
 
-pub const SNAPSHOT_VERSION: u32 = 2;
-pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 1;
+pub const SNAPSHOT_VERSION: u32 = 3;
+pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 2;
 
 /// The bare server-wide snapshot: every project document plus the cursor a
 /// client should pull from next.
@@ -133,7 +133,7 @@ pub struct ImportReport {
     pub projects: usize,
     pub sections: usize,
     pub tasks: usize,
-    pub notes: usize,
+    pub comments: usize,
     pub automations: usize,
     /// Fresh ids assigned because the incoming id was tombstoned or its parent
     /// was reminted. Omitted from JSON when empty.
@@ -147,7 +147,7 @@ pub struct ImportState {
     pub projects: Vec<Project>,
     pub sections: Vec<Section>,
     pub tasks: Vec<Task>,
-    pub notes: Vec<Note>,
+    pub comments: Vec<Comment>,
     pub automations: Vec<Automation>,
     pub tombstones: HashSet<(EntityType, Uuid)>,
 }
@@ -190,12 +190,12 @@ pub fn plan_import(
             deleted_ids.insert((EntityType::Task, task.id));
         }
     }
-    for note in &state.notes {
+    for comment in &state.comments {
         if task_project_ids
-            .get(&note.task_id)
+            .get(&comment.task_id)
             .is_some_and(|project_id| deleted_projects.contains(project_id))
         {
-            deleted_ids.insert((EntityType::Note, note.id));
+            deleted_ids.insert((EntityType::Comment, comment.id));
         }
     }
     for automation in &state.automations {
@@ -226,11 +226,11 @@ pub fn plan_import(
         .filter(|task| !deleted_ids.contains(&(EntityType::Task, task.id)))
         .map(|task| (task.id, task))
         .collect();
-    let live_notes: HashMap<NoteId, &Note> = state
-        .notes
+    let live_comments: HashMap<CommentId, &Comment> = state
+        .comments
         .iter()
-        .filter(|note| !deleted_ids.contains(&(EntityType::Note, note.id)))
-        .map(|note| (note.id, note))
+        .filter(|comment| !deleted_ids.contains(&(EntityType::Comment, comment.id)))
+        .map(|comment| (comment.id, comment))
         .collect();
     let live_automations: HashMap<AutomationId, &Automation> = state
         .automations
@@ -609,46 +609,50 @@ pub fn plan_import(
             plan.report.tasks += 1;
         }
 
-        for incoming_note in &document.notes {
-            let original_id = incoming_note.id;
-            let original_task_id = incoming_note.task_id;
+        for incoming_comment in &document.comments {
+            let original_id = incoming_comment.id;
+            let original_task_id = incoming_comment.task_id;
             let task_remapped = task_remap.get(&original_task_id).copied();
 
             let task_id = task_remapped.unwrap_or(original_task_id);
 
             if task_projects.get(&task_id) != Some(&target_project_id) {
                 return Err(StorageError::Conflict(format!(
-                    "note {original_id} references a task outside project {target_project_id}"
+                    "comment {original_id} references a task outside project {target_project_id}"
                 )));
             }
 
-            let note_dead = is_dead(EntityType::Note, original_id);
-            let reminted = project_reminted || note_dead || task_remapped.is_some();
+            let comment_dead = is_dead(EntityType::Comment, original_id);
+            let reminted = project_reminted || comment_dead || task_remapped.is_some();
 
-            let live_note = live_notes.get(&original_id).copied().filter(|_| !reminted);
+            let live_comment = live_comments
+                .get(&original_id)
+                .copied()
+                .filter(|_| !reminted);
 
-            if let Some(live_note) = live_note {
-                if live_note.task_id != task_id {
+            if let Some(live_comment) = live_comment {
+                if live_comment.task_id != task_id {
                     return Err(StorageError::Conflict(format!(
-                        "note {original_id} belongs to a different task"
+                        "comment {original_id} belongs to a different task"
                     )));
                 }
 
-                if live_note.contents != incoming_note.contents {
-                    plan.operations.push(operation(OperationKind::UpdateNote {
-                        id: live_note.id,
-                        contents: incoming_note.contents.clone(),
-                    }));
+                if live_comment.contents != incoming_comment.contents {
+                    plan.operations
+                        .push(operation(OperationKind::UpdateComment {
+                            id: live_comment.id,
+                            contents: incoming_comment.contents.clone(),
+                        }));
                 }
 
-                plan.report.notes += 1;
+                plan.report.comments += 1;
                 continue;
             }
 
-            let note_id = if reminted {
+            let comment_id = if reminted {
                 let fresh = Uuid::new_v4();
                 plan.report.remapped.push(ImportIdRemap {
-                    entity_type: EntityType::Note,
+                    entity_type: EntityType::Comment,
                     from: original_id,
                     to: fresh,
                 });
@@ -657,13 +661,14 @@ pub fn plan_import(
                 original_id
             };
 
-            plan.operations.push(operation(OperationKind::CreateNote {
-                id: note_id,
-                task_id,
-                contents: incoming_note.contents.clone(),
-                created_at: incoming_note.created_at,
-            }));
-            plan.report.notes += 1;
+            plan.operations
+                .push(operation(OperationKind::CreateComment {
+                    id: comment_id,
+                    task_id,
+                    contents: incoming_comment.contents.clone(),
+                    created_at: incoming_comment.created_at,
+                }));
+            plan.report.comments += 1;
         }
 
         for incoming_automation in &document.automations {
@@ -915,7 +920,8 @@ fn remap_automation_action(
 mod tests {
     use super::*;
     use crate::models::{
-        ExternalIdentity, ExternalMetadata, Note, Priority, Project, Section, Tags, Task, TaskState,
+        Comment, ExternalIdentity, ExternalMetadata, Priority, Project, Section, Tags, Task,
+        TaskState,
     };
     use crate::position::Position;
     use chrono::{DateTime, Utc};
@@ -925,7 +931,7 @@ mod tests {
     const PROJECT_ID: &str = "a1b2c3d4-0000-4000-8000-000000000001";
     const SECTION_ID: &str = "b1b2c3d4-0000-4000-8000-000000000003";
     const TASK_ID: &str = "c1b2c3d4-0000-4000-8000-000000000004";
-    const NOTE_ID: &str = "d1b2c3d4-0000-4000-8000-000000000005";
+    const COMMENT_ID: &str = "d1b2c3d4-0000-4000-8000-000000000005";
 
     fn uuid(value: &str) -> Uuid {
         Uuid::parse_str(value).expect("test uuid should parse")
@@ -976,8 +982,8 @@ mod tests {
         }
     }
 
-    fn note(id: &str, task_id: Uuid) -> Note {
-        Note {
+    fn comment(id: &str, task_id: Uuid) -> Comment {
+        Comment {
             id: uuid(id),
             task_id,
             contents: "note".to_string(),
@@ -989,13 +995,13 @@ mod tests {
         let project = project(id, name);
         let section = section(SECTION_ID, project.id);
         let task = task(TASK_ID, project.id, Some(section.id));
-        let note = note(NOTE_ID, task.id);
+        let comment = comment(COMMENT_ID, task.id);
 
         ProjectSnapshot {
             project,
             sections: vec![section],
             tasks: vec![task],
-            notes: vec![note],
+            comments: vec![comment],
             automations: Vec::new(),
         }
     }
@@ -1075,21 +1081,25 @@ mod tests {
     fn parse_accepts_previous_version() {
         let file = snapshot_file(vec![full_project_doc(PROJECT_ID, "alpha")]);
         let mut value = serde_json::to_value(&file).expect("snapshot file should serialize");
-        value["version"] = json!(1);
+        value["version"] = json!(2);
         for project in value["projects"]
             .as_array_mut()
             .expect("projects should be an array")
         {
-            project
+            let project = project
                 .as_object_mut()
-                .expect("project should be an object")
-                .remove("automations");
+                .expect("project should be an object");
+            project.remove("automations");
+            // v2 named the comment list "notes"; the alias keeps it readable
+            let comments = project.remove("comments").expect("comments should exist");
+            project.insert("notes".to_string(), comments);
         }
 
         let parsed = parse_file(&value.to_string()).expect("previous version should parse");
 
-        assert_eq!(parsed.version, 1);
+        assert_eq!(parsed.version, 2);
         assert!(parsed.projects[0].automations.is_empty());
+        assert_eq!(parsed.projects[0].comments.len(), 1);
     }
 
     #[test]
@@ -1203,7 +1213,7 @@ mod tests {
             "created_at": "1970-01-01T00:00:00Z",
             "sections": [],
             "tasks": [],
-            "notes": [],
+            "comments": [],
             "automations": []
         }))
         .expect("a snapshot carrying the removed task_sorting_mode field should deserialize");
@@ -1294,8 +1304,8 @@ mod import_tests {
         }
     }
 
-    fn note(id: Uuid, task_id: Uuid, contents: &str) -> Note {
-        Note {
+    fn comment(id: Uuid, task_id: Uuid, contents: &str) -> Comment {
+        Comment {
             id,
             task_id,
             contents: contents.to_string(),
@@ -1307,13 +1317,13 @@ mod import_tests {
         project: Project,
         sections: Vec<Section>,
         tasks: Vec<Task>,
-        notes: Vec<Note>,
+        comments: Vec<Comment>,
     ) -> ProjectSnapshot {
         ProjectSnapshot {
             project,
             sections,
             tasks,
-            notes,
+            comments,
             automations: Vec::new(),
         }
     }
@@ -1331,13 +1341,13 @@ mod import_tests {
         projects: Vec<Project>,
         sections: Vec<Section>,
         tasks: Vec<Task>,
-        notes: Vec<Note>,
+        comments: Vec<Comment>,
     ) -> ImportState {
         ImportState {
             projects,
             sections,
             tasks,
-            notes,
+            comments,
             automations: Vec::new(),
             tombstones: HashSet::new(),
         }
@@ -1352,7 +1362,7 @@ mod import_tests {
                     OperationKind::CreateProject { .. }
                         | OperationKind::CreateSection { .. }
                         | OperationKind::CreateTask { .. }
-                        | OperationKind::CreateNote { .. }
+                        | OperationKind::CreateComment { .. }
                         | OperationKind::CreateAutomation { .. }
                 )
             })
@@ -1417,13 +1427,13 @@ mod import_tests {
         let project_id = uuid(1);
         let section_id = uuid(2);
         let task_id = uuid(3);
-        let note_id = uuid(4);
+        let comment_id = uuid(4);
 
         let incoming = file(vec![document(
             project(project_id, "p"),
             vec![section(section_id, project_id, "todo")],
             vec![task(task_id, project_id, Some(section_id), "task")],
-            vec![note(note_id, task_id, "contents")],
+            vec![comment(comment_id, task_id, "contents")],
         )]);
 
         let mut state = import_state(vec![], vec![], vec![], vec![]);
@@ -1465,16 +1475,16 @@ mod import_tests {
         assert_eq!(*task_project, *new_project);
         assert_eq!(*task_section, Some(*new_section));
 
-        let OperationKind::CreateNote {
-            id: new_note,
-            task_id: note_task,
+        let OperationKind::CreateComment {
+            id: new_comment,
+            task_id: comment_task,
             ..
         } = &plan.operations[3].kind
         else {
-            panic!("expected CreateNote, got {:?}", plan.operations[3].kind);
+            panic!("expected CreateComment, got {:?}", plan.operations[3].kind);
         };
-        assert_ne!(*new_note, note_id);
-        assert_eq!(*note_task, *new_task);
+        assert_ne!(*new_comment, comment_id);
+        assert_eq!(*comment_task, *new_task);
 
         let remaps: Vec<(EntityType, Uuid)> = plan
             .report
@@ -1488,14 +1498,14 @@ mod import_tests {
                 (EntityType::Project, project_id),
                 (EntityType::Section, section_id),
                 (EntityType::Task, task_id),
-                (EntityType::Note, note_id),
+                (EntityType::Comment, comment_id),
             ]
         );
 
         assert_eq!(plan.report.projects, 1);
         assert_eq!(plan.report.sections, 1);
         assert_eq!(plan.report.tasks, 1);
-        assert_eq!(plan.report.notes, 1);
+        assert_eq!(plan.report.comments, 1);
     }
 
     #[test]
@@ -1503,7 +1513,7 @@ mod import_tests {
         let project_id = uuid(1);
         let section_id = uuid(2);
         let task_id = uuid(3);
-        let note_id = uuid(4);
+        let comment_id = uuid(4);
 
         let live_state = import_state(
             vec![Project {
@@ -1512,7 +1522,7 @@ mod import_tests {
             }],
             vec![section(section_id, project_id, "todo")],
             vec![task(task_id, project_id, Some(section_id), "old")],
-            vec![note(note_id, task_id, "old")],
+            vec![comment(comment_id, task_id, "old")],
         );
 
         let incoming = file(vec![document(
@@ -1530,7 +1540,7 @@ mod import_tests {
                 position: Position::parse("a1").unwrap(),
                 ..task(task_id, project_id, Some(section_id), "old")
             }],
-            vec![note(note_id, task_id, "new")],
+            vec![comment(comment_id, task_id, "new")],
         )]);
 
         let plan = plan_import(&incoming, &live_state, ImportMode::Merge).unwrap();
@@ -1585,17 +1595,17 @@ mod import_tests {
             .operations
             .iter()
             .find_map(|operation| match &operation.kind {
-                OperationKind::UpdateNote { contents, .. } => Some(contents),
+                OperationKind::UpdateComment { contents, .. } => Some(contents),
                 _ => None,
             })
-            .expect("expected UpdateNote");
+            .expect("expected UpdateComment");
         assert_eq!(contents.as_str(), "new");
 
         assert!(plan.report.remapped.is_empty());
         assert_eq!(plan.report.projects, 1);
         assert_eq!(plan.report.sections, 1);
         assert_eq!(plan.report.tasks, 1);
-        assert_eq!(plan.report.notes, 1);
+        assert_eq!(plan.report.comments, 1);
     }
 
     #[test]
@@ -1816,20 +1826,20 @@ mod import_tests {
         let project_id = uuid(1);
         let section_id = uuid(2);
         let task_id = uuid(3);
-        let note_id = uuid(4);
+        let comment_id = uuid(4);
 
         let live_state = import_state(
             vec![project(project_id, "p")],
             vec![section(section_id, project_id, "todo")],
             vec![task(task_id, project_id, Some(section_id), "task")],
-            vec![note(note_id, task_id, "contents")],
+            vec![comment(comment_id, task_id, "contents")],
         );
 
         let incoming = file(vec![document(
             project(project_id, "p"),
             vec![section(section_id, project_id, "todo")],
             vec![task(task_id, project_id, Some(section_id), "task")],
-            vec![note(note_id, task_id, "contents")],
+            vec![comment(comment_id, task_id, "contents")],
         )]);
 
         let plan = plan_import(&incoming, &live_state, ImportMode::Merge).unwrap();
@@ -1838,7 +1848,7 @@ mod import_tests {
         assert_eq!(plan.report.projects, 1);
         assert_eq!(plan.report.sections, 1);
         assert_eq!(plan.report.tasks, 1);
-        assert_eq!(plan.report.notes, 1);
+        assert_eq!(plan.report.comments, 1);
     }
 
     #[test]
@@ -1893,11 +1903,11 @@ mod import_tests {
     }
 
     #[test]
-    fn note_task_from_another_project_is_a_conflict() {
+    fn comment_task_from_another_project_is_a_conflict() {
         let other_project_id = uuid(1);
         let project_id = uuid(10);
         let task_id = uuid(2);
-        let note_id = uuid(3);
+        let comment_id = uuid(3);
 
         let live_state = import_state(
             vec![project(other_project_id, "other")],
@@ -1910,7 +1920,7 @@ mod import_tests {
             project(project_id, "p"),
             vec![],
             vec![],
-            vec![note(note_id, task_id, "contents")],
+            vec![comment(comment_id, task_id, "contents")],
         )]);
 
         let result = plan_import(&incoming, &live_state, ImportMode::Merge);

@@ -1,7 +1,7 @@
 //! Shared human and JSON output helpers.
 
 use crate::error::AppError;
-use crate::state::TaskWithNotes;
+use crate::state::TaskWithComments;
 use scry_core::ids::TaskId;
 use scry_core::models::{Section, TaskState};
 use std::collections::HashMap;
@@ -22,7 +22,7 @@ pub fn section_label(section: &Option<Section>) -> &str {
 }
 
 /// Render one task line for the human `list` output.
-pub fn task_line(task: &TaskWithNotes, handles: &HashMap<TaskId, String>) -> String {
+pub fn task_line(task: &TaskWithComments, handles: &HashMap<TaskId, String>) -> String {
     let checkbox = match task.state {
         TaskState::Open => "[ ]",
         TaskState::Closed => "[x]",

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    n.id,\n                    n.task_id,\n                    n.contents,\n                    n.created_at\n                FROM notes n\n                JOIN tasks t ON t.id = n.task_id\n                WHERE t.project_id = $1\n                ORDER BY n.created_at ASC\n            ",
+  "query": "\n                SELECT\n                    id,\n                    task_id,\n                    contents,\n                    created_at\n                FROM comments\n                WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "notes",
+            "table": "comments",
             "name": "id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "notes",
+            "table": "comments",
             "name": "task_id"
           }
         }
@@ -31,7 +31,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "notes",
+            "table": "comments",
             "name": "contents"
           }
         }
@@ -42,7 +42,7 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "notes",
+            "table": "comments",
             "name": "created_at"
           }
         }
@@ -60,5 +60,5 @@
       false
     ]
   },
-  "hash": "73f0a04111c2482099a8a2f83674f80fa7b3702895301d4c512a16c664179473"
+  "hash": "aaf16f8106b983f355f29334e984be01733964799b2d01c031aaa0dbd10fd8fe"
 }

@@ -12,6 +12,9 @@ pub use automation::{
 mod close_tasks;
 pub use close_tasks::close_tasks;
 
+mod comment_add;
+pub use comment_add::comment_add;
+
 mod delete;
 pub use delete::delete;
 
@@ -29,9 +32,6 @@ pub use list::list;
 
 mod move_task;
 pub use move_task::{MoveTask, TaskMovePlacement, move_task};
-
-mod note_add;
-pub use note_add::note_add;
 
 mod open_tasks;
 pub use open_tasks::open_tasks;

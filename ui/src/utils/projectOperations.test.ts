@@ -14,7 +14,7 @@ function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
     created_at: '2026-01-01T00:00:00Z',
     sections: [],
     tasks: [],
-    notes: [],
+    comments: [],
     automations: [],
     ...overrides,
   };

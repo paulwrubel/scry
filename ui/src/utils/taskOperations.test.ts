@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import type { Comment } from '@/generated/Comment';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { ExternalMetadata } from '@/generated/ExternalMetadata';
-import type { Note } from '@/generated/Note';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import {
-  createNoteOperation,
+  createCommentOperation,
   createTaskOperation,
-  deleteNoteOperation,
+  deleteCommentOperation,
   deleteTaskOperation,
   externalIdentityOperation,
   moveTaskOperation,
   nextTaskPosition,
   setTaskStateOperation,
-  updateNoteOperation,
+  updateCommentOperation,
   updateTaskOperation,
 } from './taskOperations';
 
@@ -29,7 +29,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     created_at: CREATED_AT,
     sections: [],
     tasks: [],
-    notes: [],
+    comments: [],
     automations: [],
     ...overrides,
   };
@@ -51,7 +51,7 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
   };
 }
 
-function note(overrides: Partial<Note> & Pick<Note, 'id' | 'contents'>): Note {
+function comment(overrides: Partial<Comment> & Pick<Comment, 'id' | 'contents'>): Comment {
   return {
     task_id: TASK_ID,
     created_at: CREATED_AT,
@@ -409,43 +409,45 @@ describe('deleteTaskOperation', () => {
   });
 });
 
-describe('note operations', () => {
+describe('comment operations', () => {
   const existingTask = task({ id: TASK_ID, title: 'Title' });
 
-  it('creates a trimmed note', () => {
-    const operation = createNoteOperation(existingTask, '  note text  ');
+  it('creates a trimmed comment', () => {
+    const operation = createCommentOperation(existingTask, '  comment text  ');
 
     expect(operation).toMatchObject({
-      kind: 'create_note',
+      kind: 'create_comment',
       task_id: TASK_ID,
-      contents: 'note text',
+      contents: 'comment text',
     });
-    expect(operation?.kind === 'create_note' && operation?.id).not.toBe(operation?.operation_id);
+    expect(operation?.kind === 'create_comment' && operation?.id).not.toBe(operation?.operation_id);
   });
 
-  it('does not create an empty note', () => {
-    expect(createNoteOperation(existingTask, '   ')).toBeNull();
+  it('does not create an empty comment', () => {
+    expect(createCommentOperation(existingTask, '   ')).toBeNull();
   });
 
-  it('updates a changed note', () => {
-    expect(updateNoteOperation(note({ id: 'note-1', contents: 'old' }), ' new ')).toMatchObject({
-      kind: 'update_note',
-      id: 'note-1',
+  it('updates a changed comment', () => {
+    const existing = comment({ id: 'comment-1', contents: 'old' });
+
+    expect(updateCommentOperation(existing, ' new ')).toMatchObject({
+      kind: 'update_comment',
+      id: 'comment-1',
       contents: 'new',
     });
   });
 
-  it('does not update an unchanged or empty note', () => {
-    const existing = note({ id: 'note-1', contents: 'same' });
+  it('does not update an unchanged or empty comment', () => {
+    const existing = comment({ id: 'comment-1', contents: 'same' });
 
-    expect(updateNoteOperation(existing, 'same')).toBeNull();
-    expect(updateNoteOperation(existing, '  ')).toBeNull();
+    expect(updateCommentOperation(existing, 'same')).toBeNull();
+    expect(updateCommentOperation(existing, '  ')).toBeNull();
   });
 
-  it('deletes a note', () => {
-    expect(deleteNoteOperation(note({ id: 'note-1', contents: 'text' }))).toMatchObject({
-      kind: 'delete_note',
-      id: 'note-1',
+  it('deletes a comment', () => {
+    expect(deleteCommentOperation(comment({ id: 'comment-1', contents: 'text' }))).toMatchObject({
+      kind: 'delete_comment',
+      id: 'comment-1',
     });
   });
 });

@@ -22,18 +22,18 @@ license: MIT
 
 ## Task commands
 
-| Command                                                                                                                                                                                           | Purpose                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `scry --json add [<title>] [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>] [--external-url <url>]`                                           | Add a task                 |
-| `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                                                                        | List tasks                 |
-| `scry --json show <id\|handle>`                                                                                                                                                                   | Show a task with its notes |
-| `scry --json move <id\|handle> [<section>] [--no-section] [--top\|--first\|--bottom\|--last\|--before <id>\|--after <id>]`                                                                        | Move or place a task       |
-| `scry --json update <id\|handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section] [--external-url <url>\|--clear-external-url]` | Update task properties     |
-| `scry --json close <id\|handle>...`                                                                                                                                                               | Close tasks                |
-| `scry --json open <id\|handle>...`                                                                                                                                                                | Reopen tasks               |
-| `scry --json duplicate <id\|handle>`                                                                                                                                                              | Duplicate a task           |
-| `scry --json note add <id\|handle> <contents>`                                                                                                                                                    | Add a note to a task       |
-| `scry --json delete <id\|handle>`                                                                                                                                                                 | Delete a task permanently  |
+| Command                                                                                                                                                                                           | Purpose                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `scry --json add [<title>] [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>] [--external-url <url>]`                                           | Add a task                    |
+| `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                                                                        | List tasks                    |
+| `scry --json show <id\|handle>`                                                                                                                                                                   | Show a task with its comments |
+| `scry --json move <id\|handle> [<section>] [--no-section] [--top\|--first\|--bottom\|--last\|--before <id>\|--after <id>]`                                                                        | Move or place a task          |
+| `scry --json update <id\|handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section] [--external-url <url>\|--clear-external-url]` | Update task properties        |
+| `scry --json close <id\|handle>...`                                                                                                                                                               | Close tasks                   |
+| `scry --json open <id\|handle>...`                                                                                                                                                                | Reopen tasks                  |
+| `scry --json duplicate <id\|handle>`                                                                                                                                                              | Duplicate a task              |
+| `scry --json comment add <id\|handle> <contents>`                                                                                                                                                 | Add a comment to a task       |
+| `scry --json delete <id\|handle>`                                                                                                                                                                 | Delete a task permanently     |
 
 Task arguments accept a full UUID or a unique handle prefix of at least 4 hex characters
 (case-insensitive, dashes optional at the canonical UUID positions).
@@ -42,7 +42,7 @@ Priority is one of `normal`, `elevated`, or `critical`; `normal` is the default.
 `--description` or `--tags` on `update` clears the field.
 
 `list` returns a flat JSON array of task objects; use `section_id` to associate tasks with sections. It includes
-no notes or handles, and closed tasks are hidden unless you pass `--include-closed` (they follow the open tasks).
+no comments or handles, and closed tasks are hidden unless you pass `--include-closed` (they follow the open tasks).
 The array follows section order but is not grouped.
 
 Sections are optional. `--section` must match an existing section name exactly, while `--new-section` creates
@@ -57,7 +57,7 @@ default; add `--top`/`--first`, `--bottom`/`--last`, `--before <id>`, or `--afte
 
 `scry --json sync [--provider github]` mirrors GitHub's title, description, and state into the task.
 It requires an authenticated `gh` and is one-way. A linked task's title, description, and lifecycle are
-read-only; moving, priority, tags, and notes still work.
+read-only; moving, priority, tags, and comments still work.
 
 ## Project and section commands
 

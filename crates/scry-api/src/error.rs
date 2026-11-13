@@ -46,7 +46,7 @@ impl AppError {
     pub fn details(&self) -> Option<serde_json::Value> {
         match self {
             AppError::Service(ServiceError::AmbiguousTaskHandle { candidates, .. })
-            | AppError::Service(ServiceError::AmbiguousNoteHandle { candidates, .. }) => {
+            | AppError::Service(ServiceError::AmbiguousCommentHandle { candidates, .. }) => {
                 Some(serde_json::json!({ "candidates": candidates }))
             }
             _ => None,
@@ -105,14 +105,14 @@ pub enum ServiceError {
     TaskHandleNotFound {
         handle: String,
     },
-    NoteHandleNotFound {
+    CommentHandleNotFound {
         handle: String,
     },
     AmbiguousTaskHandle {
         handle: String,
         candidates: Vec<String>,
     },
-    AmbiguousNoteHandle {
+    AmbiguousCommentHandle {
         handle: String,
         candidates: Vec<String>,
     },
@@ -162,17 +162,17 @@ impl fmt::Display for ServiceError {
             Self::TaskHandleNotFound { handle } => {
                 write!(f, "No task matches handle \"{handle}\"")
             }
-            Self::NoteHandleNotFound { handle } => {
-                write!(f, "No note matches handle \"{handle}\"")
+            Self::CommentHandleNotFound { handle } => {
+                write!(f, "No comment matches handle \"{handle}\"")
             }
             Self::AmbiguousTaskHandle { handle, candidates } => write!(
                 f,
                 "Handle \"{handle}\" matches multiple tasks: {}. Use a longer prefix.",
                 candidates.join(", ")
             ),
-            Self::AmbiguousNoteHandle { handle, candidates } => write!(
+            Self::AmbiguousCommentHandle { handle, candidates } => write!(
                 f,
-                "Handle \"{handle}\" matches multiple notes: {}. Use a longer prefix.",
+                "Handle \"{handle}\" matches multiple comments: {}. Use a longer prefix.",
                 candidates.join(", ")
             ),
             Self::SectionInUseByAutomation { section } => write!(
@@ -191,7 +191,7 @@ impl ServiceError {
     fn kind(&self) -> &'static str {
         match self {
             Self::SectionNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
-            Self::TaskHandleNotFound { .. } | Self::NoteHandleNotFound { .. } => "not_found",
+            Self::TaskHandleNotFound { .. } | Self::CommentHandleNotFound { .. } => "not_found",
             Self::AutomationNotFound { .. } => "not_found",
             Self::SectionNameTaken { .. }
             | Self::SectionMergeIntoItself { .. }
@@ -200,7 +200,7 @@ impl ServiceError {
             Self::SectionInUseByAutomation { .. } => "conflict",
             Self::SectionNameRequired => "invalid",
             Self::TaskAnchorNotInSection { .. } => "invalid",
-            Self::AmbiguousTaskHandle { .. } | Self::AmbiguousNoteHandle { .. } => "invalid",
+            Self::AmbiguousTaskHandle { .. } | Self::AmbiguousCommentHandle { .. } => "invalid",
             Self::Storage(error) => error.kind(),
         }
     }

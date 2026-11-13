@@ -189,9 +189,9 @@ enum Command {
         #[arg(long)]
         include_closed: bool,
     },
-    /// Manage notes on a task
+    /// Manage comments on a task
     #[command(subcommand)]
-    Note(NoteCommand),
+    Comment(CommentCommand),
     /// Snapshot all data (or a single project with the global -p/--project) as JSON to stdout
     Export,
     /// Import a JSON snapshot from stdin
@@ -220,12 +220,12 @@ enum Command {
 }
 
 #[derive(Subcommand)]
-enum NoteCommand {
-    /// Add a note to a task
+enum CommentCommand {
+    /// Add a comment to a task
     Add {
         /// The task ID or a unique handle prefix
         task_id: Handle,
-        /// The note contents
+        /// The comment contents
         contents: String,
     },
 }
@@ -634,9 +634,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::sync(&client, *provider, output_json).await;
         }
-        Some(Command::Note(NoteCommand::Add { task_id, contents })) => {
+        Some(Command::Comment(CommentCommand::Add { task_id, contents })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-            return client::note_add(&client, task_id.as_str(), contents, output_json).await;
+            return client::comment_add(&client, task_id.as_str(), contents, output_json).await;
         }
         Some(Command::Project(ProjectCommand::Show { name })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;

@@ -64,7 +64,7 @@ pub async fn create_task(
 
             Json(TaskDetails {
                 task: change.task,
-                notes: None,
+                comments: None,
                 handle: Some(handle),
             })
             .into_response()

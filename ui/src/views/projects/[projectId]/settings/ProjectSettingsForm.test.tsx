@@ -19,7 +19,7 @@ function projectSnapshot(): ProjectSnapshot {
     created_at: CREATED_AT,
     sections: [],
     tasks: [],
-    notes: [],
+    comments: [],
     automations: [],
   };
 }

@@ -8,7 +8,7 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 use uuid::Uuid;
 
-pub use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
+pub use crate::ids::{AutomationId, CommentId, ProjectId, SectionId, TaskId};
 
 /// Why a stored enum name could not be parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -360,8 +360,8 @@ pub struct Task {
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Note {
-    pub id: NoteId,
+pub struct Comment {
+    pub id: CommentId,
     pub task_id: TaskId,
     pub contents: String,
     pub created_at: DateTime<Utc>,
@@ -448,7 +448,7 @@ pub enum EntityType {
     Project,
     Section,
     Task,
-    Note,
+    Comment,
     Automation,
 }
 
@@ -458,7 +458,7 @@ impl EntityType {
             Self::Project => "project",
             Self::Section => "section",
             Self::Task => "task",
-            Self::Note => "note",
+            Self::Comment => "comment",
             Self::Automation => "automation",
         }
     }
@@ -472,12 +472,12 @@ impl FromStr for EntityType {
             "project" | "Project" => Ok(Self::Project),
             "section" | "Section" => Ok(Self::Section),
             "task" | "Task" => Ok(Self::Task),
-            "note" | "Note" => Ok(Self::Note),
+            "comment" | "Comment" => Ok(Self::Comment),
             "automation" | "Automation" => Ok(Self::Automation),
             _ => Err(ParseFieldError::new(
                 "change entity type",
                 value,
-                &["project", "section", "task", "note", "automation"],
+                &["project", "section", "task", "comment", "automation"],
             )),
         }
     }
@@ -496,7 +496,7 @@ pub enum Entity {
     Project(ProjectId),
     Section(SectionId),
     Task(TaskId),
-    Note(NoteId),
+    Comment(CommentId),
     Automation(AutomationId),
 }
 
@@ -506,7 +506,7 @@ impl Entity {
             Self::Project(_) => EntityType::Project,
             Self::Section(_) => EntityType::Section,
             Self::Task(_) => EntityType::Task,
-            Self::Note(_) => EntityType::Note,
+            Self::Comment(_) => EntityType::Comment,
             Self::Automation(_) => EntityType::Automation,
         }
     }
@@ -516,7 +516,7 @@ impl Entity {
             Self::Project(id)
             | Self::Section(id)
             | Self::Task(id)
-            | Self::Note(id)
+            | Self::Comment(id)
             | Self::Automation(id) => *id,
         }
     }
@@ -590,7 +590,7 @@ pub struct Change {
     pub created_at: DateTime<Utc>,
 }
 
-/// A project together with all of its sections, tasks, notes, and automations.
+/// A project together with all of its sections, tasks, comments, and automations.
 ///
 /// This is scry's canonical project document: `GET /projects/{id}/snapshot`
 /// returns it directly, and each entry in a snapshot file is the same
@@ -604,7 +604,8 @@ pub struct ProjectSnapshot {
     pub project: Project,
     pub sections: Vec<Section>,
     pub tasks: Vec<Task>,
-    pub notes: Vec<Note>,
+    #[serde(alias = "notes")]
+    pub comments: Vec<Comment>,
     #[serde(default)]
     pub automations: Vec<Automation>,
 }

@@ -4,7 +4,7 @@ import type { ClientState } from '@/contract/op-replay';
 import { applyChanges as applyConfirmedChanges } from '@/contract/op-replay';
 import type { Automation } from '@/generated/Automation';
 import type { Change } from '@/generated/Change';
-import type { Note } from '@/generated/Note';
+import type { Comment } from '@/generated/Comment';
 import type { Operation } from '@/generated/Operation';
 import type { Project } from '@/generated/Project';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
@@ -24,7 +24,7 @@ export type ReplicaDB = {
   projects: { key: string; value: Project };
   sections: { key: string; value: Section };
   tasks: { key: string; value: Task };
-  notes: { key: string; value: Note };
+  comments: { key: string; value: Comment };
   automations: { key: string; value: Automation };
   outbox: {
     key: number;
@@ -46,7 +46,14 @@ export type AppliedSyncResult = {
   lastSeenSeq: number;
 };
 
-const CONFIRMED_STORES = ['projects', 'sections', 'tasks', 'notes', 'automations', 'meta'] as const;
+const CONFIRMED_STORES = [
+  'projects',
+  'sections',
+  'tasks',
+  'comments',
+  'automations',
+  'meta',
+] as const;
 type ConfirmedStoreName = (typeof CONFIRMED_STORES)[number];
 type ConfirmedTransaction = IDBPTransaction<ReplicaDB, ConfirmedStoreName[], 'readwrite'>;
 
@@ -55,7 +62,7 @@ const NEEDS_BOOTSTRAP_KEY = 'needs_bootstrap';
 const PROJECT_ORDER_KEY = 'project_order';
 const SECTION_ORDER_KEY = 'section_order';
 const TASK_ORDER_KEY = 'task_order';
-const NOTE_ORDER_KEY = 'note_order';
+const COMMENT_ORDER_KEY = 'comment_order';
 const LAST_SEEN_SEQ_KEY = 'last_seen_seq';
 
 export async function openReplicaDatabase(
@@ -67,7 +74,7 @@ export async function openReplicaDatabase(
 
   try {
     const opened = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, _newVersion, transaction) {
         if (!db.objectStoreNames.contains('projects')) {
           db.createObjectStore('projects', { keyPath: 'id' });
         }
@@ -77,8 +84,8 @@ export async function openReplicaDatabase(
         if (!db.objectStoreNames.contains('tasks')) {
           db.createObjectStore('tasks', { keyPath: 'id' });
         }
-        if (!db.objectStoreNames.contains('notes')) {
-          db.createObjectStore('notes', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('comments')) {
+          db.createObjectStore('comments', { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains('automations')) {
           db.createObjectStore('automations', { keyPath: 'id' });
@@ -92,6 +99,10 @@ export async function openReplicaDatabase(
         }
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta');
+        }
+        if (oldVersion > 0 && oldVersion < 3 && db.objectStoreNames.contains('outbox')) {
+          // queued note operations cannot be sent after the comment rename, so drop them once
+          void transaction.objectStore('outbox').clear();
         }
       },
       blocked() {
@@ -123,26 +134,26 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
       projects,
       sections,
       tasks,
-      notes,
+      comments,
       automations,
       schemaVersion,
       projectOrder,
       sectionOrder,
       taskOrder,
-      noteOrder,
+      commentOrder,
       needsBootstrap,
       lastSeenSeq,
     ] = await Promise.all([
       tx.objectStore('projects').getAll(),
       tx.objectStore('sections').getAll(),
       tx.objectStore('tasks').getAll(),
-      tx.objectStore('notes').getAll(),
+      tx.objectStore('comments').getAll(),
       tx.objectStore('automations').getAll(),
       meta.get(SCHEMA_VERSION_KEY),
       meta.get(PROJECT_ORDER_KEY),
       meta.get(SECTION_ORDER_KEY),
       meta.get(TASK_ORDER_KEY),
-      meta.get(NOTE_ORDER_KEY),
+      meta.get(COMMENT_ORDER_KEY),
       meta.get(NEEDS_BOOTSTRAP_KEY),
       meta.get(LAST_SEEN_SEQ_KEY),
     ]);
@@ -157,7 +168,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
         migration.objectStore('projects').clear(),
         migration.objectStore('sections').clear(),
         migration.objectStore('tasks').clear(),
-        migration.objectStore('notes').clear(),
+        migration.objectStore('comments').clear(),
         migration.objectStore('automations').clear(),
       ]);
       await migrationMeta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY);
@@ -173,12 +184,12 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
         projects,
         sections,
         tasks,
-        notes,
+        comments,
         automations,
         projectOrder,
         sectionOrder,
         taskOrder,
-        noteOrder,
+        commentOrder,
       ),
       needsBootstrap: needsBootstrap === true,
       lastSeenSeq: typeof lastSeenSeq === 'number' ? lastSeenSeq : 0,
@@ -221,7 +232,7 @@ async function writeConfirmed(
   const projects = tx.objectStore('projects');
   const sections = tx.objectStore('sections');
   const tasks = tx.objectStore('tasks');
-  const notes = tx.objectStore('notes');
+  const comments = tx.objectStore('comments');
   const automations = tx.objectStore('automations');
   const meta = tx.objectStore('meta');
 
@@ -229,20 +240,20 @@ async function writeConfirmed(
     projects.clear(),
     sections.clear(),
     tasks.clear(),
-    notes.clear(),
+    comments.clear(),
     automations.clear(),
   ]);
 
   const projectOrder: string[] = [];
   const sectionOrder: string[] = [];
   const taskOrder: string[] = [];
-  const noteOrder: string[] = [];
+  const commentOrder: string[] = [];
 
   for (const snapshot of state.projects) {
     const {
       sections: snapshotSections,
       tasks: snapshotTasks,
-      notes: snapshotNotes,
+      comments: snapshotComments,
       automations: snapshotAutomations,
       ...project
     } = snapshot;
@@ -256,9 +267,9 @@ async function writeConfirmed(
       taskOrder.push(task.id);
       await tasks.put(task);
     }
-    for (const note of snapshotNotes) {
-      noteOrder.push(note.id);
-      await notes.put(note);
+    for (const comment of snapshotComments) {
+      commentOrder.push(comment.id);
+      await comments.put(comment);
     }
     for (const automation of snapshotAutomations) {
       await automations.put(automation);
@@ -269,7 +280,7 @@ async function writeConfirmed(
     meta.put(projectOrder, PROJECT_ORDER_KEY),
     meta.put(sectionOrder, SECTION_ORDER_KEY),
     meta.put(taskOrder, TASK_ORDER_KEY),
-    meta.put(noteOrder, NOTE_ORDER_KEY),
+    meta.put(commentOrder, COMMENT_ORDER_KEY),
     meta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY),
     meta.put(false, NEEDS_BOOTSTRAP_KEY),
   ];
@@ -291,23 +302,23 @@ export async function applyConfirmedChangesIfNewer(
       projects,
       sections,
       tasks,
-      notes,
+      comments,
       automations,
       projectOrder,
       sectionOrder,
       taskOrder,
-      noteOrder,
+      commentOrder,
       lastSeenSeq,
     ] = await Promise.all([
       tx.objectStore('projects').getAll(),
       tx.objectStore('sections').getAll(),
       tx.objectStore('tasks').getAll(),
-      tx.objectStore('notes').getAll(),
+      tx.objectStore('comments').getAll(),
       tx.objectStore('automations').getAll(),
       meta.get(PROJECT_ORDER_KEY),
       meta.get(SECTION_ORDER_KEY),
       meta.get(TASK_ORDER_KEY),
-      meta.get(NOTE_ORDER_KEY),
+      meta.get(COMMENT_ORDER_KEY),
       meta.get(LAST_SEEN_SEQ_KEY),
     ]);
 
@@ -315,12 +326,12 @@ export async function applyConfirmedChangesIfNewer(
       projects,
       sections,
       tasks,
-      notes,
+      comments,
       automations,
       projectOrder,
       sectionOrder,
       taskOrder,
-      noteOrder,
+      commentOrder,
     );
     const current = typeof lastSeenSeq === 'number' ? lastSeenSeq : 0;
 
@@ -388,19 +399,19 @@ function buildClientState(
   projects: readonly Project[],
   sections: readonly Section[],
   tasks: readonly Task[],
-  notes: readonly Note[],
+  comments: readonly Comment[],
   automations: readonly Automation[],
   projectOrder: unknown,
   sectionOrder: unknown,
   taskOrder: unknown,
-  noteOrder: unknown,
+  commentOrder: unknown,
 ): ClientState {
   return {
     projects: buildSnapshots(
       orderById(projects, asStringArray(projectOrder)),
       orderById(sections, asStringArray(sectionOrder)),
       orderById(tasks, asStringArray(taskOrder)),
-      orderById(notes, asStringArray(noteOrder)),
+      orderById(comments, asStringArray(commentOrder)),
       automations,
     ),
   };
@@ -410,7 +421,7 @@ function buildSnapshots(
   projects: readonly Project[],
   sections: readonly Section[],
   tasks: readonly Task[],
-  notes: readonly Note[],
+  comments: readonly Comment[],
   automations: readonly Automation[],
 ): ProjectSnapshot[] {
   const snapshots = new Map<string, ProjectSnapshot>();
@@ -419,7 +430,7 @@ function buildSnapshots(
       ...project,
       sections: [],
       tasks: [],
-      notes: [],
+      comments: [],
       automations: [],
     };
     snapshots.set(project.id, snapshot);
@@ -435,10 +446,10 @@ function buildSnapshots(
     snapshots.get(task.project_id)?.tasks.push(task);
   }
 
-  for (const note of notes) {
-    const task = tasksById.get(note.task_id);
+  for (const comment of comments) {
+    const task = tasksById.get(comment.task_id);
     if (task !== undefined) {
-      snapshots.get(task.project_id)?.notes.push(note);
+      snapshots.get(task.project_id)?.comments.push(comment);
     }
   }
 

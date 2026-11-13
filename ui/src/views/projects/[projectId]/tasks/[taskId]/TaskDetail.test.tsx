@@ -2,9 +2,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Comment } from '@/generated/Comment';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { ExternalMetadata } from '@/generated/ExternalMetadata';
-import type { Note } from '@/generated/Note';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
@@ -67,7 +67,7 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
   };
 }
 
-function note(overrides: Partial<Note> & Pick<Note, 'id' | 'contents'>): Note {
+function comment(overrides: Partial<Comment> & Pick<Comment, 'id' | 'contents'>): Comment {
   return {
     task_id: TASK_ID,
     created_at: CREATED_AT,
@@ -93,7 +93,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
       }),
       task({ id: 'task-2', title: 'Other task', section_id: 'doing', position: 'a4' }),
     ],
-    notes: [note({ id: 'note-1', contents: 'A note' })],
+    comments: [comment({ id: 'comment-1', contents: 'A comment' })],
     automations: [],
     ...overrides,
   };
@@ -154,7 +154,7 @@ describe('TaskDetail', () => {
     expect(screen.getByText('one')).toBeDefined();
     expect(screen.getByText('two')).toBeDefined();
     expect(screen.getByText('abcd')).toBeDefined();
-    expect(screen.getByText('A note')).toBeDefined();
+    expect(screen.getByText('A comment')).toBeDefined();
     expect(screen.queryByLabelText('Title')).toBeNull();
     expect(screen.queryByLabelText('Description')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
@@ -349,57 +349,57 @@ describe('TaskDetail', () => {
     });
   });
 
-  it('adds a note', async () => {
+  it('adds a comment', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
-    fireEvent.change(screen.getByLabelText('New note'), {
-      target: { value: '  A new note  ' },
+    fireEvent.change(screen.getByLabelText('New comment'), {
+      target: { value: '  A new comment  ' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add comment' }));
 
     await waitFor(() => {
       expect(enqueue).toHaveBeenCalledWith(
         expect.objectContaining({
-          kind: 'create_note',
+          kind: 'create_comment',
           task_id: TASK_ID,
-          contents: 'A new note',
+          contents: 'A new comment',
         }),
       );
     });
   });
 
-  it('edits a note inline', async () => {
+  it('edits a comment inline', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit note' }));
-    fireEvent.change(screen.getByLabelText('Note contents'), {
-      target: { value: 'Updated note' },
+    fireEvent.click(screen.getByRole('button', { name: 'Edit comment' }));
+    fireEvent.change(screen.getByLabelText('Comment contents'), {
+      target: { value: 'Updated comment' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save comment' }));
 
     await waitFor(() => {
       expect(enqueue).toHaveBeenCalledWith(
         expect.objectContaining({
-          kind: 'update_note',
-          id: 'note-1',
-          contents: 'Updated note',
+          kind: 'update_comment',
+          id: 'comment-1',
+          contents: 'Updated comment',
         }),
       );
     });
   });
 
-  it('deletes a note after two-step confirmation', async () => {
+  it('deletes a comment after two-step confirmation', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete note' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete comment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete comment' }));
 
     await waitFor(() => {
       expect(enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'delete_note', id: 'note-1' }),
+        expect.objectContaining({ kind: 'delete_comment', id: 'comment-1' }),
       );
     });
   });

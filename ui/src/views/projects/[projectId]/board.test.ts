@@ -59,7 +59,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     created_at: CREATED_AT,
     sections: [],
     tasks: [],
-    notes: [],
+    comments: [],
     automations: [],
     ...overrides,
   };

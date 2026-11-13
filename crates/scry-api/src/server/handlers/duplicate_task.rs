@@ -42,7 +42,7 @@ pub async fn duplicate_task(
 
             Json(TaskDetails {
                 task: change.task,
-                notes: None,
+                comments: None,
                 handle: Some(handle),
             })
             .into_response()

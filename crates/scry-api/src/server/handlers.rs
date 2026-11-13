@@ -5,7 +5,7 @@ use crate::error::AppError;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use scry_core::models::{Note, Task};
+use scry_core::models::{Comment, Task};
 use serde::Serialize;
 
 mod batch;
@@ -19,8 +19,8 @@ pub use close_tasks::close_tasks;
 mod create_automation;
 pub use create_automation::create_automation;
 
-mod create_note;
-pub use create_note::create_note;
+mod create_comment;
+pub use create_comment::create_comment;
 
 mod create_project;
 pub use create_project::create_project;
@@ -37,8 +37,8 @@ pub use create_task::create_task;
 mod delete_automation;
 pub use delete_automation::delete_automation;
 
-mod delete_note;
-pub use delete_note::delete_note;
+mod delete_comment;
+pub use delete_comment::delete_comment;
 
 mod delete_project_by_id;
 pub use delete_project_by_id::delete_project_by_id;
@@ -67,14 +67,14 @@ pub use get_automation::get_automation;
 mod get_automations;
 pub use get_automations::get_automations;
 
-mod get_note;
-pub use get_note::get_note;
+mod get_comment;
+pub use get_comment::get_comment;
 
-mod get_notes_by_project;
-pub use get_notes_by_project::get_notes_by_project;
+mod get_comments_by_project;
+pub use get_comments_by_project::get_comments_by_project;
 
-mod get_notes_by_task;
-pub use get_notes_by_task::get_notes_by_task;
+mod get_comments_by_task;
+pub use get_comments_by_task::get_comments_by_task;
 
 mod get_project;
 pub use get_project::get_project;
@@ -142,8 +142,8 @@ pub use sync::sync;
 mod update_automation;
 pub use update_automation::update_automation;
 
-mod update_note;
-pub use update_note::update_note;
+mod update_comment;
+pub use update_comment::update_comment;
 
 mod update_project;
 pub use update_project::update_project;
@@ -185,13 +185,13 @@ impl From<AppError> for Response {
     }
 }
 
-/// A task with optional notes and display handle.
+/// A task with optional comments and display handle.
 #[derive(Serialize)]
 pub struct TaskDetails {
     #[serde(flatten)]
     pub task: Task,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub notes: Option<Vec<Note>>,
+    pub comments: Option<Vec<Comment>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub handle: Option<String>,
 }
