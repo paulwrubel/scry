@@ -55,13 +55,13 @@ function captureDragLayout(groups: BoardGroup[], draggedHeight: number): DragLay
   return layout;
 }
 
-export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): TaskDragPreview {
+export function useTaskDragPreview(groups: BoardGroup[]): TaskDragPreview {
   const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(null);
   const dragLayoutRef = useRef<DragLayout | null>(null);
   const dragAnchorOffsetRef = useRef(0);
 
   function handleDragStart(event: DragStartEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
     const sourceElement = event.operation.source?.element;
@@ -118,7 +118,7 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
   }
 
   function handleDragMove(event: DragMoveEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
 
@@ -131,7 +131,7 @@ export function useTaskDragPreview(groups: BoardGroup[], canReorder: boolean): T
   }
 
   function handleDragOver(event: DragOverEvent) {
-    if (!canReorder || event.operation.source?.type === 'column') {
+    if (event.operation.source?.type === 'column') {
       return;
     }
     event.preventDefault();

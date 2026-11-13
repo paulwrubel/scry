@@ -1,5 +1,6 @@
 import { keyBetween } from '@/contract/positions';
 import { compareTasks } from '@/contract/task-order';
+import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
@@ -241,6 +242,20 @@ export function dropPosition(
   afterId: string | null,
 ): string {
   const tasks = sectionTasks(project, sectionId).filter((task) => task.id !== taskId);
+  const at = afterId === null ? tasks.length : tasks.findIndex((task) => task.id === afterId);
+  return insertPosition(tasks, at === -1 ? tasks.length : at);
+}
+
+export function dropPositionForPriority(
+  project: ProjectSnapshot,
+  sectionId: string | null,
+  priority: Priority,
+  taskId: string,
+  afterId: string | null,
+): string {
+  const tasks = sectionTasks(project, sectionId).filter(
+    (task) => task.priority === priority && task.id !== taskId,
+  );
   const at = afterId === null ? tasks.length : tasks.findIndex((task) => task.id === afterId);
   return insertPosition(tasks, at === -1 ? tasks.length : at);
 }

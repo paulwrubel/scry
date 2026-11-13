@@ -9,6 +9,7 @@ import {
   buildBoard,
   CLOSED_NO_SECTION_GROUP,
   dropPosition,
+  dropPositionForPriority,
   groupKey,
   insertionIndexForPointer,
   insertPosition,
@@ -406,6 +407,54 @@ describe('dropPosition', () => {
     });
 
     expect(dropPosition(withClosed, 'backlog', 'a', 'b')).toBe('a1V');
+  });
+});
+
+describe('dropPositionForPriority', () => {
+  const project = projectSnapshot({
+    sections: [section('backlog', 'a0'), section('doing', 'a1')],
+    tasks: [
+      task({
+        id: 'high-a',
+        title: 'High A',
+        section_id: 'backlog',
+        position: 'a0',
+        priority: 'high',
+      }),
+      task({
+        id: 'medium',
+        title: 'Medium',
+        section_id: 'backlog',
+        position: 'a1',
+        priority: 'medium',
+      }),
+      task({
+        id: 'high-b',
+        title: 'High B',
+        section_id: 'backlog',
+        position: 'a2',
+        priority: 'high',
+      }),
+      task({
+        id: 'doing-high',
+        title: 'Doing high',
+        section_id: 'doing',
+        position: 'a0',
+        priority: 'high',
+      }),
+    ],
+  });
+
+  it('inserts only among tasks of the same priority', () => {
+    expect(dropPositionForPriority(project, 'backlog', 'high', 'dragged', 'high-b')).toBe('a1');
+  });
+
+  it('appends within the priority when the next visible task is another priority', () => {
+    expect(dropPositionForPriority(project, 'backlog', 'high', 'dragged', 'medium')).toBe('a3');
+  });
+
+  it('finds the same priority in another section', () => {
+    expect(dropPositionForPriority(project, 'doing', 'high', 'dragged', null)).toBe('a1');
   });
 });
 

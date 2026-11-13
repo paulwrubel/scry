@@ -458,67 +458,6 @@ describe('BoardPage', () => {
     expect(screen.queryByText('Feature task')).toBeNull();
   });
 
-  it('explains that filters disable drag-and-drop', () => {
-    const project = projectSnapshot({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-      '/projects/project-1?state=open',
-    );
-
-    expect(screen.getByText('task drag-and-drop disabled due to applied filters')).toBeDefined();
-  });
-
-  it('explains that a non-manual sort mode disables drag-and-drop', () => {
-    const project = projectSnapshot({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-      '/projects/project-1?sort=priority',
-    );
-
-    expect(screen.getByText('task drag-and-drop disabled due to sort mode')).toBeDefined();
-  });
-
-  it('explains when both sort mode and filters disable drag-and-drop', () => {
-    const project = projectSnapshot({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-      '/projects/project-1?sort=priority&state=open',
-    );
-
-    expect(
-      screen.getByText('task drag-and-drop disabled due to sort mode and applied filters'),
-    ).toBeDefined();
-  });
-
-  it('does not show the drag-and-drop warning for manual sort with no filters', () => {
-    const project = projectSnapshot({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-    );
-
-    expect(screen.queryByText(/task drag-and-drop disabled/)).toBeNull();
-  });
-
   it('orders tasks on the board from the sort URL param', () => {
     const project = projectSnapshot({
       sections: [section('backlog', 'Backlog', 'a0')],
@@ -597,30 +536,6 @@ describe('BoardPage', () => {
 
     const sort = screen.getByRole('combobox', { name: 'Task sorting' }) as HTMLSelectElement;
     expect(sort.value).toBe('manual');
-    expect(screen.queryByText(/task drag-and-drop disabled/)).toBeNull();
-  });
-
-  it('orders the toolbar warning before filter, sort, and show priority', () => {
-    const project = projectSnapshot({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog' })],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-      '/projects/project-1?state=open',
-    );
-
-    const warning = screen.getByText('task drag-and-drop disabled due to applied filters');
-    const filter = screen.getByRole('button', { name: 'Filter tasks' });
-    const sort = screen.getByRole('combobox', { name: 'Task sorting' });
-    const priority = screen.getByRole('switch', { name: 'Show priority' });
-
-    expect(warning.compareDocumentPosition(filter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(filter.compareDocumentPosition(sort) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(sort.compareDocumentPosition(priority) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(warning.className).toContain('text-yellow-500/80');
   });
 
   it('enqueues a create_task operation in the section', async () => {
