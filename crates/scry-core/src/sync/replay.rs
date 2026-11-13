@@ -66,14 +66,12 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             id,
             name,
             description,
-            show_priority,
             created_at,
         } => {
             let project = Project {
                 id: *id,
                 name: name.clone(),
                 description: description.clone(),
-                show_priority: *show_priority,
                 created_at: *created_at,
             };
             if let Some(snapshot) = state.projects.iter_mut().find(|p| p.project.id == *id) {
@@ -86,7 +84,6 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             id,
             name,
             description,
-            show_priority,
         } => {
             if let Some(snapshot) = state.projects.iter_mut().find(|p| p.project.id == *id) {
                 let project = &mut snapshot.project;
@@ -95,9 +92,6 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(description) = description {
                     project.description = description.clone();
-                }
-                if let Some(show_priority) = show_priority {
-                    project.show_priority = *show_priority;
                 }
             }
         }
@@ -408,12 +402,6 @@ fn apply_project_values(project: &mut Project, values: &serde_json::Value) {
     }
     if let Some(description) = values.get("description") {
         project.description = description.as_str().map(str::to_string);
-    }
-    if let Some(show_priority) = values
-        .get("show_priority")
-        .and_then(|value| value.as_bool())
-    {
-        project.show_priority = show_priority;
     }
 }
 

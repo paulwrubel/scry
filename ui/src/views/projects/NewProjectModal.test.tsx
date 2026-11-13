@@ -97,7 +97,6 @@ describe('NewProjectModal', () => {
       kind: 'create_project',
       name: 'New project',
       description: 'Details',
-      show_priority: false,
     });
     await waitFor(() => {
       expect(onCreated).toHaveBeenCalledWith(operation.id);

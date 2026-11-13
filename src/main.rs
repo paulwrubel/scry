@@ -262,12 +262,6 @@ enum ProjectCommand {
         /// New description (empty string clears it)
         #[arg(long)]
         description: Option<String>,
-        /// Show the priority level in task listings
-        #[arg(long, conflicts_with = "hide_priority")]
-        show_priority: bool,
-        /// Hide the priority level in task listings
-        #[arg(long, conflicts_with = "show_priority")]
-        hide_priority: bool,
     },
     /// Delete a project and all its tasks
     Delete {
@@ -663,10 +657,7 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::project_use(&client, &config, name, output_json).await;
         }
-        Some(Command::Project(ProjectCommand::Create {
-            name,
-            description,
-        })) => {
+        Some(Command::Project(ProjectCommand::Create { name, description })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::project_create(
                 &client,
@@ -678,21 +669,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             )
             .await;
         }
-        Some(Command::Project(ProjectCommand::Update {
-            name,
-            description,
-            show_priority,
-            hide_priority,
-        })) => {
+        Some(Command::Project(ProjectCommand::Update { name, description })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-            let show_priority = if *show_priority {
-                Some(true)
-            } else if *hide_priority {
-                Some(false)
-            } else {
-                None
-            };
-
             return client::project_update(
                 &client,
                 &config,
@@ -700,7 +678,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 client::UpdateProject {
                     name: name.as_deref(),
                     description: description.as_deref(),
-                    show_priority,
                 },
                 output_json,
             )

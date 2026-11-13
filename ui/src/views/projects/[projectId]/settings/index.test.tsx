@@ -22,7 +22,6 @@ function projectSnapshot(id: string, name: string): ProjectSnapshot {
     id,
     name,
     description: null,
-    show_priority: false,
     created_at: CREATED_AT,
     sections: [],
     tasks: [],

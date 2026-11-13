@@ -56,7 +56,6 @@ function applyOperation(state: ClientState, operation: Operation): void {
         id: operation.id,
         name: operation.name,
         description: operation.description,
-        show_priority: operation.show_priority,
         created_at: operation.created_at,
       };
       const existing = findProject(state, operation.id);
@@ -77,9 +76,6 @@ function applyOperation(state: ClientState, operation: Operation): void {
       }
       if (operation.description !== undefined) {
         snapshot.description = operation.description;
-      }
-      if (operation.show_priority !== undefined && operation.show_priority !== null) {
-        snapshot.show_priority = operation.show_priority;
       }
       return;
     }
@@ -388,9 +384,6 @@ function applyProjectValues(snapshot: ProjectSnapshot, values: Record<string, un
   if ('description' in values) {
     snapshot.description = typeof values.description === 'string' ? values.description : null;
   }
-  if (typeof values.show_priority === 'boolean') {
-    snapshot.show_priority = values.show_priority;
-  }
 }
 
 function applySectionValues(section: Section, values: Record<string, unknown>): void {
@@ -443,7 +436,6 @@ function setProject(snapshot: ProjectSnapshot, project: Project): void {
   snapshot.id = project.id;
   snapshot.name = project.name;
   snapshot.description = project.description;
-  snapshot.show_priority = project.show_priority;
   snapshot.created_at = project.created_at;
 }
 

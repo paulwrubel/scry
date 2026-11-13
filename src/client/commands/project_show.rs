@@ -34,14 +34,6 @@ pub async fn project_show(
     }
     println!();
     println!(
-        "Priority:     {}",
-        if project.show_priority {
-            "shown"
-        } else {
-            "hidden"
-        }
-    );
-    println!(
         "Created at:   {}",
         project
             .created_at

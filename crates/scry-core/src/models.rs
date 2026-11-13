@@ -264,7 +264,6 @@ pub struct Project {
     pub id: ProjectId,
     pub name: String,
     pub description: Option<String>,
-    pub show_priority: bool,
     pub created_at: DateTime<Utc>,
 }
 

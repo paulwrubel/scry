@@ -94,8 +94,6 @@ pub async fn list(
 
     println!("project \"{}\"\n", state.project().name);
 
-    let show_priority = state.project().show_priority;
-
     if groups.is_empty() && (!include_closed || state.closed_tasks().is_empty()) {
         println!("No tasks.");
         return Ok(());
@@ -116,14 +114,14 @@ pub async fn list(
         );
 
         for task in &group.tasks_with_notes {
-            anstream::println!("{}", task_line(task, show_priority, &handles));
+            anstream::println!("{}", task_line(task, &handles));
         }
     }
 
     if include_closed {
         println!("Closed ({}):", state.closed_tasks().len());
         for task in state.closed_tasks() {
-            anstream::println!("{}", task_line(task, show_priority, &handles));
+            anstream::println!("{}", task_line(task, &handles));
         }
     }
 

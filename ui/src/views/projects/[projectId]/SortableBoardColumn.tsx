@@ -15,6 +15,7 @@ export type SortableBoardColumnProps = {
   project: ProjectSnapshot;
   sectionsSortable: boolean;
   showCreate: boolean;
+  showPriority: boolean;
   collapsed: boolean;
   onToggleCollapsed?: () => void;
   onCreate: (
@@ -34,6 +35,7 @@ export function SortableBoardColumn(props: SortableBoardColumnProps) {
     project,
     sectionsSortable,
     showCreate,
+    showPriority,
     collapsed,
     onToggleCollapsed,
     onCreate,
@@ -65,7 +67,7 @@ export function SortableBoardColumn(props: SortableBoardColumnProps) {
       title={section.name}
       color={section.color}
       tasks={group.tasks}
-      showPriority={project.show_priority}
+      showPriority={showPriority}
       blockingAutomations={blockingAutomations}
       showCreate={showCreate}
       collapsed={collapsed}

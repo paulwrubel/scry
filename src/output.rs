@@ -23,11 +23,7 @@ pub fn section_label(section: &Option<Section>) -> &str {
 }
 
 /// Render one task line for the human `list` output.
-pub fn task_line(
-    task: &TaskWithNotes,
-    show_priority: bool,
-    handles: &HashMap<TaskId, String>,
-) -> String {
+pub fn task_line(task: &TaskWithNotes, handles: &HashMap<TaskId, String>) -> String {
     let checkbox = match task.state {
         TaskState::Open => "[ ]",
         TaskState::Closed => "[x]",
@@ -39,9 +35,7 @@ pub fn task_line(
         .cloned()
         .unwrap_or_else(|| task.id.simple().to_string());
     let mut line = format!("  {}  {}", id, checkbox);
-    if show_priority {
-        line.push_str(&format!("  {}", color::priority(task.priority)));
-    }
+    line.push_str(&format!("  {}", color::priority(task.priority)));
     line.push_str(&format!("  {}", task.title));
 
     let tags = task

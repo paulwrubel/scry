@@ -16,7 +16,6 @@ use crate::service::UpdateProject;
 pub struct UpdateProjectRequest {
     pub name: String,
     pub description: Option<String>,
-    pub show_priority: bool,
 }
 
 impl From<UpdateProjectRequest> for UpdateProject {
@@ -26,7 +25,6 @@ impl From<UpdateProjectRequest> for UpdateProject {
             // An absent or null description keeps PUT's full-replace behavior:
             // it clears the field rather than leaving it alone.
             description: Some(request.description.unwrap_or_default()),
-            show_priority: Some(request.show_priority),
         }
     }
 }

@@ -120,7 +120,6 @@ pub enum OperationKind {
         id: ProjectId,
         name: String,
         description: Option<String>,
-        show_priority: bool,
         created_at: DateTime<Utc>,
     },
     /// `None` leaves a field unchanged. `description` distinguishes all three
@@ -136,7 +135,6 @@ pub enum OperationKind {
         )]
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         description: Option<Option<String>>,
-        show_priority: Option<bool>,
     },
     DeleteProject {
         id: ProjectId,

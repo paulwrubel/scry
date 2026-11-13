@@ -21,6 +21,5 @@ export type ProjectSnapshot = {
   id: string;
   name: string;
   description: string | null;
-  show_priority: boolean;
   created_at: string;
 };

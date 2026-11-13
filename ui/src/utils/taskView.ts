@@ -2,6 +2,8 @@ import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 
 export const TASK_SORTING_PARAM = 'sort';
 
+export const SHOW_PRIORITY_PARAM = 'show_priority';
+
 export const DEFAULT_TASK_SORTING_MODE: TaskSortingMode = 'manual';
 
 export const TASK_SORTING_MODES: readonly TaskSortingMode[] = ['manual', 'priority'];
@@ -29,6 +31,19 @@ export function applyTaskSortingMode(
   // the manual default stays out of the URL so a default view keeps a clean link
   if (mode !== DEFAULT_TASK_SORTING_MODE) {
     next.set(TASK_SORTING_PARAM, mode);
+  }
+  return next;
+}
+
+export function parseShowPriority(params: URLSearchParams): boolean {
+  return params.get(SHOW_PRIORITY_PARAM) === 'true';
+}
+
+export function applyShowPriority(params: URLSearchParams, show: boolean): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.delete(SHOW_PRIORITY_PARAM);
+  if (show) {
+    next.set(SHOW_PRIORITY_PARAM, 'true');
   }
   return next;
 }
