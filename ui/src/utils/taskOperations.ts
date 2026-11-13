@@ -118,8 +118,11 @@ export function moveTaskOperation(
   task: Task,
   sectionId: string | null,
   position: string,
+  priority: Priority | null = null,
 ): Operation | null {
-  if (task.section_id === sectionId && task.position === position) {
+  // null priority means "leave unchanged", so only send one that actually differs
+  const nextPriority = priority !== null && priority !== task.priority ? priority : null;
+  if (task.section_id === sectionId && task.position === position && nextPriority === null) {
     return null;
   }
 
@@ -130,6 +133,7 @@ export function moveTaskOperation(
     id: task.id,
     section_id: sectionId,
     position,
+    priority: nextPriority,
   };
 }
 

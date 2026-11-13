@@ -180,6 +180,9 @@ function applyOperation(state: ClientState, operation: Operation): void {
       if (task) {
         task.section_id = operation.section_id;
         task.position = operation.position;
+        if (operation.priority !== undefined && operation.priority !== null) {
+          task.priority = operation.priority;
+        }
       }
       return;
     }

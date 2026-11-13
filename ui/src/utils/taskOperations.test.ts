@@ -382,6 +382,40 @@ describe('moveTaskOperation', () => {
       position: 'a0',
     });
   });
+
+  it('carries a changed priority', () => {
+    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog', position: 'a1' });
+
+    expect(moveTaskOperation(existing, 'backlog', 'a1', 'high')).toMatchObject({
+      kind: 'move_task',
+      id: TASK_ID,
+      section_id: 'backlog',
+      position: 'a1',
+      priority: 'high',
+    });
+  });
+
+  it('returns null when only the priority matches', () => {
+    const existing = task({
+      id: TASK_ID,
+      title: 'Title',
+      section_id: 'backlog',
+      position: 'a1',
+      priority: 'medium',
+    });
+
+    expect(moveTaskOperation(existing, 'backlog', 'a1', 'medium')).toBeNull();
+  });
+
+  it('leaves the priority unchanged when omitted', () => {
+    const existing = task({ id: TASK_ID, title: 'Title', section_id: 'backlog', position: 'a1' });
+
+    expect(moveTaskOperation(existing, 'backlog', 'a0V')).toMatchObject({
+      kind: 'move_task',
+      priority: null,
+      position: 'a0V',
+    });
+  });
 });
 
 describe('setTaskStateOperation', () => {

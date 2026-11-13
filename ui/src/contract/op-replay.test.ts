@@ -117,6 +117,18 @@ function moveSection(position: string, operationId: string): Operation {
   };
 }
 
+function moveTask(operationId: string, priority?: Task['priority']): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'move_task',
+    id: TASK_ID,
+    section_id: null,
+    position: 'a1',
+    ...(priority === undefined ? {} : { priority }),
+  };
+}
+
 function deleteProject(operationId: string): Operation {
   return {
     operation_id: operationId,
@@ -302,6 +314,35 @@ describe('op replay', () => {
       name: 'Renamed',
       description: 'Updated',
       show_priority: false,
+    });
+  });
+
+  it('replays a move_task operation that also changes priority', () => {
+    const result = replayOperations(state(), [moveTask('op-1', 'high')]);
+
+    expect(result.projects[0].tasks[0]).toMatchObject({
+      section_id: null,
+      position: 'a1',
+      priority: 'high',
+    });
+  });
+
+  it('replays a legacy move_task operation without a priority', () => {
+    const legacy = {
+      operation_id: 'op-legacy',
+      operation_version: 1,
+      kind: 'move_task',
+      id: TASK_ID,
+      section_id: null,
+      position: 'a1',
+    } as unknown as Operation;
+
+    const result = replayOperations(state(), [legacy]);
+
+    expect(result.projects[0].tasks[0]).toMatchObject({
+      section_id: null,
+      position: 'a1',
+      priority: 'medium',
     });
   });
 });
