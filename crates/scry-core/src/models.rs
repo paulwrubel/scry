@@ -258,49 +258,6 @@ impl From<&str> for TaskSortingMode {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct ProjectTemplate {
-    pub name: &'static str,
-    pub show_priority: bool,
-    pub sections: &'static [ProjectTemplateSection],
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct ProjectTemplateSection {
-    pub name: &'static str,
-    pub position: &'static str,
-    pub color: Option<Color>,
-}
-
-pub const PROJECT_TEMPLATES: &[ProjectTemplate] = &[
-    ProjectTemplate {
-        name: "todolist",
-        show_priority: false,
-        sections: &[],
-    },
-    ProjectTemplate {
-        name: "kanban",
-        show_priority: true,
-        sections: &[
-            ProjectTemplateSection {
-                name: "backlog",
-                position: "a0",
-                color: None,
-            },
-            ProjectTemplateSection {
-                name: "in-progress",
-                position: "a1",
-                color: Some(Color::Blue),
-            },
-            ProjectTemplateSection {
-                name: "review",
-                position: "a2",
-                color: Some(Color::Yellow),
-            },
-        ],
-    },
-];
-
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {

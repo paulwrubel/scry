@@ -248,9 +248,6 @@ enum ProjectCommand {
     },
     /// Create a new project
     Create {
-        /// The name of a template for the project
-        #[arg(short = 't')]
-        template_name: Option<String>,
         /// The project description
         #[arg(long)]
         description: Option<String>,
@@ -668,7 +665,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         }
         Some(Command::Project(ProjectCommand::Create {
             name,
-            template_name,
             description,
         })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
@@ -677,7 +673,6 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 client::CreateProject {
                     name,
                     description: description.as_deref(),
-                    template: template_name.as_deref(),
                 },
                 output_json,
             )

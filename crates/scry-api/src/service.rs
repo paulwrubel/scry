@@ -3,12 +3,12 @@ use chrono::Utc;
 use scry_core::error::StorageError;
 use scry_core::ids::{
     AutomationId, Handle, MIN_HANDLE_LENGTH, NoteId, ProjectId, SectionId, TaskId,
-    distinguishing_prefixes, shortest_handle, shortest_handles, template_section_id,
+    distinguishing_prefixes, shortest_handle, shortest_handles,
 };
 use scry_core::models::{
     Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Entity, EntityType,
     ExternalIdentity, ExternalMetadata, FieldValues, MAX_AUTOMATION_ACTIONS, Note, Priority,
-    Project, ProjectSnapshot, ProjectTemplate, Section, Tags, Task, TaskState,
+    Project, ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, key_between, n_keys_between};
 use scry_core::snapshot::{
@@ -166,15 +166,6 @@ pub enum TaskPlacement {
     Bottom,
     Before(TaskId),
     After(TaskId),
-}
-
-/// How a new project's priority flag and sections are chosen.
-#[derive(Debug, Clone, Copy)]
-pub enum ProjectSetup {
-    /// Adopt the template's priority flag and sections.
-    Template(ProjectTemplate),
-    /// Use these settings and seed no sections.
-    Explicit { show_priority: bool },
 }
 
 /// Frontend-agnostic, high-level operations over one project. Resolves names to
@@ -1030,18 +1021,13 @@ impl ProjectService {
         Ok(None)
     }
 
-    /// Create a project, optionally seeding sections from a template.
+    /// Create a project.
     pub async fn create_project(
         &self,
         name: String,
         description: Option<String>,
-        setup: ProjectSetup,
+        show_priority: bool,
     ) -> Result<Project, ServiceError> {
-        let (show_priority, template_sections) = match setup {
-            ProjectSetup::Template(template) => (template.show_priority, Some(template.sections)),
-            ProjectSetup::Explicit { show_priority } => (show_priority, None),
-        };
-
         let project = Project {
             id: Uuid::new_v4(),
             name,
@@ -1058,7 +1044,7 @@ impl ProjectService {
             .into());
         }
 
-        let mut ops = vec![new_operation(
+        let ops = vec![new_operation(
             Uuid::new_v4(),
             OperationKind::CreateProject {
                 id: project.id,
@@ -1068,24 +1054,6 @@ impl ProjectService {
                 created_at: project.created_at,
             },
         )];
-
-        if let Some(sections) = template_sections {
-            for section in sections {
-                let position = Position::parse(section.position).map_err(position_error)?;
-                let id = template_section_id(project.id, section.name);
-                ops.push(new_operation(
-                    Uuid::new_v4(),
-                    OperationKind::CreateSection {
-                        id,
-                        project_id: project.id,
-                        name: section.name.to_string(),
-                        position,
-                        color: section.color,
-                        created_at: Utc::now(),
-                    },
-                ));
-            }
-        }
 
         self.apply_operations(&ops, ApplyMode::Atomic).await?;
         Ok(project)

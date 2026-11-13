@@ -67,7 +67,7 @@ read-only; moving, priority, tags, and notes still work.
 | `scry --json project current`                                                                         | Show the active project                        |
 | `scry --json project show [name]`                                                                     | Show project details                           |
 | `scry --json project use <name>`                                                                      | Set the active project                         |
-| `scry --json project create [-t <template>] [--description <text>] <name>`                            | Create a project                               |
+| `scry --json project create [--description <text>] <name>`                                            | Create a project                               |
 | `scry --json project update [--name <new>] [--description <text>] [--show-priority\|--hide-priority]` | Update project properties                      |
 | `scry --json project delete <name> [-f]`                                                              | Delete a project and its tasks                 |
 | `scry --json section list`                                                                            | List a project's sections                      |
@@ -82,9 +82,8 @@ read-only; moving, priority, tags, and notes still work.
 `section move` requires exactly one placement flag: `--top` (alias `--first`), `--bottom` (alias
 `--last`), `--before <name>`, or `--after <name>`.
 
-`project create -t <template>` seeds sections and settings: `todolist` has none; `kanban` has `backlog`,
-`in-progress`, and `review`. Both templates start with manual sorting. Without `-t` a project starts with
-no sections. An empty `--description` clears it.
+A new project starts with no sections; add one with `scry section add <name>`. An empty
+`--description` clears it.
 
 ## Automation commands
 
