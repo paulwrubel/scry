@@ -2,6 +2,7 @@ import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-rea
 import { useState } from 'react';
 import { z } from 'zod';
 import { useAppForm } from '@/hooks/useAppForm';
+import { useCloseRequest } from '@/hooks/useCloseRequest';
 import { useCreateProject } from '@/hooks/useCreateProject';
 
 function schemaFor(existingNames: readonly string[]) {
@@ -45,6 +46,9 @@ export function NewProjectModal(props: NewProjectModalProps) {
       }
     },
   });
+
+  // This modal is mounted only while open.
+  useCloseRequest(true, onClose);
 
   return (
     <Modal show onClose={onClose}>

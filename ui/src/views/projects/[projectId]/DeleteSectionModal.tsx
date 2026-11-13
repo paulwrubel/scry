@@ -1,4 +1,5 @@
 import { Alert, Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
+import { useCloseRequest } from '@/hooks/useCloseRequest';
 
 export type DeleteSectionModalProps = {
   sectionName: string;
@@ -11,6 +12,8 @@ export type DeleteSectionModalProps = {
 export function DeleteSectionModal(props: DeleteSectionModalProps) {
   const { sectionName, blockingAutomations, show, onClose, onDelete } = props;
   const blocked = blockingAutomations.length > 0;
+
+  useCloseRequest(show, onClose);
 
   return (
     <Modal show={show} onClose={onClose}>

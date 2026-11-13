@@ -1,6 +1,7 @@
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
 import { useState } from 'react';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import { useCloseRequest } from '@/hooks/useCloseRequest';
 import { useProjectMutations } from '@/hooks/useProjectMutations';
 
 export type DeleteProjectModalProps = {
@@ -15,6 +16,9 @@ export function DeleteProjectModal(props: DeleteProjectModalProps) {
 
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // This modal is mounted only while open.
+  useCloseRequest(true, onClose);
 
   async function handleDelete() {
     setDeleting(true);
