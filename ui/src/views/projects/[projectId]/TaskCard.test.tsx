@@ -36,7 +36,7 @@ const task: Task = {
   project_id: 'project-1',
   title: 'Task title',
   description: null,
-  priority: 'medium',
+  priority: 'normal',
   section_id: null,
   position: 'a0',
   state: 'open',
@@ -91,14 +91,29 @@ describe('TaskCard', () => {
   it('renders the priority dot at the top-right of the title row', () => {
     render(
       <MemoryRouter initialEntries={['/projects/project-1?tags=bug']}>
-        <TaskCard projectId="project-1" task={task} showPriority={true} />
+        <TaskCard
+          projectId="project-1"
+          task={{ ...task, priority: 'elevated' }}
+          showPriority={true}
+        />
       </MemoryRouter>,
     );
 
     const link = screen.getByRole('link', { name: 'Task title' });
     const controls = link.nextElementSibling;
     expect(controls).not.toBeNull();
-    expect(controls?.contains(screen.getByRole('img', { name: 'medium priority' }))).toBe(true);
+    expect(controls?.contains(screen.getByRole('img', { name: 'elevated priority' }))).toBe(true);
+  });
+
+  it('renders no priority dot for a normal task', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/project-1?tags=bug']}>
+        <TaskCard projectId="project-1" task={task} showPriority={true} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('img', { name: 'normal priority' })).toBeNull();
+    expect(screen.queryAllByRole('img')).toHaveLength(0);
   });
 
   it('renders no extra description text for a null description', () => {

@@ -272,7 +272,9 @@ fn action_label(action: &AutomationAction, sections: &[Section]) -> String {
         AutomationAction::MoveToSection { section_id: None } => "move to No section".to_string(),
         AutomationAction::CloseTask => "close it".to_string(),
         AutomationAction::OpenTask => "open it".to_string(),
-        AutomationAction::SetPriority { priority } => format!("set priority to {priority}"),
+        AutomationAction::SetPriority { priority } => {
+            format!("set priority to {}", priority.as_str())
+        }
     }
 }
 

@@ -55,7 +55,7 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
   return {
     project_id: PROJECT_ID,
     description: null,
-    priority: 'medium',
+    priority: 'normal',
     section_id: null,
     position: 'a0',
     state: 'open',
@@ -87,7 +87,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
         id: TASK_ID,
         title: 'Write tests',
         description: 'Details',
-        priority: 'high',
+        priority: 'elevated',
         section_id: 'backlog',
         tags: ['one', 'two'],
       }),
@@ -149,7 +149,7 @@ describe('TaskDetail', () => {
     );
 
     expect(screen.getByText('Details')).toBeDefined();
-    expect((screen.getByLabelText('Priority') as HTMLSelectElement).value).toBe('high');
+    expect((screen.getByLabelText('Priority') as HTMLSelectElement).value).toBe('elevated');
     expect((screen.getByLabelText('Section') as HTMLSelectElement).value).toBe('backlog');
     expect(screen.getByText('one')).toBeDefined();
     expect(screen.getByText('two')).toBeDefined();
@@ -266,11 +266,11 @@ describe('TaskDetail', () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
-    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'low' } });
+    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'normal' } });
 
     await waitFor(() => {
       expect(enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'update_task', id: TASK_ID, priority: 'low' }),
+        expect.objectContaining({ kind: 'update_task', id: TASK_ID, priority: 'normal' }),
       );
     });
   });

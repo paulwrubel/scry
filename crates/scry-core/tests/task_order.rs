@@ -30,8 +30,8 @@ fn sorted_ids(mode: TaskSortingMode, mut tasks: Vec<Task>) -> Vec<Uuid> {
 #[test]
 fn manual_mode_orders_by_position() {
     let tasks = vec![
-        task(1, "first", "a1", Priority::Medium),
-        task(2, "second", "a0", Priority::Medium),
+        task(1, "first", "a1", Priority::Normal),
+        task(2, "second", "a0", Priority::Normal),
     ];
 
     assert_eq!(
@@ -43,7 +43,7 @@ fn manual_mode_orders_by_position() {
 #[test]
 fn priority_mode_orders_by_priority() {
     let tasks = vec![
-        task(1, "first", "a0", Priority::Minimal),
+        task(1, "first", "a0", Priority::Normal),
         task(2, "second", "a0", Priority::Critical),
     ];
 
@@ -56,8 +56,8 @@ fn priority_mode_orders_by_priority() {
 #[test]
 fn priority_mode_orders_same_priority_by_position() {
     let tasks = vec![
-        task(1, "first", "a1", Priority::High),
-        task(2, "second", "a0", Priority::High),
+        task(1, "first", "a1", Priority::Elevated),
+        task(2, "second", "a0", Priority::Elevated),
     ];
 
     assert_eq!(
@@ -69,8 +69,8 @@ fn priority_mode_orders_same_priority_by_position() {
 #[test]
 fn priority_mode_breaks_position_ties_by_id() {
     let tasks = vec![
-        task(2, "second", "a0", Priority::High),
-        task(1, "first", "a0", Priority::High),
+        task(2, "second", "a0", Priority::Elevated),
+        task(1, "first", "a0", Priority::Elevated),
     ];
 
     assert_eq!(
@@ -82,8 +82,8 @@ fn priority_mode_breaks_position_ties_by_id() {
 #[test]
 fn ids_break_ties_in_every_mode() {
     for mode in [TaskSortingMode::Manual, TaskSortingMode::Priority] {
-        let left = task(1, "same", "a0", Priority::Medium);
-        let right = task(2, "same", "a0", Priority::Medium);
+        let left = task(1, "same", "a0", Priority::Normal);
+        let right = task(2, "same", "a0", Priority::Normal);
 
         assert_eq!(compare_tasks(mode, &left, &right), Ordering::Less);
         assert_eq!(compare_tasks(mode, &right, &left), Ordering::Greater);

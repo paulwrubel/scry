@@ -47,7 +47,7 @@ pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<()
     }
     println!();
 
-    anstream::println!("Priority:    {}", color::priority_long(task.priority));
+    anstream::println!("Priority:    {}", task.priority.as_str());
     anstream::println!(
         "Section:     {}",
         color::status(

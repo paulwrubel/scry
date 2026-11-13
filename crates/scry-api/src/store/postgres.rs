@@ -154,7 +154,7 @@ struct TaskRow {
     project_id: ProjectId,
     title: String,
     description: Option<String>,
-    priority: i64,
+    priority: String,
     section_id: Option<Uuid>,
     position: String,
     state: String,
@@ -169,15 +169,14 @@ impl TryFrom<TaskRow> for Task {
 
     fn try_from(row: TaskRow) -> Result<Self, Self::Error> {
         let id = row.id;
-        let state = match row.state.as_str() {
-            "open" => TaskState::Open,
-            "closed" => TaskState::Closed,
-            other => {
-                return Err(StorageError::Database(format!(
-                    "task {id} has invalid state {other:?}"
-                )));
-            }
-        };
+        let state = row
+            .state
+            .parse::<TaskState>()
+            .map_err(|error| StorageError::Database(format!("task {id}: {error}")))?;
+        let priority = row
+            .priority
+            .parse::<Priority>()
+            .map_err(|error| StorageError::Database(format!("task {id}: {error}")))?;
 
         let external_identity: Option<ExternalIdentity> = row
             .external_identity
@@ -199,8 +198,7 @@ impl TryFrom<TaskRow> for Task {
             project_id: row.project_id,
             title: row.title,
             description: row.description,
-            priority: Priority::try_from(row.priority)
-                .map_err(|e| StorageError::Database(format!("invalid priority i64 value: {e}")))?,
+            priority,
             section_id: row.section_id,
             position: Position::parse(row.position)
                 .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
@@ -281,30 +279,6 @@ fn automation_from_fields(
     })
 }
 
-fn entity_type_from_field(value: &str) -> Result<EntityType, StorageError> {
-    match value {
-        "project" => Ok(EntityType::Project),
-        "section" => Ok(EntityType::Section),
-        "task" => Ok(EntityType::Task),
-        "note" => Ok(EntityType::Note),
-        "automation" => Ok(EntityType::Automation),
-        other => Err(StorageError::Database(format!(
-            "unknown change entity type '{other}'"
-        ))),
-    }
-}
-
-fn change_kind_from_field(value: &str) -> Result<ChangeKind, StorageError> {
-    match value {
-        "create" => Ok(ChangeKind::Create),
-        "update" => Ok(ChangeKind::Update),
-        "delete" => Ok(ChangeKind::Delete),
-        other => Err(StorageError::Database(format!(
-            "unknown change kind '{other}'"
-        ))),
-    }
-}
-
 #[async_trait]
 impl Store for PostgresStore {
     async fn create_task(
@@ -340,7 +314,7 @@ impl Store for PostgresStore {
             task.project_id,
             &task.title,
             task.description.as_deref(),
-            i64::from(task.priority),
+            task.priority.as_str(),
             task.section_id,
             task.position.as_str(),
             task.state.as_str(),
@@ -564,7 +538,7 @@ impl Store for PostgresStore {
             "#,
             &task.title,
             task.description.as_deref(),
-            i64::from(task.priority),
+            task.priority.as_str(),
             task.section_id,
             task.position.as_str(),
             task.state.as_str(),
@@ -1738,9 +1712,15 @@ impl Store for PostgresStore {
             .map(|row| {
                 Ok(Change {
                     seq: row.seq,
-                    entity_type: entity_type_from_field(&row.entity_type)?,
+                    entity_type: row
+                        .entity_type
+                        .parse::<EntityType>()
+                        .map_err(|error| StorageError::Database(error.to_string()))?,
                     entity_id: row.entity_id,
-                    kind: change_kind_from_field(&row.kind)?,
+                    kind: row
+                        .kind
+                        .parse::<ChangeKind>()
+                        .map_err(|error| StorageError::Database(error.to_string()))?,
                     operation_id: row.operation_id,
                     client_timestamp: row.client_timestamp,
                     field_values: row.field_values,

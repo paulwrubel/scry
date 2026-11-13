@@ -28,7 +28,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
         project_id: 'project-1',
         title: 'Task',
         description: null,
-        priority: 'medium',
+        priority: 'normal',
         section_id: 'section-1',
         position: 'a0',
         state: 'open',

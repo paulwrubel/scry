@@ -38,7 +38,7 @@ license: MIT
 Task arguments accept a full UUID or a unique handle prefix of at least 4 hex characters
 (case-insensitive, dashes optional at the canonical UUID positions).
 
-Priority is one of `minimal`, `low`, `medium`, `high`, `critical` (aliases `p5`-`p1`). An empty
+Priority is one of `normal`, `elevated`, or `critical`; `normal` is the default. An empty
 `--description` or `--tags` on `update` clears the field.
 
 `list` returns a flat JSON array of task objects; use `section_id` to associate tasks with sections. It includes

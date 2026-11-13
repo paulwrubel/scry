@@ -12,10 +12,8 @@ const ACTION_OPTIONS = [
 
 const PRIORITY_OPTIONS: readonly { label: string; value: Priority }[] = [
   { label: 'Critical', value: 'critical' },
-  { label: 'High', value: 'high' },
-  { label: 'Medium', value: 'medium' },
-  { label: 'Low', value: 'low' },
-  { label: 'Minimal', value: 'minimal' },
+  { label: 'Elevated', value: 'elevated' },
+  { label: 'Normal', value: 'normal' },
 ];
 
 function isPriority(value: string): value is Priority {
@@ -35,7 +33,7 @@ export function ActionEditor(props: ActionEditorProps) {
   const kind = action.kind;
   const moveSectionId =
     action.kind === 'move_to_section' ? action.section_id : (sections[0]?.id ?? null);
-  const priority = action.kind === 'set_priority' ? action.priority : 'medium';
+  const priority = action.kind === 'set_priority' ? action.priority : 'normal';
 
   function changeKind(value: string) {
     switch (value) {
@@ -52,7 +50,7 @@ export function ActionEditor(props: ActionEditorProps) {
         onChange({ kind: 'open_task' });
         return;
       case 'set_priority': {
-        const nextPriority = action.kind === 'set_priority' ? action.priority : 'medium';
+        const nextPriority = action.kind === 'set_priority' ? action.priority : 'normal';
         onChange({ kind: 'set_priority', priority: nextPriority });
         return;
       }

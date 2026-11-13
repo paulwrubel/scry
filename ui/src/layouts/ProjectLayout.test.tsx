@@ -24,7 +24,7 @@ function projectSnapshot(): ProjectSnapshot {
         project_id: PROJECT_ID,
         title: 'Task title',
         description: null,
-        priority: 'medium',
+        priority: 'normal',
         section_id: null,
         position: 'a0',
         state: 'open',

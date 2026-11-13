@@ -4,10 +4,8 @@ import type { TaskSortingMode } from '../generated/TaskSortingMode';
 
 const PRIORITY_RANK: Record<Priority, number> = {
   critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  minimal: 4,
+  elevated: 1,
+  normal: 2,
 };
 
 export function compareTasks(mode: TaskSortingMode, left: Task, right: Task): number {

@@ -9,7 +9,7 @@ import type { TaskState } from '@/generated/TaskState';
 import type { TaskFilter } from '@/utils/taskFilter';
 import { matchesTaskFilter } from '@/utils/taskFilter';
 
-const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'medium', 'low', 'minimal'];
+const PRIORITY_ORDER: Priority[] = ['critical', 'elevated', 'normal'];
 
 export type BoardGroup = {
   section: Section | null;

@@ -65,7 +65,7 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
   return {
     project_id: 'project-1',
     description: null,
-    priority: 'medium',
+    priority: 'normal',
     section_id: null,
     position: 'a0',
     state: 'open',
@@ -461,7 +461,13 @@ describe('BoardPage', () => {
     const project = projectSnapshot({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
-        task({ id: 'low', title: 'Low', section_id: 'backlog', position: 'a0', priority: 'low' }),
+        task({
+          id: 'normal',
+          title: 'Normal',
+          section_id: 'backlog',
+          position: 'a0',
+          priority: 'normal',
+        }),
         task({
           id: 'critical',
           title: 'Critical',
@@ -478,10 +484,12 @@ describe('BoardPage', () => {
       '/projects/project-1?sort=priority',
     );
 
-    const low = screen.getByText('Low');
+    const normal = screen.getByText('Normal');
     const critical = screen.getByText('Critical');
 
-    expect(critical.compareDocumentPosition(low) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      critical.compareDocumentPosition(normal) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('updates the sort URL param without enqueueing an operation', () => {
@@ -563,7 +571,7 @@ describe('BoardPage', () => {
         project_id: project.id,
         title: 'New task',
         description: null,
-        priority: 'medium',
+        priority: 'normal',
         section_id: 'backlog',
         position: 'a2',
         state: 'open',
@@ -716,7 +724,7 @@ describe('show priority', () => {
     viewport.isDesktop = false;
     const project = projectSnapshot({
       sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog', priority: 'high' })],
+      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog', priority: 'elevated' })],
     });
 
     renderBoard(
@@ -725,7 +733,7 @@ describe('show priority', () => {
       '/projects/project-1?state=open',
     );
 
-    expect(screen.queryByRole('img', { name: 'high priority' })).toBeNull();
+    expect(screen.queryByRole('img', { name: 'elevated priority' })).toBeNull();
 
     const toggle = screen.getByRole('switch', { name: 'Show priority' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
@@ -734,19 +742,19 @@ describe('show priority', () => {
 
     expect(screen.getByTestId('search').textContent).toBe('state=open&show_priority=true');
     expect(toggle.getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('img', { name: 'high priority' })).toBeDefined();
+    expect(screen.getByRole('img', { name: 'elevated priority' })).toBeDefined();
 
     fireEvent.click(toggle);
 
     expect(screen.getByTestId('search').textContent).toBe('state=open');
     expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(screen.queryByRole('img', { name: 'high priority' })).toBeNull();
+    expect(screen.queryByRole('img', { name: 'elevated priority' })).toBeNull();
   });
 
   it('keeps the labelled switch on desktop', () => {
     const project = projectSnapshot({
       sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog' })],
+      tasks: [task({ id: 'one', title: 'One', section_id: 'backlog', priority: 'elevated' })],
     });
 
     renderBoard(
@@ -758,7 +766,7 @@ describe('show priority', () => {
     const toggle = screen.getByRole('switch', { name: 'Show priority' });
     expect(toggle.getAttribute('aria-checked')).toBe('true');
     expect(screen.queryByRole('button', { name: 'Show priority' })).toBeNull();
-    expect(screen.getByRole('img', { name: 'medium priority' })).toBeDefined();
+    expect(screen.getByRole('img', { name: 'elevated priority' })).toBeDefined();
   });
 });
 

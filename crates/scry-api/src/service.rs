@@ -2908,7 +2908,7 @@ mod tests {
             project_id: Uuid::new_v4(),
             title: title.to_string(),
             description: description.map(String::from),
-            priority: Priority::Medium,
+            priority: Priority::Normal,
             section_id: None,
             position: Position::parse("a0").expect("a0 is a valid position"),
             state: TaskState::Open,
@@ -2925,7 +2925,7 @@ mod tests {
             project_id: Uuid::new_v4(),
             title: "task".to_string(),
             description: None,
-            priority: Priority::Medium,
+            priority: Priority::Normal,
             section_id,
             position: Position::parse(position).expect("valid position"),
             state: TaskState::Open,
@@ -3203,7 +3203,7 @@ mod tests {
         ));
         let mut op = lock_op(&task, None, None, None, None, None);
         if let OperationKind::UpdateTask { priority, tags, .. } = &mut op {
-            *priority = Some(Priority::High);
+            *priority = Some(Priority::Elevated);
             *tags = Some(Tags::from(vec!["urgent"]));
         }
 
@@ -3884,13 +3884,13 @@ mod tests {
         ));
         assert!(automation_action_is_noop(
             &AutomationAction::SetPriority {
-                priority: Priority::Medium
+                priority: Priority::Normal
             },
             &task
         ));
         assert!(!automation_action_is_noop(
             &AutomationAction::SetPriority {
-                priority: Priority::High
+                priority: Priority::Elevated
             },
             &task
         ));

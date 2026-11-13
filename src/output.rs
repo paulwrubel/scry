@@ -1,6 +1,5 @@
 //! Shared human and JSON output helpers.
 
-use crate::color;
 use crate::error::AppError;
 use crate::state::TaskWithNotes;
 use scry_core::ids::TaskId;
@@ -35,7 +34,7 @@ pub fn task_line(task: &TaskWithNotes, handles: &HashMap<TaskId, String>) -> Str
         .cloned()
         .unwrap_or_else(|| task.id.simple().to_string());
     let mut line = format!("  {}  {}", id, checkbox);
-    line.push_str(&format!("  {}", color::priority(task.priority)));
+    line.push_str(&format!("  {}", task.priority.as_str()));
     line.push_str(&format!("  {}", task.title));
 
     let tags = task

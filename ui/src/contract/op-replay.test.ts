@@ -39,7 +39,7 @@ function task(title: string): Task {
     project_id: PROJECT_ID,
     title,
     description: null,
-    priority: 'medium',
+    priority: 'normal',
     section_id: SECTION_ID,
     position: 'a0',
     state: 'open',
@@ -169,7 +169,7 @@ function updateAutomation(operationId: string): Operation {
     operation_version: 1,
     kind: 'update_automation',
     id: AUTOMATION_ID,
-    actions: [{ kind: 'set_priority', priority: 'high' }],
+    actions: [{ kind: 'set_priority', priority: 'elevated' }],
   };
 }
 
@@ -317,7 +317,7 @@ describe('automation replay', () => {
     const result = replayOperations(confirmed, [updateAutomation('op-update')]);
 
     expect(result.projects[0].automations[0].actions).toEqual([
-      { kind: 'set_priority', priority: 'high' },
+      { kind: 'set_priority', priority: 'elevated' },
     ]);
   });
 

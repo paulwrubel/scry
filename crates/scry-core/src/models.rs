@@ -3,12 +3,44 @@ use anstyle::AnsiColor;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use itertools::Itertools;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::fmt::{self, Display};
+use std::str::FromStr;
 use uuid::Uuid;
 
 pub use crate::ids::{AutomationId, NoteId, ProjectId, SectionId, TaskId};
+
+/// Why a stored enum name could not be parsed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseFieldError {
+    kind: &'static str,
+    value: String,
+    expected: &'static [&'static str],
+}
+
+impl ParseFieldError {
+    fn new(kind: &'static str, value: &str, expected: &'static [&'static str]) -> Self {
+        Self {
+            kind,
+            value: value.to_string(),
+            expected,
+        }
+    }
+}
+
+impl Display for ParseFieldError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "invalid {} {:?}; expected one of: {}",
+            self.kind,
+            self.value,
+            self.expected.join(", ")
+        )
+    }
+}
+
+impl std::error::Error for ParseFieldError {}
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
@@ -80,6 +112,30 @@ impl TaskState {
             Self::Open => "open",
             Self::Closed => "closed",
         }
+    }
+}
+
+impl FromStr for TaskState {
+    type Err = ParseFieldError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "open" | "Open" => Ok(Self::Open),
+            "closed" | "Closed" => Ok(Self::Closed),
+            _ => Err(ParseFieldError::new(
+                "task state",
+                value,
+                &["open", "closed"],
+            )),
+        }
+    }
+}
+
+impl TryFrom<&str> for TaskState {
+    type Error = ParseFieldError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }
 
@@ -186,48 +242,55 @@ impl<'a> IntoIterator for &'a Tags {
     }
 }
 
+/// Ordered highest-first so the derived `Ord` sorts critical before elevated and normal.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    ValueEnum,
-    TryFromPrimitive,
-    IntoPrimitive,
-    strum::Display,
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum,
 )]
 #[serde(rename_all = "kebab-case")]
-#[repr(i64)]
 pub enum Priority {
-    #[value(alias("p5"))]
-    Minimal = 5,
-    #[value(alias("p4"))]
-    Low = 4,
+    Critical,
+    #[serde(alias = "high")]
+    Elevated,
     #[default]
-    #[value(alias("p3"))]
-    Medium = 3,
-    #[value(alias("p2"))]
-    High = 2,
-    #[value(alias("p1"))]
-    Critical = 1,
+    #[serde(alias = "medium")]
+    #[serde(alias = "low")]
+    #[serde(alias = "minimal")]
+    Normal,
 }
 
 impl Priority {
-    pub fn color(&self) -> Color {
+    pub fn as_str(&self) -> &'static str {
         match self {
-            Priority::Critical => Color::Red,
-            Priority::High => Color::Yellow,
-            Priority::Medium => Color::Cyan,
-            Priority::Low => Color::Blue,
-            Priority::Minimal => Color::Magenta,
+            Self::Critical => "critical",
+            Self::Elevated => "elevated",
+            Self::Normal => "normal",
         }
+    }
+}
+
+impl FromStr for Priority {
+    type Err = ParseFieldError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "critical" | "Critical" => Ok(Self::Critical),
+            "elevated" | "Elevated" => Ok(Self::Elevated),
+            "normal" | "Normal" => Ok(Self::Normal),
+            _ => Err(ParseFieldError::new(
+                "priority",
+                value,
+                &["critical", "elevated", "normal"],
+            )),
+        }
+    }
+}
+
+impl TryFrom<&str> for Priority {
+    type Error = ParseFieldError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }
 
@@ -401,6 +464,33 @@ impl EntityType {
     }
 }
 
+impl FromStr for EntityType {
+    type Err = ParseFieldError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "project" | "Project" => Ok(Self::Project),
+            "section" | "Section" => Ok(Self::Section),
+            "task" | "Task" => Ok(Self::Task),
+            "note" | "Note" => Ok(Self::Note),
+            "automation" | "Automation" => Ok(Self::Automation),
+            _ => Err(ParseFieldError::new(
+                "change entity type",
+                value,
+                &["project", "section", "task", "note", "automation"],
+            )),
+        }
+    }
+}
+
+impl TryFrom<&str> for EntityType {
+    type Error = ParseFieldError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Entity {
     Project(ProjectId),
@@ -451,6 +541,31 @@ impl ChangeKind {
     }
 }
 
+impl FromStr for ChangeKind {
+    type Err = ParseFieldError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "create" | "Create" => Ok(Self::Create),
+            "update" | "Update" => Ok(Self::Update),
+            "delete" | "Delete" => Ok(Self::Delete),
+            _ => Err(ParseFieldError::new(
+                "change kind",
+                value,
+                &["create", "update", "delete"],
+            )),
+        }
+    }
+}
+
+impl TryFrom<&str> for ChangeKind {
+    type Error = ParseFieldError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
 /// One row of the changes log, as written by the server.
 ///
 /// `seq` is assigned by the database and defines the row's order. Writers pass
@@ -492,4 +607,48 @@ pub struct ProjectSnapshot {
     pub notes: Vec<Note>,
     #[serde(default)]
     pub automations: Vec<Automation>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ChangeKind, EntityType, Priority, TaskState};
+
+    #[test]
+    fn parses_kebab_and_variant_names() {
+        assert_eq!("critical".parse::<Priority>(), Ok(Priority::Critical));
+        assert_eq!("Critical".parse::<Priority>(), Ok(Priority::Critical));
+        assert_eq!("elevated".parse::<Priority>(), Ok(Priority::Elevated));
+        assert_eq!("Elevated".parse::<Priority>(), Ok(Priority::Elevated));
+        assert_eq!("normal".parse::<Priority>(), Ok(Priority::Normal));
+        assert_eq!("Normal".parse::<Priority>(), Ok(Priority::Normal));
+        assert_eq!(Priority::try_from("Elevated"), Ok(Priority::Elevated));
+    }
+
+    #[test]
+    fn rejects_unknown_priorities() {
+        assert!("high".parse::<Priority>().is_err());
+        assert!("".parse::<Priority>().is_err());
+        assert!("CRITICAL".parse::<Priority>().is_err());
+    }
+
+    #[test]
+    fn parses_stored_enum_names() {
+        assert_eq!("open".parse::<TaskState>(), Ok(TaskState::Open));
+        assert_eq!("Closed".parse::<TaskState>(), Ok(TaskState::Closed));
+        assert_eq!(
+            "automation".parse::<EntityType>(),
+            Ok(EntityType::Automation)
+        );
+        assert_eq!("Task".parse::<EntityType>(), Ok(EntityType::Task));
+        assert_eq!("delete".parse::<ChangeKind>(), Ok(ChangeKind::Delete));
+        assert_eq!("Update".parse::<ChangeKind>(), Ok(ChangeKind::Update));
+        assert_eq!(EntityType::try_from("Section"), Ok(EntityType::Section));
+    }
+
+    #[test]
+    fn rejects_unknown_stored_enum_names() {
+        assert!("reopened".parse::<TaskState>().is_err());
+        assert!("filter".parse::<EntityType>().is_err());
+        assert!("archive".parse::<ChangeKind>().is_err());
+    }
 }

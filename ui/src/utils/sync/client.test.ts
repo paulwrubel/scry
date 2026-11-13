@@ -460,7 +460,7 @@ function task(overrides: Partial<Task> = {}): Task {
     project_id: PROJECT_ID,
     title: 'Task',
     description: null,
-    priority: 'medium',
+    priority: 'normal',
     section_id: null,
     position: 'a0',
     state: 'open',
