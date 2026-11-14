@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    tags,\n                    created_at,\n                    external_identity,\n                    external_metadata\n                FROM tasks\n                WHERE section_id = $1\n                ORDER BY position ASC, id ASC\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    tags,\n                    created_at,\n                    updated_at,\n                    external_identity,\n                    external_metadata\n                FROM tasks\n                WHERE section_id = $1\n                ORDER BY position ASC, id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -115,6 +115,17 @@
       },
       {
         "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
         "name": "external_identity",
         "type_info": "Jsonb",
         "origin": {
@@ -125,7 +136,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "external_metadata",
         "type_info": "Jsonb",
         "origin": {
@@ -152,9 +163,10 @@
       false,
       false,
       false,
+      false,
       true,
       true
     ]
   },
-  "hash": "2a4ec41266f5a423a853459505f53d7e2037c920d35cd2f432a0a321e8bb997e"
+  "hash": "fc2d46e2a8d949964b9ef7802db5e527231dfe201993bf335c2c3115e083d460"
 }

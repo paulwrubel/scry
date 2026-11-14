@@ -73,6 +73,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 name: name.clone(),
                 description: description.clone(),
                 created_at: *created_at,
+                updated_at: *created_at,
             };
             if let Some(snapshot) = state.projects.iter_mut().find(|p| p.project.id == *id) {
                 snapshot.project = project;
@@ -113,6 +114,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 position: position.clone(),
                 color: *color,
                 created_at: *created_at,
+                updated_at: *created_at,
             };
             if let Some(snapshot) = state
                 .projects
@@ -168,6 +170,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 state: *task_state,
                 tags: tags.clone(),
                 created_at: *created_at,
+                updated_at: *created_at,
                 external_identity: external_identity.clone(),
                 external_metadata: external_metadata.as_deref().cloned(),
             };
@@ -237,6 +240,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 task_id: *task_id,
                 contents: contents.clone(),
                 created_at: *created_at,
+                updated_at: *created_at,
             };
             if let Some(snapshot) = state
                 .projects
@@ -267,6 +271,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 trigger: trigger.clone(),
                 actions: actions.clone(),
                 created_at: *created_at,
+                updated_at: *created_at,
             };
             if let Some(snapshot) = state
                 .projects

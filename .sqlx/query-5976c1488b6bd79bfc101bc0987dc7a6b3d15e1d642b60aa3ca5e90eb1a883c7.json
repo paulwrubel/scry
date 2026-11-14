@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    name,\n                    position,\n                    color,\n                    created_at\n                FROM sections\n                WHERE project_id = $1\n                ORDER BY position ASC, id ASC\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    trigger,\n                    actions,\n                    created_at,\n                    updated_at\n                FROM automations\n                WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "sections",
+            "table": "automations",
             "name": "id"
           }
         }
@@ -20,52 +20,52 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "sections",
+            "table": "automations",
             "name": "project_id"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "name",
-        "type_info": "Text",
+        "name": "trigger",
+        "type_info": "Jsonb",
         "origin": {
           "Table": {
-            "table": "sections",
-            "name": "name"
+            "table": "automations",
+            "name": "trigger"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "position",
-        "type_info": "Text",
+        "name": "actions",
+        "type_info": "Jsonb",
         "origin": {
           "Table": {
-            "table": "sections",
-            "name": "position"
+            "table": "automations",
+            "name": "actions"
           }
         }
       },
       {
         "ordinal": 4,
-        "name": "color",
-        "type_info": "Text",
+        "name": "created_at",
+        "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "sections",
-            "name": "color"
+            "table": "automations",
+            "name": "created_at"
           }
         }
       },
       {
         "ordinal": 5,
-        "name": "created_at",
+        "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "sections",
-            "name": "created_at"
+            "table": "automations",
+            "name": "updated_at"
           }
         }
       }
@@ -80,9 +80,9 @@
       false,
       false,
       false,
-      true,
+      false,
       false
     ]
   },
-  "hash": "4914d62c8a0b4f78de83f70cbc7873a7ed6b7c6a8690287ecf120b33975abcd4"
+  "hash": "5976c1488b6bd79bfc101bc0987dc7a6b3d15e1d642b60aa3ca5e90eb1a883c7"
 }

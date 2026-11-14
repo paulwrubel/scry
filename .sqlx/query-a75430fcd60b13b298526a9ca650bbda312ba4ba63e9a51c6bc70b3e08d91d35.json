@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE sections\n                SET name = $1, color = $2, position = $3, updated_at = $4\n                WHERE id = $5\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a75430fcd60b13b298526a9ca650bbda312ba4ba63e9a51c6bc70b3e08d91d35"
+}

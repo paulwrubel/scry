@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT id, name, description, created_at\n                FROM projects\n                ORDER BY name ASC\n            ",
+  "query": "\n                SELECT id, name, description, created_at, updated_at\n                FROM projects\n                ORDER BY name ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "updated_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -55,8 +66,9 @@
       false,
       false,
       true,
+      false,
       false
     ]
   },
-  "hash": "d52cc9cc67260ed43dd433e32b33ac3fef82c044271358fb76810bda52230aa6"
+  "hash": "c5bced387d332611a92e37e273cad14dc21cc8bd35b6a095fa3136f0d6841ab2"
 }

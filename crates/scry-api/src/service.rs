@@ -190,6 +190,7 @@ impl ProjectService {
         let section_id = section.as_ref().map(|section| section.id);
         let position = self.append_position(project.id, section_id).await?;
 
+        let created_at = Utc::now();
         let task = Task {
             id: Uuid::new_v4(),
             project_id: project.id,
@@ -202,7 +203,8 @@ impl ProjectService {
             position: position.clone(),
             state: TaskState::Open,
             tags: input.tags.unwrap_or_default(),
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
             external_identity: input.external_identity,
             external_metadata: input.external_metadata,
         };
@@ -248,6 +250,7 @@ impl ProjectService {
         let position =
             key_between(Some(&source.position), next_position).map_err(position_error)?;
 
+        let created_at = Utc::now();
         let task = Task {
             id: Uuid::new_v4(),
             project_id: source.project_id,
@@ -258,7 +261,8 @@ impl ProjectService {
             position: position.clone(),
             state: source.state,
             tags: source.tags,
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
             external_identity: source.external_identity.clone(),
             external_metadata: source.external_metadata.clone(),
         };
@@ -515,11 +519,13 @@ impl ProjectService {
         contents: String,
     ) -> Result<Comment, ServiceError> {
         self.require_task(task_id).await?;
+        let created_at = Utc::now();
         let comment = Comment {
             id: Uuid::new_v4(),
             task_id,
             contents,
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
         };
         let op = new_operation(
             Uuid::new_v4(),
@@ -669,6 +675,7 @@ impl ProjectService {
             position: position.clone(),
             color,
             created_at,
+            updated_at: created_at,
         };
         let operation = new_operation(
             Uuid::new_v4(),
@@ -903,12 +910,14 @@ impl ProjectService {
         actions: Vec<AutomationAction>,
     ) -> Result<Automation, ServiceError> {
         let project = self.require_project(project_id).await?;
+        let created_at = Utc::now();
         let automation = Automation {
             id: Uuid::new_v4(),
             project_id: project.id,
             trigger,
             actions: actions.clone(),
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
         };
         let op = new_operation(
             Uuid::new_v4(),
@@ -1039,11 +1048,13 @@ impl ProjectService {
         name: String,
         description: Option<String>,
     ) -> Result<Project, ServiceError> {
+        let created_at = Utc::now();
         let project = Project {
             id: Uuid::new_v4(),
             name,
             description: description.filter(|description| !description.is_empty()),
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
         };
 
         if self.get_project_by_name(&project.name).await?.is_some() {
@@ -1415,6 +1426,7 @@ impl ProjectService {
                         .clone()
                         .filter(|description| !description.is_empty()),
                     created_at: *created_at,
+                    updated_at: *created_at,
                 };
                 self.store
                     .create_project(project.clone(), Some(&mut **tx))
@@ -1543,6 +1555,7 @@ impl ProjectService {
                     position: position.clone(),
                     color: *color,
                     created_at: *created_at,
+                    updated_at: *created_at,
                 };
                 self.store
                     .create_section(section.clone(), Some(&mut **tx))
@@ -1764,6 +1777,7 @@ impl ProjectService {
                     state: *state,
                     tags: tags.clone(),
                     created_at: *created_at,
+                    updated_at: *created_at,
                     external_identity: external_identity.clone(),
                     external_metadata: external_metadata.as_deref().cloned(),
                 };
@@ -1874,6 +1888,7 @@ impl ProjectService {
                     task_id: *task_id,
                     contents: contents.clone(),
                     created_at: *created_at,
+                    updated_at: *created_at,
                 };
                 self.store
                     .create_comment(comment.clone(), Some(&mut **tx))
@@ -1991,6 +2006,7 @@ impl ProjectService {
                     trigger: trigger.clone(),
                     actions: actions.clone(),
                     created_at: *created_at,
+                    updated_at: *created_at,
                 };
                 self.store
                     .create_automation(automation.clone(), Some(&mut **tx))
@@ -2941,6 +2957,7 @@ mod tests {
     use crate::error::AppError;
 
     fn task(title: &str, description: Option<&str>) -> Task {
+        let created_at = Utc::now();
         Task {
             id: Uuid::new_v4(),
             project_id: Uuid::new_v4(),
@@ -2951,13 +2968,15 @@ mod tests {
             position: Position::parse("a0").expect("a0 is a valid position"),
             state: TaskState::Open,
             tags: Tags::from(vec!["alpha"]),
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
             external_identity: None,
             external_metadata: None,
         }
     }
 
     fn task_at(id: TaskId, section_id: Option<SectionId>, position: &str) -> Task {
+        let created_at = Utc::now();
         Task {
             id,
             project_id: Uuid::new_v4(),
@@ -2968,7 +2987,8 @@ mod tests {
             position: Position::parse(position).expect("valid position"),
             state: TaskState::Open,
             tags: Tags::default(),
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
             external_identity: None,
             external_metadata: None,
         }
@@ -3276,13 +3296,15 @@ mod tests {
     }
 
     fn section(name: &str, position: &str) -> Section {
+        let created_at = Utc::now();
         Section {
             id: Uuid::new_v4(),
             project_id: Uuid::new_v4(),
             name: name.to_string(),
             position: Position::parse(position).expect("valid position"),
             color: None,
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
         }
     }
 
@@ -3739,13 +3761,15 @@ mod tests {
     fn automation_references_section_in_trigger_or_actions() {
         let section_id = Uuid::new_v4();
         let other_id = Uuid::new_v4();
+        let created_at = Utc::now();
 
         let triggered = Automation {
             id: Uuid::new_v4(),
             project_id: Uuid::new_v4(),
             trigger: AutomationTrigger::TaskEntersSection { section_id },
             actions: vec![AutomationAction::CloseTask],
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
         };
         assert!(triggered.references_section(section_id));
         assert!(!triggered.references_section(other_id));
@@ -3757,7 +3781,8 @@ mod tests {
             actions: vec![AutomationAction::MoveToSection {
                 section_id: Some(section_id),
             }],
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
         };
         assert!(actioned.references_section(section_id));
         assert!(!actioned.references_section(other_id));
@@ -3767,7 +3792,8 @@ mod tests {
             project_id: Uuid::new_v4(),
             trigger: AutomationTrigger::TaskClosed,
             actions: vec![AutomationAction::OpenTask],
-            created_at: Utc::now(),
+            created_at,
+            updated_at: created_at,
         };
         assert!(!unrelated.references_section(section_id));
     }

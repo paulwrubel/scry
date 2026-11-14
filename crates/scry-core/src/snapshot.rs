@@ -951,6 +951,7 @@ mod tests {
             name: name.to_string(),
             description: None,
             created_at: at(),
+            updated_at: at(),
         }
     }
 
@@ -962,6 +963,7 @@ mod tests {
             position: position("a0"),
             color: None,
             created_at: at(),
+            updated_at: at(),
         }
     }
 
@@ -977,6 +979,7 @@ mod tests {
             state: TaskState::Open,
             tags: Tags::default(),
             created_at: at(),
+            updated_at: at(),
             external_identity: None,
             external_metadata: None,
         }
@@ -988,6 +991,7 @@ mod tests {
             task_id,
             contents: "note".to_string(),
             created_at: at(),
+            updated_at: at(),
         }
     }
 
@@ -1114,6 +1118,7 @@ mod tests {
                 section_id: Some(section_id),
             }],
             created_at: at(),
+            updated_at: at(),
         });
         let original = snapshot_file(vec![document]);
 
@@ -1273,6 +1278,7 @@ mod import_tests {
             name: name.to_string(),
             description: None,
             created_at: at(),
+            updated_at: at(),
         }
     }
 
@@ -1284,6 +1290,7 @@ mod import_tests {
             position: Position::parse("a0").unwrap(),
             color: None,
             created_at: at(),
+            updated_at: at(),
         }
     }
 
@@ -1299,6 +1306,7 @@ mod import_tests {
             state: TaskState::Open,
             tags: Tags::default(),
             created_at: at(),
+            updated_at: at(),
             external_identity: None,
             external_metadata: None,
         }
@@ -1310,6 +1318,7 @@ mod import_tests {
             task_id,
             contents: contents.to_string(),
             created_at: at(),
+            updated_at: at(),
         }
     }
 
@@ -1948,6 +1957,7 @@ mod import_tests {
                 section_id: Some(section_id),
             }],
             created_at: at(),
+            updated_at: at(),
         });
 
         let incoming = file(vec![incoming_document]);

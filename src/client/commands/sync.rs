@@ -466,6 +466,7 @@ mod tests {
             state: TaskState::Open,
             tags: Tags::default(),
             created_at: timestamp("2024-01-01T00:00:00Z"),
+            updated_at: timestamp("2024-01-01T00:00:00Z"),
             external_identity: None,
             external_metadata: metadata,
         }
