@@ -4,16 +4,11 @@ import type { AutomationTrigger } from '@/generated/AutomationTrigger';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
+import { PRIORITY_LABELS } from '@/data/priority';
 import { newId } from '@/utils/uuid';
 
 /** Mirrors `MAX_AUTOMATION_ACTIONS` in the Rust core. */
 export const MAX_AUTOMATION_ACTIONS = 1;
-
-const PRIORITY_LABELS = {
-  critical: 'Critical',
-  elevated: 'Elevated',
-  normal: 'Normal',
-} as const;
 
 export function sameAutomationTrigger(a: AutomationTrigger, b: AutomationTrigger): boolean {
   if (a.kind !== b.kind) {

@@ -1,4 +1,5 @@
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
+import { TASK_SORTING_MODE_LABELS } from '@/data/taskView';
 
 export const TASK_SORTING_PARAM = 'sort';
 
@@ -9,8 +10,8 @@ export const DEFAULT_TASK_SORTING_MODE: TaskSortingMode = 'manual';
 export const TASK_SORTING_MODES: readonly TaskSortingMode[] = ['manual', 'priority'];
 
 export const TASK_SORTING_OPTIONS: readonly { value: TaskSortingMode; label: string }[] = [
-  { value: 'manual', label: 'Manual' },
-  { value: 'priority', label: 'Priority' },
+  { value: 'manual', label: TASK_SORTING_MODE_LABELS.manual },
+  { value: 'priority', label: TASK_SORTING_MODE_LABELS.priority },
 ];
 
 export function isTaskSortingMode(value: string): value is TaskSortingMode {

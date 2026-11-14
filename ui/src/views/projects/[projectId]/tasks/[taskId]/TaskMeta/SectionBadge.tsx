@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { HiChevronDown } from 'react-icons/hi2';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { SECTION_COLOR_HEX } from '@/utils/sections/color';
-import { CHEVRON_CLASS, SELECT_CLASS } from './constants';
+import { MetaSelect } from './MetaSelect';
 
 export type SectionBadgeProps = {
   task: Task;
@@ -37,22 +36,12 @@ export function SectionBadge(props: SectionBadgeProps) {
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="relative inline-flex">
-        <select
-          aria-label="Section"
-          value={task.section_id ?? ''}
-          disabled={saving}
-          onChange={(event) => void change(event.target.value)}
-          className={SELECT_CLASS}
-        >
-          <option value="">No section</option>
-          {project.sections.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {candidate.name}
-            </option>
-          ))}
-        </select>
+    <MetaSelect
+      ariaLabel="Section"
+      value={task.section_id ?? ''}
+      disabled={saving}
+      onChange={(value) => void change(value)}
+      dot={
         <span
           aria-hidden="true"
           className={`pointer-events-none absolute top-1/2 left-2.5 h-2 w-2 -translate-y-1/2 rounded-full ${
@@ -62,13 +51,15 @@ export function SectionBadge(props: SectionBadgeProps) {
             sectionColor === null ? undefined : { backgroundColor: SECTION_COLOR_HEX[sectionColor] }
           }
         />
-        <HiChevronDown aria-hidden="true" className={CHEVRON_CLASS} />
-      </div>
-      {error === null ? null : (
-        <p className="text-danger text-xs" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
+      }
+      error={error}
+    >
+      <option value="">No section</option>
+      {project.sections.map((candidate) => (
+        <option key={candidate.id} value={candidate.id}>
+          {candidate.name}
+        </option>
+      ))}
+    </MetaSelect>
   );
 }

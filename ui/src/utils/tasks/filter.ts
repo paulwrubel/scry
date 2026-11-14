@@ -1,5 +1,6 @@
 import type { Task } from '@/generated/Task';
 import type { TaskState } from '@/generated/TaskState';
+import { TASK_STATE_LABELS } from '@/data/taskState';
 
 export const TASK_STATES = ['open', 'closed'] as const;
 
@@ -12,8 +13,8 @@ export type TaskFilter = {
 export type TaskFilterStatus = TaskState | 'all';
 
 export const TASK_FILTER_STATUS_OPTIONS: readonly { value: TaskFilterStatus; label: string }[] = [
-  { value: 'open', label: 'Open' },
-  { value: 'closed', label: 'Closed' },
+  { value: 'open', label: TASK_STATE_LABELS.open },
+  { value: 'closed', label: TASK_STATE_LABELS.closed },
   { value: 'all', label: 'All' },
 ];
 

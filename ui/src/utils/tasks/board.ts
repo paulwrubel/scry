@@ -6,10 +6,9 @@ import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import type { TaskState } from '@/generated/TaskState';
+import { PRIORITIES } from '@/data/priority';
 import type { TaskFilter } from '@/utils/tasks/filter';
 import { matchesTaskFilter } from '@/utils/tasks/filter';
-
-const PRIORITY_ORDER: Priority[] = ['critical', 'elevated', 'normal'];
 
 export type BoardGroup = {
   section: Section | null;
@@ -212,10 +211,10 @@ export function previewAtPointer(
         insertAt = destinationIds.indexOf(scoped[scoped.length - 1].id) + 1;
       }
     } else {
-      const rank = PRIORITY_ORDER.indexOf(scope.priority);
+      const rank = PRIORITIES.indexOf(scope.priority);
       const at = destinationIds.findIndex((id) => {
         const priority = scope.priorityOf(id);
-        return priority !== null && PRIORITY_ORDER.indexOf(priority) > rank;
+        return priority !== null && PRIORITIES.indexOf(priority) > rank;
       });
       insertAt = at === -1 ? destinationIds.length : at;
     }
