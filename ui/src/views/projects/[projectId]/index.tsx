@@ -50,8 +50,8 @@ import {
   itemsFromGroups,
   planSectionMove,
   sectionIdFromGroup,
-} from './board';
-import { useTaskDragPreview } from './useTaskDragPreview';
+} from '@/utils/tasks/board';
+import { useTaskDragPreview } from '@/hooks/useTaskDragPreview';
 
 const defaultActivationConstraints = PointerSensor.defaults.activationConstraints;
 

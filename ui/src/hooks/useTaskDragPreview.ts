@@ -2,14 +2,14 @@ import type { DragMoveEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/reac
 import { isSortable } from '@dnd-kit/react/sortable';
 import type { Priority } from '@/generated/Priority';
 import { useRef, useState } from 'react';
-import type { BoardGroup, DragLayout, TaskSlot } from './board';
+import type { BoardGroup, DragLayout, TaskSlot } from '@/utils/tasks/board';
 import {
   groupContaining,
   groupKey,
   isNoSectionGroupKey,
   itemsFromGroups,
   previewAtPointer,
-} from './board';
+} from '@/utils/tasks/board';
 
 export type TaskDragPreview = {
   dragItems: Record<string, string[]> | null;

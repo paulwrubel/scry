@@ -5,7 +5,7 @@ import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import { automationReferencesSection, describeAutomation } from '@/utils/automations/operations';
 import { BoardColumn } from './BoardColumn';
-import { columnDragId, groupKey, type BoardGroup } from './board';
+import { columnDragId, groupKey, type BoardGroup } from '@/utils/tasks/board';
 
 export type SectionBoardGroup = BoardGroup & { section: Section };
 
