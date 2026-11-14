@@ -1,6 +1,6 @@
-import type { Priority } from '../generated/Priority';
-import type { Task } from '../generated/Task';
-import type { TaskSortingMode } from '../generated/TaskSortingMode';
+import type { Priority } from '@/generated/Priority';
+import type { Task } from '@/generated/Task';
+import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 
 const PRIORITY_RANK: Record<Priority, number> = {
   critical: 0,

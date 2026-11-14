@@ -1,16 +1,16 @@
-import type { Automation } from '../../generated/Automation';
-import type { AutomationAction } from '../../generated/AutomationAction';
-import type { Change } from '../../generated/Change';
-import type { Color } from '../../generated/Color';
-import type { Comment } from '../../generated/Comment';
-import type { ExternalIdentity } from '../../generated/ExternalIdentity';
-import type { ExternalMetadata } from '../../generated/ExternalMetadata';
-import type { Priority } from '../../generated/Priority';
-import type { Project } from '../../generated/Project';
-import type { ProjectSnapshot } from '../../generated/ProjectSnapshot';
-import type { Section } from '../../generated/Section';
-import type { Task } from '../../generated/Task';
-import type { TaskState } from '../../generated/TaskState';
+import type { Automation } from '@/generated/Automation';
+import type { AutomationAction } from '@/generated/AutomationAction';
+import type { Change } from '@/generated/Change';
+import type { Color } from '@/generated/Color';
+import type { Comment } from '@/generated/Comment';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
+import type { ExternalMetadata } from '@/generated/ExternalMetadata';
+import type { Priority } from '@/generated/Priority';
+import type { Project } from '@/generated/Project';
+import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import type { Section } from '@/generated/Section';
+import type { Task } from '@/generated/Task';
+import type { TaskState } from '@/generated/TaskState';
 import {
   findAutomation,
   findComment,

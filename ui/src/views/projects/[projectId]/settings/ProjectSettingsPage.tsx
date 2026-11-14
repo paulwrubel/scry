@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
-import { DeleteProjectModal } from '../../DeleteProjectModal';
+import { DeleteProjectModal } from '@/views/projects/DeleteProjectModal';
 import { AppSection } from './AppSection';
 import { AutomationsSection } from './AutomationsSection';
 import { ProjectSettingsForm } from './ProjectSettingsForm';

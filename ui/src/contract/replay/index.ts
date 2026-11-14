@@ -1,5 +1,5 @@
-import type { Change } from '../../generated/Change';
-import type { Operation } from '../../generated/Operation';
+import type { Change } from '@/generated/Change';
+import type { Operation } from '@/generated/Operation';
 import { applyChange } from './changes';
 import { applyOperation } from './operations';
 import type { ClientState } from './types';

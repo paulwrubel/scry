@@ -1,9 +1,9 @@
-import type { Automation } from '../../generated/Automation';
-import type { Comment } from '../../generated/Comment';
-import type { Project } from '../../generated/Project';
-import type { ProjectSnapshot } from '../../generated/ProjectSnapshot';
-import type { Section } from '../../generated/Section';
-import type { Task } from '../../generated/Task';
+import type { Automation } from '@/generated/Automation';
+import type { Comment } from '@/generated/Comment';
+import type { Project } from '@/generated/Project';
+import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import type { Section } from '@/generated/Section';
+import type { Task } from '@/generated/Task';
 import type { ClientState } from './types';
 
 export function findProject(state: ClientState, id: string): ProjectSnapshot | undefined {

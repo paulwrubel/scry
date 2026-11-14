@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { Automation } from '../../generated/Automation';
-import type { AutomationAction } from '../../generated/AutomationAction';
-import type { Change } from '../../generated/Change';
-import type { Comment } from '../../generated/Comment';
-import type { Operation } from '../../generated/Operation';
-import type { ProjectSnapshot } from '../../generated/ProjectSnapshot';
-import type { Section } from '../../generated/Section';
-import type { Task } from '../../generated/Task';
+import type { Automation } from '@/generated/Automation';
+import type { AutomationAction } from '@/generated/AutomationAction';
+import type { Change } from '@/generated/Change';
+import type { Comment } from '@/generated/Comment';
+import type { Operation } from '@/generated/Operation';
+import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import type { Section } from '@/generated/Section';
+import type { Task } from '@/generated/Task';
 import type { ClientState } from './index';
 import { applyChanges, replayOperations, visibleState } from './index';
 

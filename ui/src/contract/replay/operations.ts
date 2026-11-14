@@ -1,9 +1,9 @@
-import type { Automation } from '../../generated/Automation';
-import type { Comment } from '../../generated/Comment';
-import type { Operation } from '../../generated/Operation';
-import type { Project } from '../../generated/Project';
-import type { Section } from '../../generated/Section';
-import type { Task } from '../../generated/Task';
+import type { Automation } from '@/generated/Automation';
+import type { Comment } from '@/generated/Comment';
+import type { Operation } from '@/generated/Operation';
+import type { Project } from '@/generated/Project';
+import type { Section } from '@/generated/Section';
+import type { Task } from '@/generated/Task';
 import {
   findAutomation,
   findComment,

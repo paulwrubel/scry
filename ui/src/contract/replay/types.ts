@@ -1,4 +1,4 @@
-import type { ProjectSnapshot } from '../../generated/ProjectSnapshot';
+import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 
 export type ClientState = {
   projects: ProjectSnapshot[];
