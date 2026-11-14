@@ -139,6 +139,29 @@ export function moveTaskOperation(
   };
 }
 
+export function taskFieldOperations(
+  task: Task,
+  patch: TaskFieldPatch,
+  sectionId: string | null,
+  tasks: readonly Task[],
+): Operation[] {
+  const operations: Operation[] = [];
+
+  const update = updateTaskOperation(task, patch);
+  if (update !== null) {
+    operations.push(update);
+  }
+
+  if (sectionId !== task.section_id) {
+    const move = moveTaskOperation(task, sectionId, nextTaskPosition(tasks, sectionId));
+    if (move !== null) {
+      operations.push(move);
+    }
+  }
+
+  return operations;
+}
+
 export function setTaskStateOperation(task: Task, state: TaskState): Operation | null {
   if (task.state === state) {
     return null;

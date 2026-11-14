@@ -1,10 +1,21 @@
 import { Alert, Card } from 'flowbite-react';
 import { useState } from 'react';
+import type { Comment } from '@/generated/Comment';
+import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
-import { useTaskMutations } from '@/hooks/useTaskMutations';
+import { useEnqueue } from '@/hooks/useEnqueue';
 import type { TaskFieldPatch } from '@/utils/tasks/operations';
+import {
+  createCommentOperation,
+  deleteCommentOperation,
+  deleteTaskOperation,
+  externalIdentityOperation,
+  setTaskStateOperation,
+  taskFieldOperations,
+  updateCommentOperation,
+} from '@/utils/tasks/operations';
 import { DeleteTaskModal } from './DeleteTaskModal';
 import { ExternalLinkField } from './ExternalLinkField';
 import { CommentsSection } from './CommentsSection';
@@ -26,15 +37,7 @@ export function TaskDetail(props: TaskDetailProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const {
-    saveFields,
-    saveExternalIdentity,
-    toggleState,
-    deleteTask,
-    createComment,
-    updateComment,
-    deleteComment,
-  } = useTaskMutations(task, project);
+  const enqueue = useEnqueue();
 
   const comments = project.comments.filter((comment) => comment.task_id === task.id);
 
@@ -48,6 +51,37 @@ export function TaskDetail(props: TaskDetailProps) {
     };
   }
 
+  async function saveFields(nextPatch: TaskFieldPatch, sectionId: string | null) {
+    for (const operation of taskFieldOperations(task, nextPatch, sectionId, project.tasks)) {
+      await enqueue(operation);
+    }
+  }
+
+  async function saveExternalIdentity(identity: ExternalIdentity | null) {
+    const operation = externalIdentityOperation(task, identity);
+    if (operation !== null) {
+      await enqueue(operation);
+    }
+  }
+
+  async function createComment(contents: string) {
+    const operation = createCommentOperation(task, contents);
+    if (operation !== null) {
+      await enqueue(operation);
+    }
+  }
+
+  async function updateComment(comment: Comment, contents: string) {
+    const operation = updateCommentOperation(comment, contents);
+    if (operation !== null) {
+      await enqueue(operation);
+    }
+  }
+
+  async function deleteComment(comment: Comment) {
+    await enqueue(deleteCommentOperation(comment));
+  }
+
   const saveTitle = (title: string) => saveFields(patch({ title }), task.section_id);
   const saveDescription = (description: string) =>
     saveFields(patch({ description }), task.section_id);
@@ -57,7 +91,10 @@ export function TaskDetail(props: TaskDetailProps) {
 
   async function handleToggleState() {
     try {
-      await toggleState();
+      const operation = setTaskStateOperation(task, task.state === 'open' ? 'closed' : 'open');
+      if (operation !== null) {
+        await enqueue(operation);
+      }
       setError(null);
     } catch {
       setError('Could not update this task.');
@@ -66,7 +103,7 @@ export function TaskDetail(props: TaskDetailProps) {
 
   async function handleDelete() {
     try {
-      await deleteTask();
+      await enqueue(deleteTaskOperation(task));
       setConfirmingDelete(false);
       onClose();
     } catch {
