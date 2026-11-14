@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
+import { formatDate } from '@/utils/date';
 import { NewProjectModal } from './NewProjectModal';
 import { ProjectCard } from './ProjectCard';
 
@@ -87,7 +88,7 @@ export function ProjectsPage() {
                       <TableCell className="text-muted">{project.description || '—'}</TableCell>
                       <TableCell>{project.sections.length}</TableCell>
                       <TableCell>{project.tasks.length}</TableCell>
-                      <TableCell>{new Date(project.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatDate(project.created_at)}</TableCell>
                       <TableCell>
                         <Button size="xs" color="default" onClick={() => handleUse(project.id)}>
                           Use

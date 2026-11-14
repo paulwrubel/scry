@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/providers/Auth';
 import { useReplicaSnapshot } from '@/providers/Replica';
+import { formatDateTime } from '@/utils/date';
 import type { SyncError, SyncSnapshot } from '@/utils/sync';
 import { useSyncSnapshot } from './hook';
 
@@ -52,7 +53,7 @@ export function formatLastSyncedAt(value: string | null): string {
   if (Number.isNaN(date.getTime())) {
     return 'Never';
   }
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return formatDateTime(date);
 }
 
 export function deriveSyncStatus(input: DeriveSyncStatusInput): SyncStatusView {

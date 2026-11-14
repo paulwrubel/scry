@@ -17,6 +17,8 @@ export type AuthProviderProps = {
 
 type RefreshResult = string | null;
 
+const SIGN_IN_FAILED = 'Unable to sign in';
+
 export function AuthProvider(props: AuthProviderProps) {
   const { children, fetcher = fetch, baseUrl = getAPIURL(), channel } = props;
 
@@ -151,10 +153,10 @@ export function AuthProvider(props: AuthProviderProps) {
             // response.json() is untyped; access_token is validated immediately below
             body = (await response.json()) as AccessTokenResponse;
           } catch {
-            return { ok: false, message: 'Unable to sign in' };
+            return { ok: false, message: SIGN_IN_FAILED };
           }
           if (typeof body.access_token !== 'string' || body.access_token === '') {
-            return { ok: false, message: 'Unable to sign in' };
+            return { ok: false, message: SIGN_IN_FAILED };
           }
           applyAccessToken(body.access_token);
           setIsAuthLoading(false);
@@ -168,7 +170,7 @@ export function AuthProvider(props: AuthProviderProps) {
         if (response.status === 400) {
           return { ok: false, message: 'Authentication is disabled on this server' };
         }
-        return { ok: false, message: 'Unable to sign in' };
+        return { ok: false, message: SIGN_IN_FAILED };
       } catch {
         return { ok: false, message: 'Unable to reach the server' };
       }
