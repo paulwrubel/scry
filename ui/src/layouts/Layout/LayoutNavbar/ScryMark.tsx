@@ -5,5 +5,7 @@ export type ScryMarkProps = {
 };
 
 export function ScryMark(props: ScryMarkProps) {
-  return <img src={scryLogo} alt="" aria-hidden="true" className={props.className} />;
+  const { className } = props;
+
+  return <img src={scryLogo} alt="" aria-hidden="true" className={className} />;
 }

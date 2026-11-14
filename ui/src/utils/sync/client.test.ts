@@ -268,7 +268,7 @@ describe('sync client', () => {
 
     const fetcher = (async () => {
       throw new TypeError('network down');
-    }) as unknown as typeof fetch;
+    }) as typeof fetch;
     const client = createSyncClient({ replica: testReplica, fetcher, baseUrl: BASE_URL });
 
     await expect(client.sync()).rejects.toMatchObject({
@@ -413,7 +413,7 @@ function createFetcher(queued: QueuedResponses, requests: string[] = []): typeof
     throw new Error(`unexpected request: ${url}`);
   });
 
-  return mock as unknown as typeof fetch;
+  return mock as typeof fetch;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {

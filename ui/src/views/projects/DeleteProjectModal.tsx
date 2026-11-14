@@ -12,6 +12,7 @@ export type DeleteProjectModalProps = {
 
 export function DeleteProjectModal(props: DeleteProjectModalProps) {
   const { project, onClose, onDeleted } = props;
+
   const { deleteProject } = useProjectMutations(project);
 
   const [error, setError] = useState<string | null>(null);

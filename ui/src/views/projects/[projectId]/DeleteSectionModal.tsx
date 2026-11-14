@@ -11,6 +11,7 @@ export type DeleteSectionModalProps = {
 
 export function DeleteSectionModal(props: DeleteSectionModalProps) {
   const { sectionName, blockingAutomations, show, onClose, onDelete } = props;
+
   const blocked = blockingAutomations.length > 0;
 
   useCloseRequest(show, onClose);

@@ -24,6 +24,7 @@ export type NewProjectModalProps = {
 
 export function NewProjectModal(props: NewProjectModalProps) {
   const { existingNames, onClose, onCreated } = props;
+
   const { createProject } = useCreateProject();
 
   const [error, setError] = useState<string | null>(null);

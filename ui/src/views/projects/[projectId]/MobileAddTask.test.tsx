@@ -141,7 +141,7 @@ describe('MobileAddTask', () => {
   });
 
   it('lifts the sheet by the visual viewport inset', () => {
-    const viewport = new EventTarget() as unknown as VisualViewport;
+    const viewport = new EventTarget() as VisualViewport;
     Object.defineProperty(viewport, 'height', {
       configurable: true,
       value: window.innerHeight - 300,

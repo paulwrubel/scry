@@ -24,6 +24,7 @@ export type SectionColorPickerProps = {
 
 export function SectionColorPicker(props: SectionColorPickerProps) {
   const { color, onChange } = props;
+
   const [open, setOpen] = useState(false);
 
   function select(next: Color | null) {

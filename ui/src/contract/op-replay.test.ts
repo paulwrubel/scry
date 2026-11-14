@@ -275,7 +275,7 @@ describe('op replay', () => {
       task_sorting_mode: 'priority',
       show_priority: true,
       created_at: CREATED_AT,
-    } as unknown as Operation;
+    } as Operation;
 
     const result = replayOperations({ projects: [] }, [legacy]);
 
@@ -297,7 +297,7 @@ describe('op replay', () => {
       description: 'Updated',
       task_sorting_mode: 'priority',
       show_priority: false,
-    } as unknown as Operation;
+    } as Operation;
 
     const result = replayOperations(state(), [legacy]);
 

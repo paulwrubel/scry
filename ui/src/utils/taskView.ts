@@ -14,6 +14,8 @@ export const TASK_SORTING_OPTIONS: readonly { value: TaskSortingMode; label: str
 ];
 
 export function isTaskSortingMode(value: string): value is TaskSortingMode {
+  // safe upcast: includes() needs a wider element type to
+  // accept an arbitrary URL param string
   return (TASK_SORTING_MODES as readonly string[]).includes(value);
 }
 

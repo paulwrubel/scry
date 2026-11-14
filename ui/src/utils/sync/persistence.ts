@@ -53,6 +53,7 @@ function isPersistedSyncState(value: unknown): value is PersistedSyncState {
     return false;
   }
 
+  // the guard above proved value is a non-null object, but TS cannot index unknown
   const record = value as Record<string, unknown>;
   if (record.lastSyncedAt !== null && typeof record.lastSyncedAt !== 'string') {
     return false;
@@ -65,6 +66,7 @@ function isPersistedSyncState(value: unknown): value is PersistedSyncState {
     if (typeof item !== 'object' || item === null) {
       return false;
     }
+    // same guard as above: item is a non-null object, cast only to index its fields
     const rejected = item as Record<string, unknown>;
     return typeof rejected.operation_id === 'string' && isRejectionReason(rejected.reason);
   });

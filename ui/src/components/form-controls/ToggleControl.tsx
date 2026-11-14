@@ -7,6 +7,7 @@ export type ToggleControlProps = {
 
 export function ToggleControl(props: ToggleControlProps) {
   const { label } = props;
+
   const field = useFieldContext<boolean>();
 
   return (

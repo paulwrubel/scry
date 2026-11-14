@@ -23,6 +23,7 @@ function detectInstalled(): boolean {
     return true;
   }
 
+  // iOS Safari exposes navigator.standalone but the DOM lib does not declare it
   return (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
 
@@ -51,6 +52,7 @@ function detectMobile(): boolean {
 
 export function InstallPromptProvider(props: InstallPromptProviderProps) {
   const { children } = props;
+
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(detectInstalled);
   const [isIos] = useState(detectIos);
@@ -59,6 +61,7 @@ export function InstallPromptProvider(props: InstallPromptProviderProps) {
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
       event.preventDefault();
+      // the beforeinstallprompt event carries this payload but the DOM lib has no such type
       setDeferredPrompt(event as BeforeInstallPromptEvent);
     }
 

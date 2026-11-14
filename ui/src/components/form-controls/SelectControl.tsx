@@ -14,6 +14,7 @@ export type SelectControlProps = {
 
 export function SelectControl(props: SelectControlProps) {
   const { label, items } = props;
+
   const field = useFieldContext<string>();
   const error = field.state.meta.isTouched ? fieldErrorMessage(field.state.meta.errors) : null;
 

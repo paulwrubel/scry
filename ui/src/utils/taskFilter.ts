@@ -28,6 +28,7 @@ export const FILTER_TAGS_PARAM = 'tags';
 export const FILTER_SEARCH_PARAM = 'q';
 
 export function isTaskState(value: string): value is TaskState {
+  // widened because includes() must accept the URL-supplied string; every element is a string
   return (TASK_STATES as readonly string[]).includes(value);
 }
 

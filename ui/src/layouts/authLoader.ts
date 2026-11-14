@@ -20,6 +20,7 @@ export function bootstrapAuth(
       if (!response.ok) {
         return null;
       }
+      // response.json() is untyped; access_token is validated immediately below
       const body = (await response.json()) as AccessTokenResponse;
       if (typeof body.access_token !== 'string' || body.access_token === '') {
         return null;

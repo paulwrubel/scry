@@ -16,6 +16,7 @@ export type ProjectSettingsFormProps = {
 
 export function ProjectSettingsForm(props: ProjectSettingsFormProps) {
   const { project } = props;
+
   const { saveFields } = useProjectMutations(project);
 
   const [error, setError] = useState<string | null>(null);

@@ -60,6 +60,7 @@ export function AuthProvider(props: AuthProviderProps) {
     channelRef.current = active;
 
     function handleMessage(event: MessageEvent) {
+      // message event data is any-typed; widening to unknown lets the guard narrow from a safe type
       const data = event.data as unknown;
       if (!isAuthChannelMessage(data)) {
         return;
@@ -99,6 +100,7 @@ export function AuthProvider(props: AuthProviderProps) {
           resetBootstrapCache();
           return null;
         }
+        // response.json() is untyped; access_token is validated immediately below
         const body = (await response.json()) as AccessTokenResponse;
         if (typeof body.access_token !== 'string' || body.access_token === '') {
           resetBootstrapCache();
@@ -146,6 +148,7 @@ export function AuthProvider(props: AuthProviderProps) {
         if (response.ok) {
           let body: AccessTokenResponse;
           try {
+            // response.json() is untyped; access_token is validated immediately below
             body = (await response.json()) as AccessTokenResponse;
           } catch {
             return { ok: false, message: 'Unable to sign in' };

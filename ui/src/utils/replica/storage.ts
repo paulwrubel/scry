@@ -494,6 +494,7 @@ function storageError(error: unknown): ReplicaError {
   }
 
   const name =
+    // DOMException and Error subclasses carry name, but a guarded object has no known shape
     typeof error === 'object' && error !== null ? (error as { name?: unknown }).name : undefined;
 
   if (name === 'QuotaExceededError') {

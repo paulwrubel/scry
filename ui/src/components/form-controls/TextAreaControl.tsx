@@ -11,6 +11,7 @@ export type TextAreaControlProps = {
 
 export function TextAreaControl(props: TextAreaControlProps) {
   const { label, value, onChange, placeholder, rows = 4 } = props;
+
   const id = useId();
 
   return (

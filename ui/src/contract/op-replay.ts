@@ -284,7 +284,8 @@ function applyChange(state: ClientState, change: Change): void {
 function applyProjectChange(state: ClientState, change: Change): void {
   switch (change.kind) {
     case 'create': {
-      const project = change.field_values as unknown as Project;
+      // a create change carries the full serialized project, so the untyped field map matches the generated type
+      const project = change.field_values as Project;
       const existing = findProject(state, project.id);
       if (existing) {
         setProject(existing, project);
@@ -310,7 +311,8 @@ function applyProjectChange(state: ClientState, change: Change): void {
 function applySectionChange(state: ClientState, change: Change): void {
   switch (change.kind) {
     case 'create': {
-      const section = change.field_values as unknown as Section;
+      // a create change carries the full serialized section, so the untyped field map matches the generated type
+      const section = change.field_values as Section;
       const snapshot = findProject(state, section.project_id);
       if (snapshot) {
         upsertSection(snapshot, section);
@@ -334,7 +336,8 @@ function applySectionChange(state: ClientState, change: Change): void {
 function applyTaskChange(state: ClientState, change: Change): void {
   switch (change.kind) {
     case 'create': {
-      const task = change.field_values as unknown as Task;
+      // a create change carries the full serialized task, so the untyped field map matches the generated type
+      const task = change.field_values as Task;
       const snapshot = findProject(state, task.project_id);
       if (snapshot) {
         upsertTask(snapshot, task);
@@ -358,7 +361,8 @@ function applyTaskChange(state: ClientState, change: Change): void {
 function applyCommentChange(state: ClientState, change: Change): void {
   switch (change.kind) {
     case 'create': {
-      const comment = change.field_values as unknown as Comment;
+      // a create change carries the full serialized comment, so the untyped field map matches the generated type
+      const comment = change.field_values as Comment;
       const snapshot = findProjectForTask(state, comment.task_id);
       if (snapshot) {
         upsertComment(snapshot, comment);
@@ -387,7 +391,8 @@ function applyCommentChange(state: ClientState, change: Change): void {
 function applyAutomationChange(state: ClientState, change: Change): void {
   switch (change.kind) {
     case 'create': {
-      const automation = change.field_values as unknown as Automation;
+      // a create change carries the full serialized automation, so the untyped field map matches the generated type
+      const automation = change.field_values as Automation;
       const snapshot = findProject(state, automation.project_id);
       if (snapshot) {
         upsertAutomation(snapshot, automation);
@@ -398,6 +403,7 @@ function applyAutomationChange(state: ClientState, change: Change): void {
       const automation = findAutomation(state, change.entity_id);
       if (automation) {
         if (Array.isArray(change.field_values.actions)) {
+          // the Array.isArray guard proves this is an array of serialized actions
           automation.actions = change.field_values.actions as AutomationAction[];
         }
         if (typeof change.field_values.updated_at === 'string') {
@@ -430,6 +436,7 @@ function applySectionValues(section: Section, values: Record<string, unknown>): 
     section.name = values.name;
   }
   if ('color' in values) {
+    // the typeof guard proves a string, and the server only emits valid Color literals
     section.color = typeof values.color === 'string' ? (values.color as Color) : null;
   }
   if (typeof values.position === 'string') {
@@ -448,12 +455,14 @@ function applyTaskValues(task: Task, values: Record<string, unknown>): void {
     task.description = typeof values.description === 'string' ? values.description : null;
   }
   if (typeof values.priority === 'string') {
+    // the typeof guard proves a string, and the server only emits valid Priority literals
     task.priority = values.priority as Priority;
   }
   if (Array.isArray(values.tags)) {
     task.tags = values.tags.filter((tag): tag is string => typeof tag === 'string');
   }
   if (typeof values.state === 'string') {
+    // the typeof guard proves a string, and the server only emits valid TaskState literals
     task.state = values.state as TaskState;
   }
   if ('section_id' in values) {
