@@ -15,8 +15,8 @@ export function TaskFields(props: TaskFieldsProps) {
 
   return (
     <section className="flex flex-col gap-4">
-      <DescriptionField task={task} readOnly={descriptionReadOnly} onSave={onSaveDescription} />
       <TagsField task={task} onSave={onSaveTags} />
+      <DescriptionField task={task} readOnly={descriptionReadOnly} onSave={onSaveDescription} />
     </section>
   );
 }

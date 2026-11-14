@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @source '../node_modules/flowbite-react';
 @import 'flowbite-react/plugin/tailwindcss';
+@plugin '@tailwindcss/typography';
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
@@ -37,4 +38,55 @@ button:focus-visible {
 button:focus:not(:focus-visible) {
   outline: none;
   box-shadow: none;
+}
+
+/* Palette mappings parked until we review the stock dark theme.
+   Uncomment to pin prose colors to the app palette instead of the plugin defaults. */
+/*
+.prose {
+  --tw-prose-body: var(--color-zinc-200);
+  --tw-prose-headings: var(--color-zinc-100);
+  --tw-prose-lead: var(--color-zinc-300);
+  --tw-prose-links: var(--color-blue-400);
+  --tw-prose-bold: var(--color-zinc-100);
+  --tw-prose-counters: var(--color-muted);
+  --tw-prose-bullets: var(--color-line-hover);
+  --tw-prose-hr: var(--color-line);
+  --tw-prose-quotes: var(--color-muted);
+  --tw-prose-quote-borders: var(--color-line-strong);
+  --tw-prose-captions: var(--color-faint);
+  --tw-prose-code: var(--color-zinc-100);
+  --tw-prose-pre-code: var(--color-zinc-200);
+  --tw-prose-pre-bg: var(--color-surface);
+  --tw-prose-th-borders: var(--color-line-strong);
+  --tw-prose-td-borders: var(--color-line);
+}
+*/
+
+/* GitHub renders inline code without the plugin's literal backticks. */
+.prose :not(pre) > code::before,
+.prose :not(pre) > code::after {
+  content: none;
+}
+
+.prose :not(pre) > code {
+  border: 1px solid var(--color-line-strong);
+  border-radius: 0.25rem;
+  background-color: var(--color-panel);
+  padding: 0.125rem 0.25rem;
+  font-weight: 500;
+}
+
+.prose :where(pre) {
+  border: 1px solid var(--color-line-strong);
+}
+
+/* remark-gfm emits task-list items with checkboxes; bullets would double up. */
+.prose :where(ul.contains-task-list) {
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.prose :where(li.task-list-item) > input[type='checkbox'] {
+  margin-inline-end: 0.375rem;
 }

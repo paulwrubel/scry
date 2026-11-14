@@ -1,4 +1,5 @@
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
+import { TitleText } from '@/components/TitleText';
 import type { Task } from '@/generated/Task';
 import { useCloseRequest } from '@/hooks/useCloseRequest';
 
@@ -19,7 +20,8 @@ export function DeleteTaskModal(props: DeleteTaskModalProps) {
       <ModalHeader>Delete task</ModalHeader>
       <ModalBody>
         <p className="text-sm">
-          Delete “{task.title}”? This permanently deletes the task and its comments.
+          Delete “<TitleText title={task.title} />
+          ”? This permanently deletes the task and its comments.
         </p>
       </ModalBody>
       <ModalFooter className="justify-between">

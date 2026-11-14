@@ -1,6 +1,7 @@
 import { Button } from 'flowbite-react';
 import { useState } from 'react';
 import { z } from 'zod';
+import { Markdown } from '@/components/markdown/Markdown';
 import type { Comment } from '@/generated/Comment';
 import { useAppForm } from '@/hooks/useAppForm';
 import { formatDateTime } from '@/utils/date';
@@ -126,7 +127,7 @@ export function CommentsSection(props: CommentsSectionProps) {
             </form>
           ) : (
             <>
-              <p className="text-sm whitespace-pre-wrap">{comment.contents}</p>
+              <Markdown>{comment.contents}</Markdown>
               <p className="text-faint text-xs">{formatDateTime(comment.created_at)}</p>
               {confirmingId === comment.id ? (
                 <div className="flex items-center gap-2">

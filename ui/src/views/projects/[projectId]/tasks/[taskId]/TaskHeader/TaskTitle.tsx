@@ -2,6 +2,7 @@ import { Button, TextInput } from 'flowbite-react';
 import { useState } from 'react';
 import { HiCheck, HiPencil, HiXMark } from 'react-icons/hi2';
 import { z } from 'zod';
+import { TitleText } from '@/components/TitleText';
 import { fieldErrorMessage } from '@/components/form-controls/fieldErrors';
 import { useAppForm } from '@/hooks/useAppForm';
 
@@ -137,7 +138,9 @@ export function TaskTitle(props: TaskTitleProps) {
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <h1 className="min-w-0 text-2xl font-semibold wrap-break-word">{title}</h1>
+      <h1 className="min-w-0 text-2xl font-semibold wrap-break-word">
+        <TitleText title={title} />
+      </h1>
       {readOnly ? null : (
         <button
           type="button"
