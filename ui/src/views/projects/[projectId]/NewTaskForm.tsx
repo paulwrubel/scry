@@ -1,20 +1,7 @@
 import { Button } from 'flowbite-react';
-import { useEffect, useRef, useState } from 'react';
-import { z } from 'zod';
+import { useEffect, useRef } from 'react';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
-import { useAppForm } from '@/hooks/useAppForm';
-import { parseTaskInput } from '@/utils/tasks/input';
-
-const schema = z.object({
-  task: z
-    .string()
-    .trim()
-    .min(1, 'Enter a task title or GitHub URL.')
-    .refine(
-      (value) => parseTaskInput(value) !== null,
-      'Only GitHub issue or pull request URLs are supported.',
-    ),
-});
+import { useCreateTaskForm } from '@/hooks/useCreateTaskForm';
 
 export type NewTaskFormProps = {
   onCreate: (title: string, externalIdentity: ExternalIdentity | null) => Promise<void>;
@@ -23,33 +10,8 @@ export type NewTaskFormProps = {
 export function NewTaskForm(props: NewTaskFormProps) {
   const { onCreate } = props;
 
-  const [open, setOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const { form, open, inputRef, openForm, closeForm } = useCreateTaskForm(onCreate);
   const formRef = useRef<HTMLFormElement>(null);
-
-  const form = useAppForm({
-    defaultValues: { task: '' },
-    validators: { onChange: schema, onMount: schema },
-    onSubmit: async ({ value }) => {
-      const submitted = value.task;
-      const parsed = parseTaskInput(value.task);
-      if (parsed === null) {
-        return;
-      }
-      await onCreate(parsed.title, parsed.externalIdentity);
-      if (form.getFieldValue('task') === submitted) {
-        form.reset();
-        void form.validate('change');
-      }
-      inputRef.current?.focus();
-    },
-  });
-
-  function cancel() {
-    form.reset();
-    void form.validate('change');
-    setOpen(false);
-  }
 
   useEffect(() => {
     if (!open) {
@@ -60,18 +22,16 @@ export function NewTaskForm(props: NewTaskFormProps) {
       if (event.target instanceof Node && formRef.current?.contains(event.target)) {
         return;
       }
-      form.reset();
-      void form.validate('change');
-      setOpen(false);
+      closeForm();
     }
 
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [open, form]);
+  }, [open, closeForm]);
 
   if (!open) {
     return (
-      <Button size="xs" color="alternative" className="shrink-0" onClick={() => setOpen(true)}>
+      <Button size="xs" color="alternative" className="shrink-0" onClick={openForm}>
         Add task
       </Button>
     );
@@ -80,7 +40,7 @@ export function NewTaskForm(props: NewTaskFormProps) {
   function handleKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
     if (event.key === 'Escape') {
       event.preventDefault();
-      cancel();
+      closeForm();
     }
   }
 
@@ -114,7 +74,7 @@ export function NewTaskForm(props: NewTaskFormProps) {
       >
         {({ isValid, submitting }) => (
           <div className="flex justify-between gap-2">
-            <Button type="button" size="xs" color="alternative" onClick={cancel}>
+            <Button type="button" size="xs" color="alternative" onClick={closeForm}>
               Cancel
             </Button>
             <Button type="submit" size="xs" disabled={submitting || !isValid}>

@@ -1,25 +1,12 @@
 import { Button, Drawer } from 'flowbite-react';
 import type { DrawerTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { HiPlus } from 'react-icons/hi2';
-import { z } from 'zod';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
-import { useAppForm } from '@/hooks/useAppForm';
 import { useCloseRequest } from '@/hooks/useCloseRequest';
+import { useCreateTaskForm } from '@/hooks/useCreateTaskForm';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
-import { parseTaskInput } from '@/utils/tasks/input';
-
-const schema = z.object({
-  task: z
-    .string()
-    .trim()
-    .min(1, 'Enter a task title or GitHub URL.')
-    .refine(
-      (value) => parseTaskInput(value) !== null,
-      'Only GitHub issue or pull request URLs are supported.',
-    ),
-});
 
 const sheetTheme: DeepPartial<DrawerTheme> = {
   root: {
@@ -40,63 +27,30 @@ export type MobileAddTaskProps = {
 export function MobileAddTask(props: MobileAddTaskProps) {
   const { onCreate } = props;
 
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const { form, open, error, inputRef, openForm, closeForm } = useCreateTaskForm(onCreate);
   const bottomInset = useVisualViewportInset();
-
-  const form = useAppForm({
-    defaultValues: { task: '' },
-    validators: { onChange: schema, onMount: schema },
-    listeners: { onChange: () => setError(null) },
-    onSubmit: async ({ value }) => {
-      const submitted = value.task;
-      const parsed = parseTaskInput(value.task);
-      if (parsed === null) {
-        return;
-      }
-      setError(null);
-      try {
-        await onCreate(parsed.title, parsed.externalIdentity);
-        if (form.getFieldValue('task') === submitted) {
-          form.reset();
-          void form.validate('change');
-        }
-        inputRef.current?.focus();
-      } catch {
-        setError('Could not add this task.');
-      }
-    },
-  });
 
   useEffect(() => {
     if (open) {
       inputRef.current?.focus();
     }
-  }, [open]);
+  }, [open, inputRef]);
 
-  function close() {
-    setOpen(false);
-    form.reset();
-    void form.validate('change');
-    setError(null);
-  }
-
-  useCloseRequest(open, close);
+  useCloseRequest(open, closeForm);
 
   return (
     <>
       <button
         type="button"
         aria-label="Add task"
-        onClick={() => setOpen(true)}
+        onClick={openForm}
         className="bg-primary-600 hover:bg-primary-700 focus-visible:ring-primary-300 fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+4rem)] z-20 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-colors focus:outline-none focus-visible:ring-2 md:hidden"
       >
         <HiPlus aria-hidden="true" className="h-6 w-6" />
       </button>
       <Drawer
         open={open}
-        onClose={close}
+        onClose={closeForm}
         position="bottom"
         theme={sheetTheme}
         aria-hidden={!open}
