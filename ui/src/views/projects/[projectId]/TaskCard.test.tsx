@@ -72,6 +72,22 @@ describe('TaskCard', () => {
     );
   });
 
+  it('renders inline code in the title without interpreting other markdown', () => {
+    render(
+      <MemoryRouter>
+        <TaskCard
+          projectId="project-1"
+          task={{ ...task, title: 'Fix `parse()` **now**' }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    const link = screen.getByRole('link');
+    expect(link.querySelector('code')?.textContent).toBe('parse()');
+    expect(link.textContent).toBe('Fix parse() **now**');
+  });
+
   it('renders a plain description preview and preserves newlines', () => {
     render(
       <MemoryRouter initialEntries={['/projects/project-1?tags=bug']}>

@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { SiGithub } from 'react-icons/si';
 import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { Link, useLocation } from 'react-router-dom';
+import { TitleText } from '@/components/TitleText';
 import type { Task } from '@/generated/Task';
 import { PRIORITY_DOT_CLASS } from '@/data/priority';
 import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/github';
@@ -83,7 +84,7 @@ export function TaskCard(props: TaskCardProps) {
                 closed ? 'text-faint line-through' : ''
               }`}
             >
-              {task.title}
+              <TitleText title={task.title} />
             </span>
           </Link>
           <div className="mt-1 flex shrink-0 items-center gap-1.5">

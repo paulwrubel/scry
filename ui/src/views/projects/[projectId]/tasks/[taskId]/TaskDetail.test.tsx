@@ -185,6 +185,18 @@ describe('TaskDetail', () => {
     expect(screen.getByText('npm test').tagName).toBe('CODE');
   });
 
+  it('renders inline code in the title', () => {
+    renderTask(
+      projectSnapshot({
+        tasks: [task({ id: TASK_ID, title: 'Fix `parse()` crash' })],
+      }),
+      vi.fn(async () => undefined),
+    );
+
+    const heading = screen.getByRole('heading', { level: 1, name: 'Fix parse() crash' });
+    expect(heading.querySelector('code')?.textContent).toBe('parse()');
+  });
+
   it('edits the title inline', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
