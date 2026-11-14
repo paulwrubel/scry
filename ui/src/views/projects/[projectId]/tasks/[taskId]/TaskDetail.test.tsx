@@ -156,6 +156,35 @@ describe('TaskDetail', () => {
     expect(screen.getByRole('button', { name: 'Edit tags' })).toBeDefined();
   });
 
+  it('renders markdown in the description', () => {
+    renderTask(
+      projectSnapshot({
+        tasks: [
+          task({
+            id: TASK_ID,
+            title: 'Write tests',
+            description: '## Steps\n\n**Carefully**',
+          }),
+        ],
+      }),
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Steps' })).toBeDefined();
+    expect(screen.getByText('Carefully').tagName).toBe('STRONG');
+  });
+
+  it('renders markdown in comments', () => {
+    renderTask(
+      projectSnapshot({
+        comments: [comment({ id: 'comment-1', contents: 'Use `npm test` first' })],
+      }),
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.getByText('npm test').tagName).toBe('CODE');
+  });
+
   it('edits the title inline', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);

@@ -1,5 +1,6 @@
 import { Button } from 'flowbite-react';
 import { useState } from 'react';
+import { Markdown } from '@/components/markdown/Markdown';
 import type { Task } from '@/generated/Task';
 import { useAppForm } from '@/hooks/useAppForm';
 import { FieldHeader } from './FieldHeader';
@@ -104,7 +105,7 @@ export function DescriptionField(props: DescriptionFieldProps) {
           </div>
         </form>
       ) : description.length > 0 ? (
-        <p className="text-sm whitespace-pre-wrap">{description}</p>
+        <Markdown>{description}</Markdown>
       ) : (
         <p className="text-faint text-sm">No description.</p>
       )}
