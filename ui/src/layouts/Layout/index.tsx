@@ -1,9 +1,10 @@
-import { Alert, Button, Spinner } from 'flowbite-react';
+import { Button, Spinner } from 'flowbite-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '@/providers/Auth';
 import { useReplicaStatus } from '@/providers/Replica';
 import { LayoutBottomNav } from './LayoutBottomNav';
 import { LayoutNavbar } from './LayoutNavbar';
+import { ShellState } from './ShellState';
 
 export function Layout() {
   const { status, error, retry } = useReplicaStatus();
@@ -38,26 +39,6 @@ export function Layout() {
         </div>
       </main>
       {isAuthenticated ? <LayoutBottomNav /> : null}
-    </div>
-  );
-}
-
-type ShellStateProps = {
-  title: string;
-  message: string;
-  children?: React.ReactNode;
-};
-
-function ShellState(props: ShellStateProps) {
-  const { title, message, children } = props;
-
-  return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-3 p-8 pt-[calc(env(safe-area-inset-top)+2rem)] pb-[calc(env(safe-area-inset-bottom)+2rem)]">
-      <Alert color="info" className="max-w-md">
-        <span className="font-medium">{title}</span>
-        <span className="mt-1 block text-sm">{message}</span>
-      </Alert>
-      {children}
     </div>
   );
 }

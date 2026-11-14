@@ -4,7 +4,7 @@ import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import { BoardPage } from '@/views/projects/[projectId]';
+import { BoardPage } from '@/views/projects/[projectId]/BoardPage';
 import { createReplicaMock, makeReplicaSnapshot } from '@/test/fixtures';
 import { SearchProbe } from '@/test/SearchProbe';
 

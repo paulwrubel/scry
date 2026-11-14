@@ -7,7 +7,7 @@ import { MIN_HANDLE_LENGTH, shortestHandles } from '@/contract/handles';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { useReplicaSnapshot } from '@/providers/Replica';
-import { BoardPage } from '@/views/projects/[projectId]';
+import { BoardPage } from '@/views/projects/[projectId]/BoardPage';
 import { TaskDetail } from '@/views/projects/[projectId]/tasks/[taskId]/TaskDetail';
 
 type Panel = { project: ProjectSnapshot; task: Task };

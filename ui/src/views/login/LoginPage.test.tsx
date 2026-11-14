@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthContext } from '@/providers/Auth/context';
 import type { AuthContextType, LoginResult } from '@/providers/Auth/context';
-import { LoginPage } from './index';
+import { LoginPage } from './LoginPage';
 
 afterEach(cleanup);
 

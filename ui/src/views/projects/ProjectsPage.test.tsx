@@ -7,7 +7,7 @@ import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ActiveProjectContext } from '@/providers/ActiveProject/context';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import { ProjectsPage } from './index';
+import { ProjectsPage } from './ProjectsPage';
 import { createReplicaMock } from '@/test/fixtures';
 import { makeReplicaSnapshot } from '@/test/fixtures';
 

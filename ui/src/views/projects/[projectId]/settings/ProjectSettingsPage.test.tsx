@@ -12,7 +12,7 @@ import type { ReplicaContextValue } from '@/providers/Replica/context';
 import { SyncContext } from '@/providers/Sync/context';
 import type { SyncContextValue } from '@/providers/Sync/context';
 import type { SyncClient, SyncSnapshot } from '@/utils/sync';
-import { ProjectSettingsPage } from './index';
+import { ProjectSettingsPage } from './ProjectSettingsPage';
 import { createReplicaMock, makeProject, makeReplicaSnapshot } from '@/test/fixtures';
 
 function LocationProbe() {

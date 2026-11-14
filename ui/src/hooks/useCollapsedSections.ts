@@ -3,10 +3,12 @@ import { readCollapsedSections, writeCollapsedSections } from '@/utils/sections/
 
 type CollapsedState = { projectId: string; ids: ReadonlySet<string> };
 
-export function useCollapsedSections(projectId: string): {
+export type UseCollapsedSectionsResult = {
   collapsedSections: ReadonlySet<string>;
   toggleCollapsedSection: (sectionId: string) => void;
-} {
+};
+
+export function useCollapsedSections(projectId: string): UseCollapsedSectionsResult {
   const [state, setState] = useState<CollapsedState>(() => ({
     projectId,
     ids: readCollapsedSections(projectId),
