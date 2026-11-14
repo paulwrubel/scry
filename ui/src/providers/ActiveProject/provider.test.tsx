@@ -4,7 +4,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import type { ClientState } from '@/contract/replay';
-import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaProvider, useReplicaStatus } from '@/providers/Replica';
 import { openReplica } from '@/utils/replica';
 import { useActiveProject } from './context';
@@ -15,6 +14,7 @@ import {
   resolveActiveProjectId,
   writeActiveProjectId,
 } from '@/utils/projects/activeProject';
+import { makeProject } from '@/test/fixtures';
 
 const PROJECT_A_ID = '11111111-1111-4111-8111-111111111111';
 const PROJECT_B_ID = '22222222-2222-4222-8222-222222222222';
@@ -132,23 +132,12 @@ function Probe() {
   );
 }
 
-function projectSnapshot(id: string, projectName: string): ProjectSnapshot {
-  return {
-    id,
-    name: projectName,
-    description: null,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-    sections: [],
-    tasks: [],
-    comments: [],
-    automations: [],
-  };
-}
-
 function twoProjectState(): ClientState {
   return {
-    projects: [projectSnapshot(PROJECT_A_ID, 'Alpha'), projectSnapshot(PROJECT_B_ID, 'Beta')],
+    projects: [
+      makeProject({ id: PROJECT_A_ID, name: 'Alpha' }),
+      makeProject({ id: PROJECT_B_ID, name: 'Beta' }),
+    ],
   };
 }
 

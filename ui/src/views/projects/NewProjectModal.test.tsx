@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Operation } from '@/generated/Operation';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import type { Replica } from '@/utils/replica';
 import { NewProjectModal } from './NewProjectModal';
+import { createReplicaMock, makeReplicaSnapshot } from '@/test/fixtures';
 
 class FakeCloseWatcher extends EventTarget {
   static instances: FakeCloseWatcher[] = [];
@@ -34,22 +34,11 @@ function renderModal(
   onCreated = vi.fn(),
   onClose = vi.fn(),
 ) {
-  const snapshot = {
-    confirmed: { projects: [] },
-    visible: { projects: [] },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot([]);
 
   const context: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot, { enqueue }),
     error: undefined,
     retry: () => undefined,
   };

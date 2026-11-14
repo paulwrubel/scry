@@ -5,9 +5,9 @@ import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
 import { SyncContext } from '@/providers/Sync/context';
 import type { SyncContextValue } from '@/providers/Sync/context';
-import type { Replica } from '@/utils/replica';
 import type { RejectedOperation, SyncClient, SyncSnapshot } from '@/utils/sync';
 import { SyncSection } from './SyncSection';
+import { createReplicaMock, makeReplicaSnapshot } from '@/test/fixtures';
 
 afterEach(cleanup);
 
@@ -18,23 +18,13 @@ type RenderOptions = {
 };
 
 function renderSection(options: RenderOptions) {
-  const snapshot = {
-    confirmed: { projects: [] },
-    visible: { projects: [] },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: options.persisted,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot([], { persisted: options.persisted });
 
   const clearRejectedOperation = options.clearRejectedOperation ?? vi.fn();
 
   const replicaContext: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot),
     error: undefined,
     retry: () => undefined,
   };

@@ -2,57 +2,30 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Operation } from '@/generated/Operation';
-import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import type { Replica } from '@/utils/replica';
 import { DeleteProjectModal } from './DeleteProjectModal';
+import { createReplicaMock, makeProject, makeReplicaSnapshot } from '@/test/fixtures';
 
 const PROJECT_ID = 'project-1';
-const CREATED_AT = '2026-01-01T00:00:00Z';
-
-function projectSnapshot(): ProjectSnapshot {
-  return {
-    id: PROJECT_ID,
-    name: 'Project',
-    description: null,
-    created_at: CREATED_AT,
-    updated_at: CREATED_AT,
-    sections: [],
-    tasks: [],
-    comments: [],
-    automations: [],
-  };
-}
 
 function renderModal(
   enqueue: (operation: Operation) => Promise<void>,
   onDeleted = vi.fn(),
   onClose = vi.fn(),
 ) {
-  const snapshot = {
-    confirmed: { projects: [projectSnapshot()] },
-    visible: { projects: [projectSnapshot()] },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot([makeProject()]);
 
   const context: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot, { enqueue }),
     error: undefined,
     retry: () => undefined,
   };
 
   render(
     <ReplicaContext.Provider value={context}>
-      <DeleteProjectModal project={projectSnapshot()} onClose={onClose} onDeleted={onDeleted} />
+      <DeleteProjectModal project={makeProject()} onClose={onClose} onDeleted={onDeleted} />
     </ReplicaContext.Provider>,
   );
 

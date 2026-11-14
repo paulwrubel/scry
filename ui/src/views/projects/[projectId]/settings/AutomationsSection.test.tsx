@@ -6,8 +6,8 @@ import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import type { Replica } from '@/utils/replica';
 import { AutomationsSection } from './AutomationsSection';
+import { createReplicaMock, makeProject, makeReplicaSnapshot, makeSection } from '@/test/fixtures';
 
 const PROJECT_ID = 'project-1';
 const SECTION_ID = 'section-1';
@@ -15,28 +15,7 @@ const AUTOMATION_ID = 'automation-1';
 const CREATED_AT = '2026-01-01T00:00:00Z';
 
 function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
-  return {
-    id: PROJECT_ID,
-    name: 'Project',
-    description: null,
-    created_at: CREATED_AT,
-    updated_at: CREATED_AT,
-    sections: [
-      {
-        id: SECTION_ID,
-        project_id: PROJECT_ID,
-        name: 'Todo',
-        position: 'a0',
-        color: null,
-        created_at: CREATED_AT,
-        updated_at: CREATED_AT,
-      },
-    ],
-    tasks: [],
-    comments: [],
-    automations: [],
-    ...overrides,
-  };
+  return makeProject({ sections: [makeSection({ id: SECTION_ID, name: 'Todo' })], ...overrides });
 }
 
 function automation(overrides: Partial<Automation> = {}): Automation {
@@ -52,22 +31,11 @@ function automation(overrides: Partial<Automation> = {}): Automation {
 }
 
 function renderSection(project: ProjectSnapshot, enqueue: (operation: Operation) => Promise<void>) {
-  const snapshot = {
-    confirmed: { projects: [project] },
-    visible: { projects: [project] },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot([project]);
 
   const context: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot, { enqueue }),
     error: undefined,
     retry: () => undefined,
   };

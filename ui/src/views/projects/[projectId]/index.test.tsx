@@ -11,8 +11,8 @@ import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import type { Replica } from '@/utils/replica';
 import { BoardPage } from './index';
+import { createReplicaMock, makeProject, makeReplicaSnapshot } from '@/test/fixtures';
 
 const dragIds = vi.hoisted(() => ({
   droppable: [] as string[],
@@ -79,21 +79,6 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
   };
 }
 
-function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
-  return {
-    id: 'project-1',
-    name: 'Project',
-    description: null,
-    created_at: CREATED_AT,
-    updated_at: CREATED_AT,
-    sections: [],
-    tasks: [],
-    comments: [],
-    automations: [],
-    ...overrides,
-  };
-}
-
 function SearchProbe() {
   const [params] = useSearchParams();
   return <span data-testid="search">{params.toString()}</span>;
@@ -104,22 +89,11 @@ function renderBoard(
   enqueue: (operation: Operation) => Promise<void>,
   path = `/projects/${project.id}`,
 ) {
-  const snapshot = {
-    confirmed: { projects: [project] },
-    visible: { projects: [project] },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot([project]);
 
   const context: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot, { enqueue }),
     error: undefined,
     retry: () => undefined,
   };
@@ -147,7 +121,7 @@ describe('drag ids', () => {
     dragIds.droppable.length = 0;
     dragIds.sortable.length = 0;
 
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
     });
 
@@ -163,7 +137,7 @@ describe('drag ids', () => {
 
 describe('BoardPage', () => {
   it('renders a column per section and the tasks inside', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0'), section('doing', 'Doing', 'a1')],
       tasks: [
         task({ id: 'one', title: 'Write tests', section_id: 'backlog' }),
@@ -183,7 +157,7 @@ describe('BoardPage', () => {
   });
 
   it('keeps empty sections visible', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
     });
 
@@ -197,7 +171,7 @@ describe('BoardPage', () => {
   });
 
   it('shows open and closed tasks by default', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
@@ -221,7 +195,7 @@ describe('BoardPage', () => {
   });
 
   it('hides closed tasks when Open only is selected', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
@@ -248,7 +222,7 @@ describe('BoardPage', () => {
   });
 
   it('shows only closed tasks when Closed is the only status', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
@@ -275,7 +249,7 @@ describe('BoardPage', () => {
   });
 
   it('defaults the status filter to All', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' })],
     });
@@ -293,7 +267,7 @@ describe('BoardPage', () => {
   });
 
   it('restores every task when All is selected', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
@@ -324,7 +298,7 @@ describe('BoardPage', () => {
   });
 
   it('reads the closed-only status filter from the URL', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
@@ -349,7 +323,7 @@ describe('BoardPage', () => {
   });
 
   it('filters tasks by tag', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({
@@ -382,7 +356,7 @@ describe('BoardPage', () => {
   });
 
   it('filters tasks by search', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({ id: 'tests', title: 'Write tests', section_id: 'backlog' }),
@@ -405,7 +379,7 @@ describe('BoardPage', () => {
   });
 
   it('reads the status filter from the URL', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
@@ -430,7 +404,7 @@ describe('BoardPage', () => {
   });
 
   it('reads tag filters from the URL', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({
@@ -461,7 +435,7 @@ describe('BoardPage', () => {
   });
 
   it('orders tasks on the board from the sort URL param', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({
@@ -497,7 +471,7 @@ describe('BoardPage', () => {
 
   it('updates the sort URL param without enqueueing an operation', () => {
     const enqueue = vi.fn(async (_operation: Operation) => undefined);
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'One', section_id: 'backlog' })],
     });
@@ -514,7 +488,7 @@ describe('BoardPage', () => {
   });
 
   it('removes the sort param when switching back to manual while preserving other params', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'One', section_id: 'backlog' })],
     });
@@ -533,7 +507,7 @@ describe('BoardPage', () => {
   });
 
   it('falls back to manual for an invalid sort param', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'One', section_id: 'backlog' })],
     });
@@ -549,7 +523,7 @@ describe('BoardPage', () => {
   });
 
   it('enqueues a create_task operation in the section', async () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'Existing', section_id: 'backlog', position: 'a1' })],
     });
@@ -594,7 +568,7 @@ describe('BoardPage', () => {
   });
 
   it('puts open tasks without a section first and closed ones last', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [
         task({ id: 'done', title: 'Done task', state: 'closed' }),
@@ -618,7 +592,7 @@ describe('BoardPage', () => {
   });
 
   it('hides each no-section column when its tasks are filtered out', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       tasks: [
         task({ id: 'done', title: 'Done task', state: 'closed' }),
         task({ id: 'loose', title: 'Loose task', position: 'a1' }),
@@ -636,7 +610,7 @@ describe('BoardPage', () => {
   });
 
   it('offers create in the Open No Section column', async () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       tasks: [task({ id: 'loose', title: 'Loose task' })],
     });
     const enqueue = vi.fn(async (_operation: Operation) => undefined);
@@ -666,7 +640,7 @@ describe('BoardPage', () => {
   });
 
   it('does not offer create in the Closed No Section column', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       tasks: [task({ id: 'done', title: 'Done task', state: 'closed' })],
     });
 
@@ -680,7 +654,7 @@ describe('BoardPage', () => {
   });
 
   it('shows the not-found alert for an unknown project', () => {
-    const project = projectSnapshot();
+    const project = makeProject();
 
     renderBoard(
       project,
@@ -693,7 +667,7 @@ describe('BoardPage', () => {
 
   it('offers to add a section for a project with no content', () => {
     renderBoard(
-      projectSnapshot(),
+      makeProject(),
       vi.fn(async () => undefined),
     );
 
@@ -702,7 +676,7 @@ describe('BoardPage', () => {
 
   it('enqueues a section color change', () => {
     const enqueue = vi.fn(async () => undefined);
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
     });
 
@@ -725,7 +699,7 @@ describe('BoardPage', () => {
 describe('show priority', () => {
   it('toggles priority display from the mobile toolbar button', () => {
     viewport.isDesktop = false;
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'One', section_id: 'backlog', priority: 'elevated' })],
     });
@@ -755,7 +729,7 @@ describe('show priority', () => {
   });
 
   it('keeps the labelled switch on desktop', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'One', section_id: 'backlog', priority: 'elevated' })],
     });
@@ -780,7 +754,7 @@ describe('collapsible sections', () => {
 
   it('collapses and expands a section on mobile', async () => {
     viewport.isDesktop = false;
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'Write tests', section_id: 'backlog' })],
     });
@@ -805,7 +779,7 @@ describe('collapsible sections', () => {
 
   it('toggles twice when two taps land before the commit', () => {
     viewport.isDesktop = false;
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
     });
 
@@ -825,7 +799,7 @@ describe('collapsible sections', () => {
 
   it('toggles from the whole header row', () => {
     viewport.isDesktop = false;
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'Write tests', section_id: 'backlog' })],
     });
@@ -846,7 +820,7 @@ describe('collapsible sections', () => {
 
   it('collapses a no-section column on mobile', async () => {
     viewport.isDesktop = false;
-    const project = projectSnapshot({
+    const project = makeProject({
       tasks: [task({ id: 'loose', title: 'Loose task' })],
     });
 
@@ -862,7 +836,7 @@ describe('collapsible sections', () => {
   });
 
   it('renders no collapse controls on desktop', () => {
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'Write tests', section_id: 'backlog' })],
     });
@@ -878,7 +852,7 @@ describe('collapsible sections', () => {
 
   it('remembers a collapsed section across renders', () => {
     viewport.isDesktop = false;
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
       tasks: [task({ id: 'one', title: 'Write tests', section_id: 'backlog' })],
     });
@@ -904,7 +878,7 @@ describe('mobile quick add', () => {
   it('hides inline add buttons and creates a No Section task from the FAB', async () => {
     viewport.isDesktop = false;
     const enqueue = vi.fn(async (_operation: Operation) => undefined);
-    const project = projectSnapshot({
+    const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
     });
 

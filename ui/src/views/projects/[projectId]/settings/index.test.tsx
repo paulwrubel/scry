@@ -11,25 +11,9 @@ import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
 import { SyncContext } from '@/providers/Sync/context';
 import type { SyncContextValue } from '@/providers/Sync/context';
-import type { Replica } from '@/utils/replica';
 import type { SyncClient, SyncSnapshot } from '@/utils/sync';
 import { ProjectSettingsPage } from './index';
-
-const CREATED_AT = '2026-01-01T00:00:00Z';
-
-function projectSnapshot(id: string, name: string): ProjectSnapshot {
-  return {
-    id,
-    name,
-    description: null,
-    created_at: CREATED_AT,
-    updated_at: CREATED_AT,
-    sections: [],
-    tasks: [],
-    comments: [],
-    automations: [],
-  };
-}
+import { createReplicaMock, makeProject, makeReplicaSnapshot } from '@/test/fixtures';
 
 function LocationProbe() {
   const location = useLocation();
@@ -42,22 +26,11 @@ function renderPage(
   projectId: string,
   enqueue: (operation: Operation) => Promise<void>,
 ) {
-  const snapshot = {
-    confirmed: { projects },
-    visible: { projects },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot(projects);
 
   const replicaContext: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot, { enqueue }),
     error: undefined,
     retry: () => undefined,
   };
@@ -120,7 +93,7 @@ afterEach(cleanup);
 describe('ProjectSettingsPage', () => {
   it('renders the settings fields and delete action for an existing project', () => {
     renderPage(
-      [projectSnapshot('project-1', 'Alpha')],
+      [makeProject({ id: 'project-1', name: 'Alpha' })],
       'project-1',
       'project-1',
       vi.fn(async () => undefined),
@@ -134,7 +107,10 @@ describe('ProjectSettingsPage', () => {
   it('deletes the project and falls back to the next one', async () => {
     const enqueue = vi.fn(async () => undefined);
     const { setActiveProjectId, clearActiveProject } = renderPage(
-      [projectSnapshot('project-1', 'Alpha'), projectSnapshot('project-2', 'Beta')],
+      [
+        makeProject({ id: 'project-1', name: 'Alpha' }),
+        makeProject({ id: 'project-2', name: 'Beta' }),
+      ],
       'project-1',
       'project-1',
       enqueue,

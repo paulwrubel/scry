@@ -7,9 +7,10 @@ import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
 import { SyncContext } from '@/providers/Sync/context';
 import type { SyncContextValue } from '@/providers/Sync/context';
-import type { Replica } from '@/utils/replica';
 import type { RejectedOperation, SyncClient, SyncSnapshot } from '@/utils/sync';
 import { AppSection } from './AppSection';
+import { createReplicaMock } from '@/test/fixtures';
+import { makeReplicaSnapshot } from '@/test/fixtures';
 
 afterEach(cleanup);
 
@@ -22,22 +23,11 @@ function renderSection(
 ) {
   const { persisted = true, rejected = [], install = {} } = options;
 
-  const snapshot = {
-    confirmed: { projects: [] },
-    visible: { projects: [] },
-    outbox: [],
-    needsBootstrap: false,
-    persisted,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot([], { persisted: persisted });
 
   const replicaContext: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue: async () => undefined,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot),
     error: undefined,
     retry: () => undefined,
   };
