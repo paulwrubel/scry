@@ -1,4 +1,4 @@
-export { useActiveProject } from './hook';
+export { useActiveProject } from './context';
 export { ActiveProjectProvider } from './provider';
 export {
   ACTIVE_PROJECT_STORAGE_KEY,

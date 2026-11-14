@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createRequiredContext } from '@/hooks/createRequiredContext';
 
 export type ActiveProjectContextType = {
   activeProjectId: string | null;
@@ -6,4 +6,5 @@ export type ActiveProjectContextType = {
   clearActiveProject: () => void;
 };
 
-export const ActiveProjectContext = createContext<ActiveProjectContextType | null>(null);
+export const [ActiveProjectContext, useActiveProject] =
+  createRequiredContext<ActiveProjectContextType>('ActiveProject');

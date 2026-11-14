@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSyncTriggers } from '@/hooks/useSyncTriggers';
 import type { SyncTiming } from '@/hooks/useSyncTriggers';
 import { useAuth } from '@/providers/Auth';
-import { useReplica, useReplicaSnapshot, useReplicaStatus } from '@/providers/Replica';
+import { useReplica, useReplicaSnapshot } from '@/providers/Replica';
 import { createSyncClient } from '@/utils/sync';
 import type { SyncClient } from '@/utils/sync';
 import { SyncContext } from './context';
@@ -15,14 +15,6 @@ export type SyncProviderProps = {
 };
 
 export function SyncProvider(props: SyncProviderProps) {
-  const { status } = useReplicaStatus();
-  if (status !== 'ready') {
-    return props.children;
-  }
-  return <ReadySyncProvider {...props} />;
-}
-
-function ReadySyncProvider(props: SyncProviderProps) {
   const { children, client: providedClient, timing } = props;
 
   const { isAuthenticated, authenticatedFetch } = useAuth();

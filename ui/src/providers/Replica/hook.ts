@@ -1,15 +1,7 @@
-import { useContext, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { Replica, ReplicaSnapshot } from '@/utils/replica';
-import { ReplicaContext } from './context';
+import { useReplicaContext } from './context';
 import type { ReplicaContextValue } from './context';
-
-function useReplicaContext(): ReplicaContextValue {
-  const context = useContext(ReplicaContext);
-  if (context === null) {
-    throw new Error('useReplica must be used within ReplicaProvider');
-  }
-  return context;
-}
 
 export function useReplicaStatus(): ReplicaContextValue {
   return useReplicaContext();

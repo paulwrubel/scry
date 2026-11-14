@@ -7,7 +7,7 @@ import type { ClientState } from '@/contract/replay';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaProvider, useReplicaStatus } from '@/providers/Replica';
 import { openReplica } from '@/utils/replica';
-import { useActiveProject } from './hook';
+import { useActiveProject } from './context';
 import { ActiveProjectProvider } from './provider';
 import {
   ACTIVE_PROJECT_STORAGE_KEY,

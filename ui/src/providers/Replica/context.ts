@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createRequiredContext } from '@/hooks/createRequiredContext';
 import type { Replica } from '@/utils/replica';
 
 export type ReplicaStatus = 'loading' | 'ready' | 'error';
@@ -10,4 +10,5 @@ export type ReplicaContextValue = {
   retry: () => void;
 };
 
-export const ReplicaContext = createContext<ReplicaContextValue | null>(null);
+export const [ReplicaContext, useReplicaContext] =
+  createRequiredContext<ReplicaContextValue>('Replica');
