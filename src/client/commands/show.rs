@@ -69,6 +69,12 @@ pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<()
             .with_timezone(&Local)
             .format(DATETIME_FORMAT_STR)
     );
+    println!(
+        "Updated at:  {}",
+        task.updated_at
+            .with_timezone(&Local)
+            .format(DATETIME_FORMAT_STR)
+    );
     println!();
 
     for comment in detail.comments.unwrap_or_default() {
@@ -76,7 +82,12 @@ pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<()
             .created_at
             .with_timezone(&Local)
             .format(DATETIME_FORMAT_STR);
-        println!("{}", comment_created_at);
+        let comment_updated_at = comment
+            .updated_at
+            .with_timezone(&Local)
+            .format(DATETIME_FORMAT_STR);
+        println!("Created at:  {}", comment_created_at);
+        println!("Updated at:  {}", comment_updated_at);
         println!("{}", comment.contents);
         println!();
     }

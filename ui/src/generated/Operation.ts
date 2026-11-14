@@ -30,8 +30,15 @@ export type Operation = {
       name: string;
       description: string | null;
       created_at: string;
+      updated_at?: string | null;
     }
-  | { kind: 'update_project'; id: string; name: string | null; description?: string | null }
+  | {
+      kind: 'update_project';
+      id: string;
+      name: string | null;
+      description?: string | null;
+      updated_at?: string | null;
+    }
   | { kind: 'delete_project'; id: string }
   | {
       kind: 'create_section';
@@ -41,9 +48,16 @@ export type Operation = {
       position: Position;
       color: Color | null;
       created_at: string;
+      updated_at?: string | null;
     }
-  | { kind: 'update_section'; id: string; name: string | null; color: ColorChange | null }
-  | { kind: 'move_section'; id: string; position: Position }
+  | {
+      kind: 'update_section';
+      id: string;
+      name: string | null;
+      color: ColorChange | null;
+      updated_at?: string | null;
+    }
+  | { kind: 'move_section'; id: string; position: Position; updated_at?: string | null }
   | { kind: 'delete_section'; id: string }
   | {
       kind: 'create_task';
@@ -57,6 +71,7 @@ export type Operation = {
       state: TaskState;
       tags: Tags;
       created_at: string;
+      updated_at?: string | null;
       external_identity?: ExternalIdentity | null;
       external_metadata?: ExternalMetadata | null;
     }
@@ -70,11 +85,25 @@ export type Operation = {
       state: TaskState | null;
       external_identity?: ExternalIdentity | null;
       external_metadata?: ExternalMetadata | null;
+      updated_at?: string | null;
     }
-  | { kind: 'move_task'; id: string; section_id: string | null; position: Position }
+  | {
+      kind: 'move_task';
+      id: string;
+      section_id: string | null;
+      position: Position;
+      updated_at?: string | null;
+    }
   | { kind: 'delete_task'; id: string }
-  | { kind: 'create_comment'; id: string; task_id: string; contents: string; created_at: string }
-  | { kind: 'update_comment'; id: string; contents: string }
+  | {
+      kind: 'create_comment';
+      id: string;
+      task_id: string;
+      contents: string;
+      created_at: string;
+      updated_at?: string | null;
+    }
+  | { kind: 'update_comment'; id: string; contents: string; updated_at?: string | null }
   | { kind: 'delete_comment'; id: string }
   | {
       kind: 'create_automation';
@@ -83,7 +112,13 @@ export type Operation = {
       trigger: AutomationTrigger;
       actions: Array<AutomationAction>;
       created_at: string;
+      updated_at?: string | null;
     }
-  | { kind: 'update_automation'; id: string; actions: Array<AutomationAction> }
+  | {
+      kind: 'update_automation';
+      id: string;
+      actions: Array<AutomationAction>;
+      updated_at?: string | null;
+    }
   | { kind: 'delete_automation'; id: string }
 );

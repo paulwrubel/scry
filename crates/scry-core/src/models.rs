@@ -328,6 +328,8 @@ pub struct Project {
     pub name: String,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
+    #[serde(default = "Utc::now")]
+    pub updated_at: DateTime<Utc>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -339,6 +341,8 @@ pub struct Section {
     pub position: Position,
     pub color: Option<Color>,
     pub created_at: DateTime<Utc>,
+    #[serde(default = "Utc::now")]
+    pub updated_at: DateTime<Utc>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -354,6 +358,8 @@ pub struct Task {
     pub state: TaskState,
     pub tags: Tags,
     pub created_at: DateTime<Utc>,
+    #[serde(default = "Utc::now")]
+    pub updated_at: DateTime<Utc>,
     pub external_identity: Option<ExternalIdentity>,
     pub external_metadata: Option<ExternalMetadata>,
 }
@@ -365,6 +371,8 @@ pub struct Comment {
     pub task_id: TaskId,
     pub contents: String,
     pub created_at: DateTime<Utc>,
+    #[serde(default = "Utc::now")]
+    pub updated_at: DateTime<Utc>,
 }
 
 pub const MAX_AUTOMATION_ACTIONS: usize = 1;
@@ -424,6 +432,8 @@ pub struct Automation {
     pub trigger: AutomationTrigger,
     pub actions: Vec<AutomationAction>,
     pub created_at: DateTime<Utc>,
+    #[serde(default = "Utc::now")]
+    pub updated_at: DateTime<Utc>,
 }
 
 impl Automation {

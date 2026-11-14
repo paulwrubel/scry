@@ -8,4 +8,5 @@ export type Automation = {
   trigger: AutomationTrigger;
   actions: Array<AutomationAction>;
   created_at: string;
+  updated_at: string;
 };

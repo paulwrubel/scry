@@ -17,6 +17,7 @@ export type Task = {
   state: TaskState;
   tags: Tags;
   created_at: string;
+  updated_at: string;
   external_identity: ExternalIdentity | null;
   external_metadata: ExternalMetadata | null;
 };

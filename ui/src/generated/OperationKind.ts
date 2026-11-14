@@ -19,6 +19,9 @@ import type { TaskState } from './TaskState';
  * Create variants carry the client-generated id and `created_at` so
  * offline-created entities keep stable identity and Created ordering;
  * server-side REST creates fill those fields before building the operation.
+ * Create, update, and move variants may also carry the client's edit time as
+ * `updated_at`; the server stamps its own clock when it is absent, and creates
+ * fall back to the operation's `created_at`.
  */
 export type OperationKind =
   | {
@@ -27,8 +30,15 @@ export type OperationKind =
       name: string;
       description: string | null;
       created_at: string;
+      updated_at?: string | null;
     }
-  | { kind: 'update_project'; id: string; name: string | null; description?: string | null }
+  | {
+      kind: 'update_project';
+      id: string;
+      name: string | null;
+      description?: string | null;
+      updated_at?: string | null;
+    }
   | { kind: 'delete_project'; id: string }
   | {
       kind: 'create_section';
@@ -38,9 +48,16 @@ export type OperationKind =
       position: Position;
       color: Color | null;
       created_at: string;
+      updated_at?: string | null;
     }
-  | { kind: 'update_section'; id: string; name: string | null; color: ColorChange | null }
-  | { kind: 'move_section'; id: string; position: Position }
+  | {
+      kind: 'update_section';
+      id: string;
+      name: string | null;
+      color: ColorChange | null;
+      updated_at?: string | null;
+    }
+  | { kind: 'move_section'; id: string; position: Position; updated_at?: string | null }
   | { kind: 'delete_section'; id: string }
   | {
       kind: 'create_task';
@@ -54,6 +71,7 @@ export type OperationKind =
       state: TaskState;
       tags: Tags;
       created_at: string;
+      updated_at?: string | null;
       external_identity?: ExternalIdentity | null;
       external_metadata?: ExternalMetadata | null;
     }
@@ -67,11 +85,25 @@ export type OperationKind =
       state: TaskState | null;
       external_identity?: ExternalIdentity | null;
       external_metadata?: ExternalMetadata | null;
+      updated_at?: string | null;
     }
-  | { kind: 'move_task'; id: string; section_id: string | null; position: Position }
+  | {
+      kind: 'move_task';
+      id: string;
+      section_id: string | null;
+      position: Position;
+      updated_at?: string | null;
+    }
   | { kind: 'delete_task'; id: string }
-  | { kind: 'create_comment'; id: string; task_id: string; contents: string; created_at: string }
-  | { kind: 'update_comment'; id: string; contents: string }
+  | {
+      kind: 'create_comment';
+      id: string;
+      task_id: string;
+      contents: string;
+      created_at: string;
+      updated_at?: string | null;
+    }
+  | { kind: 'update_comment'; id: string; contents: string; updated_at?: string | null }
   | { kind: 'delete_comment'; id: string }
   | {
       kind: 'create_automation';
@@ -80,6 +112,12 @@ export type OperationKind =
       trigger: AutomationTrigger;
       actions: Array<AutomationAction>;
       created_at: string;
+      updated_at?: string | null;
     }
-  | { kind: 'update_automation'; id: string; actions: Array<AutomationAction> }
+  | {
+      kind: 'update_automation';
+      id: string;
+      actions: Array<AutomationAction>;
+      updated_at?: string | null;
+    }
   | { kind: 'delete_automation'; id: string };

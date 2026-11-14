@@ -160,6 +160,7 @@ struct TaskRow {
     state: String,
     tags: String,
     created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
     external_identity: Option<serde_json::Value>,
     external_metadata: Option<serde_json::Value>,
 }
@@ -205,6 +206,7 @@ impl TryFrom<TaskRow> for Task {
             state,
             tags: Tags::from(row.tags.as_str()),
             created_at: row.created_at,
+            updated_at: row.updated_at,
             external_identity,
             external_metadata,
         })
@@ -216,12 +218,14 @@ fn project_from_fields(
     name: String,
     description: Option<String>,
     created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 ) -> Result<Project, StorageError> {
     Ok(Project {
         id,
         name,
         description,
         created_at,
+        updated_at,
     })
 }
 
@@ -230,12 +234,14 @@ fn comment_from_fields(
     task_id: TaskId,
     contents: String,
     created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 ) -> Result<Comment, StorageError> {
     Ok(Comment {
         id,
         task_id,
         contents,
         created_at,
+        updated_at,
     })
 }
 
@@ -246,6 +252,7 @@ fn section_from_fields(
     position: String,
     color: Option<String>,
     created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 ) -> Result<Section, StorageError> {
     Ok(Section {
         id,
@@ -255,6 +262,7 @@ fn section_from_fields(
             .map_err(|e| StorageError::Database(format!("invalid section position: {e}")))?,
         color: color.and_then(|c| Color::from_str(&c, false).ok()),
         created_at,
+        updated_at,
     })
 }
 
@@ -264,6 +272,7 @@ fn automation_from_fields(
     trigger: serde_json::Value,
     actions: serde_json::Value,
     created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 ) -> Result<Automation, StorageError> {
     let trigger = serde_json::from_value::<AutomationTrigger>(trigger)
         .map_err(|e| StorageError::Database(format!("automation {id} has invalid trigger: {e}")))?;
@@ -276,6 +285,7 @@ fn automation_from_fields(
         trigger,
         actions,
         created_at,
+        updated_at,
     })
 }
 
@@ -307,8 +317,8 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, tags, created_at, external_identity, external_metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, tags, created_at, updated_at, external_identity, external_metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             "#,
             task.id,
             task.project_id,
@@ -320,6 +330,7 @@ impl Store for PostgresStore {
             task.state.as_str(),
             task.tags.to_string(),
             task.created_at,
+            task.updated_at,
             external_identity,
             external_metadata,
         )
@@ -357,6 +368,7 @@ impl Store for PostgresStore {
                     state,
                     tags,
                     created_at,
+                    updated_at,
                     external_identity,
                     external_metadata
                 FROM tasks
@@ -441,6 +453,7 @@ impl Store for PostgresStore {
                     state,
                     tags,
                     created_at,
+                    updated_at,
                     external_identity,
                     external_metadata
                 FROM tasks
@@ -484,6 +497,7 @@ impl Store for PostgresStore {
                     state,
                     tags,
                     created_at,
+                    updated_at,
                     external_identity,
                     external_metadata
                 FROM tasks
@@ -533,8 +547,8 @@ impl Store for PostgresStore {
         match sqlx::query!(
             r#"
                 UPDATE tasks
-                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7, external_identity = $8, external_metadata = $9
-                WHERE id = $10
+                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7, external_identity = $8, external_metadata = $9, updated_at = $10
+                WHERE id = $11
             "#,
             &task.title,
             task.description.as_deref(),
@@ -545,6 +559,7 @@ impl Store for PostgresStore {
             task.tags.to_string(),
             external_identity,
             external_metadata,
+            task.updated_at,
             task.id,
         )
         .execute(&mut *conn)
@@ -614,13 +629,14 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                INSERT INTO comments (id, task_id, contents, created_at)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO comments (id, task_id, contents, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5)
             "#,
             comment.id,
             comment.task_id,
             &comment.contents,
             comment.created_at,
+            comment.updated_at,
         )
         .execute(&mut *conn)
         .await
@@ -651,7 +667,8 @@ impl Store for PostgresStore {
                     id,
                     task_id,
                     contents,
-                    created_at
+                    created_at,
+                    updated_at
                 FROM comments
                 WHERE id = $1
             "#,
@@ -665,6 +682,7 @@ impl Store for PostgresStore {
                 row.task_id,
                 row.contents,
                 row.created_at,
+                row.updated_at,
             )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
@@ -687,7 +705,8 @@ impl Store for PostgresStore {
                     id,
                     task_id,
                     contents,
-                    created_at
+                    created_at,
+                    updated_at
                 FROM comments
                 WHERE task_id = $1
                 ORDER BY created_at ASC
@@ -699,7 +718,9 @@ impl Store for PostgresStore {
         {
             Ok(rows) => rows
                 .into_iter()
-                .map(|r| comment_from_fields(r.id, r.task_id, r.contents, r.created_at))
+                .map(|r| {
+                    comment_from_fields(r.id, r.task_id, r.contents, r.created_at, r.updated_at)
+                })
                 .collect::<Result<Vec<Comment>, _>>(),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to list comments: {}",
@@ -721,7 +742,8 @@ impl Store for PostgresStore {
                     c.id,
                     c.task_id,
                     c.contents,
-                    c.created_at
+                    c.created_at,
+                    c.updated_at
                 FROM comments c
                 JOIN tasks t ON t.id = c.task_id
                 WHERE t.project_id = $1
@@ -734,7 +756,9 @@ impl Store for PostgresStore {
         {
             Ok(rows) => rows
                 .into_iter()
-                .map(|r| comment_from_fields(r.id, r.task_id, r.contents, r.created_at))
+                .map(|r| {
+                    comment_from_fields(r.id, r.task_id, r.contents, r.created_at, r.updated_at)
+                })
                 .collect::<Result<Vec<Comment>, _>>(),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to list comments: {}",
@@ -753,10 +777,11 @@ impl Store for PostgresStore {
         match sqlx::query!(
             r#"
                 UPDATE comments
-                SET contents = $1
-                WHERE id = $2
+                SET contents = $1, updated_at = $2
+                WHERE id = $3
             "#,
             &comment.contents,
+            comment.updated_at,
             comment.id,
         )
         .execute(&mut *conn)
@@ -853,8 +878,8 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                INSERT INTO sections (id, project_id, name, position, color, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO sections (id, project_id, name, position, color, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
             section.id,
             section.project_id,
@@ -862,6 +887,7 @@ impl Store for PostgresStore {
             section.position.as_str(),
             section.color.map(|c| c.to_string()),
             section.created_at,
+            section.updated_at,
         )
         .execute(&mut *conn)
         .await
@@ -898,7 +924,8 @@ impl Store for PostgresStore {
                     name,
                     position,
                     color,
-                    created_at
+                    created_at,
+                    updated_at
                 FROM sections
                 WHERE id = $1
             "#,
@@ -914,6 +941,7 @@ impl Store for PostgresStore {
                 r.position,
                 r.color,
                 r.created_at,
+                r.updated_at,
             )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
@@ -940,7 +968,8 @@ impl Store for PostgresStore {
                     name,
                     position,
                     color,
-                    created_at
+                    created_at,
+                    updated_at
                 FROM sections
                 WHERE project_id = $1 AND name = $2
             "#,
@@ -957,6 +986,7 @@ impl Store for PostgresStore {
                 r.position,
                 r.color,
                 r.created_at,
+                r.updated_at,
             )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
@@ -981,7 +1011,8 @@ impl Store for PostgresStore {
                     name,
                     position,
                     color,
-                    created_at
+                    created_at,
+                    updated_at
                 FROM sections
                 WHERE project_id = $1
                 ORDER BY position ASC, id ASC
@@ -1001,6 +1032,7 @@ impl Store for PostgresStore {
                         r.position,
                         r.color,
                         r.created_at,
+                        r.updated_at,
                     )
                 })
                 .collect::<Result<Vec<Section>, StorageError>>(),
@@ -1021,12 +1053,13 @@ impl Store for PostgresStore {
         match sqlx::query!(
             r#"
                 UPDATE sections
-                SET name = $1, color = $2, position = $3
-                WHERE id = $4
+                SET name = $1, color = $2, position = $3, updated_at = $4
+                WHERE id = $5
             "#,
             &section.name,
             section.color.map(|c| c.to_string()),
             section.position.as_str(),
+            section.updated_at,
             section.id,
         )
         .execute(&mut *conn)
@@ -1171,14 +1204,15 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                INSERT INTO automations (id, project_id, trigger, actions, created_at)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO automations (id, project_id, trigger, actions, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
             "#,
             automation.id,
             automation.project_id,
             trigger,
             actions,
             automation.created_at,
+            automation.updated_at,
         )
         .execute(&mut *conn)
         .await
@@ -1210,7 +1244,8 @@ impl Store for PostgresStore {
                     project_id,
                     trigger,
                     actions,
-                    created_at
+                    created_at,
+                    updated_at
                 FROM automations
                 WHERE id = $1
             "#,
@@ -1225,6 +1260,7 @@ impl Store for PostgresStore {
                 row.trigger,
                 row.actions,
                 row.created_at,
+                row.updated_at,
             )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
@@ -1248,7 +1284,8 @@ impl Store for PostgresStore {
                     project_id,
                     trigger,
                     actions,
-                    created_at
+                    created_at,
+                    updated_at
                 FROM automations
                 WHERE project_id = $1
                 ORDER BY created_at ASC, id ASC
@@ -1267,6 +1304,7 @@ impl Store for PostgresStore {
                         row.trigger,
                         row.actions,
                         row.created_at,
+                        row.updated_at,
                     )
                 })
                 .collect::<Result<Vec<Automation>, StorageError>>(),
@@ -1291,10 +1329,11 @@ impl Store for PostgresStore {
         match sqlx::query!(
             r#"
                 UPDATE automations
-                SET actions = $1
-                WHERE id = $2
+                SET actions = $1, updated_at = $2
+                WHERE id = $3
             "#,
             actions,
+            automation.updated_at,
             automation.id,
         )
         .execute(&mut *conn)
@@ -1351,13 +1390,14 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                INSERT INTO projects (id, name, description, created_at)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO projects (id, name, description, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5)
             "#,
             project.id,
             &project.name,
             project.description.as_deref(),
             project.created_at,
+            project.updated_at,
         )
         .execute(&mut *conn)
         .await
@@ -1388,7 +1428,7 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                SELECT id, name, description, created_at
+                SELECT id, name, description, created_at, updated_at
                 FROM projects
                 WHERE id = $1
             "#,
@@ -1402,6 +1442,7 @@ impl Store for PostgresStore {
                 r.name,
                 r.description,
                 r.created_at,
+                r.updated_at,
             )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
@@ -1467,7 +1508,7 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                SELECT id, name, description, created_at
+                SELECT id, name, description, created_at, updated_at
                 FROM projects
                 WHERE name = $1
             "#,
@@ -1481,6 +1522,7 @@ impl Store for PostgresStore {
                 r.name,
                 r.description,
                 r.created_at,
+                r.updated_at,
             )?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
@@ -1498,7 +1540,7 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                SELECT id, name, description, created_at
+                SELECT id, name, description, created_at, updated_at
                 FROM projects
                 ORDER BY name ASC
             "#,
@@ -1508,7 +1550,9 @@ impl Store for PostgresStore {
         {
             Ok(rows) => rows
                 .into_iter()
-                .map(|r| project_from_fields(r.id, r.name, r.description, r.created_at))
+                .map(|r| {
+                    project_from_fields(r.id, r.name, r.description, r.created_at, r.updated_at)
+                })
                 .collect::<Result<Vec<Project>, _>>(),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to list projects: {}",
@@ -1527,11 +1571,12 @@ impl Store for PostgresStore {
         match sqlx::query!(
             r#"
                 UPDATE projects
-                SET name = $1, description = $2
-                WHERE id = $3
+                SET name = $1, description = $2, updated_at = $3
+                WHERE id = $4
             "#,
             &project.name,
             project.description.as_deref(),
+            project.updated_at,
             project.id,
         )
         .execute(&mut *conn)

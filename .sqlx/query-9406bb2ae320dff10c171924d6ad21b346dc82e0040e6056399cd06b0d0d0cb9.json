@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    task_id,\n                    contents,\n                    created_at\n                FROM comments\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT\n                    c.id,\n                    c.task_id,\n                    c.contents,\n                    c.created_at,\n                    c.updated_at\n                FROM comments c\n                JOIN tasks t ON t.id = c.task_id\n                WHERE t.project_id = $1\n                ORDER BY c.created_at ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "comments",
+            "name": "updated_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -57,8 +68,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "aaf16f8106b983f355f29334e984be01733964799b2d01c031aaa0dbd10fd8fe"
+  "hash": "9406bb2ae320dff10c171924d6ad21b346dc82e0040e6056399cd06b0d0d0cb9"
 }

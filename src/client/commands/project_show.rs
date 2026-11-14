@@ -40,6 +40,13 @@ pub async fn project_show(
             .with_timezone(&Local)
             .format(DATETIME_FORMAT_STR)
     );
+    println!(
+        "Updated at:   {}",
+        project
+            .updated_at
+            .with_timezone(&Local)
+            .format(DATETIME_FORMAT_STR)
+    );
 
     Ok(())
 }

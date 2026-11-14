@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use scry_core::models::{AutomationAction, AutomationTrigger, Change, Priority, Task, TaskState};
 use scry_core::sync::operations::{Operation, OperationKind};
 use scry_core::sync::replay::{ClientState, apply_changes, replay_operations, visible_state};
@@ -7,10 +8,16 @@ use uuid::Uuid;
 const PROJECT_ID: &str = "11111111-1111-4111-8111-111111111111";
 const SECTION_ID: &str = "22222222-2222-4222-8222-222222222222";
 const TASK_ID: &str = "44444444-4444-4444-8444-444444444444";
+const NEW_TASK_ID: &str = "55555555-5555-4555-8555-555555555555";
 const COMMENT_ID: &str = "66666666-6666-4666-8666-666666666666";
 const AUTOMATION_ID: &str = "88888888-8888-4888-8888-888888888888";
 const OPERATION_ID: &str = "c0000000-0000-4000-8000-000000000001";
 const NOW: &str = "2026-01-01T00:00:00Z";
+const EDITED: &str = "2026-02-02T00:00:00Z";
+
+fn utc(value: &str) -> DateTime<Utc> {
+    value.parse().expect("valid timestamp")
+}
 
 fn confirmed() -> ClientState {
     serde_json::from_value(json!({
@@ -382,4 +389,112 @@ fn old_update_project_operation_with_show_priority_deserializes() {
         operation.kind,
         OperationKind::UpdateProject { .. }
     ));
+}
+
+#[test]
+fn replay_operations_applies_updated_at_on_update_and_move() {
+    let update: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "update_task",
+        "id": TASK_ID,
+        "title": "local",
+        "updated_at": EDITED
+    }))
+    .unwrap();
+    let state = replay_operations(&confirmed(), &[update]);
+    assert_eq!(only_task(&state).updated_at, utc(EDITED));
+
+    let moved: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "move_task",
+        "id": TASK_ID,
+        "section_id": null,
+        "position": "a1",
+        "updated_at": "2026-03-03T00:00:00Z"
+    }))
+    .unwrap();
+    let state = replay_operations(&confirmed(), &[moved]);
+    assert_eq!(only_task(&state).updated_at, utc("2026-03-03T00:00:00Z"));
+}
+
+#[test]
+fn apply_changes_applies_task_updated_at() {
+    let change: Change = serde_json::from_value(json!({
+        "seq": 2,
+        "entity_type": "task",
+        "entity_id": TASK_ID,
+        "kind": "update",
+        "operation_id": OPERATION_ID,
+        "client_timestamp": null,
+        "field_values": { "updated_at": EDITED },
+        "created_at": NOW
+    }))
+    .unwrap();
+
+    let state = apply_changes(&confirmed(), &[change]);
+
+    assert_eq!(only_task(&state).updated_at, utc(EDITED));
+}
+
+#[test]
+fn create_task_with_updated_at_uses_the_operation_value() {
+    let operation: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "create_task",
+        "id": NEW_TASK_ID,
+        "project_id": PROJECT_ID,
+        "title": "new",
+        "description": null,
+        "priority": "normal",
+        "section_id": null,
+        "position": "a1",
+        "state": "open",
+        "tags": [],
+        "created_at": NOW,
+        "updated_at": EDITED
+    }))
+    .unwrap();
+
+    let state = replay_operations(&confirmed(), &[operation]);
+    let task = state.projects[0]
+        .tasks
+        .iter()
+        .find(|task| task.id == Uuid::parse_str(NEW_TASK_ID).unwrap())
+        .expect("the task was created");
+
+    assert_eq!(task.created_at, utc(NOW));
+    assert_eq!(task.updated_at, utc(EDITED));
+}
+
+#[test]
+fn create_task_without_updated_at_falls_back_to_created_at() {
+    let operation: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "create_task",
+        "id": NEW_TASK_ID,
+        "project_id": PROJECT_ID,
+        "title": "new",
+        "description": null,
+        "priority": "normal",
+        "section_id": null,
+        "position": "a1",
+        "state": "open",
+        "tags": [],
+        "created_at": NOW
+    }))
+    .unwrap();
+
+    let state = replay_operations(&confirmed(), &[operation]);
+    let task = state.projects[0]
+        .tasks
+        .iter()
+        .find(|task| task.id == Uuid::parse_str(NEW_TASK_ID).unwrap())
+        .expect("the task was created");
+
+    assert_eq!(task.created_at, utc(NOW));
+    assert_eq!(task.updated_at, utc(NOW));
 }

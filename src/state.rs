@@ -37,6 +37,7 @@ pub struct TaskWithComments {
     pub(crate) position: Position,
     pub(crate) tags: Tags,
     pub(crate) created_at: DateTime<Utc>,
+    pub(crate) updated_at: DateTime<Utc>,
     pub(crate) comments: Vec<Comment>,
     pub(crate) external_identity: Option<ExternalIdentity>,
     pub(crate) external_metadata: Option<ExternalMetadata>,
@@ -55,6 +56,7 @@ impl TaskWithComments {
             position: task.position.clone(),
             tags: task.tags.clone(),
             created_at: task.created_at,
+            updated_at: task.updated_at,
             comments: comments.into_iter().collect(),
             external_identity: task.external_identity.clone(),
             external_metadata: task.external_metadata.clone(),
@@ -81,6 +83,7 @@ impl From<&TaskWithComments> for Task {
             state: value.state,
             tags: value.tags.clone(),
             created_at: value.created_at,
+            updated_at: value.updated_at,
             external_identity: value.external_identity.clone(),
             external_metadata: value.external_metadata.clone(),
         }
@@ -250,6 +253,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             created_at: ts("2026-01-01T00:00:00Z"),
+            updated_at: ts("2026-01-01T00:00:00Z"),
         }
     }
 
@@ -261,6 +265,7 @@ mod tests {
             position: Position::parse(position).expect("valid test position"),
             color: None,
             created_at: ts("2026-01-01T00:00:00Z"),
+            updated_at: ts("2026-01-01T00:00:00Z"),
         }
     }
 
@@ -283,6 +288,7 @@ mod tests {
             state,
             tags: Tags::default(),
             created_at: ts("2026-01-01T00:00:00Z"),
+            updated_at: ts("2026-01-01T00:00:00Z"),
             external_identity: None,
             external_metadata: None,
         }
@@ -366,6 +372,7 @@ mod tests {
                 task_id: task_id(2),
                 contents: "belongs to first".to_string(),
                 created_at: ts("2026-01-02T00:00:00Z"),
+                updated_at: ts("2026-01-02T00:00:00Z"),
             }],
             automations: Vec::new(),
         };

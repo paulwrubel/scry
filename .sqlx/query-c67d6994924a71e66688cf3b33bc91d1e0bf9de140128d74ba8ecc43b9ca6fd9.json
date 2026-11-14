@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    name,\n                    position,\n                    color,\n                    created_at\n                FROM sections\n                WHERE project_id = $1 AND name = $2\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    name,\n                    position,\n                    color,\n                    created_at,\n                    updated_at\n                FROM sections\n                WHERE project_id = $1 AND name = $2\n            ",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,17 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sections",
+            "name": "updated_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -82,8 +93,9 @@
       false,
       false,
       true,
+      false,
       false
     ]
   },
-  "hash": "0885e87c331faf00d2acad56801203a3cb8c5846207d2ac799685c6c5d4b80b0"
+  "hash": "c67d6994924a71e66688cf3b33bc91d1e0bf9de140128d74ba8ecc43b9ca6fd9"
 }

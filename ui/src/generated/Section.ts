@@ -9,4 +9,5 @@ export type Section = {
   position: Position;
   color: Color | null;
   created_at: string;
+  updated_at: string;
 };

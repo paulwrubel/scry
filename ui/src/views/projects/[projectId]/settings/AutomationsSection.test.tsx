@@ -20,6 +20,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     name: 'Project',
     description: null,
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     sections: [
       {
         id: SECTION_ID,
@@ -28,6 +29,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
         position: 'a0',
         color: null,
         created_at: CREATED_AT,
+        updated_at: CREATED_AT,
       },
     ],
     tasks: [],
@@ -44,6 +46,7 @@ function automation(overrides: Partial<Automation> = {}): Automation {
     trigger: { kind: 'task_created' },
     actions: [{ kind: 'close_task' }],
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     ...overrides,
   };
 }

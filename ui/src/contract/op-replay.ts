@@ -57,6 +57,7 @@ function applyOperation(state: ClientState, operation: Operation): void {
         name: operation.name,
         description: operation.description,
         created_at: operation.created_at,
+        updated_at: operation.updated_at ?? operation.created_at,
       };
       const existing = findProject(state, operation.id);
       if (existing) {
@@ -77,6 +78,9 @@ function applyOperation(state: ClientState, operation: Operation): void {
       if (operation.description !== undefined) {
         snapshot.description = operation.description;
       }
+      if (operation.updated_at !== undefined && operation.updated_at !== null) {
+        snapshot.updated_at = operation.updated_at;
+      }
       return;
     }
     case 'delete_project': {
@@ -91,6 +95,7 @@ function applyOperation(state: ClientState, operation: Operation): void {
         position: operation.position,
         color: operation.color,
         created_at: operation.created_at,
+        updated_at: operation.updated_at ?? operation.created_at,
       };
       const snapshot = findProject(state, section.project_id);
       if (snapshot) {
@@ -109,12 +114,18 @@ function applyOperation(state: ClientState, operation: Operation): void {
       if (operation.color !== undefined && operation.color !== null) {
         section.color = operation.color === 'clear' ? null : operation.color.set;
       }
+      if (operation.updated_at !== undefined && operation.updated_at !== null) {
+        section.updated_at = operation.updated_at;
+      }
       return;
     }
     case 'move_section': {
       const section = findSection(state, operation.id);
       if (section) {
         section.position = operation.position;
+        if (operation.updated_at !== undefined && operation.updated_at !== null) {
+          section.updated_at = operation.updated_at;
+        }
       }
       return;
     }
@@ -134,6 +145,7 @@ function applyOperation(state: ClientState, operation: Operation): void {
         state: operation.state,
         tags: operation.tags,
         created_at: operation.created_at,
+        updated_at: operation.updated_at ?? operation.created_at,
         external_identity: operation.external_identity ?? null,
         external_metadata: operation.external_metadata ?? null,
       };
@@ -169,6 +181,9 @@ function applyOperation(state: ClientState, operation: Operation): void {
       if (operation.external_metadata !== undefined) {
         task.external_metadata = operation.external_metadata;
       }
+      if (operation.updated_at !== undefined && operation.updated_at !== null) {
+        task.updated_at = operation.updated_at;
+      }
       return;
     }
     case 'move_task': {
@@ -176,6 +191,9 @@ function applyOperation(state: ClientState, operation: Operation): void {
       if (task) {
         task.section_id = operation.section_id;
         task.position = operation.position;
+        if (operation.updated_at !== undefined && operation.updated_at !== null) {
+          task.updated_at = operation.updated_at;
+        }
       }
       return;
     }
@@ -189,6 +207,7 @@ function applyOperation(state: ClientState, operation: Operation): void {
         task_id: operation.task_id,
         contents: operation.contents,
         created_at: operation.created_at,
+        updated_at: operation.updated_at ?? operation.created_at,
       };
       const snapshot = findProjectForTask(state, comment.task_id);
       if (snapshot) {
@@ -200,6 +219,9 @@ function applyOperation(state: ClientState, operation: Operation): void {
       const comment = findComment(state, operation.id);
       if (comment) {
         comment.contents = operation.contents;
+        if (operation.updated_at !== undefined && operation.updated_at !== null) {
+          comment.updated_at = operation.updated_at;
+        }
       }
       return;
     }
@@ -214,6 +236,7 @@ function applyOperation(state: ClientState, operation: Operation): void {
         trigger: operation.trigger,
         actions: operation.actions,
         created_at: operation.created_at,
+        updated_at: operation.updated_at ?? operation.created_at,
       };
       const snapshot = findProject(state, automation.project_id);
       if (snapshot) {
@@ -225,6 +248,9 @@ function applyOperation(state: ClientState, operation: Operation): void {
       const automation = findAutomation(state, operation.id);
       if (automation) {
         automation.actions = operation.actions;
+        if (operation.updated_at !== undefined && operation.updated_at !== null) {
+          automation.updated_at = operation.updated_at;
+        }
       }
       return;
     }
@@ -341,8 +367,13 @@ function applyCommentChange(state: ClientState, change: Change): void {
     }
     case 'update': {
       const comment = findComment(state, change.entity_id);
-      if (comment && typeof change.field_values.contents === 'string') {
-        comment.contents = change.field_values.contents;
+      if (comment) {
+        if (typeof change.field_values.contents === 'string') {
+          comment.contents = change.field_values.contents;
+        }
+        if (typeof change.field_values.updated_at === 'string') {
+          comment.updated_at = change.field_values.updated_at;
+        }
       }
       return;
     }
@@ -365,8 +396,13 @@ function applyAutomationChange(state: ClientState, change: Change): void {
     }
     case 'update': {
       const automation = findAutomation(state, change.entity_id);
-      if (automation && Array.isArray(change.field_values.actions)) {
-        automation.actions = change.field_values.actions as AutomationAction[];
+      if (automation) {
+        if (Array.isArray(change.field_values.actions)) {
+          automation.actions = change.field_values.actions as AutomationAction[];
+        }
+        if (typeof change.field_values.updated_at === 'string') {
+          automation.updated_at = change.field_values.updated_at;
+        }
       }
       return;
     }
@@ -384,6 +420,9 @@ function applyProjectValues(snapshot: ProjectSnapshot, values: Record<string, un
   if ('description' in values) {
     snapshot.description = typeof values.description === 'string' ? values.description : null;
   }
+  if (typeof values.updated_at === 'string') {
+    snapshot.updated_at = values.updated_at;
+  }
 }
 
 function applySectionValues(section: Section, values: Record<string, unknown>): void {
@@ -395,6 +434,9 @@ function applySectionValues(section: Section, values: Record<string, unknown>): 
   }
   if (typeof values.position === 'string') {
     section.position = values.position;
+  }
+  if (typeof values.updated_at === 'string') {
+    section.updated_at = values.updated_at;
   }
 }
 
@@ -430,6 +472,9 @@ function applyTaskValues(task: Task, values: Record<string, unknown>): void {
     // matches the generated types even though the map is untyped
     task.external_metadata = values.external_metadata as ExternalMetadata | null;
   }
+  if (typeof values.updated_at === 'string') {
+    task.updated_at = values.updated_at;
+  }
 }
 
 function setProject(snapshot: ProjectSnapshot, project: Project): void {
@@ -437,6 +482,7 @@ function setProject(snapshot: ProjectSnapshot, project: Project): void {
   snapshot.name = project.name;
   snapshot.description = project.description;
   snapshot.created_at = project.created_at;
+  snapshot.updated_at = project.updated_at;
 }
 
 function upsertSection(snapshot: ProjectSnapshot, section: Section): void {

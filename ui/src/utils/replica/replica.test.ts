@@ -85,6 +85,7 @@ describe('replica confirmed state', () => {
       trigger: { kind: 'task_created' },
       actions: [{ kind: 'close_task' }],
       created_at: '2026-01-01T00:00:05Z',
+      updated_at: '2026-01-01T00:00:05Z',
     };
     const state = sampleState();
     state.projects[0].automations = [automation];
@@ -111,6 +112,7 @@ describe('replica confirmed state', () => {
           name: 'Second project',
           description: null,
           created_at: '2026-02-01T00:00:00Z',
+          updated_at: '2026-02-01T00:00:00Z',
           sections: [],
           tasks: [],
           comments: [],
@@ -586,6 +588,7 @@ function extraTask(id: string, title: string): Task {
     state: 'open',
     tags: [],
     created_at: '2026-01-01T00:00:05Z',
+    updated_at: '2026-01-01T00:00:05Z',
     external_identity: null,
     external_metadata: null,
   };
@@ -618,6 +621,7 @@ function sampleState(): ClientState {
     position: 'a0',
     color: 'blue',
     created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
   };
   const sectionB: Section = {
     id: SECTION_B_ID,
@@ -626,6 +630,7 @@ function sampleState(): ClientState {
     position: 'a1',
     color: null,
     created_at: '2026-01-01T00:00:01Z',
+    updated_at: '2026-01-01T00:00:01Z',
   };
   const taskA: Task = {
     id: TASK_A_ID,
@@ -638,6 +643,7 @@ function sampleState(): ClientState {
     state: 'open',
     tags: ['alpha', 'beta'],
     created_at: '2026-01-01T00:00:02Z',
+    updated_at: '2026-01-01T00:00:02Z',
     external_identity: null,
     external_metadata: null,
   };
@@ -652,6 +658,7 @@ function sampleState(): ClientState {
     state: 'closed',
     tags: [],
     created_at: '2026-01-01T00:00:03Z',
+    updated_at: '2026-01-01T00:00:03Z',
     external_identity: null,
     external_metadata: null,
   };
@@ -660,6 +667,7 @@ function sampleState(): ClientState {
     task_id: TASK_A_ID,
     contents: 'A comment',
     created_at: '2026-01-01T00:00:04Z',
+    updated_at: '2026-01-01T00:00:04Z',
   };
 
   return {
@@ -669,6 +677,7 @@ function sampleState(): ClientState {
         name: 'Project',
         description: 'The project',
         created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
         sections: [sectionA, sectionB],
         tasks: [taskA, taskB],
         comments: [comment],
@@ -686,6 +695,7 @@ function orderedState(): ClientState {
     position: 'a0',
     color: 'green',
     created_at: '2026-03-01T00:00:00Z',
+    updated_at: '2026-03-01T00:00:00Z',
   };
   const sectionB: Section = {
     id: 'aaa-section',
@@ -694,6 +704,7 @@ function orderedState(): ClientState {
     position: 'a1',
     color: null,
     created_at: '2026-03-01T00:00:01Z',
+    updated_at: '2026-03-01T00:00:01Z',
   };
   const taskA: Task = {
     id: 'zzz-task',
@@ -706,6 +717,7 @@ function orderedState(): ClientState {
     state: 'open',
     tags: ['first'],
     created_at: '2026-03-01T00:00:02Z',
+    updated_at: '2026-03-01T00:00:02Z',
     external_identity: null,
     external_metadata: null,
   };
@@ -720,6 +732,7 @@ function orderedState(): ClientState {
     state: 'closed',
     tags: [],
     created_at: '2026-03-01T00:00:03Z',
+    updated_at: '2026-03-01T00:00:03Z',
     external_identity: null,
     external_metadata: null,
   };
@@ -728,6 +741,7 @@ function orderedState(): ClientState {
     task_id: 'zzz-task',
     contents: 'Comment text',
     created_at: '2026-03-01T00:00:04Z',
+    updated_at: '2026-03-01T00:00:04Z',
   };
 
   return {
@@ -737,6 +751,7 @@ function orderedState(): ClientState {
         name: 'First project',
         description: null,
         created_at: '2026-03-01T00:00:00Z',
+        updated_at: '2026-03-01T00:00:00Z',
         sections: [sectionA, sectionB],
         tasks: [taskA, taskB],
         comments: [comment],
@@ -747,6 +762,7 @@ function orderedState(): ClientState {
         name: 'Second project',
         description: 'empty',
         created_at: '2026-03-01T00:00:05Z',
+        updated_at: '2026-03-01T00:00:05Z',
         sections: [],
         tasks: [],
         comments: [],

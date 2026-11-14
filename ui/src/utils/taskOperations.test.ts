@@ -27,6 +27,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     name: 'Project',
     description: null,
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     sections: [],
     tasks: [],
     comments: [],
@@ -45,6 +46,7 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     state: 'open',
     tags: [],
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     external_identity: null,
     external_metadata: null,
     ...overrides,
@@ -55,6 +57,7 @@ function comment(overrides: Partial<Comment> & Pick<Comment, 'id' | 'contents'>)
   return {
     task_id: TASK_ID,
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     ...overrides,
   };
 }

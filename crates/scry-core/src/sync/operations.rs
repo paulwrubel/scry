@@ -112,6 +112,9 @@ pub enum ColorChange {
 /// Create variants carry the client-generated id and `created_at` so
 /// offline-created entities keep stable identity and Created ordering;
 /// server-side REST creates fill those fields before building the operation.
+/// Create, update, and move variants may also carry the client's edit time as
+/// `updated_at`; the server stamps its own clock when it is absent, and creates
+/// fall back to the operation's `created_at`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -121,6 +124,8 @@ pub enum OperationKind {
         name: String,
         description: Option<String>,
         created_at: DateTime<Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     /// `None` leaves a field unchanged. `description` distinguishes all three
     /// states: `None` leaves it, `Some(None)` clears it, `Some(Some(text))`
@@ -135,6 +140,8 @@ pub enum OperationKind {
         )]
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         description: Option<Option<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     DeleteProject {
         id: ProjectId,
@@ -146,15 +153,21 @@ pub enum OperationKind {
         position: Position,
         color: Option<Color>,
         created_at: DateTime<Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     UpdateSection {
         id: SectionId,
         name: Option<String>,
         color: Option<ColorChange>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     MoveSection {
         id: SectionId,
         position: Position,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     DeleteSection {
         id: SectionId,
@@ -171,6 +184,8 @@ pub enum OperationKind {
         state: TaskState,
         tags: Tags,
         created_at: DateTime<Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         external_identity: Option<ExternalIdentity>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -209,6 +224,8 @@ pub enum OperationKind {
         )]
         #[cfg_attr(feature = "ts", ts(type = "ExternalMetadata | null"))]
         external_metadata: Option<Option<Box<ExternalMetadata>>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     /// `section_id` and `position` are always set together; `None` means the
     /// task moves to No section.
@@ -216,6 +233,8 @@ pub enum OperationKind {
         id: TaskId,
         section_id: Option<SectionId>,
         position: Position,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     DeleteTask {
         id: TaskId,
@@ -225,10 +244,14 @@ pub enum OperationKind {
         task_id: TaskId,
         contents: String,
         created_at: DateTime<Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     UpdateComment {
         id: CommentId,
         contents: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     DeleteComment {
         id: CommentId,
@@ -239,10 +262,14 @@ pub enum OperationKind {
         trigger: AutomationTrigger,
         actions: Vec<AutomationAction>,
         created_at: DateTime<Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     UpdateAutomation {
         id: AutomationId,
         actions: Vec<AutomationAction>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime<Utc>>,
     },
     DeleteAutomation {
         id: AutomationId,

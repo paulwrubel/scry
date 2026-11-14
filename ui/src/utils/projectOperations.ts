@@ -38,12 +38,14 @@ export function updateProjectOperation(
     id: project.id,
     name: nameChanged ? name : null,
     description: descriptionChanged ? nextDescription : undefined,
+    updated_at: new Date().toISOString(),
   };
 }
 
 export function createProjectOperation(draft: ProjectDraft): Operation {
   const name = draft.name.trim();
   const description = draft.description.trim();
+  const created_at = new Date().toISOString();
 
   return {
     operation_id: newId(),
@@ -52,7 +54,8 @@ export function createProjectOperation(draft: ProjectDraft): Operation {
     id: newId(),
     name,
     description: description.length === 0 ? null : description,
-    created_at: new Date().toISOString(),
+    created_at,
+    updated_at: created_at,
   };
 }
 

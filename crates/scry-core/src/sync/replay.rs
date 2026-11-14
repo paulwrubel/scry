@@ -6,6 +6,7 @@
 
 use std::collections::HashSet;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -67,12 +68,14 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             name,
             description,
             created_at,
+            updated_at,
         } => {
             let project = Project {
                 id: *id,
                 name: name.clone(),
                 description: description.clone(),
                 created_at: *created_at,
+                updated_at: (*updated_at).unwrap_or(*created_at),
             };
             if let Some(snapshot) = state.projects.iter_mut().find(|p| p.project.id == *id) {
                 snapshot.project = project;
@@ -84,6 +87,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             id,
             name,
             description,
+            updated_at,
         } => {
             if let Some(snapshot) = state.projects.iter_mut().find(|p| p.project.id == *id) {
                 let project = &mut snapshot.project;
@@ -92,6 +96,9 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(description) = description {
                     project.description = description.clone();
+                }
+                if let Some(updated_at) = updated_at {
+                    project.updated_at = *updated_at;
                 }
             }
         }
@@ -105,6 +112,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             position,
             color,
             created_at,
+            updated_at,
         } => {
             let section = Section {
                 id: *id,
@@ -113,6 +121,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 position: position.clone(),
                 color: *color,
                 created_at: *created_at,
+                updated_at: (*updated_at).unwrap_or(*created_at),
             };
             if let Some(snapshot) = state
                 .projects
@@ -122,7 +131,12 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 upsert_section(snapshot, section);
             }
         }
-        OperationKind::UpdateSection { id, name, color } => {
+        OperationKind::UpdateSection {
+            id,
+            name,
+            color,
+            updated_at,
+        } => {
             if let Some(section) = find_section_mut(state, *id) {
                 if let Some(name) = name {
                     section.name = name.clone();
@@ -133,11 +147,21 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                         ColorChange::Set(color) => Some(*color),
                     };
                 }
+                if let Some(updated_at) = updated_at {
+                    section.updated_at = *updated_at;
+                }
             }
         }
-        OperationKind::MoveSection { id, position } => {
+        OperationKind::MoveSection {
+            id,
+            position,
+            updated_at,
+        } => {
             if let Some(section) = find_section_mut(state, *id) {
                 section.position = position.clone();
+                if let Some(updated_at) = updated_at {
+                    section.updated_at = *updated_at;
+                }
             }
         }
         OperationKind::DeleteSection { id } => {
@@ -154,6 +178,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             state: task_state,
             tags,
             created_at,
+            updated_at,
             external_identity,
             external_metadata,
         } => {
@@ -168,6 +193,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 state: *task_state,
                 tags: tags.clone(),
                 created_at: *created_at,
+                updated_at: (*updated_at).unwrap_or(*created_at),
                 external_identity: external_identity.clone(),
                 external_metadata: external_metadata.as_deref().cloned(),
             };
@@ -188,6 +214,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             state: task_state,
             external_identity,
             external_metadata,
+            updated_at,
         } => {
             if let Some(task) = find_task_mut(state, *id) {
                 if let Some(title) = title {
@@ -211,16 +238,23 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 if let Some(metadata) = external_metadata {
                     task.external_metadata = metadata.as_deref().cloned();
                 }
+                if let Some(updated_at) = updated_at {
+                    task.updated_at = *updated_at;
+                }
             }
         }
         OperationKind::MoveTask {
             id,
             section_id,
             position,
+            updated_at,
         } => {
             if let Some(task) = find_task_mut(state, *id) {
                 task.section_id = *section_id;
                 task.position = position.clone();
+                if let Some(updated_at) = updated_at {
+                    task.updated_at = *updated_at;
+                }
             }
         }
         OperationKind::DeleteTask { id } => {
@@ -231,12 +265,14 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             task_id,
             contents,
             created_at,
+            updated_at,
         } => {
             let comment = Comment {
                 id: *id,
                 task_id: *task_id,
                 contents: contents.clone(),
                 created_at: *created_at,
+                updated_at: (*updated_at).unwrap_or(*created_at),
             };
             if let Some(snapshot) = state
                 .projects
@@ -246,9 +282,16 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 upsert_comment(snapshot, comment);
             }
         }
-        OperationKind::UpdateComment { id, contents } => {
+        OperationKind::UpdateComment {
+            id,
+            contents,
+            updated_at,
+        } => {
             if let Some(comment) = find_comment_mut(state, *id) {
                 comment.contents = contents.clone();
+                if let Some(updated_at) = updated_at {
+                    comment.updated_at = *updated_at;
+                }
             }
         }
         OperationKind::DeleteComment { id } => {
@@ -260,6 +303,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             trigger,
             actions,
             created_at,
+            updated_at,
         } => {
             let automation = Automation {
                 id: *id,
@@ -267,6 +311,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 trigger: trigger.clone(),
                 actions: actions.clone(),
                 created_at: *created_at,
+                updated_at: (*updated_at).unwrap_or(*created_at),
             };
             if let Some(snapshot) = state
                 .projects
@@ -276,9 +321,16 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 upsert_automation(snapshot, automation);
             }
         }
-        OperationKind::UpdateAutomation { id, actions } => {
+        OperationKind::UpdateAutomation {
+            id,
+            actions,
+            updated_at,
+        } => {
             if let Some(automation) = find_automation_mut(state, *id) {
                 automation.actions = actions.clone();
+                if let Some(updated_at) = updated_at {
+                    automation.updated_at = *updated_at;
+                }
             }
         }
         OperationKind::DeleteAutomation { id } => {
@@ -361,10 +413,12 @@ fn apply_change(state: &mut ClientState, change: &Change) {
             }
         }
         (EntityType::Comment, ChangeKind::Update) => {
-            if let Some(comment) = find_comment_mut(state, change.entity_id)
-                && let Some(contents) = change.field_values.get("contents").and_then(|v| v.as_str())
-            {
-                comment.contents = contents.to_string();
+            if let Some(comment) = find_comment_mut(state, change.entity_id) {
+                if let Some(contents) = change.field_values.get("contents").and_then(|v| v.as_str())
+                {
+                    comment.contents = contents.to_string();
+                }
+                apply_updated_at(&mut comment.updated_at, &change.field_values);
             }
         }
         (EntityType::Comment, ChangeKind::Delete) => {
@@ -382,17 +436,28 @@ fn apply_change(state: &mut ClientState, change: &Change) {
             }
         }
         (EntityType::Automation, ChangeKind::Update) => {
-            if let Some(automation) = find_automation_mut(state, change.entity_id)
-                && let Some(actions) = change.field_values.get("actions")
-                && let Ok(actions) =
-                    serde_json::from_value::<Vec<AutomationAction>>(actions.clone())
-            {
-                automation.actions = actions;
+            if let Some(automation) = find_automation_mut(state, change.entity_id) {
+                if let Some(actions) = change.field_values.get("actions")
+                    && let Ok(actions) =
+                        serde_json::from_value::<Vec<AutomationAction>>(actions.clone())
+                {
+                    automation.actions = actions;
+                }
+                apply_updated_at(&mut automation.updated_at, &change.field_values);
             }
         }
         (EntityType::Automation, ChangeKind::Delete) => {
             remove_automation(state, change.entity_id);
         }
+    }
+}
+
+/// Apply the `updated_at` carried by a change payload, when present.
+fn apply_updated_at(updated_at: &mut DateTime<Utc>, values: &serde_json::Value) {
+    if let Some(value) = values.get("updated_at")
+        && let Ok(parsed) = serde_json::from_value::<DateTime<Utc>>(value.clone())
+    {
+        *updated_at = parsed;
     }
 }
 
@@ -403,6 +468,7 @@ fn apply_project_values(project: &mut Project, values: &serde_json::Value) {
     if let Some(description) = values.get("description") {
         project.description = description.as_str().map(str::to_string);
     }
+    apply_updated_at(&mut project.updated_at, values);
 }
 
 fn apply_section_values(section: &mut Section, values: &serde_json::Value) {
@@ -421,6 +487,7 @@ fn apply_section_values(section: &mut Section, values: &serde_json::Value) {
     {
         section.position = position;
     }
+    apply_updated_at(&mut section.updated_at, values);
 }
 
 fn apply_task_values(task: &mut Task, values: &serde_json::Value) {
@@ -461,6 +528,7 @@ fn apply_task_values(task: &mut Task, values: &serde_json::Value) {
     {
         task.position = position;
     }
+    apply_updated_at(&mut task.updated_at, values);
 }
 
 fn snapshot(project: Project) -> ProjectSnapshot {
