@@ -2,17 +2,13 @@
 import type * as DndKitReact from '@dnd-kit/react';
 import type * as DndKitSortable from '@dnd-kit/react/sortable';
 import type * as MediaQuery from '@/hooks/useMediaQuery';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router-dom';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Operation } from '@/generated/Operation';
-import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
-import { ReplicaContext } from '@/providers/Replica/context';
-import type { ReplicaContextValue } from '@/providers/Replica/context';
-import { BoardPage } from './index';
-import { createReplicaMock, makeProject, makeReplicaSnapshot } from '@/test/fixtures';
+import { CREATED_AT, makeProject } from '@/test/fixtures';
+import { renderBoard } from '@/test/renderBoard';
 
 const dragIds = vi.hoisted(() => ({
   droppable: [] as string[],
@@ -48,8 +44,6 @@ vi.mock('@dnd-kit/react/sortable', async (importOriginal) => {
   };
 });
 
-const CREATED_AT = '2026-01-01T00:00:00Z';
-
 function section(id: string, name: string, position: string): Section {
   return {
     id,
@@ -77,37 +71,6 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     external_metadata: null,
     ...overrides,
   };
-}
-
-function SearchProbe() {
-  const [params] = useSearchParams();
-  return <span data-testid="search">{params.toString()}</span>;
-}
-
-function renderBoard(
-  project: ProjectSnapshot,
-  enqueue: (operation: Operation) => Promise<void>,
-  path = `/projects/${project.id}`,
-) {
-  const snapshot = makeReplicaSnapshot([project]);
-
-  const context: ReplicaContextValue = {
-    status: 'ready',
-    replica: createReplicaMock(snapshot, { enqueue }),
-    error: undefined,
-    retry: () => undefined,
-  };
-
-  render(
-    <ReplicaContext.Provider value={context}>
-      <MemoryRouter initialEntries={[path]}>
-        <SearchProbe />
-        <Routes>
-          <Route path="/projects/:projectId" element={<BoardPage />} />
-        </Routes>
-      </MemoryRouter>
-    </ReplicaContext.Provider>,
-  );
 }
 
 afterEach(() => {
