@@ -35,8 +35,8 @@
 ## Cross-language contract
 
 - Wire types derive `ts_rs::TS` behind the `ts` feature. `just generate-bindings` targets `scry-api`, writing and formatting `ui/src/generated/` (machine-owned — never hand-edit); `just check-bindings` fails on drift.
-- The TypeScript ports in `ui/src/contract/` (`positions`, `handles`, `task-order`, `op-replay`, `github`) mirror Rust and are maintained by hand. There is no shared fixture system: when changing one side, update the other implementation and its tests in the same change.
-- `crates/scry-core/src/sync/replay.rs` is the reference client model (confirmed state plus outbox replay); the server never calls it, and `ui/src/contract/op-replay.ts` mirrors it.
+- The TypeScript ports in `ui/src/contract/` (`positions`, `handles`, `task-order`, `replay`, `github`) mirror Rust and are maintained by hand. There is no shared fixture system: when changing one side, update the other implementation and its tests in the same change.
+- `crates/scry-core/src/sync/replay.rs` is the reference client model (confirmed state plus outbox replay); the server never calls it, and `ui/src/contract/replay/` mirrors it.
 
 ## Release
 

@@ -1,7 +1,7 @@
 import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
 import { openDB } from 'idb';
-import type { ClientState } from '@/contract/op-replay';
-import { applyChanges as applyConfirmedChanges } from '@/contract/op-replay';
+import type { ClientState } from '@/contract/replay';
+import { applyChanges as applyConfirmedChanges } from '@/contract/replay';
 import type { Automation } from '@/generated/Automation';
 import type { Change } from '@/generated/Change';
 import type { Comment } from '@/generated/Comment';

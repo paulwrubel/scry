@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import type { ClientState } from '@/contract/op-replay';
+import type { ClientState } from '@/contract/replay';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaProvider, useReplicaStatus } from '@/providers/Replica';
 import { openReplica } from '@/utils/replica';

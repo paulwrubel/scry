@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientState } from '@/contract/op-replay';
+import type { ClientState } from '@/contract/replay';
 import type { Change } from '@/generated/Change';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';

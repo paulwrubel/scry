@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { Automation } from '../generated/Automation';
-import type { AutomationAction } from '../generated/AutomationAction';
-import type { Change } from '../generated/Change';
-import type { Comment } from '../generated/Comment';
-import type { Operation } from '../generated/Operation';
-import type { ProjectSnapshot } from '../generated/ProjectSnapshot';
-import type { Section } from '../generated/Section';
-import type { Task } from '../generated/Task';
-import type { ClientState } from './op-replay';
-import { applyChanges, replayOperations, visibleState } from './op-replay';
+import type { Automation } from '../../generated/Automation';
+import type { AutomationAction } from '../../generated/AutomationAction';
+import type { Change } from '../../generated/Change';
+import type { Comment } from '../../generated/Comment';
+import type { Operation } from '../../generated/Operation';
+import type { ProjectSnapshot } from '../../generated/ProjectSnapshot';
+import type { Section } from '../../generated/Section';
+import type { Task } from '../../generated/Task';
+import type { ClientState } from './index';
+import { applyChanges, replayOperations, visibleState } from './index';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const SECTION_ID = '22222222-2222-4222-8222-222222222222';

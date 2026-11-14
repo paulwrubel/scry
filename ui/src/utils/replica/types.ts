@@ -1,4 +1,4 @@
-import type { ClientState } from '@/contract/op-replay';
+import type { ClientState } from '@/contract/replay';
 import type { Operation } from '@/generated/Operation';
 
 export const REPLICA_DATABASE = 'scry-replica';

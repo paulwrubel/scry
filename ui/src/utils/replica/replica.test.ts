@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientState } from '@/contract/op-replay';
+import type { ClientState } from '@/contract/replay';
 import type { Automation } from '@/generated/Automation';
 import type { Change } from '@/generated/Change';
 import type { Comment } from '@/generated/Comment';
