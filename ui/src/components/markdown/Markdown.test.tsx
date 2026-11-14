@@ -33,6 +33,16 @@ describe('Markdown', () => {
     expect(container.querySelector('b')).toBeNull();
   });
 
+  it('drops html comments', () => {
+    const { container } = render(
+      <Markdown>{'Before\n\n<!-- One or two sentences about the change -->\n\nAfter'}</Markdown>,
+    );
+
+    expect(container.textContent).not.toContain('One or two sentences');
+    expect(container.textContent).toContain('Before');
+    expect(container.textContent).toContain('After');
+  });
+
   it('loads remote images lazily without a referrer', () => {
     const { container } = render(<Markdown>{'![shot](https://example.com/a.png)'}</Markdown>);
 

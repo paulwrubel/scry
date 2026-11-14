@@ -61,6 +61,7 @@ export function Markdown(props: MarkdownProps) {
         components={COMPONENTS}
         allowedElements={inline ? INLINE_ELEMENTS : undefined}
         unwrapDisallowed={inline}
+        skipHtml
       >
         {children}
       </ReactMarkdown>
