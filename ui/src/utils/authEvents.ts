@@ -9,6 +9,8 @@ export function isAuthChannelMessage(value: unknown): value is AuthChannelMessag
   if (typeof value !== 'object' || value === null || !('type' in value)) {
     return false;
   }
+  // the guard above proves `value` is a non-null object with a `type` key.
+  // casting it here only exposes the fields we probe next
   const message = value as { type: unknown; accessToken?: unknown };
   if (message.type === 'signed-out') {
     return true;

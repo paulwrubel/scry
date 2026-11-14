@@ -1,27 +1,19 @@
 import { useCallback, useMemo } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
-import { useReplicaSnapshot, useReplicaStatus } from '@/providers/Replica';
+import { useReplicaSnapshot } from '@/providers/Replica';
 import { ActiveProjectContext } from './context';
 import type { ActiveProjectContextType } from './context';
 import {
   readActiveProjectId,
   resolveActiveProjectId,
   writeActiveProjectId,
-} from '@/utils/activeProject';
+} from '@/utils/projects/activeProject';
 
 export type ActiveProjectProviderProps = {
   children: React.ReactNode;
 };
 
 export function ActiveProjectProvider(props: ActiveProjectProviderProps) {
-  const { status } = useReplicaStatus();
-  if (status !== 'ready') {
-    return props.children;
-  }
-  return <ReadyActiveProjectProvider {...props} />;
-}
-
-function ReadyActiveProjectProvider(props: ActiveProjectProviderProps) {
   const { children } = props;
 
   const snapshot = useReplicaSnapshot();

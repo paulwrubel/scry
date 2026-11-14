@@ -4,7 +4,7 @@ import { Outlet } from 'react-router-dom';
 import { ActiveProjectProvider } from '@/providers/ActiveProject';
 import { AuthProvider } from '@/providers/Auth';
 import { InstallPromptProvider } from '@/providers/InstallPrompt';
-import { ReplicaProvider } from '@/providers/Replica';
+import { ReplicaGate, ReplicaProvider } from '@/providers/Replica';
 import { SyncProvider } from '@/providers/Sync';
 
 const theme: CustomFlowbiteTheme = {
@@ -25,11 +25,13 @@ export function Providers() {
       <InstallPromptProvider>
         <ReplicaProvider>
           <AuthProvider>
-            <SyncProvider>
-              <ActiveProjectProvider>
-                <Outlet />
-              </ActiveProjectProvider>
-            </SyncProvider>
+            <ReplicaGate fallback={<Outlet />}>
+              <SyncProvider>
+                <ActiveProjectProvider>
+                  <Outlet />
+                </ActiveProjectProvider>
+              </SyncProvider>
+            </ReplicaGate>
           </AuthProvider>
         </ReplicaProvider>
       </InstallPromptProvider>

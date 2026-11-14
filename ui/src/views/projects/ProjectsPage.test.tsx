@@ -7,8 +7,9 @@ import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ActiveProjectContext } from '@/providers/ActiveProject/context';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import type { Replica } from '@/utils/replica';
-import { ProjectsPage } from './index';
+import { ProjectsPage } from './ProjectsPage';
+import { createReplicaMock } from '@/test/fixtures';
+import { makeReplicaSnapshot } from '@/test/fixtures';
 
 const CREATED_AT = '2026-01-01T00:00:00Z';
 
@@ -36,22 +37,11 @@ function renderPage(
   activeProjectId: string | null,
   enqueue: (operation: Operation) => Promise<void>,
 ) {
-  const snapshot = {
-    confirmed: { projects },
-    visible: { projects },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot(projects);
 
   const replicaContext: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot, { enqueue }),
     error: undefined,
     retry: () => undefined,
   };

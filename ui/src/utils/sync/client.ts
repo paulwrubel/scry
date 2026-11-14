@@ -75,6 +75,7 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
           const body = await response.text();
           throw syncError('server', body);
         }
+        // response.json() is untyped; the snapshot endpoint's documented payload is a Snapshot
         const snapshotDocument = (await response.json()) as Snapshot;
         await replica.bootstrap(
           { projects: snapshotDocument.projects },
@@ -109,6 +110,7 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
 
       let syncResponse: SyncResponse;
       try {
+        // response.json() is untyped; the sync endpoint's documented payload is a SyncResponse
         syncResponse = (await response.json()) as SyncResponse;
       } catch (cause) {
         throw syncError('server', 'invalid sync response', cause);

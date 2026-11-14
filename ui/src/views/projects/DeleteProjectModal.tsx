@@ -2,7 +2,8 @@ import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-rea
 import { useState } from 'react';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useCloseRequest } from '@/hooks/useCloseRequest';
-import { useProjectMutations } from '@/hooks/useProjectMutations';
+import { useEnqueue } from '@/hooks/useEnqueue';
+import { deleteProjectOperation } from '@/utils/projects/operations';
 
 export type DeleteProjectModalProps = {
   project: ProjectSnapshot;
@@ -12,7 +13,8 @@ export type DeleteProjectModalProps = {
 
 export function DeleteProjectModal(props: DeleteProjectModalProps) {
   const { project, onClose, onDeleted } = props;
-  const { deleteProject } = useProjectMutations(project);
+
+  const enqueue = useEnqueue();
 
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -25,7 +27,7 @@ export function DeleteProjectModal(props: DeleteProjectModalProps) {
     setError(null);
 
     try {
-      await deleteProject();
+      await enqueue(deleteProjectOperation(project));
       onDeleted(project.id);
     } catch {
       setError('Could not delete this project.');

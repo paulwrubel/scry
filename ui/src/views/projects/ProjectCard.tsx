@@ -1,5 +1,6 @@
 import { Button, Card } from 'flowbite-react';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import { formatDate } from '@/utils/date';
 
 export type ProjectCardProps = {
   project: ProjectSnapshot;
@@ -30,7 +31,7 @@ export function ProjectCard(props: ProjectCardProps) {
         </div>
         <div>
           <dt className="text-muted text-xs">Created</dt>
-          <dd>{new Date(project.created_at).toLocaleDateString()}</dd>
+          <dd>{formatDate(project.created_at)}</dd>
         </div>
       </dl>
 

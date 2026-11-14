@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { useAppForm } from '@/hooks/useAppForm';
 import { useCloseRequest } from '@/hooks/useCloseRequest';
-import { useCreateProject } from '@/hooks/useCreateProject';
+import { useEnqueue } from '@/hooks/useEnqueue';
+import { createProjectOperation } from '@/utils/projects/operations';
 
 function schemaFor(existingNames: readonly string[]) {
   return z.object({
@@ -24,7 +25,8 @@ export type NewProjectModalProps = {
 
 export function NewProjectModal(props: NewProjectModalProps) {
   const { existingNames, onClose, onCreated } = props;
-  const { createProject } = useCreateProject();
+
+  const enqueue = useEnqueue();
 
   const [error, setError] = useState<string | null>(null);
 
@@ -39,8 +41,9 @@ export function NewProjectModal(props: NewProjectModalProps) {
       setError(null);
 
       try {
-        const projectId = await createProject(value);
-        onCreated(projectId);
+        const operation = createProjectOperation(value);
+        await enqueue(operation);
+        onCreated(operation.id);
       } catch {
         setError('Could not create this project.');
       }

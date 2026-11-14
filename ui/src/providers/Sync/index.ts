@@ -1,4 +1,5 @@
-export { useSync, useSyncSnapshot } from './hook';
+export { useSync } from './context';
+export { useSyncSnapshot } from './hook';
 export {
   deriveSyncStatus,
   formatLastSyncedAt,

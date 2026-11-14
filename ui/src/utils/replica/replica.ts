@@ -1,5 +1,5 @@
-import type { ClientState } from '@/contract/op-replay';
-import { replayOperations } from '@/contract/op-replay';
+import type { ClientState } from '@/contract/replay';
+import { replayOperations } from '@/contract/replay';
 import type { Change } from '@/generated/Change';
 import type { Operation } from '@/generated/Operation';
 import { requestPersistence } from './persistence';

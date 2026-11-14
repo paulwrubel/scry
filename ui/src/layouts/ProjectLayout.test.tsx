@@ -5,40 +5,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import type { Replica } from '@/utils/replica';
 import { ProjectLayout } from './ProjectLayout';
+import { createReplicaMock, makeProject, makeReplicaSnapshot, makeTask } from '@/test/fixtures';
 
 const PROJECT_ID = 'project-1';
-const CREATED_AT = '2026-01-01T00:00:00Z';
 
 function projectSnapshot(): ProjectSnapshot {
-  return {
-    id: PROJECT_ID,
-    name: 'Project',
-    description: null,
-    created_at: CREATED_AT,
-    updated_at: CREATED_AT,
-    sections: [],
-    tasks: [
-      {
-        id: 'task-1',
-        project_id: PROJECT_ID,
-        title: 'Task title',
-        description: null,
-        priority: 'normal',
-        section_id: null,
-        position: 'a0',
-        state: 'open',
-        tags: [],
-        created_at: CREATED_AT,
-        updated_at: CREATED_AT,
-        external_identity: null,
-        external_metadata: null,
-      },
-    ],
-    comments: [],
-    automations: [],
-  };
+  return makeProject({ tasks: [makeTask()] });
 }
 
 function LocationProbe() {
@@ -53,22 +26,11 @@ function LocationProbe() {
 
 function renderLayout(path: string) {
   const project = projectSnapshot();
-  const snapshot = {
-    confirmed: { projects: [project] },
-    visible: { projects: [project] },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot([project]);
 
   const context: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue: async () => undefined,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot),
     error: undefined,
     retry: () => undefined,
   };

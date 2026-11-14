@@ -9,7 +9,7 @@ import {
   automationTriggerKey,
   automationTriggerLabel,
   findAutomation,
-} from '@/utils/automationOperations';
+} from '@/utils/automations/operations';
 import { ActionEditor } from './ActionEditor';
 
 function defaultAutomationAction(sections: readonly Section[]): AutomationAction {

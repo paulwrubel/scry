@@ -13,6 +13,7 @@ export type RejectedOperation = {
 export type SyncError = Error & { readonly kind: SyncErrorKind };
 
 export function syncError(kind: SyncErrorKind, message: string, cause?: unknown): SyncError {
+  // the next lines tag a plain Error with name/kind, which TS cannot express on Error alone
   const error = new Error(message, cause === undefined ? undefined : { cause }) as SyncError & {
     kind: SyncErrorKind;
   };
@@ -25,6 +26,7 @@ export function isSyncError(error: unknown): error is SyncError {
   return (
     error instanceof Error &&
     error.name === 'SyncError' &&
+    // any Error subclass may reach here, so read the tag through a shape cast
     typeof (error as { kind?: unknown }).kind === 'string'
   );
 }

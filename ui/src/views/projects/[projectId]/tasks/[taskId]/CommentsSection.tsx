@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { z } from 'zod';
 import type { Comment } from '@/generated/Comment';
 import { useAppForm } from '@/hooks/useAppForm';
+import { formatDateTime } from '@/utils/date';
 
 const schema = z.object({
   contents: z.string().trim().min(1, 'A comment cannot be empty.'),
@@ -126,7 +127,7 @@ export function CommentsSection(props: CommentsSectionProps) {
           ) : (
             <>
               <p className="text-sm whitespace-pre-wrap">{comment.contents}</p>
-              <p className="text-faint text-xs">{new Date(comment.created_at).toLocaleString()}</p>
+              <p className="text-faint text-xs">{formatDateTime(comment.created_at)}</p>
               {confirmingId === comment.id ? (
                 <div className="flex items-center gap-2">
                   <span className="text-muted text-sm">Delete this comment?</span>

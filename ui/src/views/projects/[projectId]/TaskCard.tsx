@@ -4,15 +4,10 @@ import type { CSSProperties } from 'react';
 import { SiGithub } from 'react-icons/si';
 import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { Link, useLocation } from 'react-router-dom';
-import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
-import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/external';
-import { tagBadgeStyle } from '@/utils/tagColor';
-
-const PRIORITY_DOT_CLASS: Record<Exclude<Priority, 'normal'>, string> = {
-  critical: 'bg-red-600',
-  elevated: 'bg-yellow-300',
-};
+import { PRIORITY_DOT_CLASS } from '@/data/priority';
+import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/github';
+import { tagBadgeStyle } from '@/utils/tasks/tagColor';
 
 export type TaskCardProps = {
   projectId: string;

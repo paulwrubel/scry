@@ -9,7 +9,7 @@ import {
   buildAutomationOperation,
   deleteAutomationOperation,
   findAutomation,
-} from '@/utils/automationOperations';
+} from '@/utils/automations/operations';
 import { AddAutomationForm } from './AddAutomationForm';
 import { AutomationRuleCard } from './AutomationRuleCard';
 

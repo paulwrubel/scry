@@ -3,9 +3,10 @@ import 'fake-indexeddb/auto';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openReplica } from '@/utils/replica';
-import type { Replica, ReplicaSnapshot } from '@/utils/replica';
+import type { Replica } from '@/utils/replica';
 import { useReplica, useReplicaSnapshot, useReplicaStatus } from './hook';
 import { ReplicaProvider } from './provider';
+import { createReplicaMock, makeReplicaSnapshot } from '@/test/fixtures';
 
 type ReadyGateProps = {
   children: React.ReactNode;
@@ -132,20 +133,9 @@ describe('ReplicaProvider', () => {
   });
 
   it('closes the Replica on unmount', async () => {
-    const snapshot: ReplicaSnapshot = {
-      confirmed: { projects: [] },
-      visible: { projects: [] },
-      outbox: [],
-      needsBootstrap: false,
-      persisted: false,
-      lastSeenSeq: 0,
-    };
+    const snapshot = makeReplicaSnapshot([], { persisted: false });
     const close = vi.fn();
-    const replica = {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      close,
-    } as unknown as Replica;
+    const replica = createReplicaMock(snapshot, { close });
 
     const { unmount } = render(
       <ReplicaProvider open={() => Promise.resolve(replica)}>

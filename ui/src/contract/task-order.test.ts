@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Task } from '../generated/Task';
+import type { Task } from '@/generated/Task';
 import { compareTasks } from './task-order';
 
 const FIRST_ID = 'e0000000-0000-4000-8000-000000000001';

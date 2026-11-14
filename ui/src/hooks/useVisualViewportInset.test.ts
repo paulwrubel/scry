@@ -19,7 +19,7 @@ function setInnerHeight(value: number) {
 }
 
 function installVisualViewport(height: number, offsetTop: number): VisualViewport {
-  const viewport = new EventTarget() as unknown as VisualViewport;
+  const viewport = new EventTarget() as VisualViewport;
   Object.defineProperty(viewport, 'height', { configurable: true, value: height });
   Object.defineProperty(viewport, 'offsetTop', { configurable: true, value: offsetTop });
   Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });

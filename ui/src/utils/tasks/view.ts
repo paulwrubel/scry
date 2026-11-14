@@ -1,0 +1,52 @@
+import type { TaskSortingMode } from '@/generated/TaskSortingMode';
+import { TASK_SORTING_MODE_LABELS } from '@/data/taskView';
+
+export const TASK_SORTING_PARAM = 'sort';
+
+export const SHOW_PRIORITY_PARAM = 'show_priority';
+
+export const DEFAULT_TASK_SORTING_MODE: TaskSortingMode = 'manual';
+
+export const TASK_SORTING_MODES: readonly TaskSortingMode[] = ['manual', 'priority'];
+
+export const TASK_SORTING_OPTIONS: readonly { value: TaskSortingMode; label: string }[] = [
+  { value: 'manual', label: TASK_SORTING_MODE_LABELS.manual },
+  { value: 'priority', label: TASK_SORTING_MODE_LABELS.priority },
+];
+
+export function isTaskSortingMode(value: string): value is TaskSortingMode {
+  // safe upcast: includes() needs a wider element type to
+  // accept an arbitrary URL param string
+  return (TASK_SORTING_MODES as readonly string[]).includes(value);
+}
+
+export function parseTaskSortingMode(params: URLSearchParams): TaskSortingMode {
+  const raw = params.get(TASK_SORTING_PARAM) ?? '';
+  return isTaskSortingMode(raw) ? raw : DEFAULT_TASK_SORTING_MODE;
+}
+
+export function applyTaskSortingMode(
+  params: URLSearchParams,
+  mode: TaskSortingMode,
+): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.delete(TASK_SORTING_PARAM);
+  // the manual default stays out of the URL so a default view keeps a clean link
+  if (mode !== DEFAULT_TASK_SORTING_MODE) {
+    next.set(TASK_SORTING_PARAM, mode);
+  }
+  return next;
+}
+
+export function parseShowPriority(params: URLSearchParams): boolean {
+  return params.get(SHOW_PRIORITY_PARAM) === 'true';
+}
+
+export function applyShowPriority(params: URLSearchParams, show: boolean): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.delete(SHOW_PRIORITY_PARAM);
+  if (show) {
+    next.set(SHOW_PRIORITY_PARAM, 'true');
+  }
+  return next;
+}

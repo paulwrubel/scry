@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createRequiredContext } from '@/hooks/createRequiredContext';
 
 export type InstallPromptContextType = {
   canInstall: boolean;
@@ -8,4 +8,5 @@ export type InstallPromptContextType = {
   promptInstall: () => Promise<void>;
 };
 
-export const InstallPromptContext = createContext<InstallPromptContextType | null>(null);
+export const [InstallPromptContext, useInstallPrompt] =
+  createRequiredContext<InstallPromptContextType>('InstallPrompt');

@@ -2,7 +2,7 @@ import { Badge, Button } from 'flowbite-react';
 import { useState } from 'react';
 import type { Task } from '@/generated/Task';
 import { useAppForm } from '@/hooks/useAppForm';
-import { tagBadgeStyle } from '@/utils/tagColor';
+import { tagBadgeStyle } from '@/utils/tasks/tagColor';
 import { FieldHeader } from './FieldHeader';
 
 const INPUT_CLASS =

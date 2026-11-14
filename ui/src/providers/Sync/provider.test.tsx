@@ -7,7 +7,8 @@ import type { AuthContextType } from '@/providers/Auth/context';
 import { ReplicaProvider, useReplicaStatus } from '@/providers/Replica';
 import { openReplica } from '@/utils/replica';
 import type { SyncClient, SyncSnapshot } from '@/utils/sync';
-import { useSync, useSyncSnapshot } from './hook';
+import { useSync } from './context';
+import { useSyncSnapshot } from './hook';
 import { SyncProvider } from './provider';
 
 // useSyncExternalStore compares snapshots by identity, so the fake client must

@@ -10,6 +10,7 @@ export type FormTextAreaFieldProps = {
 
 export function FormTextAreaField(props: FormTextAreaFieldProps) {
   const { label, placeholder, rows = 4 } = props;
+
   const field = useFieldContext<string>();
   const error = field.state.meta.isTouched ? fieldErrorMessage(field.state.meta.errors) : null;
 

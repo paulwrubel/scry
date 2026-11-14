@@ -1,7 +1,7 @@
 import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
 import { openDB } from 'idb';
-import type { ClientState } from '@/contract/op-replay';
-import { applyChanges as applyConfirmedChanges } from '@/contract/op-replay';
+import type { ClientState } from '@/contract/replay';
+import { applyChanges as applyConfirmedChanges } from '@/contract/replay';
 import type { Automation } from '@/generated/Automation';
 import type { Change } from '@/generated/Change';
 import type { Comment } from '@/generated/Comment';
@@ -494,6 +494,7 @@ function storageError(error: unknown): ReplicaError {
   }
 
   const name =
+    // DOMException and Error subclasses carry name, but a guarded object has no known shape
     typeof error === 'object' && error !== null ? (error as { name?: unknown }).name : undefined;
 
   if (name === 'QuotaExceededError') {

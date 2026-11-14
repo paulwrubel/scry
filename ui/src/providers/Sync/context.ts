@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createRequiredContext } from '@/hooks/createRequiredContext';
 import type { SyncClient } from '@/utils/sync';
 
 export type SyncContextValue = {
@@ -8,4 +8,4 @@ export type SyncContextValue = {
   clearAllRejectedOperations: () => void;
 };
 
-export const SyncContext = createContext<SyncContextValue | null>(null);
+export const [SyncContext, useSync] = createRequiredContext<SyncContextValue>('Sync');

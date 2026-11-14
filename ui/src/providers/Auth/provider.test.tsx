@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { StrictMode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetBootstrapCache } from '@/layouts/authLoader';
-import { useAuth } from './hook';
+import { useAuth } from './context';
 import { AuthProvider } from './provider';
 
 type Call = { url: string; init?: RequestInit };

@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createRequiredContext } from '@/hooks/createRequiredContext';
 
 export type LoginResult = { ok: true } | { ok: false; message: string };
 
@@ -11,4 +11,4 @@ export type AuthContextType = {
   logout: () => Promise<void>;
 };
 
-export const AuthContext = createContext<AuthContextType | null>(null);
+export const [AuthContext, useAuth] = createRequiredContext<AuthContextType>('Auth');

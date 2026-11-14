@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { z } from 'zod';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useAppForm } from '@/hooks/useAppForm';
-import { useProjectMutations } from '@/hooks/useProjectMutations';
+import { useEnqueue } from '@/hooks/useEnqueue';
+import { updateProjectOperation } from '@/utils/projects/operations';
 
 const schema = z.object({
   name: z.string().trim().min(1, 'A project needs a name.'),
@@ -16,7 +17,8 @@ export type ProjectSettingsFormProps = {
 
 export function ProjectSettingsForm(props: ProjectSettingsFormProps) {
   const { project } = props;
-  const { saveFields } = useProjectMutations(project);
+
+  const enqueue = useEnqueue();
 
   const [error, setError] = useState<string | null>(null);
 
@@ -31,10 +33,13 @@ export function ProjectSettingsForm(props: ProjectSettingsFormProps) {
       setError(null);
 
       try {
-        await saveFields({
+        const operation = updateProjectOperation(project, {
           name: value.name,
           description: value.description,
         });
+        if (operation !== null) {
+          await enqueue(operation);
+        }
       } catch {
         setError('Could not save this project.');
       }

@@ -12,6 +12,7 @@ export type SortableTaskCardProps = {
 
 export function SortableTaskCard(props: SortableTaskCardProps) {
   const { projectId, task, showPriority, index, group } = props;
+
   const { ref, isDragging } = useSortable({
     id: task.id,
     index,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useInstallPrompt } from './hook';
+import { useInstallPrompt } from './context';
 import { InstallPromptProvider } from './provider';
 
 afterEach(cleanup);

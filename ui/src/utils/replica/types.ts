@@ -1,4 +1,4 @@
-import type { ClientState } from '@/contract/op-replay';
+import type { ClientState } from '@/contract/replay';
 import type { Operation } from '@/generated/Operation';
 
 export const REPLICA_DATABASE = 'scry-replica';
@@ -28,6 +28,7 @@ export function replicaError(
   message: string,
   cause?: unknown,
 ): ReplicaError {
+  // TS cannot express adding fields to Error, so the cast records the shape assigned below
   const error = new Error(message, cause === undefined ? undefined : { cause }) as ReplicaError & {
     kind: ReplicaErrorKind;
   };
@@ -40,6 +41,7 @@ export function isReplicaError(error: unknown): error is ReplicaError {
   return (
     error instanceof Error &&
     error.name === 'ReplicaError' &&
+    // the error may be any Error subclass, so read the tag through a shape cast
     typeof (error as { kind?: unknown }).kind === 'string'
   );
 }

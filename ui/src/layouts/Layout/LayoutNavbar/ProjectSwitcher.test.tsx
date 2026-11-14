@@ -2,28 +2,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ActiveProjectContext } from '@/providers/ActiveProject/context';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import type { Replica } from '@/utils/replica';
 import { ProjectSwitcher } from './ProjectSwitcher';
-
-const CREATED_AT = '2026-01-01T00:00:00Z';
-
-function projectSnapshot(id: string, name: string): ProjectSnapshot {
-  return {
-    id,
-    name,
-    description: null,
-    created_at: CREATED_AT,
-    updated_at: CREATED_AT,
-    sections: [],
-    tasks: [],
-    comments: [],
-    automations: [],
-  };
-}
+import { createReplicaMock, makeProject, makeReplicaSnapshot } from '@/test/fixtures';
 
 function LocationProbe() {
   const location = useLocation();
@@ -31,23 +14,15 @@ function LocationProbe() {
 }
 
 function renderSwitcher(path: string, activeProjectId = 'p1') {
-  const projects = [projectSnapshot('p1', 'Alpha'), projectSnapshot('p2', 'Beta')];
-  const snapshot = {
-    confirmed: { projects },
-    visible: { projects },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const projects = [
+    makeProject({ id: 'p1', name: 'Alpha' }),
+    makeProject({ id: 'p2', name: 'Beta' }),
+  ];
+  const snapshot = makeReplicaSnapshot(projects);
 
   const replicaContext: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue: async () => undefined,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot),
     error: undefined,
     retry: () => undefined,
   };

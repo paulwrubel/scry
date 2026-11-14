@@ -9,6 +9,7 @@ export type TaskActionsProps = {
 
 export function TaskActions(props: TaskActionsProps) {
   const { task, onToggleState, onRequestDelete } = props;
+
   const closed = task.state === 'closed';
   const stateLocked = (task.external_metadata?.state ?? null) !== null;
 

@@ -11,8 +11,8 @@ import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
-import type { Replica } from '@/utils/replica';
 import { TaskDetail } from './TaskDetail';
+import { createReplicaMock, makeReplicaSnapshot } from '@/test/fixtures';
 
 const PROJECT_ID = 'project-1';
 const TASK_ID = 'task-1';
@@ -113,22 +113,11 @@ function renderTask(
   enqueue: (operation: Operation) => Promise<void>,
   onClose = vi.fn(),
 ) {
-  const snapshot = {
-    confirmed: { projects: [project] },
-    visible: { projects: [project] },
-    outbox: [],
-    needsBootstrap: false,
-    persisted: true,
-    lastSeenSeq: 0,
-  };
+  const snapshot = makeReplicaSnapshot([project]);
 
   const context: ReplicaContextValue = {
     status: 'ready',
-    replica: {
-      getSnapshot: () => snapshot,
-      subscribe: () => () => undefined,
-      enqueue,
-    } as unknown as Replica,
+    replica: createReplicaMock(snapshot, { enqueue }),
     error: undefined,
     retry: () => undefined,
   };

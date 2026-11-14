@@ -8,6 +8,7 @@ import { parseGithubIdentity } from '@/contract/github';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Task } from '@/generated/Task';
 import { useAppForm } from '@/hooks/useAppForm';
+import { formatDateTime } from '@/utils/date';
 import {
   externalError,
   githubIconColor,
@@ -16,7 +17,7 @@ import {
   githubLabel,
   githubUrl,
   lastSyncedAt,
-} from '@/utils/external';
+} from '@/utils/github';
 
 const ICON_BUTTON_CLASS =
   'text-muted inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50';
@@ -207,9 +208,7 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
             </button>
           </div>
           <p className="text-faint text-xs">
-            {syncedAt === null
-              ? 'Not synced yet.'
-              : `Last synced ${new Date(syncedAt).toLocaleString()}`}
+            {syncedAt === null ? 'Not synced yet.' : `Last synced ${formatDateTime(syncedAt)}`}
           </p>
           {syncError === null ? null : <Badge color="failure">GitHub: {syncError}</Badge>}
         </>
