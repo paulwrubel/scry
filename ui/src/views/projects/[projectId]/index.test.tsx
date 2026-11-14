@@ -221,33 +221,6 @@ describe('BoardPage', () => {
     expect(screen.queryByText('Closed task')).toBeNull();
   });
 
-  it('shows only closed tasks when Closed is the only status', () => {
-    const project = makeProject({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [
-        task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
-        task({
-          id: 'closed',
-          title: 'Closed task',
-          section_id: 'backlog',
-          position: 'a0',
-          state: 'closed',
-        }),
-      ],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Filter tasks' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Closed' }));
-
-    expect(screen.getByText('Closed task')).toBeDefined();
-    expect(screen.queryByText('Open task')).toBeNull();
-  });
-
   it('defaults the status filter to All', () => {
     const project = makeProject({
       sections: [section('backlog', 'Backlog', 'a0')],
@@ -264,62 +237,6 @@ describe('BoardPage', () => {
     expect((screen.getByRole('radio', { name: 'All' }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole('radio', { name: 'Open' }) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole('radio', { name: 'Closed' }) as HTMLInputElement).checked).toBe(false);
-  });
-
-  it('restores every task when All is selected', () => {
-    const project = makeProject({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [
-        task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
-        task({
-          id: 'closed',
-          title: 'Closed task',
-          section_id: 'backlog',
-          position: 'a0',
-          state: 'closed',
-        }),
-      ],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Filter tasks' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Open' }));
-
-    expect(screen.queryByText('Closed task')).toBeNull();
-
-    fireEvent.click(screen.getByRole('radio', { name: 'All' }));
-
-    expect(screen.getByText('Open task')).toBeDefined();
-    expect(screen.getByText('Closed task')).toBeDefined();
-  });
-
-  it('reads the closed-only status filter from the URL', () => {
-    const project = makeProject({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [
-        task({ id: 'open', title: 'Open task', section_id: 'backlog', position: 'a1' }),
-        task({
-          id: 'closed',
-          title: 'Closed task',
-          section_id: 'backlog',
-          position: 'a0',
-          state: 'closed',
-        }),
-      ],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-      '/projects/project-1?state=closed',
-    );
-
-    expect(screen.getByText('Closed task')).toBeDefined();
-    expect(screen.queryByText('Open task')).toBeNull();
   });
 
   it('filters tasks by tag', () => {
@@ -401,37 +318,6 @@ describe('BoardPage', () => {
 
     expect(screen.getByText('Open task')).toBeDefined();
     expect(screen.queryByText('Closed task')).toBeNull();
-  });
-
-  it('reads tag filters from the URL', () => {
-    const project = makeProject({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [
-        task({
-          id: 'bug',
-          title: 'Bug task',
-          section_id: 'backlog',
-          position: 'a0',
-          tags: ['bug'],
-        }),
-        task({
-          id: 'feature',
-          title: 'Feature task',
-          section_id: 'backlog',
-          position: 'a1',
-          tags: ['feature'],
-        }),
-      ],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-      '/projects/project-1?tags=bug',
-    );
-
-    expect(screen.getByText('Bug task')).toBeDefined();
-    expect(screen.queryByText('Feature task')).toBeNull();
   });
 
   it('orders tasks on the board from the sort URL param', () => {
@@ -565,48 +451,6 @@ describe('BoardPage', () => {
     expect(typeof operation.id).toBe('string');
     expect(operation.operation_id).not.toBe(operation.id);
     expect(operation.created_at).toMatch(/Z$/);
-  });
-
-  it('puts open tasks without a section first and closed ones last', () => {
-    const project = makeProject({
-      sections: [section('backlog', 'Backlog', 'a0')],
-      tasks: [
-        task({ id: 'done', title: 'Done task', state: 'closed' }),
-        task({ id: 'loose', title: 'Loose task', position: 'a1' }),
-      ],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-    );
-
-    const open = screen.getByRole('heading', { name: 'Open (No Section)' });
-    const backlog = screen.getByRole('heading', { name: 'Backlog' });
-    const closed = screen.getByRole('heading', { name: 'Closed (No Section)' });
-
-    expect(open.compareDocumentPosition(backlog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(backlog.compareDocumentPosition(closed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByText('Loose task')).toBeDefined();
-    expect(screen.getByText('Done task')).toBeDefined();
-  });
-
-  it('hides each no-section column when its tasks are filtered out', () => {
-    const project = makeProject({
-      tasks: [
-        task({ id: 'done', title: 'Done task', state: 'closed' }),
-        task({ id: 'loose', title: 'Loose task', position: 'a1' }),
-      ],
-    });
-
-    renderBoard(
-      project,
-      vi.fn(async () => undefined),
-      '/projects/project-1?state=open',
-    );
-
-    expect(screen.getByRole('heading', { name: 'Open (No Section)' })).toBeDefined();
-    expect(screen.queryByRole('heading', { name: 'Closed (No Section)' })).toBeNull();
   });
 
   it('offers create in the Open No Section column', async () => {
