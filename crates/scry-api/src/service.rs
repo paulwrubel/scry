@@ -226,6 +226,7 @@ impl ProjectService {
                 state: task.state,
                 tags: task.tags.clone(),
                 created_at: task.created_at,
+                updated_at: None,
                 external_identity: task.external_identity.clone(),
                 external_metadata: task.external_metadata.clone().map(Box::new),
             },
@@ -280,6 +281,7 @@ impl ProjectService {
                 state: task.state,
                 tags: task.tags.clone(),
                 created_at: task.created_at,
+                updated_at: None,
                 external_identity: task.external_identity.clone(),
                 external_metadata: source.external_metadata.clone().map(Box::new),
             },
@@ -339,6 +341,7 @@ impl ProjectService {
                     id: task.id,
                     section_id: task.section_id,
                     position: task.position.clone(),
+                    updated_at: None,
                 },
             ));
         }
@@ -365,6 +368,7 @@ impl ProjectService {
                 external_metadata: patch
                     .external_metadata
                     .map(|metadata| metadata.map(Box::new)),
+                updated_at: None,
             };
             if update_changes_locked_external_field(&task, &kind) {
                 return Err(ServiceError::Storage(StorageError::Conflict(format!(
@@ -372,14 +376,11 @@ impl ProjectService {
                     task.id
                 ))));
             }
-            // apply exactly the op's fields to the returned model
-            task_field_updates(&mut task, &kind);
             ops.push(new_operation(Uuid::new_v4(), kind));
         }
 
         self.apply_operations(&ops, ApplyMode::Atomic).await?;
-
-        Ok(task)
+        self.require_task(task_id).await
     }
 
     pub async fn move_task_by_id(
@@ -453,11 +454,14 @@ impl ProjectService {
                 id: task.id,
                 section_id: task.section_id,
                 position: task.position.clone(),
+                updated_at: None,
             },
         ));
         self.apply_operations(&ops, ApplyMode::Atomic).await?;
 
-        Ok(TaskChangeResult { task })
+        Ok(TaskChangeResult {
+            task: self.require_task(task_id).await?,
+        })
     }
 
     pub async fn close_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
@@ -477,10 +481,11 @@ impl ProjectService {
                 state: Some(task.state),
                 external_identity: None,
                 external_metadata: None,
+                updated_at: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
-        Ok(task)
+        self.require_task(task_id).await
     }
 
     pub async fn open_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
@@ -500,10 +505,11 @@ impl ProjectService {
                 state: Some(task.state),
                 external_identity: None,
                 external_metadata: None,
+                updated_at: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
-        Ok(task)
+        self.require_task(task_id).await
     }
 
     pub async fn delete_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
@@ -534,6 +540,7 @@ impl ProjectService {
                 task_id: comment.task_id,
                 contents: comment.contents.clone(),
                 created_at: comment.created_at,
+                updated_at: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
@@ -565,19 +572,17 @@ impl ProjectService {
     }
 
     pub async fn update_comment(&self, comment: Comment) -> Result<Comment, ServiceError> {
-        let existing = self.require_comment(comment.id).await?;
+        self.require_comment(comment.id).await?;
         let op = new_operation(
             Uuid::new_v4(),
             OperationKind::UpdateComment {
                 id: comment.id,
                 contents: comment.contents.clone(),
+                updated_at: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
-        Ok(Comment {
-            contents: comment.contents,
-            ..existing
-        })
+        self.require_comment(comment.id).await
     }
 
     pub async fn delete_comment(&self, id: CommentId) -> Result<(), ServiceError> {
@@ -686,6 +691,7 @@ impl ProjectService {
                 position,
                 color,
                 created_at,
+                updated_at: None,
             },
         );
         Ok((section, operation))
@@ -755,29 +761,21 @@ impl ProjectService {
             }
             None => section.name.clone(),
         };
-        let color = match update.color {
-            ColorChange::Clear => None,
-            ColorChange::Set(color) => Some(color),
-        };
         let operation_color = match update.color {
             ColorChange::Clear => OperationColorChange::Clear,
             ColorChange::Set(color) => OperationColorChange::Set(color),
         };
-        let updated = Section {
-            name: name.clone(),
-            color,
-            ..section
-        };
         let op = new_operation(
             Uuid::new_v4(),
             OperationKind::UpdateSection {
-                id: updated.id,
+                id: section_id,
                 name: Some(name),
                 color: Some(operation_color),
+                updated_at: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
-        Ok(updated)
+        self.require_section(section_id).await
     }
 
     /// Move a section to the top, bottom, or next to a sibling.
@@ -809,19 +807,16 @@ impl ProjectService {
         let Some(new_position) = section_placement_position(&sections, &section, placement)? else {
             return Ok(section);
         };
-        let updated = Section {
-            position: new_position.clone(),
-            ..section
-        };
         let op = new_operation(
             Uuid::new_v4(),
             OperationKind::MoveSection {
-                id: updated.id,
+                id: section.id,
                 position: new_position,
+                updated_at: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
-        Ok(updated)
+        self.require_section(section_id).await
     }
 
     pub async fn delete_section_by_id(
@@ -890,6 +885,7 @@ impl ProjectService {
                     id: task.id,
                     section_id: Some(target.id),
                     position,
+                    updated_at: None,
                 },
             ));
         }
@@ -927,6 +923,7 @@ impl ProjectService {
                 trigger: automation.trigger.clone(),
                 actions,
                 created_at: automation.created_at,
+                updated_at: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
@@ -939,8 +936,7 @@ impl ProjectService {
         id: AutomationId,
         actions: Vec<AutomationAction>,
     ) -> Result<Automation, ServiceError> {
-        let existing = self
-            .store
+        self.store
             .get_automation_by_id(id, None)
             .await?
             .ok_or(ServiceError::AutomationNotFound { id })?;
@@ -948,14 +944,15 @@ impl ProjectService {
             Uuid::new_v4(),
             OperationKind::UpdateAutomation {
                 id,
-                actions: actions.clone(),
+                actions,
+                updated_at: None,
             },
         );
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
-        Ok(Automation {
-            actions,
-            ..existing
-        })
+        self.store
+            .get_automation_by_id(id, None)
+            .await?
+            .ok_or(ServiceError::AutomationNotFound { id })
     }
 
     /// Delete an automation, returning the deleted rule.
@@ -1072,6 +1069,7 @@ impl ProjectService {
                 name: project.name.clone(),
                 description: project.description.clone(),
                 created_at: project.created_at,
+                updated_at: None,
             },
         )];
 
@@ -1124,9 +1122,11 @@ impl ProjectService {
                     id: project.id,
                     name: update.name,
                     description,
+                    updated_at: None,
                 },
             );
             self.apply_operations(&[op], ApplyMode::Atomic).await?;
+            return self.require_project(project.id).await;
         }
         Ok(updated)
     }
@@ -1403,6 +1403,7 @@ impl ProjectService {
                 name,
                 description,
                 created_at,
+                updated_at,
             } => {
                 if self
                     .store
@@ -1426,7 +1427,7 @@ impl ProjectService {
                         .clone()
                         .filter(|description| !description.is_empty()),
                     created_at: *created_at,
-                    updated_at: *created_at,
+                    updated_at: (*updated_at).unwrap_or(*created_at),
                 };
                 self.store
                     .create_project(project.clone(), Some(&mut **tx))
@@ -1445,7 +1446,7 @@ impl ProjectService {
                     .await?,
                 )
             }
-            OperationKind::UpdateProject { id, .. } => {
+            OperationKind::UpdateProject { id, updated_at, .. } => {
                 let Some(mut project) = self.store.get_project_by_id(*id, Some(&mut **tx)).await?
                 else {
                     return Ok((
@@ -1457,7 +1458,9 @@ impl ProjectService {
                     ));
                 };
 
-                let field_values = project_field_updates(&mut project, &op.kind);
+                let mut field_values = project_field_updates(&mut project, &op.kind);
+                project.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                field_values["updated_at"] = json!(project.updated_at);
                 self.store.update_project(project, Some(&mut **tx)).await?;
                 Some(
                     self.record_change(
@@ -1505,6 +1508,7 @@ impl ProjectService {
                 position,
                 color,
                 created_at,
+                updated_at,
             } => {
                 if self
                     .store
@@ -1555,7 +1559,7 @@ impl ProjectService {
                     position: position.clone(),
                     color: *color,
                     created_at: *created_at,
-                    updated_at: *created_at,
+                    updated_at: (*updated_at).unwrap_or(*created_at),
                 };
                 self.store
                     .create_section(section.clone(), Some(&mut **tx))
@@ -1574,7 +1578,7 @@ impl ProjectService {
                     .await?,
                 )
             }
-            OperationKind::UpdateSection { id, .. } => {
+            OperationKind::UpdateSection { id, updated_at, .. } => {
                 let Some(mut section) = self.store.get_section_by_id(*id, Some(&mut **tx)).await?
                 else {
                     return Ok((
@@ -1586,7 +1590,9 @@ impl ProjectService {
                     ));
                 };
 
-                let field_values = section_field_updates(&mut section, &op.kind);
+                let mut field_values = section_field_updates(&mut section, &op.kind);
+                section.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                field_values["updated_at"] = json!(section.updated_at);
                 self.store.update_section(section, Some(&mut **tx)).await?;
                 Some(
                     self.record_change(
@@ -1599,7 +1605,7 @@ impl ProjectService {
                     .await?,
                 )
             }
-            OperationKind::MoveSection { id, .. } => {
+            OperationKind::MoveSection { id, updated_at, .. } => {
                 let Some(mut section) = self.store.get_section_by_id(*id, Some(&mut **tx)).await?
                 else {
                     return Ok((
@@ -1611,7 +1617,9 @@ impl ProjectService {
                     ));
                 };
 
-                let field_values = section_field_updates(&mut section, &op.kind);
+                let mut field_values = section_field_updates(&mut section, &op.kind);
+                section.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                field_values["updated_at"] = json!(section.updated_at);
                 self.store.update_section(section, Some(&mut **tx)).await?;
                 Some(
                     self.record_change(
@@ -1663,15 +1671,18 @@ impl ProjectService {
                     let positions =
                         n_keys_between(last.as_ref(), None, tasks.len()).map_err(position_error)?;
 
+                    let relocated_at = Utc::now();
                     for (mut task, position) in tasks.into_iter().zip(positions) {
                         task.section_id = None;
                         task.position = position.clone();
+                        task.updated_at = relocated_at;
                         let task_id = task.id;
                         self.store.update_task(task, Some(&mut **tx)).await?;
 
                         let mut field_values = Map::new();
                         field_values.insert("section_id".into(), Value::Null);
                         field_values.insert("position".into(), json!(position));
+                        field_values.insert("updated_at".into(), json!(relocated_at));
                         seqs.push(
                             self.record_change(
                                 tx,
@@ -1713,6 +1724,7 @@ impl ProjectService {
                 state,
                 tags,
                 created_at,
+                updated_at,
                 external_identity,
                 external_metadata,
             } => {
@@ -1777,7 +1789,7 @@ impl ProjectService {
                     state: *state,
                     tags: tags.clone(),
                     created_at: *created_at,
-                    updated_at: *created_at,
+                    updated_at: (*updated_at).unwrap_or(*created_at),
                     external_identity: external_identity.clone(),
                     external_metadata: external_metadata.as_deref().cloned(),
                 };
@@ -1792,7 +1804,8 @@ impl ProjectService {
                         .await?,
                 )
             }
-            OperationKind::UpdateTask { id, .. } | OperationKind::MoveTask { id, .. } => {
+            OperationKind::UpdateTask { id, updated_at, .. }
+            | OperationKind::MoveTask { id, updated_at, .. } => {
                 let Some(mut task) = self.store.get_task_by_id(*id, Some(&mut **tx)).await? else {
                     return Ok((
                         OperationAcknowledgment::rejected(
@@ -1816,7 +1829,9 @@ impl ProjectService {
                 }
 
                 let before = task.clone();
-                let field_values = task_field_updates(&mut task, &op.kind);
+                let mut field_values = task_field_updates(&mut task, &op.kind);
+                task.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                field_values["updated_at"] = json!(task.updated_at);
                 task_transition = Some((Some(before), task.clone()));
                 self.store.update_task(task, Some(&mut **tx)).await?;
                 Some(
@@ -1854,6 +1869,7 @@ impl ProjectService {
                 task_id,
                 contents,
                 created_at,
+                updated_at,
             } => {
                 if self
                     .store
@@ -1888,7 +1904,7 @@ impl ProjectService {
                     task_id: *task_id,
                     contents: contents.clone(),
                     created_at: *created_at,
-                    updated_at: *created_at,
+                    updated_at: (*updated_at).unwrap_or(*created_at),
                 };
                 self.store
                     .create_comment(comment.clone(), Some(&mut **tx))
@@ -1907,7 +1923,7 @@ impl ProjectService {
                     .await?,
                 )
             }
-            OperationKind::UpdateComment { id, .. } => {
+            OperationKind::UpdateComment { id, updated_at, .. } => {
                 let Some(mut comment) = self.store.get_comment_by_id(*id, Some(&mut **tx)).await?
                 else {
                     return Ok((
@@ -1919,7 +1935,9 @@ impl ProjectService {
                     ));
                 };
 
-                let field_values = comment_field_updates(&mut comment, &op.kind);
+                let mut field_values = comment_field_updates(&mut comment, &op.kind);
+                comment.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                field_values["updated_at"] = json!(comment.updated_at);
                 self.store.update_comment(comment, Some(&mut **tx)).await?;
                 Some(
                     self.record_change(
@@ -1963,6 +1981,7 @@ impl ProjectService {
                 trigger,
                 actions,
                 created_at,
+                updated_at,
             } => {
                 let Some(project) = self
                     .store
@@ -2006,7 +2025,7 @@ impl ProjectService {
                     trigger: trigger.clone(),
                     actions: actions.clone(),
                     created_at: *created_at,
-                    updated_at: *created_at,
+                    updated_at: (*updated_at).unwrap_or(*created_at),
                 };
                 self.store
                     .create_automation(automation.clone(), Some(&mut **tx))
@@ -2025,7 +2044,11 @@ impl ProjectService {
                     .await?,
                 )
             }
-            OperationKind::UpdateAutomation { id, actions } => {
+            OperationKind::UpdateAutomation {
+                id,
+                actions,
+                updated_at,
+            } => {
                 let Some(mut automation) = self
                     .store
                     .get_automation_by_id(*id, Some(&mut **tx))
@@ -2063,6 +2086,9 @@ impl ProjectService {
                 }
 
                 automation.actions = actions.clone();
+                automation.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                let field_values =
+                    json!({ "actions": actions, "updated_at": automation.updated_at });
                 self.store
                     .update_automation(automation, Some(&mut **tx))
                     .await?;
@@ -2073,7 +2099,7 @@ impl ProjectService {
                         op,
                         Entity::Automation(*id),
                         ChangeKind::Update,
-                        json!({ "actions": actions }),
+                        field_values,
                     )
                     .await?,
                 )
@@ -2354,6 +2380,7 @@ impl ProjectService {
                         id: current.id,
                         section_id: *section_id,
                         position,
+                        updated_at: None,
                     }
                 }
                 AutomationAction::CloseTask => {
@@ -2640,6 +2667,7 @@ fn update_task_state_operation(id: TaskId, state: TaskState) -> OperationKind {
         state: Some(state),
         external_identity: None,
         external_metadata: None,
+        updated_at: None,
     }
 }
 
@@ -2653,6 +2681,7 @@ fn update_task_priority_operation(id: TaskId, priority: Priority) -> OperationKi
         state: None,
         external_identity: None,
         external_metadata: None,
+        updated_at: None,
     }
 }
 
@@ -3006,6 +3035,7 @@ mod tests {
             state: None,
             external_identity: None,
             external_metadata: None,
+            updated_at: None,
         };
 
         let fields = task_field_updates(&mut task, &op);
@@ -3035,6 +3065,7 @@ mod tests {
                 state: None,
                 external_identity: None,
                 external_metadata: None,
+                updated_at: None,
             },
         );
         let fields = task_field_updates(
@@ -3048,6 +3079,7 @@ mod tests {
                 state: None,
                 external_identity: None,
                 external_metadata: None,
+                updated_at: None,
             },
         );
 
@@ -3113,6 +3145,7 @@ mod tests {
             state,
             external_identity,
             external_metadata,
+            updated_at: None,
         }
     }
 
@@ -3138,6 +3171,7 @@ mod tests {
                 state: None,
                 external_identity: Some(Some(identity.clone())),
                 external_metadata: Some(Some(Box::new(metadata.clone()))),
+                updated_at: None,
             },
         );
 
@@ -3158,6 +3192,7 @@ mod tests {
                 state: None,
                 external_identity: Some(None),
                 external_metadata: Some(None),
+                updated_at: None,
             },
         );
 
@@ -3827,6 +3862,7 @@ mod tests {
             state: task.state,
             tags: task.tags.clone(),
             created_at: task.created_at,
+            updated_at: None,
             external_identity: task.external_identity.clone(),
             external_metadata: task.external_metadata.clone().map(Box::new),
         }
@@ -3854,6 +3890,7 @@ mod tests {
             state: Some(TaskState::Closed),
             external_identity: None,
             external_metadata: None,
+            updated_at: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&close_op, Some(&open), &closed),
@@ -3869,6 +3906,7 @@ mod tests {
             state: Some(TaskState::Open),
             external_identity: None,
             external_metadata: None,
+            updated_at: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&reopen_op, Some(&closed), &open),
@@ -3885,6 +3923,7 @@ mod tests {
             id,
             section_id: Some(section_id),
             position: sectioned.position.clone(),
+            updated_at: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&enter_op, Some(&unsectioned), &sectioned),
@@ -3899,6 +3938,7 @@ mod tests {
             id,
             section_id: None,
             position: unsectioned.position.clone(),
+            updated_at: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&leave_op, Some(&sectioned), &unsectioned),
@@ -3910,6 +3950,7 @@ mod tests {
             task_id: id,
             contents: "comment".to_string(),
             created_at: Utc::now(),
+            updated_at: None,
         };
         assert_eq!(
             automation_trigger_for_task_change(&comment_op, None, &created),

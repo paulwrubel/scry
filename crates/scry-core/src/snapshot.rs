@@ -13,8 +13,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use uuid::Uuid;
 
-pub const SNAPSHOT_VERSION: u32 = 3;
-pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 2;
+pub const SNAPSHOT_VERSION: u32 = 4;
+pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 3;
 
 /// The bare server-wide snapshot: every project document plus the cursor a
 /// client should pull from next.
@@ -331,6 +331,7 @@ pub fn plan_import(
                         id: live_project.id,
                         name,
                         description,
+                        updated_at: Some(incoming.updated_at),
                     }));
             }
 
@@ -354,6 +355,7 @@ pub fn plan_import(
                     name: chosen_name.clone(),
                     description,
                     created_at: incoming.created_at,
+                    updated_at: Some(incoming.updated_at),
                 }));
 
             (project_id, project_dead)
@@ -392,6 +394,7 @@ pub fn plan_import(
                                 id: live_section.id,
                                 name: None,
                                 color: Some(color),
+                                updated_at: Some(incoming_section.updated_at),
                             }));
                     }
                     plan.report.sections += 1;
@@ -420,6 +423,7 @@ pub fn plan_import(
                         position: incoming_section.position.clone(),
                         color: incoming_section.color,
                         created_at: incoming_section.created_at,
+                        updated_at: Some(incoming_section.updated_at),
                     }));
                 plan.report.sections += 1;
                 continue;
@@ -444,6 +448,7 @@ pub fn plan_import(
                             id: live_section.id,
                             name: renamed.then(|| name.clone()),
                             color,
+                            updated_at: Some(incoming_section.updated_at),
                         }));
                 }
 
@@ -469,6 +474,7 @@ pub fn plan_import(
                             id: live_section.id,
                             name: None,
                             color: Some(color),
+                            updated_at: Some(incoming_section.updated_at),
                         }));
                 }
                 plan.report.sections += 1;
@@ -488,6 +494,7 @@ pub fn plan_import(
                     position: incoming_section.position.clone(),
                     color: incoming_section.color,
                     created_at: incoming_section.created_at,
+                    updated_at: Some(incoming_section.updated_at),
                 }));
             plan.report.sections += 1;
         }
@@ -538,6 +545,7 @@ pub fn plan_import(
                     state: incoming_task.state,
                     tags: incoming_task.tags.clone(),
                     created_at: incoming_task.created_at,
+                    updated_at: Some(incoming_task.updated_at),
                     external_identity: incoming_task.external_identity.clone(),
                     external_metadata: incoming_task.external_metadata.clone().map(Box::new),
                 }));
@@ -574,6 +582,7 @@ pub fn plan_import(
                         state,
                         external_identity: None,
                         external_metadata: None,
+                        updated_at: Some(incoming_task.updated_at),
                     }));
                 }
 
@@ -584,6 +593,7 @@ pub fn plan_import(
                         id: live_task.id,
                         section_id,
                         position: incoming_task.position.clone(),
+                        updated_at: Some(incoming_task.updated_at),
                     }));
                 }
 
@@ -603,6 +613,7 @@ pub fn plan_import(
                 state: incoming_task.state,
                 tags: incoming_task.tags.clone(),
                 created_at: incoming_task.created_at,
+                updated_at: Some(incoming_task.updated_at),
                 external_identity: incoming_task.external_identity.clone(),
                 external_metadata: incoming_task.external_metadata.clone().map(Box::new),
             }));
@@ -642,6 +653,7 @@ pub fn plan_import(
                         .push(operation(OperationKind::UpdateComment {
                             id: live_comment.id,
                             contents: incoming_comment.contents.clone(),
+                            updated_at: Some(incoming_comment.updated_at),
                         }));
                 }
 
@@ -667,6 +679,7 @@ pub fn plan_import(
                     task_id,
                     contents: incoming_comment.contents.clone(),
                     created_at: incoming_comment.created_at,
+                    updated_at: Some(incoming_comment.updated_at),
                 }));
             plan.report.comments += 1;
         }
@@ -723,6 +736,7 @@ pub fn plan_import(
                         .push(operation(OperationKind::UpdateAutomation {
                             id: live_automation.id,
                             actions,
+                            updated_at: Some(incoming_automation.updated_at),
                         }));
                 }
 
@@ -759,6 +773,7 @@ pub fn plan_import(
                     trigger,
                     actions,
                     created_at: incoming_automation.created_at,
+                    updated_at: Some(incoming_automation.updated_at),
                 }));
             plan.report.automations += 1;
         }
@@ -1021,12 +1036,12 @@ mod tests {
 
     #[test]
     fn parse_rejects_unsupported_version() {
-        let v4 = r#"{ "version": 4, "projects": [] }"#;
+        let v5 = r#"{ "version": 5, "projects": [] }"#;
 
         assert!(matches!(
-            parse_file(v4),
+            parse_file(v5),
             Err(SnapshotFileError::UnsupportedVersion {
-                found: 4,
+                found: 5,
                 supported: SNAPSHOT_VERSION
             })
         ));
@@ -1083,27 +1098,55 @@ mod tests {
 
     #[test]
     fn parse_accepts_previous_version() {
-        let file = snapshot_file(vec![full_project_doc(PROJECT_ID, "alpha")]);
-        let mut value = serde_json::to_value(&file).expect("snapshot file should serialize");
-        value["version"] = json!(2);
-        for project in value["projects"]
+        let mut document = full_project_doc(PROJECT_ID, "alpha");
+        let section_id = document.sections[0].id;
+        document.automations.push(Automation {
+            id: uuid("e1b2c3d4-0000-4000-8000-000000000006"),
+            project_id: document.project.id,
+            trigger: AutomationTrigger::TaskEntersSection { section_id },
+            actions: vec![AutomationAction::MoveToSection {
+                section_id: Some(section_id),
+            }],
+            created_at: at(),
+            updated_at: at(),
+        });
+
+        let mut value = serde_json::to_value(snapshot_file(vec![document]))
+            .expect("snapshot file should serialize");
+        value["version"] = json!(3);
+        let project = value["projects"]
             .as_array_mut()
             .expect("projects should be an array")
-        {
-            let project = project
-                .as_object_mut()
-                .expect("project should be an object");
-            project.remove("automations");
-            // v2 named the comment list "notes"; the alias keeps it readable
-            let comments = project.remove("comments").expect("comments should exist");
-            project.insert("notes".to_string(), comments);
+            .first_mut()
+            .and_then(|project| project.as_object_mut())
+            .expect("project should be an object");
+        project.remove("updated_at");
+        for list in ["sections", "tasks", "comments", "automations"] {
+            let entities = project
+                .get_mut(list)
+                .and_then(|value| value.as_array_mut())
+                .expect("entity list should be an array");
+            for entity in entities {
+                entity
+                    .as_object_mut()
+                    .expect("entity should be an object")
+                    .remove("updated_at");
+            }
         }
 
         let parsed = parse_file(&value.to_string()).expect("previous version should parse");
 
-        assert_eq!(parsed.version, 2);
-        assert!(parsed.projects[0].automations.is_empty());
-        assert_eq!(parsed.projects[0].comments.len(), 1);
+        assert_eq!(parsed.version, 3);
+        let document = &parsed.projects[0];
+        assert_eq!(document.sections.len(), 1);
+        assert_eq!(document.tasks.len(), 1);
+        assert_eq!(document.comments.len(), 1);
+        assert_eq!(document.automations.len(), 1);
+        assert!(document.project.updated_at > at());
+        assert!(document.sections[0].updated_at > at());
+        assert!(document.tasks[0].updated_at > at());
+        assert!(document.comments[0].updated_at > at());
+        assert!(document.automations[0].updated_at > at());
     }
 
     #[test]
@@ -1128,6 +1171,25 @@ mod tests {
         assert_eq!(
             parsed.projects[0].automations,
             original.projects[0].automations
+        );
+    }
+
+    #[test]
+    fn snapshot_file_round_trips_updated_at() {
+        let mut document = full_project_doc(PROJECT_ID, "alpha");
+        let edited = DateTime::<Utc>::from_timestamp(1_600_000_000, 0).expect("valid timestamp");
+        document.project.updated_at = edited;
+        document.tasks[0].updated_at = edited;
+
+        let original = snapshot_file(vec![document]);
+        let serialized = serde_json::to_string(&original).expect("snapshot file should serialize");
+        let parsed = parse_file(&serialized).expect("current version should parse");
+
+        assert_eq!(parsed.projects[0].project.updated_at, edited);
+        assert_eq!(parsed.projects[0].tasks[0].updated_at, edited);
+        assert_ne!(
+            parsed.projects[0].tasks[0].updated_at,
+            parsed.projects[0].tasks[0].created_at
         );
     }
 
@@ -1993,5 +2055,70 @@ mod import_tests {
             }]
         );
         assert_eq!(plan.report.automations, 1);
+    }
+
+    #[test]
+    fn created_task_keeps_the_incoming_updated_at() {
+        let project_id = uuid(1);
+        let task_id = uuid(3);
+        let edited = DateTime::<Utc>::from_timestamp(500, 0).expect("valid timestamp");
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![],
+            vec![Task {
+                updated_at: edited,
+                ..task(task_id, project_id, None, "task")
+            }],
+            vec![],
+        )]);
+        let state = import_state(vec![], vec![], vec![], vec![]);
+
+        let plan = plan_import(&incoming, &state, ImportMode::Merge).unwrap();
+
+        let updated_at = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::CreateTask { updated_at, .. } => Some(*updated_at),
+                _ => None,
+            })
+            .expect("expected CreateTask");
+        assert_eq!(updated_at, Some(edited));
+    }
+
+    #[test]
+    fn changed_import_update_carries_the_incoming_updated_at() {
+        let project_id = uuid(1);
+        let task_id = uuid(3);
+        let edited = DateTime::<Utc>::from_timestamp(500, 0).expect("valid timestamp");
+
+        let live_state = import_state(
+            vec![project(project_id, "p")],
+            vec![],
+            vec![task(task_id, project_id, None, "old")],
+            vec![],
+        );
+        let incoming = file(vec![document(
+            project(project_id, "p"),
+            vec![],
+            vec![Task {
+                title: "new".to_string(),
+                updated_at: edited,
+                ..task(task_id, project_id, None, "old")
+            }],
+            vec![],
+        )]);
+
+        let plan = plan_import(&incoming, &live_state, ImportMode::Merge).unwrap();
+
+        let updated_at = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::UpdateTask { updated_at, .. } => Some(*updated_at),
+                _ => None,
+            })
+            .expect("expected UpdateTask");
+        assert_eq!(updated_at, Some(edited));
     }
 }
