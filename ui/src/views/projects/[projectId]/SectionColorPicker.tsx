@@ -3,7 +3,7 @@ import type { PopoverTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
 import { useState } from 'react';
 import type { Color } from '@/generated/Color';
-import { SECTION_COLORS, SECTION_COLOR_HEX, sectionColorLabel } from '@/utils/sectionColor';
+import { SECTION_COLORS, SECTION_COLOR_HEX, sectionColorLabel } from '@/utils/sections/color';
 
 const popoverTheme: DeepPartial<PopoverTheme> = {
   base: 'absolute z-30 rounded-lg border border-line bg-panel shadow-lg outline-none',

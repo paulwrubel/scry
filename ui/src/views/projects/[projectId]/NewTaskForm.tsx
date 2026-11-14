@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import { useAppForm } from '@/hooks/useAppForm';
-import { parseTaskInput } from '@/utils/taskInput';
+import { parseTaskInput } from '@/utils/tasks/input';
 
 const schema = z.object({
   task: z

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SECTION_COLORS, SECTION_COLOR_HEX, sectionColorLabel } from './sectionColor';
+import { SECTION_COLORS, SECTION_COLOR_HEX, sectionColorLabel } from './color';
 
 describe('sectionColorLabel', () => {
   it('turns enum values into display labels', () => {

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
-import { DEFAULT_TASK_FILTER } from '@/utils/taskFilter';
-import type { TaskFilter } from '@/utils/taskFilter';
+import { DEFAULT_TASK_FILTER } from '@/utils/tasks/filter';
+import type { TaskFilter } from '@/utils/tasks/filter';
 import type { BoardGroup, DragLayout, TaskSlot } from './board';
 import {
   buildBoard,

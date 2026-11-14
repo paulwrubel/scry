@@ -7,7 +7,7 @@ import {
   applyTaskSortingMode,
   parseShowPriority,
   parseTaskSortingMode,
-} from './taskView';
+} from './view';
 
 describe('parseTaskSortingMode', () => {
   it('defaults to manual when the param is missing', () => {

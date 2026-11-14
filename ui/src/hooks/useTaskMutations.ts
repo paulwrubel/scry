@@ -4,7 +4,7 @@ import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { useReplica } from '@/providers/Replica';
-import type { TaskFieldPatch } from '@/utils/taskOperations';
+import type { TaskFieldPatch } from '@/utils/tasks/operations';
 import {
   createCommentOperation,
   deleteCommentOperation,
@@ -15,7 +15,7 @@ import {
   setTaskStateOperation,
   updateCommentOperation,
   updateTaskOperation,
-} from '@/utils/taskOperations';
+} from '@/utils/tasks/operations';
 
 export function useTaskMutations(task: Task, project: ProjectSnapshot) {
   const replica = useReplica();

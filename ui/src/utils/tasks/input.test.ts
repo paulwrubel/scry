@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
-import { parseTaskInput } from './taskInput';
+import { parseTaskInput } from './input';
 
 const ACME_WIDGETS: ExternalIdentity = {
   provider: 'github',

@@ -18,22 +18,22 @@ import {
   moveSectionOperation,
   setSectionColorOperation,
   updateSectionOperation,
-} from '@/utils/sectionOperations';
+} from '@/utils/sections/operations';
 import {
   applyTaskFilter,
   clearTaskFilter,
   isTaskFilterNarrowing,
   parseTaskFilter,
-} from '@/utils/taskFilter';
-import type { TaskFilter } from '@/utils/taskFilter';
-import { createTaskOperation, moveTaskOperation } from '@/utils/taskOperations';
+} from '@/utils/tasks/filter';
+import type { TaskFilter } from '@/utils/tasks/filter';
+import { createTaskOperation, moveTaskOperation } from '@/utils/tasks/operations';
 import {
   applyShowPriority,
   applyTaskSortingMode,
   parseShowPriority,
   parseTaskSortingMode,
   TASK_SORTING_OPTIONS,
-} from '@/utils/taskView';
+} from '@/utils/tasks/view';
 import { BoardColumn } from './BoardColumn';
 import { MobileAddTask } from './MobileAddTask';
 import { NewSectionCard } from './NewSectionCard';

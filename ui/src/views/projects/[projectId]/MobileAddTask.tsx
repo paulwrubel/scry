@@ -8,7 +8,7 @@ import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import { useAppForm } from '@/hooks/useAppForm';
 import { useCloseRequest } from '@/hooks/useCloseRequest';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
-import { parseTaskInput } from '@/utils/taskInput';
+import { parseTaskInput } from '@/utils/tasks/input';
 
 const schema = z.object({
   task: z

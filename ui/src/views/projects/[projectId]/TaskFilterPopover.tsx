@@ -13,7 +13,7 @@ import type { DeepPartial } from 'flowbite-react/types';
 import { useMemo } from 'react';
 import { HiFunnel } from 'react-icons/hi2';
 import type { Task } from '@/generated/Task';
-import { tagBadgeStyle } from '@/utils/tagColor';
+import { tagBadgeStyle } from '@/utils/tasks/tagColor';
 import {
   TASK_FILTER_STATUS_OPTIONS,
   activeFilterCount,
@@ -23,8 +23,8 @@ import {
   setTaskFilterStatus,
   taskFilterStatus,
   toggleTaskFilterTag,
-} from '@/utils/taskFilter';
-import type { TaskFilter } from '@/utils/taskFilter';
+} from '@/utils/tasks/filter';
+import type { TaskFilter } from '@/utils/tasks/filter';
 
 const popoverTheme: DeepPartial<PopoverTheme> = {
   base: 'absolute z-30 w-80 rounded-lg border border-line bg-panel shadow-lg outline-none',

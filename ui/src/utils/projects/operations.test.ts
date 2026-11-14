@@ -4,7 +4,7 @@ import {
   createProjectOperation,
   deleteProjectOperation,
   updateProjectOperation,
-} from './projectOperations';
+} from './operations';
 
 function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
   return {

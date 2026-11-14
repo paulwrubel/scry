@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useReplica } from '@/providers/Replica';
-import type { ProjectFieldPatch } from '@/utils/projectOperations';
-import { deleteProjectOperation, updateProjectOperation } from '@/utils/projectOperations';
+import type { ProjectFieldPatch } from '@/utils/projects/operations';
+import { deleteProjectOperation, updateProjectOperation } from '@/utils/projects/operations';
 
 export function useProjectMutations(project: ProjectSnapshot) {
   const replica = useReplica();

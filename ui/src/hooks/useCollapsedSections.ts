@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { readCollapsedSections, writeCollapsedSections } from '@/utils/collapsedSections';
+import { readCollapsedSections, writeCollapsedSections } from '@/utils/sections/collapsed';
 
 type CollapsedState = { projectId: string; ids: ReadonlySet<string> };
 

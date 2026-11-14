@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { readCollapsedSections, writeCollapsedSections } from './collapsedSections';
+import { readCollapsedSections, writeCollapsedSections } from './collapsed';
 
 afterEach(() => {
   localStorage.clear();

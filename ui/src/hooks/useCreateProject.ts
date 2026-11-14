@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useReplica } from '@/providers/Replica';
-import type { ProjectDraft } from '@/utils/projectOperations';
-import { createProjectOperation } from '@/utils/projectOperations';
+import type { ProjectDraft } from '@/utils/projects/operations';
+import { createProjectOperation } from '@/utils/projects/operations';
 
 export function useCreateProject() {
   const replica = useReplica();

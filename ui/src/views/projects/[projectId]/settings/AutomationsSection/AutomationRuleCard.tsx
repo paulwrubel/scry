@@ -3,7 +3,7 @@ import { HiTrash } from 'react-icons/hi2';
 import type { Automation } from '@/generated/Automation';
 import type { AutomationAction } from '@/generated/AutomationAction';
 import type { Section } from '@/generated/Section';
-import { automationTriggerLabel } from '@/utils/automationOperations';
+import { automationTriggerLabel } from '@/utils/automations/operations';
 import { ActionEditor } from './ActionEditor';
 
 export type AutomationRuleCardProps = {

@@ -6,8 +6,8 @@ import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { Link, useLocation } from 'react-router-dom';
 import type { Priority } from '@/generated/Priority';
 import type { Task } from '@/generated/Task';
-import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/external';
-import { tagBadgeStyle } from '@/utils/tagColor';
+import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/github';
+import { tagBadgeStyle } from '@/utils/tasks/tagColor';
 
 const PRIORITY_DOT_CLASS: Record<Exclude<Priority, 'normal'>, string> = {
   critical: 'bg-red-600',

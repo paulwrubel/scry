@@ -5,6 +5,6 @@ export {
   readActiveProjectId,
   resolveActiveProjectId,
   writeActiveProjectId,
-} from '@/utils/activeProject';
+} from '@/utils/projects/activeProject';
 export type { ActiveProjectProviderProps } from './provider';
 export type { ActiveProjectContextType } from './context';

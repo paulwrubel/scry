@@ -16,7 +16,7 @@ import {
   githubLabel,
   githubUrl,
   lastSyncedAt,
-} from '@/utils/external';
+} from '@/utils/github';
 
 const ICON_BUTTON_CLASS =
   'text-muted inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50';

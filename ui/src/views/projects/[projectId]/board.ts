@@ -6,8 +6,8 @@ import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { TaskSortingMode } from '@/generated/TaskSortingMode';
 import type { TaskState } from '@/generated/TaskState';
-import type { TaskFilter } from '@/utils/taskFilter';
-import { matchesTaskFilter } from '@/utils/taskFilter';
+import type { TaskFilter } from '@/utils/tasks/filter';
+import { matchesTaskFilter } from '@/utils/tasks/filter';
 
 const PRIORITY_ORDER: Priority[] = ['critical', 'elevated', 'normal'];
 

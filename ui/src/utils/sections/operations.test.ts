@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { setSectionColorOperation, updateSectionOperation } from './sectionOperations';
+import { setSectionColorOperation, updateSectionOperation } from './operations';
 
 describe('setSectionColorOperation', () => {
   it('sets a color without touching the name', () => {

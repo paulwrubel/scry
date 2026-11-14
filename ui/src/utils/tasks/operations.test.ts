@@ -15,7 +15,7 @@ import {
   setTaskStateOperation,
   updateCommentOperation,
   updateTaskOperation,
-} from './taskOperations';
+} from './operations';
 
 const PROJECT_ID = 'project-1';
 const TASK_ID = 'task-1';

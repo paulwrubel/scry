@@ -4,7 +4,7 @@ import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { useTaskMutations } from '@/hooks/useTaskMutations';
-import type { TaskFieldPatch } from '@/utils/taskOperations';
+import type { TaskFieldPatch } from '@/utils/tasks/operations';
 import { DeleteTaskModal } from './DeleteTaskModal';
 import { ExternalLinkField } from './ExternalLinkField';
 import { CommentsSection } from './CommentsSection';

@@ -3,7 +3,7 @@ import type { Color } from '@/generated/Color';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
-import { automationReferencesSection, describeAutomation } from '@/utils/automationOperations';
+import { automationReferencesSection, describeAutomation } from '@/utils/automations/operations';
 import { BoardColumn } from './BoardColumn';
 import { columnDragId, groupKey, type BoardGroup } from './board';
 

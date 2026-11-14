@@ -7,7 +7,7 @@ import {
   readActiveProjectId,
   resolveActiveProjectId,
   writeActiveProjectId,
-} from '@/utils/activeProject';
+} from '@/utils/projects/activeProject';
 
 export type ActiveProjectProviderProps = {
   children: React.ReactNode;

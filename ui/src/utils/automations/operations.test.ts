@@ -15,7 +15,7 @@ import {
   sameAutomationAction,
   sameAutomationTrigger,
   updateAutomationOperation,
-} from './automationOperations';
+} from './operations';
 
 const PROJECT_ID = 'project-1';
 const SECTION_A_ID = 'section-a';

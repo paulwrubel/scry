@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { HiChevronDown } from 'react-icons/hi2';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
-import { SECTION_COLOR_HEX } from '@/utils/sectionColor';
+import { SECTION_COLOR_HEX } from '@/utils/sections/color';
 import { CHEVRON_CLASS, SELECT_CLASS } from './constants';
 
 export type SectionBadgeProps = {
