@@ -24,6 +24,7 @@ const section: Section = {
   position: 'a0',
   color: null,
   created_at: CREATED_AT,
+  updated_at: CREATED_AT,
 };
 
 const comment: Comment = {
@@ -31,6 +32,7 @@ const comment: Comment = {
   task_id: TASK_ID,
   contents: 'comment',
   created_at: CREATED_AT,
+  updated_at: CREATED_AT,
 };
 
 function task(title: string): Task {
@@ -45,6 +47,7 @@ function task(title: string): Task {
     state: 'open',
     tags: [],
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     external_identity: null,
     external_metadata: null,
   };
@@ -56,6 +59,7 @@ function snapshot(title: string): ProjectSnapshot {
     name: 'project',
     description: null,
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     sections: [section],
     tasks: [task(title)],
     comments: [comment],
@@ -147,6 +151,7 @@ function automation(
     trigger: { kind: 'task_enters_section', section_id: SECTION_ID },
     actions,
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
   };
 }
 

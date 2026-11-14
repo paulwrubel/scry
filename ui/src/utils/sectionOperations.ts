@@ -14,6 +14,7 @@ export function createSectionOperation(project: ProjectSnapshot, name: string): 
     (max, section) => (max === null || section.position > max ? section.position : max),
     null,
   );
+  const created_at = new Date().toISOString();
 
   return {
     operation_id: newId(),
@@ -24,7 +25,8 @@ export function createSectionOperation(project: ProjectSnapshot, name: string): 
     name: trimmed,
     position: keyBetween(lastPosition, null),
     color: null,
-    created_at: new Date().toISOString(),
+    created_at,
+    updated_at: created_at,
   };
 }
 
@@ -35,6 +37,7 @@ export function moveSectionOperation(sectionId: string, position: string): Opera
     kind: 'move_section',
     id: sectionId,
     position,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -60,6 +63,7 @@ export function updateSectionOperation(sectionId: string, name: string): Operati
     id: sectionId,
     name: trimmed,
     color: null,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -71,5 +75,6 @@ export function setSectionColorOperation(sectionId: string, color: Color | null)
     id: sectionId,
     name: null,
     color: color === null ? 'clear' : { set: color },
+    updated_at: new Date().toISOString(),
   };
 }

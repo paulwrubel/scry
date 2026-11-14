@@ -17,6 +17,7 @@ function projectSnapshot(): ProjectSnapshot {
     name: 'Project',
     description: null,
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     sections: [],
     tasks: [
       {
@@ -30,6 +31,7 @@ function projectSnapshot(): ProjectSnapshot {
         state: 'open',
         tags: [],
         created_at: CREATED_AT,
+        updated_at: CREATED_AT,
         external_identity: null,
         external_metadata: null,
       },

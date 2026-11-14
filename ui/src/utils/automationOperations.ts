@@ -115,6 +115,8 @@ export function createAutomationOperation(
   trigger: AutomationTrigger,
   actions: AutomationAction[],
 ): Operation {
+  const created_at = new Date().toISOString();
+
   return {
     operation_id: newId(),
     operation_version: 1,
@@ -123,7 +125,8 @@ export function createAutomationOperation(
     project_id: projectId,
     trigger,
     actions,
-    created_at: new Date().toISOString(),
+    created_at,
+    updated_at: created_at,
   };
 }
 
@@ -137,6 +140,7 @@ export function updateAutomationOperation(
     kind: 'update_automation',
     id: automation.id,
     actions,
+    updated_at: new Date().toISOString(),
   };
 }
 

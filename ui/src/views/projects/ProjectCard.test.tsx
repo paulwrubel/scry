@@ -12,6 +12,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     name: 'Project',
     description: 'A project description.',
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     sections: [
       {
         id: 'section-1',
@@ -20,6 +21,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
         position: 'a0',
         color: null,
         created_at: CREATED_AT,
+        updated_at: CREATED_AT,
       },
     ],
     tasks: [
@@ -34,6 +36,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
         state: 'open',
         tags: [],
         created_at: CREATED_AT,
+        updated_at: CREATED_AT,
         external_identity: null,
         external_metadata: null,
       },

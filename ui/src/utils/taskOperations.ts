@@ -32,6 +32,8 @@ export function createTaskOperation(
   title: string,
   externalIdentity: ExternalIdentity | null = null,
 ): Operation {
+  const created_at = new Date().toISOString();
+
   return {
     operation_id: newId(),
     operation_version: 1,
@@ -45,7 +47,8 @@ export function createTaskOperation(
     position: nextTaskPosition(project.tasks, sectionId),
     state: 'open',
     tags: [],
-    created_at: new Date().toISOString(),
+    created_at,
+    updated_at: created_at,
     external_identity: externalIdentity,
     external_metadata: null,
   };
@@ -88,6 +91,7 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
     priority: priorityChanged ? patch.priority : null,
     tags: tagsChanged ? tags : null,
     state: null,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -111,6 +115,7 @@ export function externalIdentityOperation(
     state: null,
     external_identity: identity,
     external_metadata: null,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -130,6 +135,7 @@ export function moveTaskOperation(
     id: task.id,
     section_id: sectionId,
     position,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -148,6 +154,7 @@ export function setTaskStateOperation(task: Task, state: TaskState): Operation |
     priority: null,
     tags: null,
     state,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -165,6 +172,7 @@ export function createCommentOperation(task: Task, contents: string): Operation 
   if (text.length === 0) {
     return null;
   }
+  const created_at = new Date().toISOString();
 
   return {
     operation_id: newId(),
@@ -173,7 +181,8 @@ export function createCommentOperation(task: Task, contents: string): Operation 
     id: newId(),
     task_id: task.id,
     contents: text,
-    created_at: new Date().toISOString(),
+    created_at,
+    updated_at: created_at,
   };
 }
 
@@ -189,6 +198,7 @@ export function updateCommentOperation(comment: Comment, contents: string): Oper
     kind: 'update_comment',
     id: comment.id,
     contents: text,
+    updated_at: new Date().toISOString(),
   };
 }
 

@@ -30,6 +30,7 @@ const SECTION_A: Section = {
   position: 'a0',
   color: null,
   created_at: CREATED_AT,
+  updated_at: CREATED_AT,
 };
 
 const SECTION_B: Section = {
@@ -39,6 +40,7 @@ const SECTION_B: Section = {
   position: 'a1',
   color: null,
   created_at: CREATED_AT,
+  updated_at: CREATED_AT,
 };
 
 function automation(overrides: Partial<Automation> = {}): Automation {
@@ -48,6 +50,7 @@ function automation(overrides: Partial<Automation> = {}): Automation {
     trigger: { kind: 'task_created' },
     actions: [{ kind: 'close_task' }],
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     ...overrides,
   };
 }
@@ -58,6 +61,7 @@ function project(automations: Automation[] = []): ProjectSnapshot {
     name: 'Project',
     description: null,
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
     sections: [SECTION_A, SECTION_B],
     tasks: [],
     comments: [],
