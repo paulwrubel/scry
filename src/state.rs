@@ -1,5 +1,5 @@
-use chrono::DateTime;
-use chrono::Utc;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 use scry_core::models::{
     Comment, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectId, ProjectSnapshot,
     Section, SectionId, Tags, Task, TaskId, TaskSortingMode, TaskState,
@@ -10,6 +10,13 @@ use serde::Serialize;
 
 // Aug 9, 2026 at 4:40pm
 pub const DATETIME_FORMAT_STR: &str = "%b %-d, %Y at %-I:%M%P";
+
+pub fn format_local(timestamp: Timestamp) -> String {
+    timestamp
+        .to_zoned_datetime(TimeZone::system())
+        .strftime(DATETIME_FORMAT_STR)
+        .to_string()
+}
 
 #[derive(Debug, Clone)]
 pub struct ProjectState {
@@ -36,8 +43,8 @@ pub struct TaskWithComments {
     pub(crate) state: TaskState,
     pub(crate) position: Position,
     pub(crate) tags: Tags,
-    pub(crate) created_at: DateTime<Utc>,
-    pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) created_at: Timestamp,
+    pub(crate) updated_at: Timestamp,
     pub(crate) comments: Vec<Comment>,
     pub(crate) external_identity: Option<ExternalIdentity>,
     pub(crate) external_metadata: Option<ExternalMetadata>,
@@ -241,10 +248,8 @@ mod tests {
         Uuid::from_u128(value)
     }
 
-    fn ts(rfc3339: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(rfc3339)
-            .expect("valid timestamp")
-            .with_timezone(&Utc)
+    fn ts(rfc3339: &str) -> Timestamp {
+        rfc3339.parse().expect("valid timestamp")
     }
 
     fn project() -> Project {

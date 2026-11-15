@@ -4,8 +4,7 @@ use crate::client::{Client, TaskDetails};
 use crate::color;
 use crate::error::AppError;
 use crate::output::{print_json, section_label};
-use crate::state::DATETIME_FORMAT_STR;
-use chrono::Local;
+use crate::state::format_local;
 use scry_core::models::Section;
 
 /// Show one task with its comments.
@@ -63,29 +62,13 @@ pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<()
         .collect::<Vec<_>>()
         .join(" ");
     anstream::println!("Tags:        {}", tags);
-    println!(
-        "Created at:  {}",
-        task.created_at
-            .with_timezone(&Local)
-            .format(DATETIME_FORMAT_STR)
-    );
-    println!(
-        "Updated at:  {}",
-        task.updated_at
-            .with_timezone(&Local)
-            .format(DATETIME_FORMAT_STR)
-    );
+    println!("Created at:  {}", format_local(task.created_at));
+    println!("Updated at:  {}", format_local(task.updated_at));
     println!();
 
     for comment in detail.comments.unwrap_or_default() {
-        let comment_created_at = comment
-            .created_at
-            .with_timezone(&Local)
-            .format(DATETIME_FORMAT_STR);
-        let comment_updated_at = comment
-            .updated_at
-            .with_timezone(&Local)
-            .format(DATETIME_FORMAT_STR);
+        let comment_created_at = format_local(comment.created_at);
+        let comment_updated_at = format_local(comment.updated_at);
         println!("Created at:  {}", comment_created_at);
         println!("Updated at:  {}", comment_updated_at);
         println!("{}", comment.contents);

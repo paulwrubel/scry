@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use scry_core::github::{placeholder_title, should_apply_metadata, task_state_for_external_state};
 use scry_core::ids::TaskId;
 use scry_core::models::{ExternalIdentity, ExternalMetadata, Task, TaskState};
@@ -112,7 +112,7 @@ struct GithubState {
     state: String,
     reason: Option<String>,
     draft: Option<bool>,
-    updated_at: DateTime<Utc>,
+    updated_at: Timestamp,
 }
 
 /// A task update containing only the fields that changed.
@@ -148,7 +148,7 @@ async fn sync_task(client: &Client, task: &Task, identity: &ExternalIdentity) ->
         Ok(state) => state,
         Err(error) => return record_error(client, task, identity, error).await,
     };
-    let synced_at = Utc::now();
+    let synced_at = Timestamp::now();
 
     if !should_apply_task_metadata(task.external_metadata.as_ref(), state.updated_at) {
         return refresh_unchanged(client, task, identity, synced_at).await;
@@ -183,7 +183,7 @@ async fn refresh_unchanged(
     client: &Client,
     task: &Task,
     identity: &ExternalIdentity,
-    synced_at: DateTime<Utc>,
+    synced_at: Timestamp,
 ) -> SyncOutcome {
     let Some(existing) = task.external_metadata.as_ref() else {
         return SyncOutcome {
@@ -220,7 +220,7 @@ async fn refresh_unchanged(
     }
 }
 
-fn refresh_synced_at(existing: &ExternalMetadata, synced_at: DateTime<Utc>) -> ExternalMetadata {
+fn refresh_synced_at(existing: &ExternalMetadata, synced_at: Timestamp) -> ExternalMetadata {
     match existing {
         ExternalMetadata::Github {
             title,
@@ -286,10 +286,7 @@ fn provider_matches(provider: Option<Provider>, identity: &ExternalIdentity) -> 
 ///
 /// A stored error wins over the timestamp guard so the next successful read can
 /// clear it, even when GitHub's `updatedAt` has not moved.
-fn should_apply_task_metadata(
-    existing: Option<&ExternalMetadata>,
-    updated_at: DateTime<Utc>,
-) -> bool {
+fn should_apply_task_metadata(existing: Option<&ExternalMetadata>, updated_at: Timestamp) -> bool {
     has_error(existing) || should_apply_metadata(existing, updated_at)
 }
 
@@ -300,7 +297,7 @@ fn has_error(metadata: Option<&ExternalMetadata>) -> bool {
     )
 }
 
-fn github_metadata(state: &GithubState, synced_at: DateTime<Utc>) -> ExternalMetadata {
+fn github_metadata(state: &GithubState, synced_at: Timestamp) -> ExternalMetadata {
     ExternalMetadata::Github {
         title: Some(state.title.clone()),
         description: state.description.clone(),
@@ -447,8 +444,7 @@ fn parse_github_node(value: &serde_json::Value) -> Result<GithubState, SyncError
     let updated_at = node
         .get("updatedAt")
         .and_then(serde_json::Value::as_str)
-        .and_then(|text| DateTime::parse_from_rfc3339(text).ok())
-        .map(|parsed| parsed.with_timezone(&Utc))
+        .and_then(|text| text.parse::<Timestamp>().ok())
         .ok_or(SyncError::InvalidResponse)?;
     let description = node
         .get("body")
@@ -493,10 +489,8 @@ mod tests {
     use scry_core::position::Position;
     use uuid::Uuid;
 
-    fn timestamp(value: &str) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(value)
-            .unwrap()
-            .with_timezone(&Utc)
+    fn timestamp(value: &str) -> Timestamp {
+        value.parse().expect("valid timestamp")
     }
 
     fn response(node: serde_json::Value) -> String {
@@ -539,7 +533,7 @@ mod tests {
         }
     }
 
-    fn stored_metadata(updated_at: Option<DateTime<Utc>>, error: Option<&str>) -> ExternalMetadata {
+    fn stored_metadata(updated_at: Option<Timestamp>, error: Option<&str>) -> ExternalMetadata {
         ExternalMetadata::Github {
             title: Some("Previous".to_string()),
             description: Some("old body".to_string()),
