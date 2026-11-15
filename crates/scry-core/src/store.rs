@@ -4,7 +4,7 @@ use crate::models::{
     Automation, Change, Comment, Entity, EntityType, Project, ProjectSnapshot, Section, Task,
 };
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use sqlx::{PgConnection, Postgres, Transaction};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -308,7 +308,7 @@ pub trait Store: Send + Sync {
     async fn record_applied_operation(
         &self,
         operation_id: Uuid,
-        applied_at: DateTime<Utc>,
+        applied_at: Timestamp,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError>;
 
@@ -346,7 +346,7 @@ pub trait Store: Send + Sync {
     async fn create_tombstone(
         &self,
         entity: Entity,
-        deleted_at: DateTime<Utc>,
+        deleted_at: Timestamp,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError>;
 

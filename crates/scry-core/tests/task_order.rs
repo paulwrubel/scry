@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use scry_core::models::{Priority, Tags, Task, TaskSortingMode, TaskState};
 use scry_core::ordering::compare_tasks;
 use scry_core::position::Position;
@@ -16,8 +16,8 @@ fn task(id: u128, title: &str, position: &str, priority: Priority) -> Task {
         position: Position::parse(position).expect("test uses a valid position"),
         state: TaskState::Open,
         tags: Tags::default(),
-        created_at: DateTime::<Utc>::from_timestamp(0, 0).expect("valid timestamp"),
-        updated_at: DateTime::<Utc>::from_timestamp(0, 0).expect("valid timestamp"),
+        created_at: Timestamp::from_second(0).expect("valid timestamp"),
+        updated_at: Timestamp::from_second(0).expect("valid timestamp"),
         external_identity: None,
         external_metadata: None,
     }

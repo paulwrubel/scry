@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use scry_core::models::{AutomationAction, AutomationTrigger, Change, Priority, Task, TaskState};
 use scry_core::sync::operations::{Operation, OperationKind};
 use scry_core::sync::replay::{ClientState, apply_changes, replay_operations, visible_state};
@@ -15,7 +15,7 @@ const OPERATION_ID: &str = "c0000000-0000-4000-8000-000000000001";
 const NOW: &str = "2026-01-01T00:00:00Z";
 const EDITED: &str = "2026-02-02T00:00:00Z";
 
-fn utc(value: &str) -> DateTime<Utc> {
+fn utc(value: &str) -> Timestamp {
     value.parse().expect("valid timestamp")
 }
 

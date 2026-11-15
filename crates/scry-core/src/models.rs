@@ -1,8 +1,8 @@
 use crate::position::Position;
 use anstyle::AnsiColor;
-use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use itertools::Itertools;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use std::str::FromStr;
@@ -171,9 +171,11 @@ pub enum ExternalMetadata {
         reason: Option<String>,
         draft: Option<bool>,
         /// GitHub's `updatedAt` for the issue or pull request.
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
         /// When `scry sync` last fetched this metadata successfully.
-        synced_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        synced_at: Option<Timestamp>,
         error: Option<String>,
     },
 }
@@ -330,9 +332,11 @@ pub struct Project {
     pub id: ProjectId,
     pub name: String,
     pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
-    #[serde(default = "Utc::now")]
-    pub updated_at: DateTime<Utc>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub created_at: Timestamp,
+    #[serde(default = "Timestamp::now")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub updated_at: Timestamp,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -343,9 +347,11 @@ pub struct Section {
     pub name: String,
     pub position: Position,
     pub color: Option<Color>,
-    pub created_at: DateTime<Utc>,
-    #[serde(default = "Utc::now")]
-    pub updated_at: DateTime<Utc>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub created_at: Timestamp,
+    #[serde(default = "Timestamp::now")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub updated_at: Timestamp,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -360,9 +366,11 @@ pub struct Task {
     pub position: Position,
     pub state: TaskState,
     pub tags: Tags,
-    pub created_at: DateTime<Utc>,
-    #[serde(default = "Utc::now")]
-    pub updated_at: DateTime<Utc>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub created_at: Timestamp,
+    #[serde(default = "Timestamp::now")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub updated_at: Timestamp,
     pub external_identity: Option<ExternalIdentity>,
     pub external_metadata: Option<ExternalMetadata>,
 }
@@ -373,9 +381,11 @@ pub struct Comment {
     pub id: CommentId,
     pub task_id: TaskId,
     pub contents: String,
-    pub created_at: DateTime<Utc>,
-    #[serde(default = "Utc::now")]
-    pub updated_at: DateTime<Utc>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub created_at: Timestamp,
+    #[serde(default = "Timestamp::now")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub updated_at: Timestamp,
 }
 
 pub const MAX_AUTOMATION_ACTIONS: usize = 1;
@@ -434,9 +444,11 @@ pub struct Automation {
     pub project_id: ProjectId,
     pub trigger: AutomationTrigger,
     pub actions: Vec<AutomationAction>,
-    pub created_at: DateTime<Utc>,
-    #[serde(default = "Utc::now")]
-    pub updated_at: DateTime<Utc>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub created_at: Timestamp,
+    #[serde(default = "Timestamp::now")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub updated_at: Timestamp,
 }
 
 impl Automation {
@@ -597,10 +609,12 @@ pub struct Change {
     pub entity_id: Uuid,
     pub kind: ChangeKind,
     pub operation_id: Uuid,
-    pub client_timestamp: Option<DateTime<Utc>>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub client_timestamp: Option<Timestamp>,
     #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
     pub field_values: FieldValues,
-    pub created_at: DateTime<Utc>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub created_at: Timestamp,
 }
 
 /// A project together with all of its sections, tasks, comments, and automations.

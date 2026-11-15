@@ -939,7 +939,7 @@ mod tests {
         TaskState,
     };
     use crate::position::Position;
-    use chrono::{DateTime, Utc};
+    use jiff::Timestamp;
     use serde_json::json;
     use uuid::Uuid;
 
@@ -956,8 +956,8 @@ mod tests {
         Position::parse(value).expect("test position should parse")
     }
 
-    fn at() -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(0, 0).expect("valid timestamp")
+    fn at() -> Timestamp {
+        Timestamp::from_second(0).expect("valid timestamp")
     }
 
     fn project(id: &str, name: &str) -> Project {
@@ -1177,7 +1177,7 @@ mod tests {
     #[test]
     fn snapshot_file_round_trips_updated_at() {
         let mut document = full_project_doc(PROJECT_ID, "alpha");
-        let edited = DateTime::<Utc>::from_timestamp(1_600_000_000, 0).expect("valid timestamp");
+        let edited = Timestamp::from_second(1_600_000_000).expect("valid timestamp");
         document.project.updated_at = edited;
         document.tasks[0].updated_at = edited;
 
@@ -1325,14 +1325,14 @@ mod import_tests {
     use super::*;
     use crate::models::{ExternalIdentity, ExternalMetadata, Priority, ProjectSnapshot, TaskState};
     use crate::position::Position;
-    use chrono::{DateTime, Utc};
+    use jiff::Timestamp;
 
     fn uuid(n: u128) -> Uuid {
         Uuid::from_u128(n)
     }
 
-    fn at() -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(0, 0).expect("valid timestamp")
+    fn at() -> Timestamp {
+        Timestamp::from_second(0).expect("valid timestamp")
     }
 
     fn project(id: Uuid, name: &str) -> Project {
@@ -2063,7 +2063,7 @@ mod import_tests {
     fn created_task_keeps_the_incoming_updated_at() {
         let project_id = uuid(1);
         let task_id = uuid(3);
-        let edited = DateTime::<Utc>::from_timestamp(500, 0).expect("valid timestamp");
+        let edited = Timestamp::from_second(500).expect("valid timestamp");
         let incoming = file(vec![document(
             project(project_id, "p"),
             vec![],
@@ -2092,7 +2092,7 @@ mod import_tests {
     fn changed_import_update_carries_the_incoming_updated_at() {
         let project_id = uuid(1);
         let task_id = uuid(3);
-        let edited = DateTime::<Utc>::from_timestamp(500, 0).expect("valid timestamp");
+        let edited = Timestamp::from_second(500).expect("valid timestamp");
 
         let live_state = import_state(
             vec![project(project_id, "p")],
