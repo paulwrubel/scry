@@ -15,6 +15,13 @@ export type ExternalMetadata = {
   state: string | null;
   reason: string | null;
   draft: boolean | null;
+  /**
+   * GitHub's `updatedAt` for the issue or pull request.
+   */
   updated_at: string | null;
+  /**
+   * When `scry sync` last fetched this metadata successfully.
+   */
+  synced_at: string | null;
   error: string | null;
 };

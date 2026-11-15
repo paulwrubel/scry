@@ -26,6 +26,7 @@ function metadata(overrides: Partial<ExternalMetadata> = {}): ExternalMetadata {
     reason: null,
     draft: false,
     updated_at: '2026-02-01T12:00:00Z',
+    synced_at: '2026-02-01T12:00:00Z',
     error: null,
     ...overrides,
   };
@@ -251,5 +252,55 @@ describe('TaskCard', () => {
     );
 
     expect(screen.getByText('GitHub: not_found')).toBeDefined();
+  });
+
+  it('marks a linked task that has not synced in over 24 hours', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/project-1']}>
+        <TaskCard
+          projectId="project-1"
+          task={{ ...task, external_identity: GITHUB_IDENTITY, external_metadata: metadata() }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('img', { name: 'GitHub not synced in over 24 hours' })).toBeDefined();
+  });
+
+  it('hides the stale marker after a recent sync', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/project-1']}>
+        <TaskCard
+          projectId="project-1"
+          task={{
+            ...task,
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata({ synced_at: new Date().toISOString() }),
+          }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('img', { name: 'GitHub not synced in over 24 hours' })).toBeNull();
+  });
+
+  it('marks a linked task that has never synced', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/project-1']}>
+        <TaskCard
+          projectId="project-1"
+          task={{
+            ...task,
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata({ synced_at: null }),
+          }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('img', { name: 'GitHub not synced yet' })).toBeDefined();
   });
 });

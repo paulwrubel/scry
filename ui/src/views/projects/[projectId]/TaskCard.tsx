@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { SiGithub } from 'react-icons/si';
 import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { Link, useLocation } from 'react-router-dom';
+import { GithubSyncStaleIcon } from '@/components/GithubSyncStaleIcon';
 import { TitleText } from '@/components/TitleText';
 import type { Task } from '@/generated/Task';
 import { PRIORITY_DOT_CLASS } from '@/data/priority';
@@ -23,7 +24,7 @@ export type TaskCardProps = {
 export function TaskCard(props: TaskCardProps) {
   const { projectId, task, showPriority, nodeRef, style, dragging, draggable } = props;
 
-  const location = useLocation();
+  const { search } = useLocation();
   const press = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
 
@@ -75,7 +76,7 @@ export function TaskCard(props: TaskCardProps) {
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <Link
-            to={`/projects/${projectId}/tasks/${task.id}${location.search}`}
+            to={`/projects/${projectId}/tasks/${task.id}${search}`}
             draggable={false}
             className="flex min-w-0 flex-1 items-center gap-2"
           >
@@ -88,6 +89,7 @@ export function TaskCard(props: TaskCardProps) {
             </span>
           </Link>
           <div className="mt-1 flex shrink-0 items-center gap-1.5">
+            <GithubSyncStaleIcon task={task} />
             {url === null ? null : (
               <a
                 href={url}

@@ -148,18 +148,13 @@ async fn sync_task(client: &Client, task: &Task, identity: &ExternalIdentity) ->
         Ok(state) => state,
         Err(error) => return record_error(client, task, identity, error).await,
     };
+    let synced_at = Utc::now();
 
     if !should_apply_task_metadata(task.external_metadata.as_ref(), state.updated_at) {
-        return SyncOutcome {
-            task_id: task.id,
-            identity: identity.clone(),
-            status: "skipped",
-            error: None,
-            detail: None,
-        };
+        return refresh_unchanged(client, task, identity, synced_at).await;
     }
 
-    let metadata = github_metadata(&state);
+    let metadata = github_metadata(&state, synced_at);
     let update = match build_success_update(task, &state, metadata) {
         Ok(update) => update,
         Err(error) => return record_error(client, task, identity, error).await,
@@ -179,6 +174,74 @@ async fn sync_task(client: &Client, task: &Task, identity: &ExternalIdentity) ->
             status: "error",
             error: Some(error.kind().to_string()),
             detail: Some(error.to_string()),
+        },
+    }
+}
+
+/// Refresh the stored `synced_at` without rewriting fields GitHub has not changed.
+async fn refresh_unchanged(
+    client: &Client,
+    task: &Task,
+    identity: &ExternalIdentity,
+    synced_at: DateTime<Utc>,
+) -> SyncOutcome {
+    let Some(existing) = task.external_metadata.as_ref() else {
+        return SyncOutcome {
+            task_id: task.id,
+            identity: identity.clone(),
+            status: "skipped",
+            error: None,
+            detail: None,
+        };
+    };
+
+    let update = SyncUpdate {
+        title: None,
+        description: None,
+        state: None,
+        external_metadata: Some(Some(refresh_synced_at(existing, synced_at))),
+    };
+
+    match put_task(client, task, &update).await {
+        Ok(()) => SyncOutcome {
+            task_id: task.id,
+            identity: identity.clone(),
+            status: "skipped",
+            error: None,
+            detail: None,
+        },
+        Err(error) => SyncOutcome {
+            task_id: task.id,
+            identity: identity.clone(),
+            status: "error",
+            error: Some(error.kind().to_string()),
+            detail: Some(error.to_string()),
+        },
+    }
+}
+
+fn refresh_synced_at(existing: &ExternalMetadata, synced_at: DateTime<Utc>) -> ExternalMetadata {
+    match existing {
+        ExternalMetadata::Github {
+            title,
+            description,
+            kind,
+            state,
+            reason,
+            draft,
+            updated_at,
+            synced_at: _,
+            error,
+        } => ExternalMetadata::Github {
+            title: title.clone(),
+            description: description.clone(),
+            kind: kind.clone(),
+            state: state.clone(),
+            reason: reason.clone(),
+            draft: *draft,
+            updated_at: *updated_at,
+            synced_at: Some(synced_at),
+            error: error.clone(),
         },
     }
 }
@@ -237,7 +300,7 @@ fn has_error(metadata: Option<&ExternalMetadata>) -> bool {
     )
 }
 
-fn github_metadata(state: &GithubState) -> ExternalMetadata {
+fn github_metadata(state: &GithubState, synced_at: DateTime<Utc>) -> ExternalMetadata {
     ExternalMetadata::Github {
         title: Some(state.title.clone()),
         description: state.description.clone(),
@@ -246,6 +309,7 @@ fn github_metadata(state: &GithubState) -> ExternalMetadata {
         reason: state.reason.clone(),
         draft: state.draft,
         updated_at: Some(state.updated_at),
+        synced_at: Some(synced_at),
         error: None,
     }
 }
@@ -260,6 +324,7 @@ fn error_metadata(existing: Option<&ExternalMetadata>, error: SyncError) -> Exte
             reason,
             draft,
             updated_at,
+            synced_at,
             ..
         }) => ExternalMetadata::Github {
             title: title.clone(),
@@ -269,6 +334,7 @@ fn error_metadata(existing: Option<&ExternalMetadata>, error: SyncError) -> Exte
             reason: reason.clone(),
             draft: *draft,
             updated_at: *updated_at,
+            synced_at: *synced_at,
             error: Some(error.code().to_string()),
         },
         None => ExternalMetadata::Github {
@@ -279,6 +345,7 @@ fn error_metadata(existing: Option<&ExternalMetadata>, error: SyncError) -> Exte
             reason: None,
             draft: None,
             updated_at: None,
+            synced_at: None,
             error: Some(error.code().to_string()),
         },
     }
@@ -481,6 +548,7 @@ mod tests {
             reason: Some("reopened".to_string()),
             draft: None,
             updated_at,
+            synced_at: Some(timestamp("2024-06-01T00:00:00Z")),
             error: error.map(str::to_string),
         }
     }
@@ -562,6 +630,7 @@ mod tests {
                 reason,
                 draft,
                 updated_at,
+                synced_at,
                 error,
             } => {
                 assert_eq!(title.as_deref(), Some("Previous"));
@@ -571,6 +640,7 @@ mod tests {
                 assert_eq!(reason.as_deref(), Some("reopened"));
                 assert_eq!(draft, None);
                 assert_eq!(updated_at, Some(timestamp("2024-05-01T12:00:00Z")));
+                assert_eq!(synced_at, Some(timestamp("2024-06-01T00:00:00Z")));
                 assert_eq!(error.as_deref(), Some("not_found"));
             }
         }
@@ -598,7 +668,7 @@ mod tests {
             draft: None,
             updated_at: timestamp("2024-05-01T12:00:00Z"),
         };
-        let metadata = github_metadata(&state);
+        let metadata = github_metadata(&state, timestamp("2024-07-01T00:00:00Z"));
         let update = build_success_update(&task(None), &state, metadata).unwrap();
 
         assert_eq!(update.title, None);
@@ -620,9 +690,39 @@ mod tests {
         };
         let mut existing = task(None);
         existing.description = Some("stale".to_string());
-        let metadata = github_metadata(&state);
+        let metadata = github_metadata(&state, timestamp("2024-07-01T00:00:00Z"));
         let update = build_success_update(&existing, &state, metadata).unwrap();
 
         assert_eq!(update.description.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn refresh_synced_at_preserves_fields_and_updates_timestamp() {
+        let existing = stored_metadata(Some(timestamp("2024-05-01T12:00:00Z")), None);
+        let metadata = refresh_synced_at(&existing, timestamp("2024-08-01T00:00:00Z"));
+
+        match metadata {
+            ExternalMetadata::Github {
+                title,
+                description,
+                kind,
+                state,
+                reason,
+                draft,
+                updated_at,
+                synced_at,
+                error,
+            } => {
+                assert_eq!(synced_at, Some(timestamp("2024-08-01T00:00:00Z")));
+                assert_eq!(updated_at, Some(timestamp("2024-05-01T12:00:00Z")));
+                assert_eq!(title.as_deref(), Some("Previous"));
+                assert_eq!(description.as_deref(), Some("old body"));
+                assert_eq!(kind.as_deref(), Some("issue"));
+                assert_eq!(state.as_deref(), Some("open"));
+                assert_eq!(reason.as_deref(), Some("reopened"));
+                assert_eq!(draft, None);
+                assert_eq!(error, None);
+            }
+        }
     }
 }

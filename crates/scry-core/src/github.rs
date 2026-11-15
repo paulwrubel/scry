@@ -149,6 +149,7 @@ mod tests {
             reason: None,
             draft: None,
             updated_at,
+            synced_at: None,
             error: None,
         }
     }

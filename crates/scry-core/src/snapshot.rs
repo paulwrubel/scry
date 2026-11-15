@@ -1208,6 +1208,7 @@ mod tests {
             reason: Some("completed".to_string()),
             draft: None,
             updated_at: Some(at()),
+            synced_at: None,
             error: None,
         };
 
@@ -1459,6 +1460,7 @@ mod import_tests {
             reason: None,
             draft: Some(false),
             updated_at: Some(at()),
+            synced_at: None,
             error: None,
         };
 

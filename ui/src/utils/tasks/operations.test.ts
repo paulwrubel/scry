@@ -232,6 +232,7 @@ describe('updateTaskOperation', () => {
       reason: null,
       draft: null,
       updated_at: CREATED_AT,
+      synced_at: null,
       error: null,
     };
     const linked = task({
@@ -277,6 +278,7 @@ describe('updateTaskOperation', () => {
       reason: null,
       draft: null,
       updated_at: CREATED_AT,
+      synced_at: null,
       error: null,
     };
     const linked = task({

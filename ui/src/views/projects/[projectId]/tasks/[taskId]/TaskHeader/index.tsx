@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { GithubSyncStaleIcon } from '@/components/GithubSyncStaleIcon';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import { TaskTitle } from './TaskTitle';
@@ -48,7 +49,10 @@ export function TaskHeader(props: TaskHeaderProps) {
         <TaskTitle title={task.title} readOnly={readOnly} onSave={onSaveTitle} />
         <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
           <p className="text-muted text-sm">{project.name}</p>
-          <span className="text-muted shrink-0 font-mono text-sm">{handle}</span>
+          <span className="text-muted inline-flex shrink-0 items-center gap-1.5 font-mono text-sm">
+            <GithubSyncStaleIcon task={task} />
+            {handle}
+          </span>
         </div>
       </div>
     </div>
