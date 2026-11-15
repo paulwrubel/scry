@@ -59,5 +59,23 @@ export function externalError(task: Task): string | null {
 }
 
 export function lastSyncedAt(task: Task): string | null {
-  return task.external_metadata?.updated_at ?? null;
+  return task.external_metadata?.synced_at ?? null;
+}
+
+const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
+
+/** Whether a linked task's GitHub metadata has not been fetched in over 24 hours. */
+export function githubSyncStale(task: Task, now: number = Date.now()): boolean {
+  if (githubIdentity(task) === null) {
+    return false;
+  }
+  const syncedAt = lastSyncedAt(task);
+  if (syncedAt === null) {
+    return true;
+  }
+  const parsed = Date.parse(syncedAt);
+  if (Number.isNaN(parsed)) {
+    return true;
+  }
+  return now - parsed > SYNC_STALE_MS;
 }

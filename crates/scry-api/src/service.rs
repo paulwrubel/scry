@@ -3096,6 +3096,7 @@ mod tests {
             reason: Some("reopened".to_string()),
             draft: Some(false),
             updated_at: Some(Utc::now()),
+            synced_at: None,
             error: None,
         }
     }
@@ -3113,6 +3114,7 @@ mod tests {
             reason: None,
             draft: Some(false),
             updated_at: None,
+            synced_at: None,
             error: None,
         }
     }

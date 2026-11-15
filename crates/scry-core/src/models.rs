@@ -170,7 +170,10 @@ pub enum ExternalMetadata {
         state: Option<String>,
         reason: Option<String>,
         draft: Option<bool>,
+        /// GitHub's `updatedAt` for the issue or pull request.
         updated_at: Option<DateTime<Utc>>,
+        /// When `scry sync` last fetched this metadata successfully.
+        synced_at: Option<DateTime<Utc>>,
         error: Option<String>,
     },
 }

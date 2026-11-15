@@ -21,5 +21,6 @@ This SHOULD be an unordered list of general changes, a sentence or two for each,
 <!-- Run the full gate before opening this PR. -->
 
 - [ ] `just validate` passes (test --> check --> clippy)
+- [ ] If any UI files were updated or added, they adhere to the react-code-conventions
 - [ ] If any SQL in a `sqlx::query!` macro or a migration changed: ran `just sqlx-prepare` and committed the regenerated `.sqlx/` cache
 - [ ] README CLI reference and `install.sh` updated if commands or flags changed

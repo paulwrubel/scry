@@ -35,6 +35,7 @@ function metadata(overrides: Partial<ExternalMetadata> = {}): ExternalMetadata {
     reason: null,
     draft: false,
     updated_at: '2026-02-01T12:00:00Z',
+    synced_at: '2026-02-01T12:00:00Z',
     error: null,
     ...overrides,
   };
@@ -462,6 +463,25 @@ describe('TaskDetail', () => {
       'https://github.com/acme/widgets/issues/123',
     );
     expect(screen.getByText(/Last synced/)).toBeDefined();
+  });
+
+  it('marks a stale sync in the task header', () => {
+    renderTask(
+      projectSnapshot({
+        tasks: [
+          task({
+            id: TASK_ID,
+            title: 'Write tests',
+            section_id: 'backlog',
+            external_identity: GITHUB_IDENTITY,
+            external_metadata: metadata({ synced_at: '2026-02-01T12:00:00Z' }),
+          }),
+        ],
+      }),
+      vi.fn(async () => undefined),
+    );
+
+    expect(screen.getByRole('img', { name: 'GitHub not synced in over 24 hours' })).toBeDefined();
   });
 
   it('shows the GitHub error badge', () => {

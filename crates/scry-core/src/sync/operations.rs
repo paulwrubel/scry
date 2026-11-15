@@ -469,6 +469,7 @@ mod tests {
             reason: None,
             draft: Some(false),
             updated_at: None,
+            synced_at: None,
             error: None,
         };
         if let OperationKind::UpdateTask {
