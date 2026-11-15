@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::super::{
     ApplyMode, NewTask, ProjectService, SectionInput, TaskChangeResult, TaskPatch, TaskPlacement,
-    new_operation, position_error,
+    create_task_operation, new_operation, position_error,
 };
 
 impl ProjectService {
@@ -48,24 +48,7 @@ impl ProjectService {
         if let Some(section_op) = section_op {
             ops.push(section_op);
         }
-        ops.push(new_operation(
-            Uuid::new_v4(),
-            OperationKind::CreateTask {
-                id: task.id,
-                project_id: task.project_id,
-                title: task.title.clone(),
-                description: task.description.clone(),
-                priority: task.priority,
-                section_id: task.section_id,
-                position,
-                state: task.state,
-                tags: task.tags.clone(),
-                created_at: task.created_at,
-                updated_at: None,
-                external_identity: task.external_identity.clone(),
-                external_metadata: task.external_metadata.clone().map(Box::new),
-            },
-        ));
+        ops.push(new_operation(Uuid::new_v4(), create_task_operation(&task)));
         self.apply_operations(&ops, ApplyMode::Atomic).await?;
 
         Ok(TaskChangeResult { task })
@@ -103,24 +86,7 @@ impl ProjectService {
             external_metadata: source.external_metadata.clone(),
         };
 
-        let op = new_operation(
-            Uuid::new_v4(),
-            OperationKind::CreateTask {
-                id: task.id,
-                project_id: task.project_id,
-                title: task.title.clone(),
-                description: task.description.clone(),
-                priority: task.priority,
-                section_id: task.section_id,
-                position,
-                state: task.state,
-                tags: task.tags.clone(),
-                created_at: task.created_at,
-                updated_at: None,
-                external_identity: task.external_identity.clone(),
-                external_metadata: source.external_metadata.clone().map(Box::new),
-            },
-        );
+        let op = new_operation(Uuid::new_v4(), create_task_operation(&task));
         self.apply_operations(&[op], ApplyMode::Atomic).await?;
 
         Ok(TaskChangeResult { task })

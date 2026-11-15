@@ -241,27 +241,16 @@ impl ProjectService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::service::create_task_operation;
     use crate::service::test_helpers::task_at;
     use chrono::Utc;
     use scry_core::ids::SectionId;
     use uuid::Uuid;
 
     fn create_task_op(task: &Task, section_id: Option<SectionId>) -> OperationKind {
-        OperationKind::CreateTask {
-            id: task.id,
-            project_id: task.project_id,
-            title: task.title.clone(),
-            description: task.description.clone(),
-            priority: task.priority,
-            section_id,
-            position: task.position.clone(),
-            state: task.state,
-            tags: task.tags.clone(),
-            created_at: task.created_at,
-            updated_at: None,
-            external_identity: task.external_identity.clone(),
-            external_metadata: task.external_metadata.clone().map(Box::new),
-        }
+        let mut task = task.clone();
+        task.section_id = section_id;
+        create_task_operation(&task)
     }
 
     #[test]
