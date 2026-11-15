@@ -128,19 +128,7 @@ impl ProjectService {
                     .await?
                     .is_some();
                 let entities = self.affected_entities(tx, Entity::Project(*id)).await?;
-                let deleted_at = Utc::now();
-
-                // children come last, so reversing logs them ahead of their parent
-                let mut seqs = Vec::with_capacity(entities.len());
-                for entity in entities.iter().rev() {
-                    self.store
-                        .create_tombstone(*entity, deleted_at, Some(&mut **tx))
-                        .await?;
-                    seqs.push(
-                        self.record_change(tx, op, *entity, ChangeKind::Delete, json!({}))
-                            .await?,
-                    );
-                }
+                let seqs = self.record_deletes(tx, op, &entities).await?;
 
                 if existed {
                     self.store
@@ -309,16 +297,7 @@ impl ProjectService {
                 }
 
                 let entities = self.affected_entities(tx, Entity::Section(*id)).await?;
-                let deleted_at = Utc::now();
-                for entity in entities.iter().rev() {
-                    self.store
-                        .create_tombstone(*entity, deleted_at, Some(&mut **tx))
-                        .await?;
-                    seqs.push(
-                        self.record_change(tx, op, *entity, ChangeKind::Delete, json!({}))
-                            .await?,
-                    );
-                }
+                seqs.extend(self.record_deletes(tx, op, &entities).await?);
 
                 if section.is_some() {
                     self.store.delete_section(*id, Some(&mut **tx)).await?;
@@ -428,18 +407,7 @@ impl ProjectService {
                     .await?
                     .is_some();
                 let entities = self.affected_entities(tx, Entity::Task(*id)).await?;
-                let deleted_at = Utc::now();
-
-                let mut seqs = Vec::with_capacity(entities.len());
-                for entity in entities.iter().rev() {
-                    self.store
-                        .create_tombstone(*entity, deleted_at, Some(&mut **tx))
-                        .await?;
-                    seqs.push(
-                        self.record_change(tx, op, *entity, ChangeKind::Delete, json!({}))
-                            .await?,
-                    );
-                }
+                let seqs = self.record_deletes(tx, op, &entities).await?;
 
                 if existed {
                     self.store.delete_task(*id, Some(&mut **tx)).await?;
@@ -521,18 +489,7 @@ impl ProjectService {
                     .await?
                     .is_some();
                 let entities = self.affected_entities(tx, Entity::Comment(*id)).await?;
-                let deleted_at = Utc::now();
-
-                let mut seqs = Vec::with_capacity(entities.len());
-                for entity in entities.iter().rev() {
-                    self.store
-                        .create_tombstone(*entity, deleted_at, Some(&mut **tx))
-                        .await?;
-                    seqs.push(
-                        self.record_change(tx, op, *entity, ChangeKind::Delete, json!({}))
-                            .await?,
-                    );
-                }
+                let seqs = self.record_deletes(tx, op, &entities).await?;
 
                 if existed {
                     self.store.delete_comment(*id, Some(&mut **tx)).await?;
@@ -645,18 +602,7 @@ impl ProjectService {
                     .await?
                     .is_some();
                 let entities = self.affected_entities(tx, Entity::Automation(*id)).await?;
-                let deleted_at = Utc::now();
-
-                let mut seqs = Vec::with_capacity(entities.len());
-                for entity in entities.iter().rev() {
-                    self.store
-                        .create_tombstone(*entity, deleted_at, Some(&mut **tx))
-                        .await?;
-                    seqs.push(
-                        self.record_change(tx, op, *entity, ChangeKind::Delete, json!({}))
-                            .await?,
-                    );
-                }
+                let seqs = self.record_deletes(tx, op, &entities).await?;
 
                 if existed {
                     self.store.delete_automation(*id, Some(&mut **tx)).await?;
@@ -680,5 +626,27 @@ impl ProjectService {
         }
 
         Ok((OperationAcknowledgment::applied(op.operation_id), seq))
+    }
+
+    /// Tombstone each affected entity and log one delete change per entity.
+    /// Children come last, so reversing logs them ahead of their parent.
+    async fn record_deletes(
+        &self,
+        tx: &mut Transaction<'static, Postgres>,
+        op: &Operation,
+        entities: &[Entity],
+    ) -> Result<Vec<i64>, ServiceError> {
+        let deleted_at = Utc::now();
+        let mut seqs = Vec::with_capacity(entities.len());
+        for entity in entities.iter().rev() {
+            self.store
+                .create_tombstone(*entity, deleted_at, Some(&mut **tx))
+                .await?;
+            seqs.push(
+                self.record_change(tx, op, *entity, ChangeKind::Delete, json!({}))
+                    .await?,
+            );
+        }
+        Ok(seqs)
     }
 }

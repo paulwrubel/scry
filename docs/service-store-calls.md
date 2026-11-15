@@ -1,6 +1,6 @@
 # Service / Store call graph
 
-Derived from `crates/scry-api/src/service.rs` (`ProjectService`), `crates/scry-core/src/store.rs` (the `Store` trait), `crates/scry-core/src/snapshot.rs`, and the REST handlers in `crates/scry-api/src/server/handlers.rs`. `PostgresStore` is the only implementor of `Store`, and `ProjectService` is the only caller of `Store` apart from the snapshot module.
+Derived from `crates/scry-api/src/service.rs` and its `service/` submodules (`ProjectService`), `crates/scry-core/src/store.rs` (the `Store` trait), `crates/scry-core/src/snapshot.rs`, and the REST handlers in `crates/scry-api/src/server/handlers.rs`. The service root keeps the public DTOs and shared helpers; the REST methods live in `service/writes/`, the batch driver and async helpers in `service/pipeline.rs`, operation dispatch in `service/apply.rs`, snapshot/import in `service/import.rs`, handle lookups in `service/handles.rs`, and the pure helpers in `service/fields.rs`, `service/placement.rs`, and `service/automation.rs`. `PostgresStore` is the only implementor of `Store`, and `ProjectService` is the only caller of `Store` apart from the snapshot module.
 
 ## How to read these diagrams
 
