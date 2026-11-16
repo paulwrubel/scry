@@ -5,7 +5,11 @@ import type { Interval } from '@/generated/Interval';
 import type { EventPlacement, WeekLane } from './calendar';
 import {
   MONTH_PARAM,
+  VIEW_PARAM,
+  WEEK_PARAM,
+  applyCalendarView,
   applyMonth,
+  applyWeek,
   dayKey,
   eventSpan,
   eventsOnDay,
@@ -13,9 +17,16 @@ import {
   monthGrid,
   monthKey,
   monthLabel,
+  parseCalendarView,
   parseMonth,
+  parseWeek,
+  placeTimedWeek,
   placeWeek,
   shiftMonth,
+  spanningEvents,
+  weekDays,
+  weekLabel,
+  weekStart,
 } from './calendar';
 
 const ZONE = 'UTC';
@@ -363,5 +374,210 @@ describe('eventsOnDay', () => {
     const events = [event('standup', timedInterval('2026-11-06T09:00:00', '2026-11-06T10:00:00'))];
 
     expect(eventsOnDay(events, day('2026-11-05'), ZONE)).toEqual([]);
+  });
+});
+
+describe('parseCalendarView', () => {
+  it('defaults to the month view when the parameter is missing', () => {
+    expect(parseCalendarView(new URLSearchParams())).toBe('month');
+  });
+
+  it('reads an explicit month view', () => {
+    expect(parseCalendarView(new URLSearchParams(`${VIEW_PARAM}=month`))).toBe('month');
+  });
+
+  it('reads the week view', () => {
+    expect(parseCalendarView(new URLSearchParams(`${VIEW_PARAM}=week`))).toBe('week');
+  });
+
+  it('falls back to the month view for an unrecognised value', () => {
+    expect(parseCalendarView(new URLSearchParams(`${VIEW_PARAM}=nonsense`))).toBe('month');
+  });
+});
+
+describe('applyCalendarView', () => {
+  it('sets the month view alongside the other parameters', () => {
+    const next = applyCalendarView(new URLSearchParams('month=2026-11'), 'month');
+
+    expect(next.toString()).toBe('month=2026-11&view=month');
+  });
+
+  it('sets the week view alongside the other parameters', () => {
+    const next = applyCalendarView(new URLSearchParams('month=2026-11'), 'week');
+
+    expect(next.toString()).toBe('month=2026-11&view=week');
+  });
+
+  it('does not mutate the input parameters', () => {
+    const input = new URLSearchParams('month=2026-11');
+
+    applyCalendarView(input, 'week');
+
+    expect(input.toString()).toBe('month=2026-11');
+  });
+});
+
+describe('weekStart', () => {
+  it('rewinds a mid-week day to the Sunday before it', () => {
+    expect(dayKey(weekStart(day('2026-11-06')))).toBe('2026-11-01');
+  });
+
+  it('leaves a Sunday where it is', () => {
+    expect(dayKey(weekStart(day('2026-11-01')))).toBe('2026-11-01');
+  });
+});
+
+describe('parseWeek', () => {
+  it('anchors an explicit date to the Sunday of its week', () => {
+    expect(dayKey(parseWeek(new URLSearchParams(`${WEEK_PARAM}=2026-11-04`), ZONE, NOW))).toBe(
+      '2026-11-01',
+    );
+  });
+
+  it('anchors a missing week to the current week', () => {
+    expect(dayKey(parseWeek(new URLSearchParams(), ZONE, NOW))).toBe('2026-11-01');
+  });
+
+  it('anchors an unreadable week to the current week', () => {
+    expect(dayKey(parseWeek(new URLSearchParams(`${WEEK_PARAM}=nonsense`), ZONE, NOW))).toBe(
+      '2026-11-01',
+    );
+  });
+});
+
+describe('applyWeek', () => {
+  it('sets the Sunday that starts the given day and keeps the other parameters', () => {
+    const next = applyWeek(new URLSearchParams('month=2026-11'), day('2026-11-04'));
+
+    expect(next.get(WEEK_PARAM)).toBe('2026-11-01');
+    expect(next.get(MONTH_PARAM)).toBe('2026-11');
+  });
+});
+
+describe('weekLabel', () => {
+  function weekOf(start: string): DateTime[] {
+    return Array.from({ length: 7 }, (_, index) => day(start).plus({ days: index }));
+  }
+
+  it('folds a week that stays inside one month', () => {
+    expect(weekLabel(weekOf('2026-11-01'))).toBe('November 1 – 7, 2026');
+  });
+
+  it('keeps both month names when the week crosses one', () => {
+    expect(weekLabel(weekOf('2026-11-29'))).toBe('November 29 – December 5, 2026');
+  });
+
+  it('keeps both years when the week crosses one', () => {
+    expect(weekLabel(weekOf('2025-12-28'))).toBe('December 28, 2025 – January 3, 2026');
+  });
+});
+
+describe('spanningEvents', () => {
+  it('keeps the all-day events and the timed one that crosses midnight', () => {
+    const events = [
+      event('holiday', dateInterval('2026-11-02', '2026-11-03')),
+      event('offsite', dateInterval('2026-11-02', '2026-11-05')),
+      event('standup', timedInterval('2026-11-02T09:00:00', '2026-11-02T10:00:00')),
+      event('night', timedInterval('2026-11-06T23:00:00', '2026-11-07T01:00:00')),
+    ];
+
+    expect(spanningEvents(events, ZONE).map((item) => item.id)).toEqual([
+      'holiday',
+      'offsite',
+      'night',
+    ]);
+  });
+});
+
+describe('placeTimedWeek', () => {
+  const week = Array.from({ length: 7 }, (_, index) => day('2026-11-01').plus({ days: index }));
+
+  function placementsByDay(events: Event[]): ReturnType<typeof placeTimedWeek> {
+    return placeTimedWeek(events, week, ZONE);
+  }
+
+  it('returns one list per day', () => {
+    expect(placementsByDay([])).toHaveLength(7);
+  });
+
+  it('places a timed event on its day and leaves the other days empty', () => {
+    const placements = placementsByDay([
+      event('standup', timedInterval('2026-11-02T09:00:00', '2026-11-02T10:00:00')),
+    ]);
+
+    expect(placements[1]).toMatchObject([
+      { event: { id: 'standup' }, startMinute: 540, endMinute: 600, column: 0, columns: 1 },
+    ]);
+    expect(
+      placements.filter((dayPlacements, index) => index !== 1 && dayPlacements.length > 0),
+    ).toEqual([]);
+  });
+
+  it('gives overlapping events separate columns in a shared cluster', () => {
+    const placements = placementsByDay([
+      event('first', timedInterval('2026-11-02T09:00:00', '2026-11-02T10:00:00')),
+      event('second', timedInterval('2026-11-02T09:30:00', '2026-11-02T10:30:00')),
+    ]);
+
+    expect(placements[1]).toMatchObject([
+      { event: { id: 'first' }, column: 0, columns: 2 },
+      { event: { id: 'second' }, column: 1, columns: 2 },
+    ]);
+  });
+
+  it('shares a column between events that only touch', () => {
+    const placements = placementsByDay([
+      event('first', timedInterval('2026-11-02T09:00:00', '2026-11-02T10:00:00')),
+      event('second', timedInterval('2026-11-02T10:00:00', '2026-11-02T11:00:00')),
+    ]);
+
+    expect(placements[1]).toMatchObject([
+      { event: { id: 'first' }, column: 0, columns: 1 },
+      { event: { id: 'second' }, column: 0, columns: 1 },
+    ]);
+  });
+
+  it('reuses a freed column in the middle of an overlapping chain', () => {
+    const placements = placementsByDay([
+      event('first', timedInterval('2026-11-02T09:00:00', '2026-11-02T10:00:00')),
+      event('second', timedInterval('2026-11-02T09:30:00', '2026-11-02T10:30:00')),
+      event('third', timedInterval('2026-11-02T10:00:00', '2026-11-02T11:00:00')),
+    ]);
+
+    expect(placements[1]).toMatchObject([
+      { event: { id: 'first' }, column: 0, columns: 2 },
+      { event: { id: 'second' }, column: 1, columns: 2 },
+      { event: { id: 'third' }, column: 0, columns: 2 },
+    ]);
+  });
+
+  it('runs an event that ends at midnight to the bottom of the day', () => {
+    const placements = placementsByDay([
+      event('wind-down', timedInterval('2026-11-02T22:00:00', '2026-11-03T00:00:00')),
+    ]);
+
+    expect(placements[1]).toMatchObject([
+      { event: { id: 'wind-down' }, startMinute: 1320, endMinute: 1440 },
+    ]);
+  });
+
+  it('leaves all-day and overnight events out of the timed columns', () => {
+    const placements = placementsByDay([
+      event('offsite', dateInterval('2026-11-02', '2026-11-05')),
+      event('night', timedInterval('2026-11-02T23:00:00', '2026-11-03T01:00:00')),
+    ]);
+
+    expect(placements.every((dayPlacements) => dayPlacements.length === 0)).toBe(true);
+  });
+});
+
+describe('weekDays', () => {
+  it('returns seven days starting on the Sunday of that week', () => {
+    const days = weekDays(day('2026-11-04'));
+
+    expect(days).toHaveLength(7);
+    expect(dayKey(days[0])).toBe('2026-11-01');
+    expect(dayKey(days[6])).toBe('2026-11-07');
+    expect(days.every((item) => item.hour === 0)).toBe(true);
   });
 });

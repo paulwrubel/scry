@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEVICE_ZONE } from '@/contract/due';
 import type { Event } from '@/generated/Event';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ReplicaContext } from '@/providers/Replica/context';
@@ -117,6 +118,80 @@ describe('EventsPage', () => {
 
     expect(screen.getByTestId('search').textContent).toBe('month=2026-12');
     expect(screen.getByRole('heading', { name: 'December 2026' })).toBeDefined();
+  });
+
+  it('switches to the week view', () => {
+    renderEvents(makeProject(), `/projects/${PROJECT_ID}/events?view=month&month=2026-11`);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Week' }));
+
+    expect(screen.getByTestId('search').textContent).toContain('view=week');
+    expect(screen.getByTestId('search').textContent).toContain('week=');
+    expect(screen.getByRole('button', { name: 'Week' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('switches back to the month of the visible week', () => {
+    renderEvents(
+      makeProject(),
+      `/projects/${PROJECT_ID}/events?view=week&week=2026-12-06&month=2026-11`,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Month' }));
+
+    expect(screen.getByTestId('search').textContent).toContain('view=month');
+    expect(screen.getByTestId('search').textContent).toContain('month=2026-12');
+    expect(screen.getByRole('heading', { name: 'December 2026' })).toBeDefined();
+  });
+
+  it('moves to the next week', () => {
+    renderEvents(makeProject(), `/projects/${PROJECT_ID}/events?view=week&week=2026-11-01`);
+
+    expect(screen.getByRole('heading', { name: 'November 1 – 7, 2026' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
+
+    expect(screen.getByTestId('search').textContent).toBe('view=week&week=2026-11-08');
+    expect(screen.getByRole('heading', { name: 'November 8 – 14, 2026' })).toBeDefined();
+  });
+
+  it('draws timed and all-day events in the week view', () => {
+    renderEvents(
+      makeProject({
+        events: [
+          event('offsite', {
+            interval: {
+              start: { kind: 'date', date: '2026-11-02' },
+              end: { kind: 'date', date: '2026-11-05' },
+            },
+          }),
+          event('standup', {
+            interval: {
+              start: { kind: 'zoned', datetime: '2026-11-02T09:00:00', zone: DEVICE_ZONE },
+              end: { kind: 'zoned', datetime: '2026-11-02T10:00:00', zone: DEVICE_ZONE },
+            },
+          }),
+        ],
+      }),
+      `/projects/${PROJECT_ID}/events?view=week&week=2026-11-01`,
+    );
+
+    expect(screen.getByText('All day')).toBeDefined();
+    expect(screen.getByText('12:00 AM')).toBeDefined();
+    expect(screen.getAllByRole('link', { name: /offsite/ })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: /standup/ })).toHaveLength(1);
+
+    const timed = screen.getByRole('link', { name: /standup/ });
+    expect(parseFloat(timed.style.top)).toBeCloseTo((540 / 1440) * 100, 3);
+  });
+
+  it('opens a day from the week view', () => {
+    renderEvents(makeProject(), `/projects/${PROJECT_ID}/events?view=week&week=2026-11-01`);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show events on Monday, November 2' }));
+
+    expect(screen.getByTestId('day').textContent).toBe('2026-11-02');
+    expect(screen.getByTestId('search').textContent).toContain('view=week');
+    expect(screen.getByTestId('search').textContent).toContain('week=2026-11-01');
   });
 
   it('warns when the project is missing', () => {
