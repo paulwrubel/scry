@@ -10,10 +10,15 @@ import { createReplicaMock, makeProject, makeReplicaSnapshot } from '@/test/fixt
 
 function LocationProbe() {
   const location = useLocation();
-  return <span data-testid="path">{location.pathname}</span>;
+  return (
+    <span data-testid="path">
+      {location.pathname}
+      {location.search}
+    </span>
+  );
 }
 
-function renderSwitcher(path: string, activeProjectId = 'p1') {
+function renderSwitcher(path: string, activeProjectId: string | null = 'p1') {
   const projects = [
     makeProject({ id: 'p1', name: 'Alpha' }),
     makeProject({ id: 'p2', name: 'Beta' }),
@@ -76,6 +81,80 @@ describe('ProjectSwitcher', () => {
 
     expect(setActiveProjectId).toHaveBeenCalledWith('p2');
     expect(screen.getByTestId('path').textContent).toBe('/projects/p2/settings');
+  });
+
+  it('keeps the events tab when switching projects', async () => {
+    const { setActiveProjectId } = renderSwitcher('/projects/p1/events?month=2026-10');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Beta' }));
+
+    expect(setActiveProjectId).toHaveBeenCalledWith('p2');
+    expect(screen.getByTestId('path').textContent).toBe('/projects/p2/events?month=2026-10');
+  });
+
+  it('keeps the events calendar when switching from an event route', async () => {
+    const { setActiveProjectId } = renderSwitcher('/projects/p1/events/evt-1?month=2026-10');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Beta' }));
+
+    expect(setActiveProjectId).toHaveBeenCalledWith('p2');
+    expect(screen.getByTestId('path').textContent).toBe('/projects/p2/events?month=2026-10');
+  });
+
+  it('collapses deeper event days routes to the calendar', async () => {
+    const { setActiveProjectId } = renderSwitcher(
+      '/projects/p1/events/days/2026-11-16?month=2026-10',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Beta' }));
+
+    expect(setActiveProjectId).toHaveBeenCalledWith('p2');
+    expect(screen.getByTestId('path').textContent).toBe('/projects/p2/events?month=2026-10');
+  });
+
+  it('drops the new-event date prefill when switching projects', async () => {
+    const { setActiveProjectId } = renderSwitcher(
+      '/projects/p1/events/new?date=2026-11-20&month=2026-10',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Beta' }));
+
+    expect(setActiveProjectId).toHaveBeenCalledWith('p2');
+    expect(screen.getByTestId('path').textContent).toBe('/projects/p2/events?month=2026-10');
+  });
+
+  it('keeps task filters when switching from a task route', async () => {
+    const { setActiveProjectId } = renderSwitcher('/projects/p1/tasks/t1?state=open&q=bug');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Beta' }));
+
+    expect(setActiveProjectId).toHaveBeenCalledWith('p2');
+    expect(screen.getByTestId('path').textContent).toBe('/projects/p2/tasks?state=open&q=bug');
+  });
+
+  it('carries a project view not named in the switcher', async () => {
+    const { setActiveProjectId } = renderSwitcher('/projects/p1/timeline/abc?view=week');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Beta' }));
+
+    expect(setActiveProjectId).toHaveBeenCalledWith('p2');
+    expect(screen.getByTestId('path').textContent).toBe('/projects/p2/timeline?view=week');
+  });
+
+  it('falls back to the task board from outside a project route', async () => {
+    const { setActiveProjectId } = renderSwitcher('/projects', null);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select project' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Beta' }));
+
+    expect(setActiveProjectId).toHaveBeenCalledWith('p2');
+    expect(screen.getByTestId('path').textContent).toBe('/projects/p2/tasks');
   });
 
   it('opens the new project form from the menu', async () => {
