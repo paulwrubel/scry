@@ -2,8 +2,8 @@ import type { ClientState } from '@/contract/replay';
 import type { Operation } from '@/generated/Operation';
 
 export const REPLICA_DATABASE = 'scry-replica';
-export const REPLICA_DATABASE_VERSION = 3;
-export const CONFIRMED_SCHEMA_VERSION = 6;
+export const REPLICA_DATABASE_VERSION = 5;
+export const CONFIRMED_SCHEMA_VERSION = 7;
 
 export type ReplicaOptions = {
   databaseName?: string;

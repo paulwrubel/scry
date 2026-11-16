@@ -2,6 +2,7 @@ import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
+import type { Event } from '@/generated/Event';
 import type { Replica, ReplicaSnapshot } from '@/utils/replica';
 
 export const CREATED_AT = '2026-01-01T00:00:00Z';
@@ -58,6 +59,22 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
 /** A task with a due date set, for tests that need one. */
 export function makeDueTask(overrides: Partial<Task> = {}): Task {
   return makeTask({ due: { kind: 'date', date: '2026-01-15' }, ...overrides });
+}
+
+export function makeEvent(overrides: Partial<Event> = {}): Event {
+  return {
+    id: 'event-1',
+    project_id: 'project-1',
+    title: 'Event title',
+    description: null,
+    interval: {
+      start: { kind: 'date', date: '2026-11-06' },
+      end: { kind: 'date', date: '2026-11-07' },
+    },
+    created_at: CREATED_AT,
+    updated_at: CREATED_AT,
+    ...overrides,
+  };
 }
 
 export type ReplicaSnapshotOverrides = Partial<

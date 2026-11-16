@@ -1,4 +1,4 @@
-import { HiClipboardDocumentList, HiCog6Tooth } from 'react-icons/hi2';
+import { HiCalendarDays, HiClipboardDocumentList, HiCog6Tooth } from 'react-icons/hi2';
 import { NavLink } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 
@@ -25,6 +25,17 @@ export function LayoutBottomNav() {
         >
           <HiClipboardDocumentList aria-hidden="true" className="h-5 w-5" />
           <span>Tasks</span>
+        </NavLink>
+        <NavLink
+          to={`/projects/${activeProjectId}/events`}
+          className={({ isActive }) =>
+            `flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
+              isActive ? 'text-white' : 'text-muted hover:text-zinc-200'
+            }`
+          }
+        >
+          <HiCalendarDays aria-hidden="true" className="h-5 w-5" />
+          <span>Events</span>
         </NavLink>
         <NavLink
           to={`/projects/${activeProjectId}/settings`}

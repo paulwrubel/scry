@@ -5,6 +5,7 @@ import type { ClientState } from '@/contract/replay';
 import type { Automation } from '@/generated/Automation';
 import type { Change } from '@/generated/Change';
 import type { Comment } from '@/generated/Comment';
+import type { Event } from '@/generated/Event';
 import type { Operation } from '@/generated/Operation';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
@@ -26,6 +27,7 @@ const TASK_A_ID = 'task-a';
 const TASK_B_ID = 'task-b';
 const COMMENT_ID = 'comment-a';
 const AUTOMATION_ID = 'automation-a';
+const EVENT_ID = 'event-a';
 
 let name = '';
 
@@ -48,7 +50,7 @@ describe('replica confirmed state', () => {
 
     const db = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
     const project = state.projects[0];
-    const { sections, tasks, comments, automations, ...projectRecord } = project;
+    const { sections, tasks, comments, automations, events, ...projectRecord } = project;
 
     expect(await db.get('projects', project.id)).toEqual(projectRecord);
     expect(await db.get('sections', SECTION_A_ID)).toEqual(sections[0]);
@@ -57,6 +59,7 @@ describe('replica confirmed state', () => {
     expect(await db.get('tasks', TASK_B_ID)).toEqual(tasks[1]);
     expect(await db.get('comments', COMMENT_ID)).toEqual(comments[0]);
     expect(automations).toEqual([]);
+    expect(events).toEqual([]);
     expect(await db.get('meta', 'project_order')).toEqual([PROJECT_ID]);
     expect(await db.get('meta', 'section_order')).toEqual([SECTION_A_ID, SECTION_B_ID]);
     expect(await db.get('meta', 'task_order')).toEqual([TASK_A_ID, TASK_B_ID]);
@@ -102,6 +105,35 @@ describe('replica confirmed state', () => {
 
     const second = await openReplica({ databaseName: name });
     expect(second.confirmed.projects[0].automations).toEqual([automation]);
+    second.close();
+  });
+
+  it('persists an event and attaches it to its project', async () => {
+    const event: Event = {
+      id: EVENT_ID,
+      project_id: PROJECT_ID,
+      title: 'Standup',
+      description: null,
+      interval: {
+        start: { kind: 'date', date: '2026-11-06' },
+        end: { kind: 'date', date: '2026-11-07' },
+      },
+      created_at: '2026-01-01T00:00:06Z',
+      updated_at: '2026-01-01T00:00:06Z',
+    };
+    const state = sampleState();
+    state.projects[0].events = [event];
+
+    const first = await openReplica({ databaseName: name });
+    await first.bootstrap(state);
+    first.close();
+
+    const db = await openDB<ReplicaDB>(name, REPLICA_DATABASE_VERSION);
+    expect(await db.get('events', EVENT_ID)).toEqual(event);
+    db.close();
+
+    const second = await openReplica({ databaseName: name });
+    expect(second.confirmed.projects[0].events).toEqual([event]);
     second.close();
   });
 

@@ -3,6 +3,7 @@ import type { Automation } from '@/generated/Automation';
 import type { AutomationAction } from '@/generated/AutomationAction';
 import type { Change } from '@/generated/Change';
 import type { Comment } from '@/generated/Comment';
+import type { Event } from '@/generated/Event';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
@@ -15,6 +16,7 @@ const SECTION_ID = '22222222-2222-4222-8222-222222222222';
 const TASK_ID = '44444444-4444-4444-8444-444444444444';
 const COMMENT_ID = '66666666-6666-4666-8666-666666666666';
 const AUTOMATION_ID = '88888888-8888-4888-8888-888888888888';
+const EVENT_ID = '99999999-9999-4999-8999-999999999999';
 const CREATED_AT = '2026-01-01T00:00:00Z';
 
 const section: Section = {
@@ -202,6 +204,68 @@ function automationChange(kind: Change['kind'], fieldValues: Record<string, unkn
   };
 }
 
+function event(title = 'standup'): Event {
+  return {
+    id: EVENT_ID,
+    project_id: PROJECT_ID,
+    title,
+    description: null,
+    interval: {
+      start: { kind: 'date', date: '2026-11-06' },
+      end: { kind: 'date', date: '2026-11-07' },
+    },
+    created_at: CREATED_AT,
+    updated_at: CREATED_AT,
+  };
+}
+
+function createEvent(operationId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'create_event',
+    id: EVENT_ID,
+    project_id: PROJECT_ID,
+    title: 'standup',
+    description: null,
+    interval: event().interval,
+    created_at: CREATED_AT,
+  };
+}
+
+function updateEvent(operationId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'update_event',
+    id: EVENT_ID,
+    title: 'standup v2',
+    interval: null,
+  };
+}
+
+function deleteEvent(operationId: string): Operation {
+  return {
+    operation_id: operationId,
+    operation_version: 1,
+    kind: 'delete_event',
+    id: EVENT_ID,
+  };
+}
+
+function eventChange(kind: Change['kind'], fieldValues: Record<string, unknown>): Change {
+  return {
+    seq: 2,
+    entity_type: 'event',
+    entity_id: EVENT_ID,
+    kind,
+    operation_id: 'event-change',
+    client_timestamp: null,
+    field_values: fieldValues,
+    created_at: CREATED_AT,
+  };
+}
+
 describe('op replay', () => {
   it('applyChanges applies an update_task change', () => {
     const result = applyChanges(state(), [serverChange('server')]);
@@ -348,5 +412,52 @@ describe('automation replay', () => {
 
     const deleted = applyChanges(updated, [automationChange('delete', {})]);
     expect(deleted.projects[0].automations).toEqual([]);
+  });
+});
+
+describe('event replay', () => {
+  it('replayOperations creates an event in the right project', () => {
+    const result = replayOperations(state(), [createEvent('op-create')]);
+
+    expect(result.projects[0].events).toEqual([event()]);
+  });
+
+  it('replayOperations applies an event update', () => {
+    const confirmed = state();
+    confirmed.projects[0].events = [event()];
+
+    const result = replayOperations(confirmed, [updateEvent('op-update')]);
+
+    expect(result.projects[0].events[0].title).toBe('standup v2');
+  });
+
+  it('replayOperations removes an event', () => {
+    const confirmed = state();
+    confirmed.projects[0].events = [event()];
+
+    const result = replayOperations(confirmed, [deleteEvent('op-delete')]);
+
+    expect(result.projects[0].events).toEqual([]);
+  });
+
+  it('applyChanges applies event create, update, and delete', () => {
+    const created = applyChanges(state(), [eventChange('create', event())]);
+    expect(created.projects[0].events).toEqual([event()]);
+
+    const updated = applyChanges(created, [
+      eventChange('update', {
+        interval: {
+          start: { kind: 'date', date: '2026-11-08' },
+          end: { kind: 'date', date: '2026-11-09' },
+        },
+      }),
+    ]);
+    expect(updated.projects[0].events[0].interval).toEqual({
+      start: { kind: 'date', date: '2026-11-08' },
+      end: { kind: 'date', date: '2026-11-09' },
+    });
+
+    const deleted = applyChanges(updated, [eventChange('delete', {})]);
+    expect(deleted.projects[0].events).toEqual([]);
   });
 });

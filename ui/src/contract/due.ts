@@ -70,7 +70,7 @@ function dueDateTime(due: When, zone: string): DateTime {
 }
 
 /// Calendar days apart, not elapsed time, so a value in a far zone keeps its own date.
-function dayPart(value: DateTime, today: DateTime): string {
+export function dayPart(value: DateTime, today: DateTime): string {
   const startOfToday = DateTime.fromObject(
     { year: today.year, month: today.month, day: today.day },
     { zone: value.zone },

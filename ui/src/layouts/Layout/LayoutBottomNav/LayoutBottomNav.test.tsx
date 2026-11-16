@@ -34,6 +34,7 @@ describe('LayoutBottomNav', () => {
     renderNav('/projects/p1/tasks', 'p1');
 
     expect(link('Tasks').getAttribute('href')).toBe('/projects/p1/tasks');
+    expect(link('Events').getAttribute('href')).toBe('/projects/p1/events');
     expect(link('Settings').getAttribute('href')).toBe('/projects/p1/settings');
   });
 
@@ -41,6 +42,13 @@ describe('LayoutBottomNav', () => {
     renderNav('/projects/p1/tasks', 'p1');
 
     expect(link('Tasks').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('marks Events as the current page on the calendar', () => {
+    renderNav('/projects/p1/events', 'p1');
+
+    expect(link('Events').getAttribute('aria-current')).toBe('page');
+    expect(link('Tasks').getAttribute('aria-current')).toBeNull();
   });
 
   it('keeps Tasks current on a task route', () => {
