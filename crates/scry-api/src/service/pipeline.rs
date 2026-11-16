@@ -1,5 +1,5 @@
 use crate::error::ServiceError;
-use chrono::Utc;
+use jiff::Timestamp;
 use scry_core::error::StorageError;
 use scry_core::ids::{CommentId, ProjectId, SectionId, TaskId};
 use scry_core::models::{
@@ -35,7 +35,7 @@ impl ProjectService {
             .cloned();
         let position = key_between(last.as_ref(), None).map_err(position_error)?;
         let id = Uuid::new_v4();
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
         let section = Section {
             id,
             project_id: project.id,
@@ -218,7 +218,7 @@ impl ProjectService {
             operation_id: op.operation_id,
             client_timestamp: op.timestamp,
             field_values,
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
         };
 
         Ok(self.store.record_change(change, Some(&mut **tx)).await?)

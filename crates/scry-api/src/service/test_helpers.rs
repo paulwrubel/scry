@@ -1,11 +1,11 @@
-use chrono::Utc;
+use jiff::Timestamp;
 use scry_core::ids::{SectionId, TaskId};
 use scry_core::models::{Priority, Tags, Task, TaskState};
 use scry_core::position::Position;
 use uuid::Uuid;
 
 pub(super) fn task_at(id: TaskId, section_id: Option<SectionId>, position: &str) -> Task {
-    let created_at = Utc::now();
+    let created_at = Timestamp::now();
     Task {
         id,
         project_id: Uuid::new_v4(),

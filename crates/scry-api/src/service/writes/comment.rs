@@ -1,5 +1,5 @@
 use crate::error::ServiceError;
-use chrono::Utc;
+use jiff::Timestamp;
 use scry_core::ids::{CommentId, ProjectId, TaskId};
 use scry_core::models::Comment;
 use scry_core::sync::operations::OperationKind;
@@ -14,7 +14,7 @@ impl ProjectService {
         contents: String,
     ) -> Result<Comment, ServiceError> {
         self.require_task(task_id).await?;
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
         let comment = Comment {
             id: Uuid::new_v4(),
             task_id,

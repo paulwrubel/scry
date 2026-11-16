@@ -1,5 +1,5 @@
 use crate::error::ServiceError;
-use chrono::Utc;
+use jiff::Timestamp;
 use scry_core::ids::{AutomationId, ProjectId};
 use scry_core::models::{Automation, AutomationAction, AutomationTrigger};
 use scry_core::sync::operations::OperationKind;
@@ -16,7 +16,7 @@ impl ProjectService {
         actions: Vec<AutomationAction>,
     ) -> Result<Automation, ServiceError> {
         let project = self.require_project(project_id).await?;
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
         let automation = Automation {
             id: Uuid::new_v4(),
             project_id: project.id,

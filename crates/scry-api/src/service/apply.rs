@@ -4,7 +4,7 @@ use super::fields::{
 };
 use super::{AutomationEvaluation, ProjectService, position_error};
 use crate::error::ServiceError;
-use chrono::Utc;
+use jiff::Timestamp;
 use scry_core::models::{
     Automation, ChangeKind, Comment, Entity, EntityType, Project, Section, Task,
 };
@@ -107,7 +107,7 @@ impl ProjectService {
                 };
 
                 let mut field_values = project_field_updates(&mut project, &op.kind);
-                project.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                project.updated_at = (*updated_at).unwrap_or_else(Timestamp::now);
                 field_values["updated_at"] = json!(project.updated_at);
                 self.store.update_project(project, Some(&mut **tx)).await?;
                 Some(
@@ -203,7 +203,7 @@ impl ProjectService {
                 };
 
                 let mut field_values = section_field_updates(&mut section, &op.kind);
-                section.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                section.updated_at = (*updated_at).unwrap_or_else(Timestamp::now);
                 field_values["updated_at"] = json!(section.updated_at);
                 self.store.update_section(section, Some(&mut **tx)).await?;
                 Some(
@@ -224,7 +224,7 @@ impl ProjectService {
                 };
 
                 let mut field_values = section_field_updates(&mut section, &op.kind);
-                section.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                section.updated_at = (*updated_at).unwrap_or_else(Timestamp::now);
                 field_values["updated_at"] = json!(section.updated_at);
                 self.store.update_section(section, Some(&mut **tx)).await?;
                 Some(
@@ -271,7 +271,7 @@ impl ProjectService {
                     let positions =
                         n_keys_between(last.as_ref(), None, tasks.len()).map_err(position_error)?;
 
-                    let relocated_at = Utc::now();
+                    let relocated_at = Timestamp::now();
                     for (mut task, position) in tasks.into_iter().zip(positions) {
                         task.section_id = None;
                         task.position = position.clone();
@@ -391,7 +391,7 @@ impl ProjectService {
 
                 let before = task.clone();
                 let mut field_values = task_field_updates(&mut task, &op.kind);
-                task.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                task.updated_at = (*updated_at).unwrap_or_else(Timestamp::now);
                 field_values["updated_at"] = json!(task.updated_at);
                 task_transition = Some((Some(before), task.clone()));
                 self.store.update_task(task, Some(&mut **tx)).await?;
@@ -468,7 +468,7 @@ impl ProjectService {
                 };
 
                 let mut field_values = comment_field_updates(&mut comment, &op.kind);
-                comment.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                comment.updated_at = (*updated_at).unwrap_or_else(Timestamp::now);
                 field_values["updated_at"] = json!(comment.updated_at);
                 self.store.update_comment(comment, Some(&mut **tx)).await?;
                 Some(
@@ -577,7 +577,7 @@ impl ProjectService {
                 }
 
                 automation.actions = actions.clone();
-                automation.updated_at = (*updated_at).unwrap_or_else(Utc::now);
+                automation.updated_at = (*updated_at).unwrap_or_else(Timestamp::now);
                 let field_values =
                     json!({ "actions": actions, "updated_at": automation.updated_at });
                 self.store
@@ -613,7 +613,7 @@ impl ProjectService {
 
         // 7. the effect is in the log, so a later replay is stopped at step 2
         self.store
-            .record_applied_operation(op.operation_id, Utc::now(), Some(&mut **tx))
+            .record_applied_operation(op.operation_id, Timestamp::now(), Some(&mut **tx))
             .await?;
 
         if automation_evaluation == AutomationEvaluation::Evaluate
@@ -636,7 +636,7 @@ impl ProjectService {
         op: &Operation,
         entities: &[Entity],
     ) -> Result<Vec<i64>, ServiceError> {
-        let deleted_at = Utc::now();
+        let deleted_at = Timestamp::now();
         let mut seqs = Vec::with_capacity(entities.len());
         for entity in entities.iter().rev() {
             self.store

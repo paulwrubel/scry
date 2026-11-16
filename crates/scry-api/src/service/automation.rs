@@ -243,7 +243,7 @@ mod tests {
     use super::*;
     use crate::service::create_task_operation;
     use crate::service::test_helpers::task_at;
-    use chrono::Utc;
+    use jiff::Timestamp;
     use scry_core::ids::SectionId;
     use uuid::Uuid;
 
@@ -334,7 +334,7 @@ mod tests {
             id: Uuid::new_v4(),
             task_id: id,
             contents: "comment".to_string(),
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
             updated_at: None,
         };
         assert_eq!(

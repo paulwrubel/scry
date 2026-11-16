@@ -66,7 +66,7 @@ pub async fn sync(State(state): State<ScryState>, Json(request): Json<SyncReques
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
+    use jiff::Timestamp;
     use scry_core::models::{ChangeKind, EntityType};
     use serde_json::json;
     use uuid::Uuid;
@@ -91,7 +91,7 @@ mod tests {
                 operation_id: Uuid::new_v4(),
                 client_timestamp: None,
                 field_values: json!({ "title": "new" }),
-                created_at: Utc::now(),
+                created_at: Timestamp::now(),
             }],
             next_seq: 4,
         };
@@ -115,7 +115,7 @@ mod tests {
             operation_id: Uuid::new_v4(),
             client_timestamp: None,
             field_values: json!({ "contents": "hello" }),
-            created_at: Utc::now(),
+            created_at: Timestamp::now(),
         };
 
         let encoded = serde_json::to_string(&change).unwrap();

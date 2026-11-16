@@ -1,5 +1,5 @@
 use crate::error::ServiceError;
-use chrono::Utc;
+use jiff::Timestamp;
 use scry_core::error::StorageError;
 use scry_core::ids::ProjectId;
 use scry_core::models::{Project, ProjectSnapshot};
@@ -15,7 +15,7 @@ impl ProjectService {
         name: String,
         description: Option<String>,
     ) -> Result<Project, ServiceError> {
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
         let project = Project {
             id: Uuid::new_v4(),
             name,
