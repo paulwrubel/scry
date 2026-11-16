@@ -6,6 +6,30 @@ import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
 import { NewProjectModal } from '@/views/projects/NewProjectModal';
 
+const DEFAULT_PROJECT_SECTION = 'tasks';
+
+// swap only the project segment so whatever view you are on carries over;
+// paths deeper than the section belong to the old project, so they collapse
+// back to the section root
+function projectPath(
+  pathname: string,
+  search: string,
+  currentProjectId: string | null,
+  nextProjectId: string,
+): string {
+  const segments = pathname.split('/');
+  const at = currentProjectId === null ? -1 : segments.indexOf(currentProjectId);
+  const section = at === -1 ? DEFAULT_PROJECT_SECTION : segments[at + 1] || DEFAULT_PROJECT_SECTION;
+  const base =
+    at === -1
+      ? ['', 'projects', nextProjectId, section]
+      : [...segments.slice(0, at), nextProjectId, section];
+  const params = new URLSearchParams(search);
+  params.delete('date');
+  const query = params.toString();
+  return `${base.join('/')}${query.length === 0 ? '' : `?${query}`}`;
+}
+
 export function ProjectSwitcher() {
   const { activeProjectId, setActiveProjectId } = useActiveProject();
   const snapshot = useReplicaSnapshot();
@@ -15,11 +39,10 @@ export function ProjectSwitcher() {
 
   const projects = snapshot.visible.projects;
   const active = projects.find((project) => project.id === activeProjectId) ?? null;
-  const currentTab = location.pathname.endsWith('/settings') ? 'settings' : 'tasks';
 
   function selectProject(projectId: string) {
     setActiveProjectId(projectId);
-    navigate(`/projects/${projectId}/${currentTab}`);
+    navigate(projectPath(location.pathname, location.search, activeProjectId, projectId));
   }
 
   function handleCreated(projectId: string) {
