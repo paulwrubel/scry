@@ -1,6 +1,6 @@
 ---
 name: scry
-description: Manage tasks, todos, projects, sections, and automations with the scry CLI; use to track, move, or inspect tasks.
+description: Manage tasks, todos, projects, sections, automations, and events with the scry CLI; use to track, move, inspect, or schedule tasks.
 license: MIT
 ---
 
@@ -22,18 +22,18 @@ license: MIT
 
 ## Task commands
 
-| Command                                                                                                                                                                                           | Purpose                       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `scry --json add [<title>] [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>] [--external-url <url>]`                                           | Add a task                    |
-| `scry --json list [--section <name>] [--search <text>] [--include-closed]`                                                                                                                        | List tasks                    |
-| `scry --json show <id\|handle>`                                                                                                                                                                   | Show a task with its comments |
-| `scry --json move <id\|handle> [<section>] [--no-section] [--top\|--first\|--bottom\|--last\|--before <id>\|--after <id>]`                                                                        | Move or place a task          |
-| `scry --json update <id\|handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section] [--external-url <url>\|--clear-external-url]` | Update task properties        |
-| `scry --json close <id\|handle>...`                                                                                                                                                               | Close tasks                   |
-| `scry --json open <id\|handle>...`                                                                                                                                                                | Reopen tasks                  |
-| `scry --json duplicate <id\|handle>`                                                                                                                                                              | Duplicate a task              |
-| `scry --json comment add <id\|handle> <contents>`                                                                                                                                                 | Add a comment to a task       |
-| `scry --json delete <id\|handle>`                                                                                                                                                                 | Delete a task permanently     |
+| Command                                                                                                                                                                                                                                 | Purpose                       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `scry --json add [<title>] [--description <text>] [--priority <level>] [--tags <a,b>] [--section <name>] [--new-section <name>] [--external-url <url>] [--due <expr>] [--floating]`                                                     | Add a task                    |
+| `scry --json list [--section <name>] [--search <text>] [--include-closed] [--overdue] [--due-before <expr>] [--due-after <expr>] [--sort <mode>]`                                                                                       | List tasks                    |
+| `scry --json show <id\|handle>`                                                                                                                                                                                                         | Show a task with its comments |
+| `scry --json move <id\|handle> [<section>] [--no-section] [--top\|--first\|--bottom\|--last\|--before <id>\|--after <id>]`                                                                                                              | Move or place a task          |
+| `scry --json update <id\|handle> [--title ...] [--description ...] [--priority ...] [--tags ...] [--section ...] [--new-section ...] [--no-section] [--external-url <url>\|--clear-external-url] [--due <expr>\|--no-due] [--floating]` | Update task properties        |
+| `scry --json close <id\|handle>...`                                                                                                                                                                                                     | Close tasks                   |
+| `scry --json open <id\|handle>...`                                                                                                                                                                                                      | Reopen tasks                  |
+| `scry --json duplicate <id\|handle>`                                                                                                                                                                                                    | Duplicate a task              |
+| `scry --json comment add <id\|handle> <contents>`                                                                                                                                                                                       | Add a comment to a task       |
+| `scry --json delete <id\|handle>`                                                                                                                                                                                                       | Delete a task permanently     |
 
 Task arguments accept a full UUID or a unique handle prefix of at least 4 hex characters
 (case-insensitive, dashes optional at the canonical UUID positions).
@@ -41,14 +41,26 @@ Task arguments accept a full UUID or a unique handle prefix of at least 4 hex ch
 Priority is one of `normal`, `elevated`, or `critical`; `normal` is the default. An empty
 `--description` or `--tags` on `update` clears the field.
 
+### Due dates
+
+Tasks carry one optional due value: an all-day date or a time. `add --due <expr>` and
+`update --due <expr>` set it; `update --no-due` clears it. Expressions accept ISO dates and datetimes,
+`today`/`tomorrow`/`yesterday`, weekday names with an optional `next`, relative offsets such as `+3d`
+or `+2h30m`, times such as `5pm` or `17:00`, and a trailing IANA zone such as
+`fri 5pm America/Chicago`. A bare date is all-day; a time uses your system zone unless you pass
+`--floating` (which requires `--due`). A date is due through the end of its local day, a floating time
+is read in your current zone, and closed tasks are never overdue.
+
 `list` returns a flat JSON array of task objects; use `section_id` to associate tasks with sections. It includes
 no comments or handles, and closed tasks are hidden unless you pass `--include-closed` (they follow the open tasks).
-The array follows section order but is not grouped.
+The array follows section order but is not grouped. `--overdue` keeps late tasks, `--due-before <expr>`
+and `--due-after <expr>` compare deadlines, and `--sort manual|priority|due` orders each section
+(`due` places undated tasks last).
 
 Sections are optional. `--section` must match an existing section name exactly, while `--new-section` creates
 one; without either, the task goes to No section. `--no-section` clears a task's section. `move` appends by
 default; add `--top`/`--first`, `--bottom`/`--last`, `--before <id>`, or `--after <id>` to place it instead.
-`scry list` shows tasks in manual order. `close` and `open` never move a task.
+By default `scry list` shows tasks in manual order. `close` and `open` never move a task.
 
 ## External links
 
@@ -95,6 +107,23 @@ A new project starts with no sections; add one with `scry section add <name>`. A
 
 Triggers are `created`, `closed`, `opened`, and `enters` (with `--section`). Actions are `--move-to <section>`,
 `--no-section`, `--close`, `--open`, or `--priority <level>`. `set` updates the existing rule for a trigger.
+
+## Event commands
+
+| Command                                                                                                              | Purpose                 |
+| -------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `scry --json event list [--from <expr> --to <expr>]`                                                                 | List a project's events |
+| `scry --json event add <title> --start <expr> [--end <expr>] [--description <text>] [--floating]`                    | Add an event            |
+| `scry --json event show <id\|handle>`                                                                                | Show one event          |
+| `scry --json event update <id\|handle> [--title ...] [--description ...] [--start <expr> --end <expr>] [--floating]` | Update an event         |
+| `scry --json event delete <id\|handle>`                                                                              | Delete an event         |
+
+Events are project-scoped calendar entries with a title, an optional description, and one start and
+end. `event add` creates a one-hour event for a timed start, or an all-day event for a bare date;
+`--end` sets an explicit end and must be paired with `--start`. Times use your system zone unless you
+pass `--floating`, which requires `--start`. `event list` returns events in start order; `--from` and
+`--to` must be supplied together and keep only events overlapping that window. Event arguments follow
+the same handle rule as tasks.
 
 ## Snapshots
 
