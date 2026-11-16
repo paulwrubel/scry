@@ -3,11 +3,18 @@ import { DateTime } from 'luxon';
 import { useState } from 'react';
 import { z } from 'zod';
 import { fieldErrorMessage } from '@/components/form-controls/fieldErrors';
-import { defaultEndInputs, intervalFromInputs, intervalToInputs } from '@/contract/interval';
+import { DEVICE_ZONE } from '@/contract/due';
+import {
+  defaultEndInputs,
+  intervalFromInputs,
+  intervalToInputs,
+  shiftEndInputs,
+} from '@/contract/interval';
 import type { Event } from '@/generated/Event';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useAppForm } from '@/hooks/useAppForm';
 import { useEnqueue } from '@/hooks/useEnqueue';
+import { eventSpan } from '@/utils/events/calendar';
 import {
   createEventOperation,
   deleteEventOperation,
@@ -102,13 +109,34 @@ export function EventDetail(props: EventDetailProps) {
     }
   }
 
-  // an event always has an end, so a new one shows the default and keeps it in
-  // step with the start until the user edits the end themselves
-  function followStart(startDate: string, startTime: string) {
-    if (event !== null || endTouched) {
+  // a single-day event's end is really a duration, so it moves with the start;
+  // a multi-day end is a committed date and stays where the user put it
+  function followStart(
+    startDate: string,
+    startTime: string,
+    previousDate: string,
+    previousTime: string,
+  ) {
+    if (event === null) {
+      if (!endTouched) {
+        setEnd(defaultEndInputs(startDate, startTime));
+      }
       return;
     }
-    const end = defaultEndInputs(startDate, startTime);
+
+    if (!isSingleDay(event)) {
+      return;
+    }
+
+    const shifted = shiftEndInputs(
+      { endDate: form.getFieldValue('endDate'), endTime: form.getFieldValue('endTime') },
+      { startDate: previousDate, startTime: previousTime },
+      { startDate, startTime },
+    );
+    setEnd(shifted ?? defaultEndInputs(startDate, startTime));
+  }
+
+  function setEnd(end: { endDate: string; endTime: string }) {
     form.setFieldValue('endDate', end.endDate);
     form.setFieldValue('endTime', end.endTime);
   }
@@ -206,8 +234,14 @@ export function EventDetail(props: EventDetailProps) {
                         aria-label="Start date"
                         value={field.state.value}
                         onChange={(changeEvent) => {
+                          const previousDate = field.state.value;
                           field.handleChange(changeEvent.target.value);
-                          followStart(changeEvent.target.value, form.getFieldValue('startTime'));
+                          followStart(
+                            changeEvent.target.value,
+                            form.getFieldValue('startTime'),
+                            previousDate,
+                            form.getFieldValue('startTime'),
+                          );
                         }}
                       />
                       {startError === null ? null : (
@@ -228,8 +262,14 @@ export function EventDetail(props: EventDetailProps) {
                       aria-label="Start time"
                       value={field.state.value}
                       onChange={(changeEvent) => {
+                        const previousTime = field.state.value;
                         field.handleChange(changeEvent.target.value);
-                        followStart(form.getFieldValue('startDate'), changeEvent.target.value);
+                        followStart(
+                          form.getFieldValue('startDate'),
+                          changeEvent.target.value,
+                          form.getFieldValue('startDate'),
+                          previousTime,
+                        );
                       }}
                     />
                   </Label>
@@ -273,8 +313,9 @@ export function EventDetail(props: EventDetailProps) {
             </div>
 
             <p className="text-muted text-xs">
-              Leave the start time empty for an all-day event. The end follows the start until you
-              edit it: one hour later for a time, or the same whole day for a date.
+              Leave the start time empty for an all-day event. The end defaults to one hour later,
+              or the same whole day. Moving a single-day start moves the end with it; a multi-day
+              end stays put.
             </p>
 
             <form.AppField name="description">
@@ -321,6 +362,11 @@ export function EventDetail(props: EventDetailProps) {
       )}
     </>
   );
+}
+
+function isSingleDay(event: Event): boolean {
+  const span = eventSpan(event, DEVICE_ZONE);
+  return span.first.hasSame(span.last, 'day');
 }
 
 function initialValues(event: Event | null, defaultDate: string | null) {

@@ -5,6 +5,7 @@ import { DEVICE_ZONE, dueToInputs } from './due';
 import {
   defaultEndInputs,
   formatInterval,
+  shiftEndInputs,
   intervalFromInputs,
   intervalToInputs,
   isAllDay,
@@ -208,5 +209,57 @@ describe('defaultEndInputs', () => {
 
   it('has nothing to show without a start date', () => {
     expect(defaultEndInputs('', '')).toEqual({ endDate: '', endTime: '' });
+  });
+});
+
+describe('shiftEndInputs', () => {
+  it('moves a timed end by the same minutes as the start', () => {
+    expect(
+      shiftEndInputs(
+        { endDate: '2026-11-06', endTime: '10:00' },
+        { startDate: '2026-11-06', startTime: '09:00' },
+        { startDate: '2026-11-06', startTime: '09:30' },
+      ),
+    ).toEqual({ endDate: '2026-11-06', endTime: '10:30' });
+  });
+
+  it('moves a timed end to the next day when the start does', () => {
+    expect(
+      shiftEndInputs(
+        { endDate: '2026-11-06', endTime: '10:00' },
+        { startDate: '2026-11-06', startTime: '09:00' },
+        { startDate: '2026-11-07', startTime: '09:00' },
+      ),
+    ).toEqual({ endDate: '2026-11-07', endTime: '10:00' });
+  });
+
+  it('moves an all-day end by the same days as the start', () => {
+    expect(
+      shiftEndInputs(
+        { endDate: '2026-11-06', endTime: '' },
+        { startDate: '2026-11-06', startTime: '' },
+        { startDate: '2026-11-08', startTime: '' },
+      ),
+    ).toEqual({ endDate: '2026-11-08', endTime: '' });
+  });
+
+  it('has no answer when the start changes between all-day and timed', () => {
+    expect(
+      shiftEndInputs(
+        { endDate: '2026-11-06', endTime: '' },
+        { startDate: '2026-11-06', startTime: '' },
+        { startDate: '2026-11-06', startTime: '09:00' },
+      ),
+    ).toBeNull();
+  });
+
+  it('has no answer when a timed end has no time to move', () => {
+    expect(
+      shiftEndInputs(
+        { endDate: '2026-11-06', endTime: '' },
+        { startDate: '2026-11-06', startTime: '09:00' },
+        { startDate: '2026-11-06', startTime: '09:30' },
+      ),
+    ).toBeNull();
   });
 });

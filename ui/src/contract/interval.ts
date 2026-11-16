@@ -136,6 +136,56 @@ export function defaultEndInputs(
   return { endDate: inputs.endDate, endTime: inputs.endTime };
 }
 
+/// Moves the end by however far the start moved, which keeps the length of an
+/// event that lives inside a single day. Returns null when the start changed
+/// shape (all-day to timed or back), where the default end is the better answer.
+export function shiftEndInputs(
+  end: { endDate: string; endTime: string },
+  previousStart: { startDate: string; startTime: string },
+  nextStart: { startDate: string; startTime: string },
+): { endDate: string; endTime: string } | null {
+  const wasTimed = previousStart.startTime.length > 0;
+  if (wasTimed !== nextStart.startTime.length > 0) {
+    return null;
+  }
+
+  if (!wasTimed) {
+    if (end.endTime.length > 0 || end.endDate.length === 0) {
+      return null;
+    }
+    const days = wholeDays(previousStart.startDate, nextStart.startDate);
+    return {
+      endDate: formatDay(civilDate(end.endDate).plus({ days })),
+      endTime: '',
+    };
+  }
+
+  if (end.endTime.length === 0 || end.endDate.length === 0) {
+    return null;
+  }
+  const minutes = wholeMinutes(previousStart, nextStart);
+  const shifted = clockAt(end.endDate, end.endTime).plus({ minutes });
+  return { endDate: formatDay(shifted), endTime: shifted.toFormat('HH:mm') };
+}
+
+function wholeDays(fromDate: string, toDate: string): number {
+  return Math.round(civilDate(toDate).diff(civilDate(fromDate), 'days').days);
+}
+
+function wholeMinutes(
+  from: { startDate: string; startTime: string },
+  to: { startDate: string; startTime: string },
+): number {
+  return Math.round(
+    clockAt(to.startDate, to.startTime).diff(clockAt(from.startDate, from.startTime), 'minutes')
+      .minutes,
+  );
+}
+
+function clockAt(date: string, time: string): DateTime {
+  return DateTime.fromISO(`${date}T${time}`, { zone: DEVICE_ZONE });
+}
+
 /// The moment a `When` names, read in the given zone when it carries no zone of
 /// its own.
 export function instantOf(when: When, zone: string): DateTime {

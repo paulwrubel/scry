@@ -5,6 +5,7 @@ import type { Event } from '@/generated/Event';
 import type { Operation } from '@/generated/Operation';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
+import { DEVICE_ZONE } from '@/contract/due';
 import { createReplicaMock, makeEvent, makeProject, makeReplicaSnapshot } from '@/test/fixtures';
 import { EventDetail } from './EventDetail';
 
@@ -77,6 +78,36 @@ describe('EventDetail', () => {
     fireEvent.change(screen.getByLabelText('End time'), { target: { value: '12:00' } });
     fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '08:00' } });
     expect(screen.getByLabelText<HTMLInputElement>('End time').value).toBe('12:00');
+  });
+
+  it('moves a single-day end with the start', () => {
+    renderDetail(
+      makeEvent({
+        interval: {
+          start: { kind: 'zoned', datetime: '2026-11-06T09:00:00', zone: DEVICE_ZONE },
+          end: { kind: 'zoned', datetime: '2026-11-06T10:00:00', zone: DEVICE_ZONE },
+        },
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '09:30' } });
+
+    expect(screen.getByLabelText<HTMLInputElement>('End time').value).toBe('10:30');
+  });
+
+  it('leaves a multi-day end where it is when the start moves', () => {
+    renderDetail(
+      makeEvent({
+        interval: {
+          start: { kind: 'date', date: '2026-11-20' },
+          end: { kind: 'date', date: '2026-11-23' },
+        },
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-11-21' } });
+
+    expect(screen.getByLabelText<HTMLInputElement>('End date').value).toBe('2026-11-22');
   });
 
   it('saves an edited title through the outbox', async () => {
