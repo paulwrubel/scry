@@ -1,4 +1,6 @@
-use scry_core::models::{Comment, Entity, ExternalMetadata, FieldValues, Project, Section, Task};
+use scry_core::models::{
+    Comment, Entity, Event, ExternalMetadata, FieldValues, Project, Section, Task,
+};
 use scry_core::sync::operations::{ColorChange as OperationColorChange, OperationKind};
 use serde_json::{Map, Value, json};
 
@@ -21,6 +23,9 @@ pub(super) fn subject(op: &OperationKind) -> Entity {
         OperationKind::CreateAutomation { id, .. }
         | OperationKind::UpdateAutomation { id, .. }
         | OperationKind::DeleteAutomation { id } => Entity::Automation(*id),
+        OperationKind::CreateEvent { id, .. }
+        | OperationKind::UpdateEvent { id, .. }
+        | OperationKind::DeleteEvent { id } => Entity::Event(*id),
     }
 }
 
@@ -84,6 +89,35 @@ pub(super) fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldVa
         }
         // the caller only passes a task op; anything else leaves it untouched
         _ => {}
+    }
+
+    Value::Object(fields)
+}
+
+/// Apply an event update to the row and return the fields the change row
+/// records. The caller sets `updated_at` afterwards.
+pub(super) fn event_field_updates(event: &mut Event, op: &OperationKind) -> FieldValues {
+    let mut fields = Map::new();
+
+    if let OperationKind::UpdateEvent {
+        title,
+        description,
+        interval,
+        ..
+    } = op
+    {
+        if let Some(title) = title {
+            event.title = title.clone();
+            fields.insert("title".into(), json!(title));
+        }
+        if let Some(description) = description {
+            event.description = description.clone();
+            fields.insert("description".into(), json!(description));
+        }
+        if let Some(interval) = interval {
+            event.interval = interval.clone();
+            fields.insert("interval".into(), json!(interval));
+        }
     }
 
     Value::Object(fields)

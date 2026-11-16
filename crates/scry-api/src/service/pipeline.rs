@@ -165,6 +165,10 @@ impl ProjectService {
                     .store
                     .get_all_automations_by_project_id(project_id, Some(&mut **tx))
                     .await?;
+                let events = self
+                    .store
+                    .get_all_events_by_project_id(project_id, Some(&mut **tx))
+                    .await?;
 
                 entities.extend(
                     sections
@@ -182,6 +186,7 @@ impl ProjectService {
                         .into_iter()
                         .map(|automation| Entity::Automation(automation.id)),
                 );
+                entities.extend(events.into_iter().map(|event| Entity::Event(event.id)));
             }
             Entity::Task(task_id) => {
                 let comments = self

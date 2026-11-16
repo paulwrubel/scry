@@ -343,6 +343,57 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
         OperationKind::DeleteAutomation { id } => {
             remove_automation(state, *id);
         }
+        OperationKind::CreateEvent {
+            id,
+            project_id,
+            title,
+            description,
+            interval,
+            created_at,
+            updated_at,
+        } => {
+            let event = Event {
+                id: *id,
+                project_id: *project_id,
+                title: title.clone(),
+                description: description.clone(),
+                interval: interval.clone(),
+                created_at: *created_at,
+                updated_at: (*updated_at).unwrap_or(*created_at),
+            };
+            if let Some(snapshot) = state
+                .projects
+                .iter_mut()
+                .find(|p| p.project.id == *project_id)
+            {
+                upsert_event(snapshot, event);
+            }
+        }
+        OperationKind::UpdateEvent {
+            id,
+            title,
+            description,
+            interval,
+            updated_at,
+        } => {
+            if let Some(event) = find_event_mut(state, *id) {
+                if let Some(title) = title {
+                    event.title = title.clone();
+                }
+                if let Some(description) = description {
+                    event.description = description.clone();
+                }
+                if let Some(interval) = interval {
+                    event.interval = interval.clone();
+                }
+                if let Some(updated_at) = updated_at {
+                    event.updated_at = *updated_at;
+                }
+            }
+        }
+        OperationKind::DeleteEvent { id } => {
+            remove_event(state, *id);
+        }
     }
 }
 
