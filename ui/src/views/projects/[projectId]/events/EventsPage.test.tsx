@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Event } from '@/generated/Event';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
@@ -37,6 +37,7 @@ function renderEvents(project: ProjectSnapshot | null, path = MONTH_PATH) {
         <SearchProbe />
         <Routes>
           <Route path="/projects/:projectId/events" element={<EventsPage />} />
+          <Route path="/projects/:projectId/events/days/:date" element={<DayProbe />} />
         </Routes>
       </MemoryRouter>
     </ReplicaContext.Provider>,
@@ -100,12 +101,13 @@ describe('EventsPage', () => {
     );
   });
 
-  it('opens the create editor for a day', () => {
+  it('opens the day list for a day', () => {
     renderEvents(makeProject());
 
-    fireEvent.click(screen.getByRole('button', { name: 'New event on Friday, November 6' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show events on Friday, November 6' }));
 
-    expect(screen.getByTestId('search').textContent).toBe('date=2026-11-06&month=2026-11');
+    expect(screen.getByTestId('day').textContent).toBe('2026-11-06');
+    expect(screen.getByTestId('search').textContent).toBe('month=2026-11');
   });
 
   it('moves to the next month', () => {
@@ -123,3 +125,8 @@ describe('EventsPage', () => {
     expect(screen.getByText(/Project not found/)).toBeDefined();
   });
 });
+
+function DayProbe() {
+  const { date } = useParams();
+  return <span data-testid="day">{date}</span>;
+}

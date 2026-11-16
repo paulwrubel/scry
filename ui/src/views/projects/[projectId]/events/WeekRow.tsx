@@ -16,11 +16,11 @@ export type WeekRowProps = {
   today: DateTime;
   projectId: string;
   monthQuery: string;
-  onSelectDay: (day: DateTime) => void;
+  onShowDay: (day: DateTime) => void;
 };
 
 export function WeekRow(props: WeekRowProps) {
-  const { week, lanes, month, today, projectId, monthQuery, onSelectDay } = props;
+  const { week, lanes, month, today, projectId, monthQuery, onShowDay } = props;
 
   const { ref, height } = useElementHeight<HTMLDivElement>();
   const capacity = height === null || height <= 0 ? null : Math.floor(height / LANE_HEIGHT);
@@ -32,13 +32,7 @@ export function WeekRow(props: WeekRowProps) {
     <div className="border-line relative flex min-h-0 flex-1 border-b">
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-7">
         {week.map((day) => (
-          <DayCell
-            key={dayKey(day)}
-            day={day}
-            month={month}
-            today={today}
-            onSelectDay={onSelectDay}
-          />
+          <DayCell key={dayKey(day)} day={day} month={month} today={today} onShowDay={onShowDay} />
         ))}
       </div>
       {/* the bars sit above the day buttons but leave their empty space clickable */}
@@ -60,13 +54,16 @@ export function WeekRow(props: WeekRowProps) {
             <div className="relative" style={{ height: LANE_HEIGHT }}>
               {hiddenByDay.map((count, index) =>
                 count === 0 ? null : (
-                  <span
+                  <button
                     key={index}
+                    type="button"
+                    onClick={() => onShowDay(week[index])}
+                    aria-label={`Show ${count} more events on ${week[index].toFormat('cccc, LLLL d')}`}
                     style={{ left: `${(index * 100) / 7}%`, width: `${100 / 7}%` }}
-                    className="text-muted absolute inset-y-0 flex items-center overflow-hidden px-1.5 text-[11px] leading-none whitespace-nowrap"
+                    className="text-muted pointer-events-auto absolute inset-y-0 flex cursor-pointer items-center overflow-hidden px-1.5 text-[11px] leading-none whitespace-nowrap transition-colors hover:text-zinc-200"
                   >
                     +{count} more
-                  </span>
+                  </button>
                 ),
               )}
             </div>

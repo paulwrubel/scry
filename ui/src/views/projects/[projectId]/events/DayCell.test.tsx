@@ -11,7 +11,7 @@ const MONTH: Month = { year: 2026, month: 11 };
 afterEach(cleanup);
 
 function renderDay(day: DateTime) {
-  render(<DayCell day={day} month={MONTH} today={TODAY} onSelectDay={() => undefined} />);
+  render(<DayCell day={day} month={MONTH} today={TODAY} onShowDay={() => undefined} />);
 }
 
 describe('DayCell', () => {
@@ -20,7 +20,7 @@ describe('DayCell', () => {
 
     expect(
       screen
-        .getByRole('button', { name: 'New event on Friday, November 6' })
+        .getByRole('button', { name: 'Show events on Friday, November 6' })
         .getAttribute('aria-current'),
     ).toBe('date');
   });
@@ -30,7 +30,7 @@ describe('DayCell', () => {
 
     expect(
       screen
-        .getByRole('button', { name: 'New event on Saturday, November 7' })
+        .getByRole('button', { name: 'Show events on Saturday, November 7' })
         .getAttribute('aria-current'),
     ).toBeNull();
   });
@@ -42,13 +42,13 @@ describe('DayCell', () => {
         day={TODAY.startOf('day')}
         month={MONTH}
         today={TODAY}
-        onSelectDay={(value) => {
+        onShowDay={(value) => {
           selected.value = value;
         }}
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'New event on Friday, November 6' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show events on Friday, November 6' }));
 
     expect(selected.value?.toISO()).toBe(TODAY.startOf('day').toISO());
   });

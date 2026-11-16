@@ -56,6 +56,7 @@ export function ProjectLayout() {
         position="bottom"
         backdrop={false}
         theme={drawerTheme}
+        className="transition-transform duration-300 ease-out"
         onClose={close}
         aria-hidden={!open}
         inert={!open}
