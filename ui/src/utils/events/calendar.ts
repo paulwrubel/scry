@@ -3,8 +3,12 @@ import { instantOf, isAllDay, displayedClock } from '@/contract/interval';
 import type { Event } from '@/generated/Event';
 
 export const MONTH_PARAM = 'month';
+export const VIEW_PARAM = 'view';
+export const WEEK_PARAM = 'week';
 
 export type Month = { year: number; month: number };
+
+export type CalendarView = 'month' | 'week';
 
 export type EventPlacement = {
   event: Event;
@@ -93,6 +97,18 @@ export function applyMonth(params: URLSearchParams, month: Month): URLSearchPara
   return next;
 }
 
+/// Month is the default, so a missing parameter and any value we no longer
+/// recognise both fall back to it.
+export function parseCalendarView(params: URLSearchParams): CalendarView {
+  return params.get(VIEW_PARAM) === 'week' ? 'week' : 'month';
+}
+
+export function applyCalendarView(params: URLSearchParams, view: CalendarView): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.set(VIEW_PARAM, view);
+  return next;
+}
+
 export function monthKey(month: Month): string {
   return DateTime.fromObject({ year: month.year, month: month.month, day: 1 }).toFormat('yyyy-LL');
 }
@@ -132,6 +148,52 @@ export function monthGrid(month: Month, zone: string): DateTime[][] {
     cursor = cursor.plus({ days: 7 });
   }
   return weeks;
+}
+
+/// The Sunday on or before `day`, at its start. Luxon counts Monday as 1 and
+/// Sunday as 7, so the modulo lands Sunday on zero days back.
+export function weekStart(day: DateTime): DateTime {
+  return day.minus({ days: day.weekday % 7 }).startOf('day');
+}
+
+/// The week containing the `week` parameter, or the current week when it is
+/// missing or unreadable.
+export function parseWeek(
+  params: URLSearchParams,
+  zone: string,
+  now: DateTime = DateTime.now(),
+): DateTime {
+  const parsed = DateTime.fromISO(params.get(WEEK_PARAM) ?? '', { zone });
+  return weekStart(parsed.isValid ? parsed : now.setZone(zone));
+}
+
+export function applyWeek(params: URLSearchParams, day: DateTime): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.set(WEEK_PARAM, dayKey(weekStart(day)));
+  return next;
+}
+
+/// The seven Sunday-first days of the week that contains `day`.
+export function weekDays(day: DateTime): DateTime[] {
+  const start = weekStart(day);
+  return Array.from({ length: 7 }, (_, offset) => start.plus({ days: offset }));
+}
+
+/// A span label for a week, folding away the month and year the two ends share.
+export function weekLabel(week: readonly DateTime[]): string {
+  if (week.length === 0) {
+    return '';
+  }
+
+  const first = week[0];
+  const last = week[week.length - 1];
+  if (!first.hasSame(last, 'year')) {
+    return `${first.toFormat('LLLL d, yyyy')} – ${last.toFormat('LLLL d, yyyy')}`;
+  }
+  if (!first.hasSame(last, 'month')) {
+    return `${first.toFormat('LLLL d')} – ${last.toFormat('LLLL d, yyyy')}`;
+  }
+  return `${first.toFormat('LLLL d')} – ${last.toFormat('d, yyyy')}`;
 }
 
 export function dayKey(day: DateTime): string {
@@ -236,4 +298,133 @@ function assignLanes(placements: readonly EventPlacement[]): WeekLane[] {
 function daysBetween(from: DateTime, to: DateTime): number {
   // a DST change makes the day difference 23 or 25 hours, so round to whole days
   return Math.round(to.diff(from, 'days').days);
+}
+
+/// The events the week view draws in its top band: every all-day event, plus
+/// the timed ones whose span reaches into a second day.
+export function spanningEvents(events: readonly Event[], zone: string): Event[] {
+  return events.filter((event) => {
+    if (isAllDay(event.interval)) {
+      return true;
+    }
+    const span = eventSpan(event, zone);
+    return !span.first.hasSame(span.last, 'day');
+  });
+}
+
+export type TimedPlacement = {
+  event: Event;
+  /// Minutes from local midnight, where 1440 is the midnight that ends the day.
+  startMinute: number;
+  endMinute: number;
+  /// Zero-based column within the day.
+  column: number;
+  /// How many columns the overlapping cluster needs.
+  columns: number;
+};
+
+/// The timed events that cover each day, laid out in side-by-side columns.
+export function placeTimedWeek(
+  events: readonly Event[],
+  days: readonly DateTime[],
+  zone: string,
+): TimedPlacement[][] {
+  return days.map((day) => placeTimedDay(events, day, zone));
+}
+
+function placeTimedDay(events: readonly Event[], day: DateTime, zone: string): TimedPlacement[] {
+  const dayStart = day.startOf('day');
+  const dayEnd = dayStart.plus({ days: 1 });
+
+  const segments: TimedPlacement[] = [];
+  for (const event of events) {
+    if (isAllDay(event.interval)) {
+      continue;
+    }
+
+    // a multi-day event is drawn in the top band instead
+    const span = eventSpan(event, zone);
+    if (!span.first.hasSame(span.last, 'day')) {
+      continue;
+    }
+
+    const start = instantOf(event.interval.start, zone).setZone(zone);
+    const end = instantOf(event.interval.end, zone).setZone(zone);
+    if (!(start < dayEnd && end > dayStart)) {
+      continue;
+    }
+
+    // wall-clock parts, so the segment still lines up with the hour labels on a
+    // day the clocks shift
+    const startMinute = start <= dayStart ? 0 : start.hour * 60 + start.minute;
+    const endMinute = end >= dayEnd ? 1440 : end.hour * 60 + end.minute;
+    if (endMinute <= startMinute) {
+      continue;
+    }
+
+    segments.push({ event, startMinute, endMinute, column: 0, columns: 1 });
+  }
+
+  segments.sort(compareSegments);
+  assignTimedColumns(segments);
+  assignClusterWidths(segments);
+  return segments;
+}
+
+function compareSegments(left: TimedPlacement, right: TimedPlacement): number {
+  if (left.startMinute !== right.startMinute) {
+    return left.startMinute - right.startMinute;
+  }
+  if (left.endMinute !== right.endMinute) {
+    return right.endMinute - left.endMinute;
+  }
+  return left.event.title.localeCompare(right.event.title);
+}
+
+/// Gives each segment the first free column, opening a new one when they all
+/// still hold an earlier segment.
+function assignTimedColumns(segments: TimedPlacement[]): void {
+  const columnEnds: number[] = [];
+  for (const segment of segments) {
+    const column = columnEnds.findIndex((end) => end <= segment.startMinute);
+    if (column === -1) {
+      segment.column = columnEnds.length;
+      columnEnds.push(segment.endMinute);
+    } else {
+      segment.column = column;
+      columnEnds[column] = segment.endMinute;
+    }
+  }
+}
+
+/// A cluster is a run of segments that overlap transitively; every segment in
+/// it shares the cluster's column count so widths stay proportional.
+function assignClusterWidths(segments: readonly TimedPlacement[]): void {
+  let start = 0;
+  let maxEnd = -1;
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (segment.startMinute >= maxEnd) {
+      if (index > start) {
+        applyClusterWidth(segments, start, index);
+        start = index;
+      }
+      maxEnd = segment.endMinute;
+      continue;
+    }
+    maxEnd = Math.max(maxEnd, segment.endMinute);
+  }
+  if (start < segments.length) {
+    applyClusterWidth(segments, start, segments.length);
+  }
+}
+
+function applyClusterWidth(segments: readonly TimedPlacement[], from: number, to: number): void {
+  let columns = 1;
+  for (let index = from; index < to; index += 1) {
+    columns = Math.max(columns, segments[index].column + 1);
+  }
+  for (let index = from; index < to; index += 1) {
+    segments[index].columns = columns;
+  }
 }
