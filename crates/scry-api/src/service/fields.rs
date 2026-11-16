@@ -204,13 +204,13 @@ pub(super) fn comment_field_updates(comment: &mut Comment, op: &OperationKind) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
+    use jiff::Timestamp;
     use scry_core::models::{ExternalIdentity, Priority, Tags, TaskState};
     use scry_core::position::Position;
     use uuid::Uuid;
 
     fn task(title: &str, description: Option<&str>) -> Task {
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
         Task {
             id: Uuid::new_v4(),
             project_id: Uuid::new_v4(),
@@ -300,7 +300,7 @@ mod tests {
             state: Some("open".to_string()),
             reason: Some("reopened".to_string()),
             draft: Some(false),
-            updated_at: Some(Utc::now()),
+            updated_at: Some(Timestamp::now()),
             synced_at: None,
             error: None,
         }

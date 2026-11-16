@@ -1,13 +1,12 @@
 //! `project show`.
 
-use chrono::Local;
 use scry_core::models::Project;
 
 use crate::client::Client;
 use crate::config::ScryConfig;
 use crate::error::AppError;
 use crate::output::print_json;
-use crate::state::DATETIME_FORMAT_STR;
+use crate::state::format_local;
 
 use super::project_by_name;
 
@@ -33,20 +32,8 @@ pub async fn project_show(
         }
     }
     println!();
-    println!(
-        "Created at:   {}",
-        project
-            .created_at
-            .with_timezone(&Local)
-            .format(DATETIME_FORMAT_STR)
-    );
-    println!(
-        "Updated at:   {}",
-        project
-            .updated_at
-            .with_timezone(&Local)
-            .format(DATETIME_FORMAT_STR)
-    );
+    println!("Created at:   {}", format_local(project.created_at));
+    println!("Updated at:   {}", format_local(project.updated_at));
 
     Ok(())
 }

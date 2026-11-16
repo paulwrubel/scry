@@ -14,7 +14,7 @@ use axum::response::{IntoResponse, Response};
 use axum_extra::TypedHeader;
 use axum_extra::extract::cookie::{Cookie, Key, SameSite};
 use axum_extra::headers::{Authorization, authorization::Bearer};
-use chrono::Utc;
+use jiff::{SignedDuration, Timestamp};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -80,7 +80,7 @@ impl AuthState {
 
     fn issue_access_token_for(&self, subject: &str) -> Result<String, AuthError> {
         let secret = self.access_secret.as_deref().ok_or(AuthError::Disabled)?;
-        let now = Utc::now().timestamp();
+        let now = Timestamp::now().as_second();
         let claims = AccessClaims {
             sub: subject.to_string(),
             iat: now,
@@ -114,7 +114,7 @@ impl AuthState {
         }
 
         let raw = generate_refresh_token();
-        let now = Utc::now();
+        let now = Timestamp::now();
 
         self.refresh_tokens
             .create_refresh_token(NewRefreshToken {
@@ -122,7 +122,7 @@ impl AuthState {
                 subject: SUBJECT.to_string(),
                 origin_id: Uuid::new_v4(),
                 issued_at: now,
-                expires_at: now + chrono::TimeDelta::days(REFRESH_MAX_AGE_DAYS),
+                expires_at: now + SignedDuration::from_hours(REFRESH_MAX_AGE_DAYS * 24),
             })
             .await
             .map_err(internal)?;
@@ -141,7 +141,7 @@ impl AuthState {
         }
 
         let new_raw = generate_refresh_token();
-        let now = Utc::now();
+        let now = Timestamp::now();
 
         let rotation = self
             .refresh_tokens
@@ -149,7 +149,7 @@ impl AuthState {
                 &hash_refresh_token(raw),
                 &hash_refresh_token(&new_raw),
                 now,
-                now + chrono::TimeDelta::days(REFRESH_MAX_AGE_DAYS),
+                now + SignedDuration::from_hours(REFRESH_MAX_AGE_DAYS * 24),
             )
             .await
             .map_err(internal)?;

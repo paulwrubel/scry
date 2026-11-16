@@ -1,7 +1,7 @@
 use crate::error::ServiceError;
 use crate::service::fields::update_changes_locked_external_field;
 use crate::service::placement::task_placement_position;
-use chrono::Utc;
+use jiff::Timestamp;
 use scry_core::error::StorageError;
 use scry_core::ids::{ProjectId, SectionId, TaskId};
 use scry_core::models::{Project, Task, TaskState};
@@ -25,7 +25,7 @@ impl ProjectService {
         let section_id = section.as_ref().map(|section| section.id);
         let position = self.append_position(project.id, section_id).await?;
 
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
         let task = Task {
             id: Uuid::new_v4(),
             project_id: project.id,
@@ -69,7 +69,7 @@ impl ProjectService {
         let position =
             key_between(Some(&source.position), next_position).map_err(position_error)?;
 
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
         let task = Task {
             id: Uuid::new_v4(),
             project_id: source.project_id,

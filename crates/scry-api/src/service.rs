@@ -199,14 +199,14 @@ impl ProjectService {
 mod tests {
     use super::*;
     use crate::error::AppError;
-    use chrono::Utc;
+    use jiff::Timestamp;
     use scry_core::models::{Automation, AutomationAction, AutomationTrigger};
 
     #[test]
     fn automation_references_section_in_trigger_or_actions() {
         let section_id = Uuid::new_v4();
         let other_id = Uuid::new_v4();
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
 
         let triggered = Automation {
             id: Uuid::new_v4(),

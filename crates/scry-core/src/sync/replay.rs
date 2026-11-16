@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -453,9 +453,9 @@ fn apply_change(state: &mut ClientState, change: &Change) {
 }
 
 /// Apply the `updated_at` carried by a change payload, when present.
-fn apply_updated_at(updated_at: &mut DateTime<Utc>, values: &serde_json::Value) {
+fn apply_updated_at(updated_at: &mut Timestamp, values: &serde_json::Value) {
     if let Some(value) = values.get("updated_at")
-        && let Ok(parsed) = serde_json::from_value::<DateTime<Utc>>(value.clone())
+        && let Ok(parsed) = serde_json::from_value::<Timestamp>(value.clone())
     {
         *updated_at = parsed;
     }

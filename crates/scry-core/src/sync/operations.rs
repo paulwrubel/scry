@@ -4,7 +4,7 @@ use crate::models::{
     TaskState,
 };
 use crate::position::Position;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
@@ -75,7 +75,8 @@ pub struct Operation {
     pub operation_id: Uuid,
     pub operation_version: u16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<DateTime<Utc>>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub timestamp: Option<Timestamp>,
     #[serde(flatten)]
     pub kind: OperationKind,
 }
@@ -123,9 +124,11 @@ pub enum OperationKind {
         id: ProjectId,
         name: String,
         description: Option<String>,
-        created_at: DateTime<Utc>,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     /// `None` leaves a field unchanged. `description` distinguishes all three
     /// states: `None` leaves it, `Some(None)` clears it, `Some(Some(text))`
@@ -141,7 +144,8 @@ pub enum OperationKind {
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         description: Option<Option<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     DeleteProject {
         id: ProjectId,
@@ -152,22 +156,26 @@ pub enum OperationKind {
         name: String,
         position: Position,
         color: Option<Color>,
-        created_at: DateTime<Utc>,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     UpdateSection {
         id: SectionId,
         name: Option<String>,
         color: Option<ColorChange>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     MoveSection {
         id: SectionId,
         position: Position,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     DeleteSection {
         id: SectionId,
@@ -183,9 +191,11 @@ pub enum OperationKind {
         #[serde(default)]
         state: TaskState,
         tags: Tags,
-        created_at: DateTime<Utc>,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         external_identity: Option<ExternalIdentity>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -225,7 +235,8 @@ pub enum OperationKind {
         #[cfg_attr(feature = "ts", ts(type = "ExternalMetadata | null"))]
         external_metadata: Option<Option<Box<ExternalMetadata>>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     /// `section_id` and `position` are always set together; `None` means the
     /// task moves to No section.
@@ -234,7 +245,8 @@ pub enum OperationKind {
         section_id: Option<SectionId>,
         position: Position,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     DeleteTask {
         id: TaskId,
@@ -243,15 +255,18 @@ pub enum OperationKind {
         id: CommentId,
         task_id: TaskId,
         contents: String,
-        created_at: DateTime<Utc>,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     UpdateComment {
         id: CommentId,
         contents: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     DeleteComment {
         id: CommentId,
@@ -261,15 +276,18 @@ pub enum OperationKind {
         project_id: ProjectId,
         trigger: AutomationTrigger,
         actions: Vec<AutomationAction>,
-        created_at: DateTime<Utc>,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     UpdateAutomation {
         id: AutomationId,
         actions: Vec<AutomationAction>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        updated_at: Option<DateTime<Utc>>,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
     },
     DeleteAutomation {
         id: AutomationId,

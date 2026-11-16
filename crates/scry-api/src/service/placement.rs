@@ -218,11 +218,11 @@ pub(super) fn task_placement_position(
 mod tests {
     use super::*;
     use crate::service::test_helpers::task_at;
-    use chrono::Utc;
+    use jiff::Timestamp;
     use uuid::Uuid;
 
     fn section(name: &str, position: &str) -> Section {
-        let created_at = Utc::now();
+        let created_at = Timestamp::now();
         Section {
             id: Uuid::new_v4(),
             project_id: Uuid::new_v4(),

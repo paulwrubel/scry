@@ -1,5 +1,5 @@
 use crate::models::{ExternalIdentity, ExternalMetadata, TaskState};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use std::fmt;
 
 /// Why a string could not be parsed as a GitHub issue or pull request URL.
@@ -110,10 +110,7 @@ pub fn task_state_for_external_state(state: &str) -> Option<TaskState> {
 ///
 /// A missing timestamp on either side means we cannot prove the stored copy is
 /// current, so the incoming metadata wins.
-pub fn should_apply_metadata(
-    existing: Option<&ExternalMetadata>,
-    updated_at: DateTime<Utc>,
-) -> bool {
+pub fn should_apply_metadata(existing: Option<&ExternalMetadata>, updated_at: Timestamp) -> bool {
     match existing {
         Some(ExternalMetadata::Github {
             updated_at: Some(existing_updated_at),
@@ -130,7 +127,10 @@ fn is_valid_name(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+
+    fn ts(value: &str) -> Timestamp {
+        value.parse().expect("valid timestamp")
+    }
 
     fn acme_widgets() -> ExternalIdentity {
         ExternalIdentity::Github {
@@ -140,7 +140,7 @@ mod tests {
         }
     }
 
-    fn github_metadata(updated_at: Option<DateTime<Utc>>) -> ExternalMetadata {
+    fn github_metadata(updated_at: Option<Timestamp>) -> ExternalMetadata {
         ExternalMetadata::Github {
             title: None,
             description: None,
@@ -217,8 +217,8 @@ mod tests {
 
     #[test]
     fn applies_metadata_only_when_strictly_newer() {
-        let earlier = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
-        let later = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 1).unwrap();
+        let earlier = ts("2024-01-01T00:00:00Z");
+        let later = ts("2024-01-01T00:00:01Z");
 
         assert!(should_apply_metadata(None, earlier));
 
@@ -230,7 +230,7 @@ mod tests {
         assert!(!should_apply_metadata(Some(&stored), earlier));
         assert!(!should_apply_metadata(
             Some(&stored),
-            Utc.with_ymd_and_hms(2023, 12, 31, 23, 59, 59).unwrap()
+            ts("2023-12-31T23:59:59Z")
         ));
     }
 }

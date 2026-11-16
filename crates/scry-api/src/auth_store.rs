@@ -1,7 +1,7 @@
 //! Refresh-token persistence shared by the auth handlers and the store backends.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use jiff::{SignedDuration, Timestamp};
 use scry_core::error::StorageError;
 use uuid::Uuid;
 
@@ -11,8 +11,8 @@ pub(crate) struct NewRefreshToken {
     pub token_hash: Vec<u8>,
     pub subject: String,
     pub origin_id: Uuid,
-    pub issued_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
+    pub issued_at: Timestamp,
+    pub expires_at: Timestamp,
 }
 
 /// Outcome of attempting to rotate a refresh token.
@@ -32,8 +32,8 @@ pub(crate) enum RefreshRotation {
 
 /// How long after revocation a token may still be retried (for example, after a
 /// dropped response) before presenting it counts as reuse.
-pub(crate) fn reuse_grace() -> chrono::TimeDelta {
-    chrono::TimeDelta::seconds(10)
+pub(crate) fn reuse_grace() -> SignedDuration {
+    SignedDuration::from_secs(10)
 }
 
 #[async_trait]
@@ -44,8 +44,8 @@ pub(crate) trait AuthStore: Send + Sync {
         &self,
         old_hash: &[u8],
         new_hash: &[u8],
-        now: DateTime<Utc>,
-        new_expires_at: DateTime<Utc>,
+        now: Timestamp,
+        new_expires_at: Timestamp,
     ) -> Result<RefreshRotation, StorageError>;
 
     async fn revoke_refresh_token(&self, token_hash: &[u8]) -> Result<(), StorageError>;
@@ -63,9 +63,9 @@ pub(crate) mod test_support {
     pub(crate) struct MemoryRefreshToken {
         pub subject: String,
         pub origin_id: Uuid,
-        pub issued_at: DateTime<Utc>,
-        pub expires_at: DateTime<Utc>,
-        pub revoked_at: Option<DateTime<Utc>>,
+        pub issued_at: Timestamp,
+        pub expires_at: Timestamp,
+        pub revoked_at: Option<Timestamp>,
     }
 
     /// Auth store backed by a `HashMap`, for handler and extractor tests.
@@ -86,9 +86,9 @@ pub(crate) mod test_support {
             token_hash: Vec<u8>,
             subject: String,
             origin_id: Uuid,
-            issued_at: DateTime<Utc>,
-            expires_at: DateTime<Utc>,
-            revoked_at: Option<DateTime<Utc>>,
+            issued_at: Timestamp,
+            expires_at: Timestamp,
+            revoked_at: Option<Timestamp>,
         ) {
             self.tokens.lock().unwrap().insert(
                 token_hash,
@@ -127,8 +127,8 @@ pub(crate) mod test_support {
             &self,
             old_hash: &[u8],
             new_hash: &[u8],
-            now: DateTime<Utc>,
-            new_expires_at: DateTime<Utc>,
+            now: Timestamp,
+            new_expires_at: Timestamp,
         ) -> Result<RefreshRotation, StorageError> {
             let mut tokens = self.tokens.lock().unwrap();
 
@@ -137,7 +137,7 @@ pub(crate) mod test_support {
             };
 
             if let Some(revoked_at) = token.revoked_at {
-                if now.signed_duration_since(revoked_at) <= reuse_grace() {
+                if now.duration_since(revoked_at) <= reuse_grace() {
                     return Ok(RefreshRotation::Revoked);
                 }
 
@@ -176,7 +176,7 @@ pub(crate) mod test_support {
 
         async fn revoke_refresh_token(&self, token_hash: &[u8]) -> Result<(), StorageError> {
             if let Some(token) = self.tokens.lock().unwrap().get_mut(token_hash) {
-                token.revoked_at = Some(Utc::now());
+                token.revoked_at = Some(Timestamp::now());
             }
             Ok(())
         }
@@ -187,20 +187,19 @@ pub(crate) mod test_support {
 mod tests {
     use super::test_support::MemoryAuthStore;
     use super::*;
-    use chrono::TimeDelta;
 
     fn hash(value: &str) -> Vec<u8> {
         value.as_bytes().to_vec()
     }
 
-    fn expiry(now: DateTime<Utc>) -> DateTime<Utc> {
-        now + TimeDelta::days(30)
+    fn expiry(now: Timestamp) -> Timestamp {
+        now + SignedDuration::from_hours(30 * 24)
     }
 
     #[tokio::test]
     async fn valid_token_rotates_and_revokes_the_old_one() {
         let store = MemoryAuthStore::new();
-        let now = Utc::now();
+        let now = Timestamp::now();
         let origin = Uuid::new_v4();
         store.insert(
             hash("old"),
@@ -234,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn missing_token_is_missing() {
         let store = MemoryAuthStore::new();
-        let now = Utc::now();
+        let now = Timestamp::now();
 
         let result = store
             .rotate_refresh_token(&hash("absent"), &hash("new"), now, expiry(now))
@@ -247,13 +246,13 @@ mod tests {
     #[tokio::test]
     async fn expired_token_is_expired() {
         let store = MemoryAuthStore::new();
-        let now = Utc::now();
+        let now = Timestamp::now();
         store.insert(
             hash("old"),
             "local".to_string(),
             Uuid::new_v4(),
-            now - TimeDelta::days(31),
-            now - TimeDelta::days(1),
+            now - SignedDuration::from_hours(31 * 24),
+            now - SignedDuration::from_hours(24),
             None,
         );
 
@@ -269,7 +268,7 @@ mod tests {
     #[tokio::test]
     async fn recently_revoked_token_is_revoked_without_lineage_revocation() {
         let store = MemoryAuthStore::new();
-        let now = Utc::now();
+        let now = Timestamp::now();
         let origin = Uuid::new_v4();
         store.insert(
             hash("old"),
@@ -277,7 +276,7 @@ mod tests {
             origin,
             now,
             expiry(now),
-            Some(now - TimeDelta::seconds(1)),
+            Some(now - SignedDuration::from_secs(1)),
         );
         store.insert(
             hash("current"),
@@ -300,7 +299,7 @@ mod tests {
     #[tokio::test]
     async fn older_revoked_token_reuses_and_revokes_the_lineage() {
         let store = MemoryAuthStore::new();
-        let now = Utc::now();
+        let now = Timestamp::now();
         let origin = Uuid::new_v4();
         store.insert(
             hash("old"),
@@ -308,7 +307,7 @@ mod tests {
             origin,
             now,
             expiry(now),
-            Some(now - TimeDelta::seconds(11)),
+            Some(now - SignedDuration::from_secs(11)),
         );
         store.insert(
             hash("current"),
@@ -331,7 +330,7 @@ mod tests {
     #[tokio::test]
     async fn revoke_sets_revoked_at() {
         let store = MemoryAuthStore::new();
-        let now = Utc::now();
+        let now = Timestamp::now();
         store.insert(
             hash("old"),
             "local".to_string(),
