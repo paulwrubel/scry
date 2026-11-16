@@ -1206,6 +1206,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "jiff-sqlx"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4996ad290ff7f7081becdda47e28556fbebb81618c599eac5d09182b5a60e38"
+dependencies = [
+ "jiff",
+ "sqlx",
+]
+
+[[package]]
 name = "jiff-static"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1865,6 +1875,8 @@ dependencies = [
  "chrono",
  "clap",
  "include_dir",
+ "jiff",
+ "jiff-sqlx",
  "jsonwebtoken",
  "scry-core",
  "serde",
@@ -2153,6 +2165,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
+ "toml",
  "tracing",
  "url",
  "uuid",

@@ -1,0 +1,3 @@
+[macros.type-overrides]
+# sqlx has no jiff mapping; decode Postgres instants with jiff-sqlx's wrapper.
+'TIMESTAMPTZ' = "jiff_sqlx::Timestamp"

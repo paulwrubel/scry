@@ -1,7 +1,9 @@
 use crate::auth_store::{AuthStore, NewRefreshToken, RefreshRotation, reuse_grace};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use clap::ValueEnum;
+use jiff::Timestamp;
+use jiff_sqlx::Timestamp as SqlxTimestamp;
+use jiff_sqlx::ToSqlx;
 use scry_core::error::StorageError;
 use scry_core::ids::{AutomationId, CommentId, Handle, ProjectId, SectionId, TaskId};
 use scry_core::models::{
@@ -159,8 +161,8 @@ struct TaskRow {
     position: String,
     state: String,
     tags: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: SqlxTimestamp,
+    updated_at: SqlxTimestamp,
     external_identity: Option<serde_json::Value>,
     external_metadata: Option<serde_json::Value>,
 }
@@ -205,8 +207,8 @@ impl TryFrom<TaskRow> for Task {
                 .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
             state,
             tags: Tags::from(row.tags.as_str()),
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+            created_at: row.created_at.to_jiff(),
+            updated_at: row.updated_at.to_jiff(),
             external_identity,
             external_metadata,
         })
@@ -217,15 +219,15 @@ fn project_from_fields(
     id: ProjectId,
     name: String,
     description: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: SqlxTimestamp,
+    updated_at: SqlxTimestamp,
 ) -> Result<Project, StorageError> {
     Ok(Project {
         id,
         name,
         description,
-        created_at,
-        updated_at,
+        created_at: created_at.to_jiff(),
+        updated_at: updated_at.to_jiff(),
     })
 }
 
@@ -233,15 +235,15 @@ fn comment_from_fields(
     id: CommentId,
     task_id: TaskId,
     contents: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: SqlxTimestamp,
+    updated_at: SqlxTimestamp,
 ) -> Result<Comment, StorageError> {
     Ok(Comment {
         id,
         task_id,
         contents,
-        created_at,
-        updated_at,
+        created_at: created_at.to_jiff(),
+        updated_at: updated_at.to_jiff(),
     })
 }
 
@@ -251,8 +253,8 @@ fn section_from_fields(
     name: String,
     position: String,
     color: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: SqlxTimestamp,
+    updated_at: SqlxTimestamp,
 ) -> Result<Section, StorageError> {
     Ok(Section {
         id,
@@ -261,8 +263,8 @@ fn section_from_fields(
         position: Position::parse(position)
             .map_err(|e| StorageError::Database(format!("invalid section position: {e}")))?,
         color: color.and_then(|c| Color::from_str(&c, false).ok()),
-        created_at,
-        updated_at,
+        created_at: created_at.to_jiff(),
+        updated_at: updated_at.to_jiff(),
     })
 }
 
@@ -271,8 +273,8 @@ fn automation_from_fields(
     project_id: ProjectId,
     trigger: serde_json::Value,
     actions: serde_json::Value,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: SqlxTimestamp,
+    updated_at: SqlxTimestamp,
 ) -> Result<Automation, StorageError> {
     let trigger = serde_json::from_value::<AutomationTrigger>(trigger)
         .map_err(|e| StorageError::Database(format!("automation {id} has invalid trigger: {e}")))?;
@@ -284,8 +286,8 @@ fn automation_from_fields(
         project_id,
         trigger,
         actions,
-        created_at,
-        updated_at,
+        created_at: created_at.to_jiff(),
+        updated_at: updated_at.to_jiff(),
     })
 }
 
@@ -329,8 +331,8 @@ impl Store for PostgresStore {
             task.position.as_str(),
             task.state.as_str(),
             task.tags.to_string(),
-            task.created_at,
-            task.updated_at,
+            task.created_at.to_sqlx(),
+            task.updated_at.to_sqlx(),
             external_identity,
             external_metadata,
         )
@@ -559,7 +561,7 @@ impl Store for PostgresStore {
             task.tags.to_string(),
             external_identity,
             external_metadata,
-            task.updated_at,
+            task.updated_at.to_sqlx(),
             task.id,
         )
         .execute(&mut *conn)
@@ -635,8 +637,8 @@ impl Store for PostgresStore {
             comment.id,
             comment.task_id,
             &comment.contents,
-            comment.created_at,
-            comment.updated_at,
+            comment.created_at.to_sqlx(),
+            comment.updated_at.to_sqlx(),
         )
         .execute(&mut *conn)
         .await
@@ -781,7 +783,7 @@ impl Store for PostgresStore {
                 WHERE id = $3
             "#,
             &comment.contents,
-            comment.updated_at,
+            comment.updated_at.to_sqlx(),
             comment.id,
         )
         .execute(&mut *conn)
@@ -886,8 +888,8 @@ impl Store for PostgresStore {
             &section.name,
             section.position.as_str(),
             section.color.map(|c| c.to_string()),
-            section.created_at,
-            section.updated_at,
+            section.created_at.to_sqlx(),
+            section.updated_at.to_sqlx(),
         )
         .execute(&mut *conn)
         .await
@@ -1059,7 +1061,7 @@ impl Store for PostgresStore {
             &section.name,
             section.color.map(|c| c.to_string()),
             section.position.as_str(),
-            section.updated_at,
+            section.updated_at.to_sqlx(),
             section.id,
         )
         .execute(&mut *conn)
@@ -1211,8 +1213,8 @@ impl Store for PostgresStore {
             automation.project_id,
             trigger,
             actions,
-            automation.created_at,
-            automation.updated_at,
+            automation.created_at.to_sqlx(),
+            automation.updated_at.to_sqlx(),
         )
         .execute(&mut *conn)
         .await
@@ -1333,7 +1335,7 @@ impl Store for PostgresStore {
                 WHERE id = $3
             "#,
             actions,
-            automation.updated_at,
+            automation.updated_at.to_sqlx(),
             automation.id,
         )
         .execute(&mut *conn)
@@ -1396,8 +1398,8 @@ impl Store for PostgresStore {
             project.id,
             &project.name,
             project.description.as_deref(),
-            project.created_at,
-            project.updated_at,
+            project.created_at.to_sqlx(),
+            project.updated_at.to_sqlx(),
         )
         .execute(&mut *conn)
         .await
@@ -1576,7 +1578,7 @@ impl Store for PostgresStore {
             "#,
             &project.name,
             project.description.as_deref(),
-            project.updated_at,
+            project.updated_at.to_sqlx(),
             project.id,
         )
         .execute(&mut *conn)
@@ -1677,7 +1679,7 @@ impl Store for PostgresStore {
     async fn record_applied_operation(
         &self,
         operation_id: Uuid,
-        applied_at: DateTime<Utc>,
+        applied_at: Timestamp,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError> {
         let mut conn = self.connection(tx).await?;
@@ -1688,7 +1690,7 @@ impl Store for PostgresStore {
                 VALUES ($1, $2)
             "#,
             operation_id,
-            applied_at,
+            applied_at.to_sqlx(),
         )
         .execute(&mut *conn)
         .await
@@ -1725,9 +1727,9 @@ impl Store for PostgresStore {
             entity_id,
             kind.as_str(),
             operation_id,
-            client_timestamp,
+            client_timestamp.map(|ts| ts.to_sqlx()),
             field_values,
-            created_at,
+            created_at.to_sqlx(),
         )
         .fetch_one(&mut *conn)
         .await
@@ -1770,9 +1772,9 @@ impl Store for PostgresStore {
                         .parse::<ChangeKind>()
                         .map_err(|error| StorageError::Database(error.to_string()))?,
                     operation_id: row.operation_id,
-                    client_timestamp: row.client_timestamp,
+                    client_timestamp: row.client_timestamp.map(|ts| ts.to_jiff()),
                     field_values: row.field_values,
-                    created_at: row.created_at,
+                    created_at: row.created_at.to_jiff(),
                 })
             })
             .collect()
@@ -1823,7 +1825,7 @@ impl Store for PostgresStore {
     async fn create_tombstone(
         &self,
         entity: Entity,
-        deleted_at: DateTime<Utc>,
+        deleted_at: Timestamp,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError> {
         let mut conn = self.connection(tx).await?;
@@ -1836,7 +1838,7 @@ impl Store for PostgresStore {
             "#,
             entity.entity_type().as_str(),
             entity.id(),
-            deleted_at,
+            deleted_at.to_sqlx(),
         )
         .execute(&mut *conn)
         .await
@@ -1875,8 +1877,8 @@ impl AuthStore for PostgresStore {
             token.token_hash,
             &token.subject,
             token.origin_id,
-            token.issued_at,
-            token.expires_at,
+            token.issued_at.to_sqlx(),
+            token.expires_at.to_sqlx(),
         )
         .execute(&mut *conn)
         .await
@@ -1889,8 +1891,8 @@ impl AuthStore for PostgresStore {
         &self,
         old_hash: &[u8],
         new_hash: &[u8],
-        now: DateTime<Utc>,
-        new_expires_at: DateTime<Utc>,
+        now: Timestamp,
+        new_expires_at: Timestamp,
     ) -> Result<RefreshRotation, StorageError> {
         let mut tx = self.pool.begin().await.map_err(|e| {
             StorageError::Database(format!("failed to begin refresh rotation: {}", e))
@@ -1917,7 +1919,7 @@ impl AuthStore for PostgresStore {
         };
 
         if let Some(revoked_at) = row.revoked_at {
-            if now.signed_duration_since(revoked_at) <= reuse_grace() {
+            if now.duration_since(revoked_at.to_jiff()) <= reuse_grace() {
                 tx.commit().await.map_err(|e| {
                     StorageError::Database(format!("failed to commit rotation: {}", e))
                 })?;
@@ -1933,7 +1935,7 @@ impl AuthStore for PostgresStore {
                     WHERE origin_id = $1
                 "#,
                 row.origin_id,
-                now,
+                now.to_sqlx(),
             )
             .execute(&mut *tx)
             .await
@@ -1947,7 +1949,7 @@ impl AuthStore for PostgresStore {
             return Ok(RefreshRotation::Reused);
         }
 
-        if row.expires_at <= now {
+        if row.expires_at.to_jiff() <= now {
             tx.commit()
                 .await
                 .map_err(|e| StorageError::Database(format!("failed to commit rotation: {}", e)))?;
@@ -1961,7 +1963,7 @@ impl AuthStore for PostgresStore {
                 WHERE token_hash = $1
             "#,
             old_hash,
-            now,
+            now.to_sqlx(),
         )
         .execute(&mut *tx)
         .await
@@ -1977,8 +1979,8 @@ impl AuthStore for PostgresStore {
             new_hash,
             &row.subject,
             row.origin_id,
-            now,
-            new_expires_at,
+            now.to_sqlx(),
+            new_expires_at.to_sqlx(),
         )
         .execute(&mut *tx)
         .await
