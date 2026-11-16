@@ -3,14 +3,10 @@ import type { AutomationAction } from '@/generated/AutomationAction';
 import type { Change } from '@/generated/Change';
 import type { Color } from '@/generated/Color';
 import type { Comment } from '@/generated/Comment';
-import type { ExternalIdentity } from '@/generated/ExternalIdentity';
-import type { ExternalMetadata } from '@/generated/ExternalMetadata';
-import type { Priority } from '@/generated/Priority';
 import type { Project } from '@/generated/Project';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
-import type { TaskState } from '@/generated/TaskState';
 import {
   findAutomation,
   findComment,
@@ -228,14 +224,14 @@ export function applyTaskValues(task: Task, values: Record<string, unknown>): vo
   }
   if (typeof values.priority === 'string') {
     // the typeof guard proves a string, and the server only emits valid Priority literals
-    task.priority = values.priority as Priority;
+    task.priority = values.priority as Task['priority'];
   }
   if (Array.isArray(values.tags)) {
     task.tags = values.tags.filter((tag): tag is string => typeof tag === 'string');
   }
   if (typeof values.state === 'string') {
     // the typeof guard proves a string, and the server only emits valid TaskState literals
-    task.state = values.state as TaskState;
+    task.state = values.state as Task['state'];
   }
   if ('section_id' in values) {
     task.section_id = typeof values.section_id === 'string' ? values.section_id : null;
@@ -243,15 +239,20 @@ export function applyTaskValues(task: Task, values: Record<string, unknown>): vo
   if (typeof values.position === 'string') {
     task.position = values.position;
   }
+  if ('due' in values) {
+    // change field values are serialized Task fields, so their JSON shape
+    // matches the generated types even though the map is untyped
+    task.due = values.due as Task['due'];
+  }
   if ('external_identity' in values) {
     // change field values are serialized Task fields, so their JSON shape
     // matches the generated types even though the map is untyped
-    task.external_identity = values.external_identity as ExternalIdentity | null;
+    task.external_identity = values.external_identity as Task['external_identity'];
   }
   if ('external_metadata' in values) {
     // change field values are serialized Task fields, so their JSON shape
     // matches the generated types even though the map is untyped
-    task.external_metadata = values.external_metadata as ExternalMetadata | null;
+    task.external_metadata = values.external_metadata as Task['external_metadata'];
   }
   if (typeof values.updated_at === 'string') {
     task.updated_at = values.updated_at;

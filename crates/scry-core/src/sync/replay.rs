@@ -177,6 +177,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             position,
             state: task_state,
             tags,
+            due,
             created_at,
             updated_at,
             external_identity,
@@ -192,6 +193,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 position: position.clone(),
                 state: *task_state,
                 tags: tags.clone(),
+                due: due.clone(),
                 created_at: *created_at,
                 updated_at: (*updated_at).unwrap_or(*created_at),
                 external_identity: external_identity.clone(),
@@ -212,6 +214,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             priority,
             tags,
             state: task_state,
+            due,
             external_identity,
             external_metadata,
             updated_at,
@@ -231,6 +234,9 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(task_state) = task_state {
                     task.state = *task_state;
+                }
+                if let Some(due) = due {
+                    task.due = due.clone();
                 }
                 if let Some(identity) = external_identity {
                     task.external_identity = identity.clone();
@@ -511,6 +517,9 @@ fn apply_task_values(task: &mut Task, values: &serde_json::Value) {
         && let Ok(state) = serde_json::from_value::<TaskState>(state.clone())
     {
         task.state = state;
+    }
+    if let Some(due) = values.get("due") {
+        task.due = serde_json::from_value(due.clone()).ok();
     }
     if let Some(identity) = values.get("external_identity") {
         task.external_identity = serde_json::from_value(identity.clone()).ok();

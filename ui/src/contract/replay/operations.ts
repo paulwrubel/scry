@@ -118,6 +118,7 @@ export function applyOperation(state: ClientState, operation: Operation): void {
         position: operation.position,
         state: operation.state,
         tags: operation.tags,
+        due: operation.due ?? null,
         created_at: operation.created_at,
         updated_at: operation.updated_at ?? operation.created_at,
         external_identity: operation.external_identity ?? null,
@@ -148,6 +149,9 @@ export function applyOperation(state: ClientState, operation: Operation): void {
       }
       if (operation.state !== undefined && operation.state !== null) {
         task.state = operation.state;
+      }
+      if (operation.due !== undefined) {
+        task.due = operation.due;
       }
       if (operation.external_identity !== undefined) {
         task.external_identity = operation.external_identity;

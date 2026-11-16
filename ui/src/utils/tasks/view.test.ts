@@ -27,6 +27,10 @@ describe('parseTaskSortingMode', () => {
       expect(parseTaskSortingMode(new URLSearchParams(`sort=${mode}`))).toBe(mode);
     }
   });
+
+  it('parses the due mode', () => {
+    expect(parseTaskSortingMode(new URLSearchParams('sort=due'))).toBe('due');
+  });
 });
 
 describe('applyTaskSortingMode', () => {

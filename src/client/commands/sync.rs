@@ -526,6 +526,7 @@ mod tests {
             position: Position::parse("a0").unwrap(),
             state: TaskState::Open,
             tags: Tags::default(),
+            due: None,
             created_at: timestamp("2024-01-01T00:00:00Z"),
             updated_at: timestamp("2024-01-01T00:00:00Z"),
             external_identity: None,

@@ -1,4 +1,5 @@
 import { keyBetween } from '@/contract/positions';
+import { nowIso } from '@/utils/date';
 import type { Color } from '@/generated/Color';
 import { newId } from '@/utils/uuid';
 import type { Operation } from '@/generated/Operation';
@@ -14,7 +15,7 @@ export function createSectionOperation(project: ProjectSnapshot, name: string): 
     (max, section) => (max === null || section.position > max ? section.position : max),
     null,
   );
-  const created_at = new Date().toISOString();
+  const created_at = nowIso();
 
   return {
     operation_id: newId(),
@@ -37,7 +38,7 @@ export function moveSectionOperation(sectionId: string, position: string): Opera
     kind: 'move_section',
     id: sectionId,
     position,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 
@@ -63,7 +64,7 @@ export function updateSectionOperation(sectionId: string, name: string): Operati
     id: sectionId,
     name: trimmed,
     color: null,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 
@@ -75,6 +76,6 @@ export function setSectionColorOperation(sectionId: string, color: Color | null)
     id: sectionId,
     name: null,
     color: color === null ? 'clear' : { set: color },
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }

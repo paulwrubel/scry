@@ -6,6 +6,7 @@ import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { Link, useLocation } from 'react-router-dom';
 import { GithubSyncStaleIcon } from '@/components/GithubSyncStaleIcon';
 import { TitleText } from '@/components/TitleText';
+import { formatDue, isOverdue } from '@/contract/due';
 import type { Task } from '@/generated/Task';
 import { PRIORITY_DOT_CLASS } from '@/data/priority';
 import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/github';
@@ -42,6 +43,9 @@ export function TaskCard(props: TaskCardProps) {
   const hasBadges = task.tags.length > 0 || githubError !== null;
   const description = task.description?.trim() ?? '';
   const hasDescription = description.length > 0;
+  const dueText = task.due === null ? null : formatDue(task.due);
+  const dueLabel = dueText === null ? null : `Due ${dueText}`;
+  const dueOverdue = task.due !== null && isOverdue(task);
 
   return (
     <div
@@ -129,6 +133,15 @@ export function TaskCard(props: TaskCardProps) {
             {githubError === null ? null : <Badge color="failure">GitHub: {githubError}</Badge>}
           </div>
         ) : null}
+        {dueLabel === null ? null : (
+          <p
+            className={`text-right text-xs ${dueOverdue ? 'text-danger' : 'text-muted'}`}
+            aria-label={dueOverdue ? `Overdue, was due ${dueText}` : `Due ${dueText}`}
+            title={dueOverdue ? `Overdue, was due ${dueText}` : `Due ${dueText}`}
+          >
+            {dueLabel}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -544,6 +544,7 @@ pub fn plan_import(
                     position: incoming_task.position.clone(),
                     state: incoming_task.state,
                     tags: incoming_task.tags.clone(),
+                    due: incoming_task.due.clone(),
                     created_at: incoming_task.created_at,
                     updated_at: Some(incoming_task.updated_at),
                     external_identity: incoming_task.external_identity.clone(),
@@ -566,12 +567,14 @@ pub fn plan_import(
                 let tags = tags_differ(&live_task.tags, &incoming_task.tags)
                     .then(|| incoming_task.tags.clone());
                 let state = changed(&live_task.state, &incoming_task.state);
+                let due = changed(&live_task.due, &incoming_task.due);
 
                 if title.is_some()
                     || description.is_some()
                     || priority.is_some()
                     || tags.is_some()
                     || state.is_some()
+                    || due.is_some()
                 {
                     plan.operations.push(operation(OperationKind::UpdateTask {
                         id: live_task.id,
@@ -580,6 +583,7 @@ pub fn plan_import(
                         priority,
                         tags,
                         state,
+                        due,
                         external_identity: None,
                         external_metadata: None,
                         updated_at: Some(incoming_task.updated_at),
@@ -612,6 +616,7 @@ pub fn plan_import(
                 position: incoming_task.position.clone(),
                 state: incoming_task.state,
                 tags: incoming_task.tags.clone(),
+                due: incoming_task.due.clone(),
                 created_at: incoming_task.created_at,
                 updated_at: Some(incoming_task.updated_at),
                 external_identity: incoming_task.external_identity.clone(),
@@ -939,7 +944,9 @@ mod tests {
         TaskState,
     };
     use crate::position::Position;
+    use crate::temporal::When;
     use jiff::Timestamp;
+    use jiff::civil::date;
     use serde_json::json;
     use uuid::Uuid;
 
@@ -993,6 +1000,7 @@ mod tests {
             position: position("a0"),
             state: TaskState::Open,
             tags: Tags::default(),
+            due: None,
             created_at: at(),
             updated_at: at(),
             external_identity: None,
@@ -1246,6 +1254,54 @@ mod tests {
     }
 
     #[test]
+    fn old_task_json_defaults_due_to_none() {
+        let task: Task = serde_json::from_value(json!({
+            "id": TASK_ID,
+            "project_id": PROJECT_ID,
+            "title": "old",
+            "description": null,
+            "priority": "normal",
+            "section_id": null,
+            "position": "a0",
+            "state": "open",
+            "tags": [],
+            "created_at": "1970-01-01T00:00:00Z"
+        }))
+        .expect("a task without a due value should deserialize");
+
+        assert!(task.due.is_none());
+    }
+
+    #[test]
+    fn task_due_round_trips_through_json() {
+        let task: Task = serde_json::from_value(json!({
+            "id": TASK_ID,
+            "project_id": PROJECT_ID,
+            "title": "due",
+            "description": null,
+            "priority": "normal",
+            "section_id": null,
+            "position": "a0",
+            "state": "open",
+            "tags": [],
+            "due": {"kind": "date", "date": "2026-11-03"},
+            "created_at": "1970-01-01T00:00:00Z"
+        }))
+        .expect("a task with a due value should deserialize");
+
+        assert_eq!(
+            task.due,
+            Some(When::Date {
+                date: date(2026, 11, 3),
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(&task).unwrap()["due"],
+            json!({"kind": "date", "date": "2026-11-03"})
+        );
+    }
+
+    #[test]
     fn legacy_priority_names_deserialize() {
         let parse = |priority: &str| -> Task {
             serde_json::from_value(json!({
@@ -1368,6 +1424,7 @@ mod import_tests {
             position: Position::parse("a0").unwrap(),
             state: TaskState::Open,
             tags: Tags::default(),
+            due: None,
             created_at: at(),
             updated_at: at(),
             external_identity: None,

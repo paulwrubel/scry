@@ -9,6 +9,7 @@ import type { Position } from './Position';
 import type { Priority } from './Priority';
 import type { Tags } from './Tags';
 import type { TaskState } from './TaskState';
+import type { When } from './When';
 
 /**
  * One sync operation as it travels over the wire.
@@ -70,6 +71,7 @@ export type Operation = {
       position: Position;
       state: TaskState;
       tags: Tags;
+      due?: When | null;
       created_at: string;
       updated_at?: string | null;
       external_identity?: ExternalIdentity | null;
@@ -83,6 +85,7 @@ export type Operation = {
       priority: Priority | null;
       tags: Tags | null;
       state: TaskState | null;
+      due?: When | null;
       external_identity?: ExternalIdentity | null;
       external_metadata?: ExternalMetadata | null;
       updated_at?: string | null;

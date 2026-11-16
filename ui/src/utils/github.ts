@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Task } from '@/generated/Task';
 
@@ -62,10 +63,10 @@ export function lastSyncedAt(task: Task): string | null {
   return task.external_metadata?.synced_at ?? null;
 }
 
-const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
+const SYNC_STALE_HOURS = 24;
 
 /** Whether a linked task's GitHub metadata has not been fetched in over 24 hours. */
-export function githubSyncStale(task: Task, now: number = Date.now()): boolean {
+export function githubSyncStale(task: Task, now: DateTime = DateTime.now()): boolean {
   if (githubIdentity(task) === null) {
     return false;
   }
@@ -73,9 +74,9 @@ export function githubSyncStale(task: Task, now: number = Date.now()): boolean {
   if (syncedAt === null) {
     return true;
   }
-  const parsed = Date.parse(syncedAt);
-  if (Number.isNaN(parsed)) {
+  const parsed = DateTime.fromISO(syncedAt);
+  if (!parsed.isValid) {
     return true;
   }
-  return now - parsed > SYNC_STALE_MS;
+  return now.diff(parsed, 'hours').hours > SYNC_STALE_HOURS;
 }

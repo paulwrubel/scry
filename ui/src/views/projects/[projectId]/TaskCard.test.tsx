@@ -6,6 +6,7 @@ import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { ExternalMetadata } from '@/generated/ExternalMetadata';
 import type { Task } from '@/generated/Task';
 import { TaskCard } from './TaskCard';
+import { nowIso } from '@/utils/date';
 
 const CREATED_AT = '2026-01-01T00:00:00Z';
 
@@ -42,6 +43,7 @@ const task: Task = {
   position: 'a0',
   state: 'open',
   tags: [],
+  due: null,
   created_at: CREATED_AT,
   updated_at: CREATED_AT,
   external_identity: null,
@@ -276,7 +278,7 @@ describe('TaskCard', () => {
           task={{
             ...task,
             external_identity: GITHUB_IDENTITY,
-            external_metadata: metadata({ synced_at: new Date().toISOString() }),
+            external_metadata: metadata({ synced_at: nowIso() }),
           }}
           showPriority={false}
         />

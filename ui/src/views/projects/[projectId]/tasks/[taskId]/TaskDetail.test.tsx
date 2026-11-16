@@ -62,6 +62,7 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     position: 'a0',
     state: 'open',
     tags: [],
+    due: null,
     created_at: CREATED_AT,
     updated_at: CREATED_AT,
     external_identity: null,

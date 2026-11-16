@@ -1,11 +1,11 @@
+import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { ExternalMetadata } from '@/generated/ExternalMetadata';
 import type { Task } from '@/generated/Task';
 import { githubSyncStale, lastSyncedAt } from './github';
 
-const HOUR = 60 * 60 * 1000;
-const NOW = Date.parse('2026-03-01T12:00:00Z');
+const NOW = DateTime.fromISO('2026-03-01T12:00:00Z', { setZone: true });
 
 const LINKED: ExternalIdentity = {
   provider: 'github',
@@ -40,6 +40,7 @@ function task(overrides: Partial<Task> = {}): Task {
     position: 'a0',
     state: 'open',
     tags: [],
+    due: null,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
     external_identity: LINKED,
@@ -71,13 +72,13 @@ describe('githubSyncStale', () => {
   });
 
   it('is false within the 24 hour window', () => {
-    const syncedAt = new Date(NOW - 23 * HOUR).toISOString();
+    const syncedAt = NOW.minus({ hours: 23 }).toISO() ?? '';
 
     expect(githubSyncStale(task({ external_metadata: metadata(syncedAt) }), NOW)).toBe(false);
   });
 
   it('is true once the window is exceeded', () => {
-    const syncedAt = new Date(NOW - 25 * HOUR).toISOString();
+    const syncedAt = NOW.minus({ hours: 25 }).toISO() ?? '';
 
     expect(githubSyncStale(task({ external_metadata: metadata(syncedAt) }), NOW)).toBe(true);
   });

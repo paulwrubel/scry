@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import {
@@ -93,7 +94,7 @@ describe('createProjectOperation', () => {
     });
     expect(operation.id).toEqual(expect.any(String));
     expect(operation.operation_id).not.toBe(operation.id);
-    expect(operation.created_at).toBe(new Date(operation.created_at).toISOString());
+    expect(DateTime.fromISO(operation.created_at).toUTC().toISO()).toBe(operation.created_at);
   });
 
   it('stores an empty description as null', () => {

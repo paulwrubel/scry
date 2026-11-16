@@ -45,6 +45,7 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     position: 'a0',
     state: 'open',
     tags: [],
+    due: null,
     created_at: CREATED_AT,
     updated_at: CREATED_AT,
     external_identity: null,
@@ -121,6 +122,7 @@ describe('createTaskOperation', () => {
       position: 'a1',
       state: 'open',
       tags: [],
+      due: null,
     });
     expect(operation.kind === 'create_task' && operation.id).not.toBe(operation.operation_id);
     expect(operation.kind === 'create_task' && operation.created_at).toMatch(/Z$/);
@@ -160,6 +162,7 @@ describe('updateTaskOperation', () => {
         description: 'Description',
         priority: 'normal',
         tags: ['one'],
+        due: null,
       }),
     ).toBeNull();
   });
@@ -171,6 +174,7 @@ describe('updateTaskOperation', () => {
         description: 'Description',
         priority: 'normal',
         tags: ['one'],
+        due: null,
       }),
     ).toBeNull();
   });
@@ -181,6 +185,7 @@ describe('updateTaskOperation', () => {
       description: 'Description',
       priority: 'normal',
       tags: ['one'],
+      due: null,
     });
 
     expect(operation).toMatchObject({
@@ -194,12 +199,38 @@ describe('updateTaskOperation', () => {
     expect(operation?.kind === 'update_task' && operation.description).toBeUndefined();
   });
 
+  it('sends due only when it changes', () => {
+    const changed = updateTaskOperation(existing, {
+      title: 'Title',
+      description: 'Description',
+      priority: 'normal',
+      tags: ['one'],
+      due: { kind: 'date', date: '2026-11-06' },
+    });
+
+    expect(changed).toMatchObject({
+      kind: 'update_task',
+      due: { kind: 'date', date: '2026-11-06' },
+    });
+
+    const unchanged = updateTaskOperation(existing, {
+      title: 'New title',
+      description: 'Description',
+      priority: 'normal',
+      tags: ['one'],
+      due: null,
+    });
+
+    expect(unchanged?.kind === 'update_task' && unchanged.due).toBeUndefined();
+  });
+
   it('clears an emptied description', () => {
     const operation = updateTaskOperation(existing, {
       title: 'Title',
       description: '   ',
       priority: 'normal',
       tags: ['one'],
+      due: null,
     });
 
     expect(operation).toMatchObject({ description: null, title: null, priority: null });
@@ -211,6 +242,7 @@ describe('updateTaskOperation', () => {
       description: 'Description',
       priority: 'normal',
       tags: [' Two ', 'three', '', 'two'],
+      due: null,
     });
 
     expect(operation).toMatchObject({ tags: ['three', 'two'], title: null });
@@ -250,6 +282,7 @@ describe('updateTaskOperation', () => {
       description: 'Body\n',
       priority: 'normal',
       tags: ['one', 'two'],
+      due: null,
     });
 
     expect(operation).toMatchObject({
@@ -295,6 +328,7 @@ describe('updateTaskOperation', () => {
       description: '',
       priority: 'normal',
       tags: ['one', 'two'],
+      due: null,
     });
 
     expect(operation).toMatchObject({

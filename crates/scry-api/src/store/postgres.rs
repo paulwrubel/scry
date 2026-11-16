@@ -13,6 +13,7 @@ use scry_core::models::{
 };
 use scry_core::position::{Position, n_keys_between};
 use scry_core::store::Store;
+use scry_core::temporal::When;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};
 use sqlx::{Postgres, Transaction};
@@ -161,6 +162,7 @@ struct TaskRow {
     position: String,
     state: String,
     tags: String,
+    due: Option<serde_json::Value>,
     created_at: SqlxTimestamp,
     updated_at: SqlxTimestamp,
     external_identity: Option<serde_json::Value>,
@@ -195,6 +197,11 @@ impl TryFrom<TaskRow> for Task {
             .map_err(|error| {
                 StorageError::Database(format!("invalid task external_metadata: {error}"))
             })?;
+        let due: Option<When> = row
+            .due
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| StorageError::Database(format!("invalid task due: {error}")))?;
 
         Ok(Task {
             id: row.id,
@@ -207,6 +214,7 @@ impl TryFrom<TaskRow> for Task {
                 .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
             state,
             tags: Tags::from(row.tags.as_str()),
+            due,
             created_at: row.created_at.to_jiff(),
             updated_at: row.updated_at.to_jiff(),
             external_identity,
@@ -316,11 +324,17 @@ impl Store for PostgresStore {
             .map_err(|e| {
                 StorageError::Database(format!("failed to serialize task external_metadata: {}", e))
             })?;
+        let due = task
+            .due
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| StorageError::Database(format!("failed to serialize task due: {}", e)))?;
 
         match sqlx::query!(
             r#"
-                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, tags, created_at, updated_at, external_identity, external_metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, tags, due, created_at, updated_at, external_identity, external_metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             "#,
             task.id,
             task.project_id,
@@ -331,6 +345,7 @@ impl Store for PostgresStore {
             task.position.as_str(),
             task.state.as_str(),
             task.tags.to_string(),
+            due,
             task.created_at.to_sqlx(),
             task.updated_at.to_sqlx(),
             external_identity,
@@ -369,6 +384,7 @@ impl Store for PostgresStore {
                     position,
                     state,
                     tags,
+                    due,
                     created_at,
                     updated_at,
                     external_identity,
@@ -454,6 +470,7 @@ impl Store for PostgresStore {
                     position,
                     state,
                     tags,
+                    due,
                     created_at,
                     updated_at,
                     external_identity,
@@ -498,6 +515,7 @@ impl Store for PostgresStore {
                     position,
                     state,
                     tags,
+                    due,
                     created_at,
                     updated_at,
                     external_identity,
@@ -545,12 +563,18 @@ impl Store for PostgresStore {
             .map_err(|e| {
                 StorageError::Database(format!("failed to serialize task external_metadata: {}", e))
             })?;
+        let due = task
+            .due
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| StorageError::Database(format!("failed to serialize task due: {}", e)))?;
 
         match sqlx::query!(
             r#"
                 UPDATE tasks
-                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7, external_identity = $8, external_metadata = $9, updated_at = $10
-                WHERE id = $11
+                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7, due = $8, external_identity = $9, external_metadata = $10, updated_at = $11
+                WHERE id = $12
             "#,
             &task.title,
             task.description.as_deref(),
@@ -559,6 +583,7 @@ impl Store for PostgresStore {
             task.position.as_str(),
             task.state.as_str(),
             task.tags.to_string(),
+            due,
             external_identity,
             external_metadata,
             task.updated_at.to_sqlx(),

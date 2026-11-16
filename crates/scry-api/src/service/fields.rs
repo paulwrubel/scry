@@ -34,6 +34,7 @@ pub(super) fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldVa
             priority,
             tags,
             state,
+            due,
             external_identity,
             external_metadata,
             ..
@@ -57,6 +58,10 @@ pub(super) fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldVa
             if let Some(state) = state {
                 task.state = *state;
                 fields.insert("state".into(), json!(state));
+            }
+            if let Some(due) = due {
+                task.due = due.clone();
+                fields.insert("due".into(), json!(due));
             }
             if let Some(identity) = external_identity {
                 task.external_identity = identity.clone();
@@ -221,6 +226,7 @@ mod tests {
             position: Position::parse("a0").expect("a0 is a valid position"),
             state: TaskState::Open,
             tags: Tags::from(vec!["alpha"]),
+            due: None,
             created_at,
             updated_at: created_at,
             external_identity: None,
@@ -238,6 +244,7 @@ mod tests {
             priority: None,
             tags: None,
             state: None,
+            due: None,
             external_identity: None,
             external_metadata: None,
             updated_at: None,
@@ -268,6 +275,7 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                due: None,
                 external_identity: None,
                 external_metadata: None,
                 updated_at: None,
@@ -282,6 +290,7 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                due: None,
                 external_identity: None,
                 external_metadata: None,
                 updated_at: None,
@@ -350,6 +359,7 @@ mod tests {
             priority: None,
             tags: None,
             state,
+            due: None,
             external_identity,
             external_metadata,
             updated_at: None,
@@ -376,6 +386,7 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                due: None,
                 external_identity: Some(Some(identity.clone())),
                 external_metadata: Some(Some(Box::new(metadata.clone()))),
                 updated_at: None,
@@ -397,6 +408,7 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                due: None,
                 external_identity: Some(None),
                 external_metadata: Some(None),
                 updated_at: None,

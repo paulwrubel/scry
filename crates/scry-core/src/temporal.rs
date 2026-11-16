@@ -9,18 +9,62 @@ use jiff::tz::TimeZone;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum When {
-    Date { date: civil::Date },
-    Floating { datetime: civil::DateTime },
-    Instant { timestamp: Timestamp },
+    Date {
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        date: civil::Date,
+    },
+    Floating {
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        datetime: civil::DateTime,
+    },
+    Instant {
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        timestamp: Timestamp,
+    },
     Zoned(Zoned),
 }
 
+impl When {
+    /// The first instant at which this value is no longer on time. It is both the
+    /// overdue boundary and the point a task sorts at, so "what goes stale first"
+    /// and "what sorts first" cannot disagree. A date covers its whole local day,
+    /// so its deadline is the next local midnight, and a floating time is read in
+    /// the caller's zone because it carries none of its own.
+    pub fn deadline(&self, tz: &TimeZone) -> Result<Timestamp, TemporalError> {
+        match self {
+            When::Date { date } => date
+                .tomorrow()
+                .map_err(TemporalError::jiff)
+                .and_then(|next| Self::resolve(next.at(0, 0, 0, 0), tz)),
+            When::Floating { datetime } => Self::resolve(*datetime, tz),
+            When::Instant { timestamp } => Ok(*timestamp),
+            When::Zoned(zoned) => zoned.to_instant(),
+        }
+    }
+
+    pub fn is_overdue(&self, now: Timestamp, tz: &TimeZone) -> bool {
+        self.deadline(tz).is_ok_and(|deadline| now >= deadline)
+    }
+
+    // Only dates and floating times need this, and neither carries a zone, so
+    // the zone has to come from the caller.
+    fn resolve(datetime: civil::DateTime, tz: &TimeZone) -> Result<Timestamp, TemporalError> {
+        let resolved = tz
+            .to_zoned_datetime(datetime)
+            .map_err(TemporalError::jiff)?;
+        Ok(resolved.timestamp())
+    }
+}
+
 /// A wall-clock time in a named IANA zone.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Zoned {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     datetime: civil::DateTime,
     zone: String,
 }
@@ -192,6 +236,14 @@ mod tests {
         When::Zoned(Zoned::new(date(2026, 11, day).at(hour, 0, 0, 0), zone).unwrap())
     }
 
+    fn zone(name: &str) -> TimeZone {
+        TimeZone::get(name).unwrap()
+    }
+
+    fn local_instant(tz: &TimeZone, datetime: civil::DateTime) -> Timestamp {
+        tz.to_zoned_datetime(datetime).unwrap().timestamp()
+    }
+
     #[test]
     fn when_json_round_trips() {
         let cases = [
@@ -331,5 +383,64 @@ mod tests {
 
         let floating = Interval::new(floating_when(9), floating_when(10)).unwrap();
         assert_eq!(floating.inclusive_end_date(), None);
+    }
+
+    #[test]
+    fn date_is_overdue_from_the_next_local_midnight() {
+        let tz = zone("America/Chicago");
+        let due = date_when(3);
+
+        let last_minute = local_instant(&tz, date(2026, 11, 3).at(23, 59, 0, 0));
+        let next_midnight = local_instant(&tz, date(2026, 11, 4).at(0, 0, 0, 0));
+
+        assert!(!due.is_overdue(last_minute, &tz));
+        assert!(due.is_overdue(next_midnight, &tz));
+    }
+
+    #[test]
+    fn floating_time_is_read_in_the_viewers_zone() {
+        let floating = floating_when(9);
+        let before: Timestamp = "2026-11-03T14:59:59Z".parse().unwrap();
+        let at: Timestamp = "2026-11-03T15:00:00Z".parse().unwrap();
+
+        assert!(!floating.is_overdue(before, &zone("America/Chicago")));
+        assert!(floating.is_overdue(at, &zone("America/Chicago")));
+        assert!(!floating.is_overdue(at, &zone("America/Denver")));
+    }
+
+    #[test]
+    fn zoned_time_is_overdue_after_its_own_instant_only() {
+        let zoned = zoned_when(3, 9, "America/Chicago");
+        let before: Timestamp = "2026-11-03T14:59:59Z".parse().unwrap();
+        let at: Timestamp = "2026-11-03T15:00:00Z".parse().unwrap();
+
+        for name in ["America/Chicago", "Asia/Tokyo"] {
+            let tz = zone(name);
+            assert!(!zoned.is_overdue(before, &tz), "viewer in {name}");
+            assert!(zoned.is_overdue(at, &tz), "viewer in {name}");
+        }
+    }
+
+    #[test]
+    fn deadline_orders_date_then_floating_then_instant() {
+        let tz = zone("America/Chicago");
+        let due = date_when(3);
+        let floating = When::Floating {
+            datetime: date(2026, 11, 4).at(9, 0, 0, 0),
+        };
+        let absolute = When::Instant {
+            timestamp: "2026-11-05T15:00:00Z".parse().unwrap(),
+        };
+
+        let date_deadline = due.deadline(&tz).unwrap();
+        let floating_deadline = floating.deadline(&tz).unwrap();
+        let instant_deadline = absolute.deadline(&tz).unwrap();
+
+        assert_eq!(
+            date_deadline,
+            local_instant(&tz, date(2026, 11, 4).at(0, 0, 0, 0))
+        );
+        assert!(date_deadline < floating_deadline);
+        assert!(floating_deadline < instant_deadline);
     }
 }

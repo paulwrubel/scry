@@ -67,7 +67,7 @@ Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
 
 ## Web UI
 
-The default build serves the embedded web app at `/` from the same origin as the API, so opening `http://127.0.0.1:8000/` in a browser is enough to start. Sign in with the server's `admin_password`; the browser exchanges it for a short-lived access token and a refresh cookie (see [Browser authentication](#browser-authentication)).
+The default build serves the embedded web app at `/` from the same origin as the API, so opening `http://127.0.0.1:8000/` in a browser is enough to start. Sign in with the server's `admin_password`; the browser exchanges it for a short-lived access token and a refresh cookie (see [Browser authentication](#browser-authentication)). Tasks show their due value on the board, overdue ones in red, and the detail view sets or clears it with a date and an optional time.
 
 The app is a PWA. Use the browser's install control, or add it to your home screen on mobile, to run it in its own window. Installation requires a secure context: HTTPS, or `localhost`/`127.0.0.1` during local development.
 
@@ -91,6 +91,7 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
 
 - **Projects** group related tasks and own optional ordered sections. The built-in `default` project exists automatically.
 - **State**: every task is `open` or `closed`. Closing records whether it was `completed` or `cancelled` and when; reopening restores the task where it was.
+- **Due dates**: a task can carry one due value, either an all-day date or a time. `scry add "call mom" --due tomorrow` and `scry update <handle> --due "fri 5pm"` set it; `--no-due` clears it. Expressions accept ISO dates and datetimes, `today`/`tomorrow`/`yesterday`, weekday names with an optional `next`, relative offsets such as `+3d` or `+2h30m`, times such as `5pm` or `17:00`, and a trailing IANA zone such as `fri 5pm America/Chicago`. A bare date is all-day; a time uses your system zone unless you pass `--floating`. A date counts as due through the end of its local day, a floating time is read in your current zone, and closed tasks are never overdue. `scry list --overdue` shows late tasks, `--due-before <expr>` and `--due-after <expr>` compare deadlines, and `--sort due` orders each section by deadline with undated tasks last.
 - **Task order**: tasks keep an explicit order within their section or **No section**. `scry move` can place one with `--top`/`--first`, `--bottom`/`--last`, `--before <handle>`, or `--after <handle>`; `scry list` shows tasks in manual order.
 - **Sections** are optional ordered groups within a project. Tasks without one appear under **No section**. New sections append and can be reordered with `scry section move` or by dragging in the web UI.
   - Create sections explicitly with `scry section add <name>` or `--new-section <name>`. `--section <name>` must match an existing name exactly.

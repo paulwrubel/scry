@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    tags,\n                    created_at,\n                    updated_at,\n                    external_identity,\n                    external_metadata\n                FROM tasks\n                WHERE project_id = $1\n                ORDER BY position ASC, id ASC\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    tags,\n                    due,\n                    created_at,\n                    updated_at,\n                    external_identity,\n                    external_metadata\n                FROM tasks\n                WHERE section_id = $1\n                ORDER BY position ASC, id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -104,6 +104,17 @@
       },
       {
         "ordinal": 9,
+        "name": "due",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "due"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -114,7 +125,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -125,7 +136,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "external_identity",
         "type_info": "Jsonb",
         "origin": {
@@ -136,7 +147,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "external_metadata",
         "type_info": "Jsonb",
         "origin": {
@@ -162,11 +173,12 @@
       false,
       false,
       false,
+      true,
       false,
       false,
       true,
       true
     ]
   },
-  "hash": "f6064fb624feb8e3626c834fb67f509ad1079c70f2ac23b18daa6adfab8505c2"
+  "hash": "685dbc938f379af2c494f6550562bfaebabd495d3bdcf2f6cdddd33815fde35e"
 }

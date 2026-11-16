@@ -1,4 +1,5 @@
 import type { Automation } from '@/generated/Automation';
+import { nowIso } from '@/utils/date';
 import type { AutomationAction } from '@/generated/AutomationAction';
 import type { AutomationTrigger } from '@/generated/AutomationTrigger';
 import type { Operation } from '@/generated/Operation';
@@ -110,7 +111,7 @@ export function createAutomationOperation(
   trigger: AutomationTrigger,
   actions: AutomationAction[],
 ): Operation {
-  const created_at = new Date().toISOString();
+  const created_at = nowIso();
 
   return {
     operation_id: newId(),
@@ -135,7 +136,7 @@ export function updateAutomationOperation(
     kind: 'update_automation',
     id: automation.id,
     actions,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 

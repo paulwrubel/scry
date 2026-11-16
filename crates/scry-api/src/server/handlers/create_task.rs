@@ -4,6 +4,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use scry_core::models::{ExternalIdentity, ExternalMetadata, Priority, ProjectId, SectionId, Tags};
+use scry_core::temporal::When;
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -19,6 +20,7 @@ pub struct CreateTaskRequest {
     pub description: Option<String>,
     pub priority: Option<Priority>,
     pub tags: Option<Vec<String>>,
+    pub due: Option<When>,
     pub section_id: Option<SectionId>,
     pub new_section: Option<String>,
     pub external_identity: Option<ExternalIdentity>,
@@ -46,6 +48,7 @@ pub async fn create_task(
         description: body.description,
         priority: body.priority,
         tags: body.tags.map(Tags::from),
+        due: body.due,
         section,
         external_identity: body.external_identity,
         external_metadata: body.external_metadata,

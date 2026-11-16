@@ -1,4 +1,5 @@
 import type { Operation } from '@/generated/Operation';
+import { nowIso } from '@/utils/date';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { newId } from '@/utils/uuid';
 
@@ -38,14 +39,14 @@ export function updateProjectOperation(
     id: project.id,
     name: nameChanged ? name : null,
     description: descriptionChanged ? nextDescription : undefined,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 
 export function createProjectOperation(draft: ProjectDraft): Operation {
   const name = draft.name.trim();
   const description = draft.description.trim();
-  const created_at = new Date().toISOString();
+  const created_at = nowIso();
 
   return {
     operation_id: newId(),

@@ -1,3 +1,5 @@
+import { sameDue } from '@/contract/due';
+import { nowIso } from '@/utils/date';
 import { keyBetween } from '@/contract/positions';
 import type { Comment } from '@/generated/Comment';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
@@ -6,6 +8,7 @@ import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
 import type { TaskState } from '@/generated/TaskState';
+import type { When } from '@/generated/When';
 import { newId } from '@/utils/uuid';
 
 export type TaskFieldPatch = {
@@ -13,6 +16,7 @@ export type TaskFieldPatch = {
   description: string;
   priority: Priority;
   tags: string[];
+  due: When | null;
 };
 
 export function nextTaskPosition(tasks: readonly Task[], sectionId: string | null): string {
@@ -32,7 +36,7 @@ export function createTaskOperation(
   title: string,
   externalIdentity: ExternalIdentity | null = null,
 ): Operation {
-  const created_at = new Date().toISOString();
+  const created_at = nowIso();
 
   return {
     operation_id: newId(),
@@ -47,6 +51,7 @@ export function createTaskOperation(
     position: nextTaskPosition(project.tasks, sectionId),
     state: 'open',
     tags: [],
+    due: null,
     created_at,
     updated_at: created_at,
     external_identity: externalIdentity,
@@ -76,8 +81,9 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
   const descriptionChanged = !descriptionLocked && nextDescription !== task.description;
   const priorityChanged = patch.priority !== task.priority;
   const tagsChanged = !sameTags(tags, task.tags);
+  const dueChanged = !sameDue(patch.due, task.due);
 
-  if (!titleChanged && !descriptionChanged && !priorityChanged && !tagsChanged) {
+  if (!titleChanged && !descriptionChanged && !priorityChanged && !tagsChanged && !dueChanged) {
     return null;
   }
 
@@ -90,8 +96,9 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
     description: descriptionChanged ? nextDescription : undefined,
     priority: priorityChanged ? patch.priority : null,
     tags: tagsChanged ? tags : null,
+    due: dueChanged ? patch.due : undefined,
     state: null,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 
@@ -115,7 +122,7 @@ export function externalIdentityOperation(
     state: null,
     external_identity: identity,
     external_metadata: null,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 
@@ -135,7 +142,7 @@ export function moveTaskOperation(
     id: task.id,
     section_id: sectionId,
     position,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 
@@ -177,7 +184,7 @@ export function setTaskStateOperation(task: Task, state: TaskState): Operation |
     priority: null,
     tags: null,
     state,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 
@@ -195,7 +202,7 @@ export function createCommentOperation(task: Task, contents: string): Operation 
   if (text.length === 0) {
     return null;
   }
-  const created_at = new Date().toISOString();
+  const created_at = nowIso();
 
   return {
     operation_id: newId(),
@@ -221,7 +228,7 @@ export function updateCommentOperation(comment: Comment, contents: string): Oper
     kind: 'update_comment',
     id: comment.id,
     contents: text,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 }
 

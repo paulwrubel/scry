@@ -16,6 +16,7 @@ pub(super) fn task_at(id: TaskId, section_id: Option<SectionId>, position: &str)
         position: Position::parse(position).expect("valid position"),
         state: TaskState::Open,
         tags: Tags::default(),
+        due: None,
         created_at,
         updated_at: created_at,
         external_identity: None,
