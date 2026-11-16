@@ -7,9 +7,10 @@ FROM debian:bookworm-slim
 
 # Run as a non-root user. Native-root TLS validates against the operating
 # system trust store, so the image needs ca-certificates present or every
-# outbound HTTPS request fails.
+# outbound HTTPS request fails. tzdata supplies the IANA zone database that
+# jiff uses for local and zoned times.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates passwd \
+    && apt-get install -y --no-install-recommends ca-certificates passwd tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 scry
 
