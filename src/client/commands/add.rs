@@ -1,6 +1,6 @@
 //! `add`.
 
-use super::{parse_due, project_by_name};
+use super::{parse_when_arg, project_by_name};
 use crate::client::{Client, TaskDetails};
 use crate::config::ScryConfig;
 use crate::error::AppError;
@@ -77,7 +77,7 @@ pub async fn add(
 
     let due = input
         .due
-        .map(|expr| parse_due(expr, input.floating))
+        .map(|expr| parse_when_arg(expr, input.floating))
         .transpose()?;
 
     #[derive(Serialize)]

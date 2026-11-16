@@ -1,5 +1,5 @@
 //! `list`.
-use super::{parse_due, project_by_name};
+use super::{parse_when_arg, project_by_name};
 use crate::client::{Client, ProjectDetail};
 use crate::color;
 use crate::config::ScryConfig;
@@ -95,7 +95,7 @@ pub async fn list(
 
     let after = match due_after {
         Some(expr) => Some(
-            parse_due(expr, false)?
+            parse_when_arg(expr, false)?
                 .deadline(&zone)
                 .map_err(|error| AppError::Usage(error.to_string()))?,
         ),
@@ -103,7 +103,7 @@ pub async fn list(
     };
     let before = match due_before {
         Some(expr) => Some(
-            parse_due(expr, false)?
+            parse_when_arg(expr, false)?
                 .deadline(&zone)
                 .map_err(|error| AppError::Usage(error.to_string()))?,
         ),

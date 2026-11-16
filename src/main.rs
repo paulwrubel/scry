@@ -239,6 +239,9 @@ enum Command {
     /// Manage automations in the active or -p project
     #[command(subcommand)]
     Automation(AutomationCommand),
+    /// Manage events in the active or -p project
+    #[command(subcommand)]
+    Event(EventCommand),
     /// Print the bundled documentation (the README) to stdout
     Docs,
     /// Manage the agent skill that teaches coding agents to drive scry
@@ -410,6 +413,66 @@ enum AutomationCommand {
         /// The section for --when enters
         #[arg(long, value_name = "SECTION")]
         section: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum EventCommand {
+    /// List events in the active or -p project
+    List {
+        /// Start of the window (requires --to)
+        #[arg(long, value_name = "EXPR", requires = "to")]
+        from: Option<String>,
+        /// End of the window (requires --from)
+        #[arg(long, value_name = "EXPR", requires = "from")]
+        to: Option<String>,
+    },
+    /// Add an event
+    Add {
+        /// The event title
+        title: String,
+        /// The event description
+        #[arg(long)]
+        description: Option<String>,
+        /// The start: a date for an all-day event, or a date and time
+        #[arg(long, value_name = "EXPR")]
+        start: String,
+        /// The end; defaults to one hour after a timed start, or the whole day for a date
+        #[arg(long, value_name = "EXPR")]
+        end: Option<String>,
+        /// Treat a time-bearing value as floating (no zone)
+        #[arg(long, requires = "start")]
+        floating: bool,
+    },
+    /// Update an event
+    Update {
+        /// The event ID or a unique handle prefix
+        id: Handle,
+        /// New title
+        #[arg(long)]
+        title: Option<String>,
+        /// New description (empty string clears it)
+        #[arg(long)]
+        description: Option<String>,
+        /// New start (requires --end)
+        #[arg(long, value_name = "EXPR", requires = "end")]
+        start: Option<String>,
+        /// New end (requires --start)
+        #[arg(long, value_name = "EXPR", requires = "start")]
+        end: Option<String>,
+        /// Treat a time-bearing value as floating (no zone)
+        #[arg(long, requires = "start")]
+        floating: bool,
+    },
+    /// Delete an event
+    Delete {
+        /// The event ID or a unique handle prefix
+        id: Handle,
+    },
+    /// Show full details for an event
+    Show {
+        /// The event ID or a unique handle prefix
+        id: Handle,
     },
 }
 
@@ -893,6 +956,72 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 output_json,
             )
             .await;
+        }
+        Some(Command::Event(EventCommand::List { from, to })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::event_list(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                from.as_deref(),
+                to.as_deref(),
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Event(EventCommand::Add {
+            title,
+            description,
+            start,
+            end,
+            floating,
+        })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::event_add(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                title,
+                description.as_deref(),
+                start,
+                end.as_deref(),
+                *floating,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Event(EventCommand::Update {
+            id,
+            title,
+            description,
+            start,
+            end,
+            floating,
+        })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::event_update(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                id,
+                title.as_deref(),
+                description.as_deref(),
+                start.as_deref(),
+                end.as_deref(),
+                *floating,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Event(EventCommand::Delete { id })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::event_delete(&client, &config, cli.project.as_deref(), id, output_json)
+                .await;
+        }
+        Some(Command::Event(EventCommand::Show { id })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::event_show(&client, &config, cli.project.as_deref(), id, output_json)
+                .await;
         }
         Some(Command::Export) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
