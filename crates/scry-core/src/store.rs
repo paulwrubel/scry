@@ -1,7 +1,8 @@
 use crate::error::StorageError;
-use crate::ids::{AutomationId, CommentId, Handle, ProjectId, SectionId, TaskId};
+use crate::ids::{AutomationId, CommentId, EventId, Handle, ProjectId, SectionId, TaskId};
 use crate::models::{
-    Automation, Change, Comment, Entity, EntityType, Project, ProjectSnapshot, Section, Task,
+    Automation, Change, Comment, Entity, EntityType, Event, Project, ProjectSnapshot, Section,
+    Task,
 };
 use async_trait::async_trait;
 use jiff::Timestamp;
@@ -243,6 +244,43 @@ pub trait Store: Send + Sync {
     async fn delete_automation(
         &self,
         id: AutomationId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<(), StorageError>;
+
+    /// Add an event to a project.
+    async fn create_event(
+        &self,
+        event: Event,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Event, StorageError>;
+
+    /// Get an event by its id.
+    async fn get_event_by_id(
+        &self,
+        id: EventId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Option<Event>, StorageError>;
+
+    /// List all events in a project.
+    ///
+    /// Results are ordered by creation time ascending, then event ID ascending.
+    async fn get_all_events_by_project_id(
+        &self,
+        project_id: ProjectId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Vec<Event>, StorageError>;
+
+    /// Write an event's mutable columns: title, description, and interval.
+    async fn update_event(
+        &self,
+        event: Event,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Event, StorageError>;
+
+    /// Delete an event.
+    async fn delete_event(
+        &self,
+        id: EventId,
         tx: Option<&mut PgConnection>,
     ) -> Result<(), StorageError>;
 
