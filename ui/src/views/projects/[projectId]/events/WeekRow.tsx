@@ -1,10 +1,13 @@
 import type { DateTime } from 'luxon';
-import { dayKey } from '@/utils/events/calendar';
+import { useElementHeight } from '@/hooks/useElementHeight';
+import { dayKey, fitLanes } from '@/utils/events/calendar';
 import type { Month, WeekLane } from '@/utils/events/calendar';
 import { DayCell } from './DayCell';
 import { EventBar } from './EventBar';
 
-const LANE_HEIGHT = 'h-5';
+/// One lane slot, in pixels. The measured height divides into this, and the
+/// last whole slot is kept for the overflow count.
+const LANE_HEIGHT = 22;
 
 export type WeekRowProps = {
   week: readonly DateTime[];
@@ -18,6 +21,10 @@ export type WeekRowProps = {
 
 export function WeekRow(props: WeekRowProps) {
   const { week, lanes, month, today, projectId, monthQuery, onSelectDay } = props;
+
+  const { ref, height } = useElementHeight<HTMLDivElement>();
+  const capacity = height === null || height <= 0 ? null : Math.floor(height / LANE_HEIGHT);
+  const { visible, hiddenByDay } = fitLanes(lanes, capacity);
 
   const todayIndex = week.findIndex((day) => day.hasSame(today, 'day'));
 
@@ -36,9 +43,9 @@ export function WeekRow(props: WeekRowProps) {
       </div>
       {/* the bars sit above the day buttons but leave their empty space clickable */}
       <div className="pointer-events-none absolute inset-0 pt-7">
-        <div className="flex flex-col gap-0.5 pt-0.5">
-          {lanes.map((lane, laneIndex) => (
-            <div key={laneIndex} className={`relative ${LANE_HEIGHT}`}>
+        <div ref={ref} className="flex h-full flex-col overflow-hidden">
+          {visible.map((lane, laneIndex) => (
+            <div key={laneIndex} className="relative" style={{ height: LANE_HEIGHT }}>
               {lane.map((placement) => (
                 <EventBar
                   key={placement.event.id}
@@ -49,6 +56,21 @@ export function WeekRow(props: WeekRowProps) {
               ))}
             </div>
           ))}
+          {hiddenByDay.some((count) => count > 0) ? (
+            <div className="relative" style={{ height: LANE_HEIGHT }}>
+              {hiddenByDay.map((count, index) =>
+                count === 0 ? null : (
+                  <span
+                    key={index}
+                    style={{ left: `${(index * 100) / 7}%`, width: `${100 / 7}%` }}
+                    className="text-muted absolute inset-y-0 flex items-center overflow-hidden px-1.5 text-[11px] leading-none whitespace-nowrap"
+                  >
+                    +{count} more
+                  </span>
+                ),
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
       {/* today's outline comes last so a spanned bar cannot paint over it */}

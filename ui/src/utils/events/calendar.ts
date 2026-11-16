@@ -22,6 +22,35 @@ export type EventPlacement = {
 /// One row of bars in a week. Bars in the same lane never overlap.
 export type WeekLane = EventPlacement[];
 
+export type FittedLanes = {
+  visible: WeekLane[];
+  /// Hidden bars per weekday column, 0–6. Zero everywhere when nothing is hidden.
+  hiddenByDay: number[];
+};
+
+/// Keeps only the lanes that fit in `capacity` rows, reserving the last row for
+/// the overflow count. A null capacity means the height is not known yet, so
+/// nothing is hidden.
+export function fitLanes(lanes: readonly WeekLane[], capacity: number | null): FittedLanes {
+  const rows = capacity === null ? lanes.length : Math.max(1, capacity);
+  if (lanes.length <= rows) {
+    return { visible: [...lanes], hiddenByDay: hiddenCount(7) };
+  }
+
+  const hiddenByDay = hiddenCount(7);
+  for (const placement of lanes.slice(rows - 1).flat()) {
+    for (let day = placement.startIndex; day <= placement.endIndex; day += 1) {
+      hiddenByDay[day] += 1;
+    }
+  }
+
+  return { visible: lanes.slice(0, rows - 1), hiddenByDay };
+}
+
+function hiddenCount(columns: number): number[] {
+  return Array.from({ length: columns }, () => 0);
+}
+
 /// The visible month, read from the URL and falling back to the current one so
 /// a default view keeps a clean link.
 export function parseMonth(params: URLSearchParams, now: DateTime = DateTime.now()): Month {
