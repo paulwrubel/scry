@@ -65,6 +65,7 @@ function snapshot(title: string): ProjectSnapshot {
     tasks: [task(title)],
     comments: [comment],
     automations: [],
+    events: [],
   };
 }
 

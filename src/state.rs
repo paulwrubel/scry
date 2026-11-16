@@ -455,6 +455,7 @@ mod tests {
                 updated_at: ts("2026-01-02T00:00:00Z"),
             }],
             automations: Vec::new(),
+            events: Vec::new(),
         };
 
         let state = ProjectState::from_snapshot(snapshot, TaskSortingMode::Manual, &test_zone());
@@ -501,6 +502,7 @@ mod tests {
             ],
             comments: vec![],
             automations: Vec::new(),
+            events: Vec::new(),
         };
 
         let state = ProjectState::from_snapshot(snapshot, TaskSortingMode::Manual, &test_zone());
@@ -531,6 +533,7 @@ mod tests {
             ],
             comments: vec![],
             automations: Vec::new(),
+            events: Vec::new(),
         };
 
         let state = ProjectState::from_snapshot(snapshot, TaskSortingMode::Manual, &test_zone());
@@ -578,6 +581,7 @@ mod tests {
             ],
             comments: vec![],
             automations: Vec::new(),
+            events: Vec::new(),
         }
     }
 
@@ -619,6 +623,7 @@ mod tests {
             ],
             comments: vec![],
             automations: Vec::new(),
+            events: Vec::new(),
         };
 
         let by_title =

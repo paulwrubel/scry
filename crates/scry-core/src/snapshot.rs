@@ -1,7 +1,7 @@
 use crate::error::StorageError;
-use crate::ids::{AutomationId, CommentId, ProjectId, SectionId, TaskId};
+use crate::ids::{AutomationId, CommentId, EventId, ProjectId, SectionId, TaskId};
 use crate::models::{
-    Automation, AutomationAction, AutomationTrigger, Color, Comment, EntityType,
+    Automation, AutomationAction, AutomationTrigger, Color, Comment, EntityType, Event,
     MAX_AUTOMATION_ACTIONS, Project, ProjectSnapshot, Section, Tags, Task,
 };
 use crate::store::Store;
@@ -13,8 +13,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use uuid::Uuid;
 
-pub const SNAPSHOT_VERSION: u32 = 4;
-pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 3;
+pub const SNAPSHOT_VERSION: u32 = 5;
+pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 4;
 
 /// The bare server-wide snapshot: every project document plus the cursor a
 /// client should pull from next.
@@ -135,6 +135,7 @@ pub struct ImportReport {
     pub tasks: usize,
     pub comments: usize,
     pub automations: usize,
+    pub events: usize,
     /// Fresh ids assigned because the incoming id was tombstoned or its parent
     /// was reminted. Omitted from JSON when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -149,6 +150,7 @@ pub struct ImportState {
     pub tasks: Vec<Task>,
     pub comments: Vec<Comment>,
     pub automations: Vec<Automation>,
+    pub events: Vec<Event>,
     pub tombstones: HashSet<(EntityType, Uuid)>,
 }
 
@@ -203,6 +205,11 @@ pub fn plan_import(
             deleted_ids.insert((EntityType::Automation, automation.id));
         }
     }
+    for event in &state.events {
+        if deleted_projects.contains(&event.project_id) {
+            deleted_ids.insert((EntityType::Event, event.id));
+        }
+    }
 
     let is_dead = |entity_type: EntityType, id: Uuid| {
         state.tombstones.contains(&(entity_type, id)) || deleted_ids.contains(&(entity_type, id))
@@ -237,6 +244,12 @@ pub fn plan_import(
         .iter()
         .filter(|automation| !deleted_ids.contains(&(EntityType::Automation, automation.id)))
         .map(|automation| (automation.id, automation))
+        .collect();
+    let live_events: HashMap<EventId, &Event> = state
+        .events
+        .iter()
+        .filter(|event| !deleted_ids.contains(&(EntityType::Event, event.id)))
+        .map(|event| (event.id, event))
         .collect();
 
     // imported entities must stay inside the project their ops target, so track
@@ -782,6 +795,67 @@ pub fn plan_import(
                 }));
             plan.report.automations += 1;
         }
+
+        for incoming_event in &document.events {
+            let original_id = incoming_event.id;
+            let reminted = project_reminted || is_dead(EntityType::Event, original_id);
+            let live_event = live_events.get(&original_id).copied().filter(|_| !reminted);
+
+            // apply-time creates drop empty descriptions, so compare the same
+            // normalized form
+            let description = incoming_event
+                .description
+                .clone()
+                .filter(|description| !description.is_empty());
+
+            if let Some(live_event) = live_event {
+                if live_event.project_id != target_project_id {
+                    return Err(StorageError::Conflict(format!(
+                        "event {original_id} belongs to a different project"
+                    )));
+                }
+
+                let title = changed(&live_event.title, &incoming_event.title);
+                let description = changed(&live_event.description, &description);
+                let interval = changed(&live_event.interval, &incoming_event.interval);
+
+                if title.is_some() || description.is_some() || interval.is_some() {
+                    plan.operations.push(operation(OperationKind::UpdateEvent {
+                        id: live_event.id,
+                        title,
+                        description,
+                        interval,
+                        updated_at: Some(incoming_event.updated_at),
+                    }));
+                }
+
+                plan.report.events += 1;
+                continue;
+            }
+
+            let event_id = if reminted {
+                let fresh = Uuid::new_v4();
+                plan.report.remapped.push(ImportIdRemap {
+                    entity_type: EntityType::Event,
+                    from: original_id,
+                    to: fresh,
+                });
+                fresh
+            } else {
+                original_id
+            };
+
+            plan.operations.push(operation(OperationKind::CreateEvent {
+                id: event_id,
+                project_id: target_project_id,
+                title: incoming_event.title.clone(),
+                description,
+                interval: incoming_event.interval.clone(),
+                created_at: incoming_event.created_at,
+                updated_at: Some(incoming_event.updated_at),
+            }));
+            plan.report.events += 1;
+        }
     }
 
     Ok(plan)
@@ -944,7 +1018,7 @@ mod tests {
         TaskState,
     };
     use crate::position::Position;
-    use crate::temporal::When;
+    use crate::temporal::{Interval, When};
     use jiff::Timestamp;
     use jiff::civil::date;
     use serde_json::json;
@@ -1030,6 +1104,7 @@ mod tests {
             tasks: vec![task],
             comments: vec![comment],
             automations: Vec::new(),
+            events: Vec::new(),
         }
     }
 
@@ -1044,12 +1119,21 @@ mod tests {
 
     #[test]
     fn parse_rejects_unsupported_version() {
-        let v5 = r#"{ "version": 5, "projects": [] }"#;
+        let v6 = r#"{ "version": 6, "projects": [] }"#;
 
         assert!(matches!(
-            parse_file(v5),
+            parse_file(v6),
             Err(SnapshotFileError::UnsupportedVersion {
-                found: 5,
+                found: 6,
+                supported: SNAPSHOT_VERSION
+            })
+        ));
+
+        let v3 = r#"{ "version": 3, "projects": [] }"#;
+        assert!(matches!(
+            parse_file(v3),
+            Err(SnapshotFileError::UnsupportedVersion {
+                found: 3,
                 supported: SNAPSHOT_VERSION
             })
         ));
@@ -1121,40 +1205,25 @@ mod tests {
 
         let mut value = serde_json::to_value(snapshot_file(vec![document]))
             .expect("snapshot file should serialize");
-        value["version"] = json!(3);
+        value["version"] = json!(4);
         let project = value["projects"]
             .as_array_mut()
             .expect("projects should be an array")
             .first_mut()
             .and_then(|project| project.as_object_mut())
             .expect("project should be an object");
-        project.remove("updated_at");
-        for list in ["sections", "tasks", "comments", "automations"] {
-            let entities = project
-                .get_mut(list)
-                .and_then(|value| value.as_array_mut())
-                .expect("entity list should be an array");
-            for entity in entities {
-                entity
-                    .as_object_mut()
-                    .expect("entity should be an object")
-                    .remove("updated_at");
-            }
-        }
+        // version 4 predates events; the field defaults back to empty
+        project.remove("events");
 
         let parsed = parse_file(&value.to_string()).expect("previous version should parse");
 
-        assert_eq!(parsed.version, 3);
+        assert_eq!(parsed.version, 4);
         let document = &parsed.projects[0];
         assert_eq!(document.sections.len(), 1);
         assert_eq!(document.tasks.len(), 1);
         assert_eq!(document.comments.len(), 1);
         assert_eq!(document.automations.len(), 1);
-        assert!(document.project.updated_at > at());
-        assert!(document.sections[0].updated_at > at());
-        assert!(document.tasks[0].updated_at > at());
-        assert!(document.comments[0].updated_at > at());
-        assert!(document.automations[0].updated_at > at());
+        assert!(document.events.is_empty());
     }
 
     #[test]
@@ -1180,6 +1249,43 @@ mod tests {
             parsed.projects[0].automations,
             original.projects[0].automations
         );
+    }
+
+    #[test]
+    fn snapshot_file_round_trips_events() {
+        let mut document = full_project_doc(PROJECT_ID, "alpha");
+        let event = Event {
+            id: uuid("e1b2c3d4-0000-4000-8000-000000000007"),
+            project_id: document.project.id,
+            title: "standup".to_string(),
+            description: Some("daily".to_string()),
+            interval: Interval::new(
+                When::Zoned(
+                    crate::temporal::Zoned::new(
+                        date(2026, 11, 16).at(9, 0, 0, 0),
+                        "America/Chicago",
+                    )
+                    .unwrap(),
+                ),
+                When::Zoned(
+                    crate::temporal::Zoned::new(
+                        date(2026, 11, 16).at(10, 0, 0, 0),
+                        "America/Chicago",
+                    )
+                    .unwrap(),
+                ),
+            )
+            .unwrap(),
+            created_at: at(),
+            updated_at: at(),
+        };
+        document.events.push(event.clone());
+        let original = snapshot_file(vec![document]);
+
+        let serialized = serde_json::to_string(&original).expect("snapshot file should serialize");
+        let parsed = parse_file(&serialized).expect("current version should parse");
+
+        assert_eq!(parsed.projects[0].events, vec![event]);
     }
 
     #[test]
@@ -1381,7 +1487,9 @@ mod import_tests {
     use super::*;
     use crate::models::{ExternalIdentity, ExternalMetadata, Priority, ProjectSnapshot, TaskState};
     use crate::position::Position;
+    use crate::temporal::{Interval, When};
     use jiff::Timestamp;
+    use jiff::civil::date;
 
     fn uuid(n: u128) -> Uuid {
         Uuid::from_u128(n)
@@ -1454,6 +1562,7 @@ mod import_tests {
             tasks,
             comments,
             automations: Vec::new(),
+            events: Vec::new(),
         }
     }
 
@@ -1478,6 +1587,7 @@ mod import_tests {
             tasks,
             comments,
             automations: Vec::new(),
+            events: Vec::new(),
             tombstones: HashSet::new(),
         }
     }
@@ -2114,6 +2224,108 @@ mod import_tests {
             }]
         );
         assert_eq!(plan.report.automations, 1);
+    }
+
+    #[test]
+    fn new_project_event_is_created() {
+        let project_id = uuid(1);
+        let event_id = uuid(4);
+        let interval = Interval::from_start(When::Date {
+            date: date(2026, 11, 16),
+        })
+        .unwrap();
+
+        let mut incoming_document = document(project(project_id, "p"), vec![], vec![], vec![]);
+        incoming_document.events.push(Event {
+            id: event_id,
+            project_id,
+            title: "standup".to_string(),
+            description: None,
+            interval: interval.clone(),
+            created_at: at(),
+            updated_at: at(),
+        });
+
+        let incoming = file(vec![incoming_document]);
+        let state = import_state(vec![], vec![], vec![], vec![]);
+
+        let plan = plan_import(&incoming, &state, ImportMode::Merge).unwrap();
+
+        let (id, created_project_id, created_interval) = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::CreateEvent {
+                    id,
+                    project_id,
+                    interval,
+                    ..
+                } => Some((id, project_id, interval)),
+                _ => None,
+            })
+            .expect("expected CreateEvent");
+
+        assert_eq!(*id, event_id);
+        assert_eq!(*created_project_id, project_id);
+        assert_eq!(created_interval, &interval);
+        assert_eq!(plan.report.events, 1);
+    }
+
+    #[test]
+    fn changed_import_event_updates_the_live_one() {
+        let project_id = uuid(1);
+        let event_id = uuid(4);
+        let live_interval = Interval::from_start(When::Date {
+            date: date(2026, 11, 16),
+        })
+        .unwrap();
+        let incoming_interval = Interval::from_start(When::Date {
+            date: date(2026, 11, 20),
+        })
+        .unwrap();
+
+        let mut incoming_document = document(project(project_id, "p"), vec![], vec![], vec![]);
+        incoming_document.events.push(Event {
+            id: event_id,
+            project_id,
+            title: "renamed".to_string(),
+            description: None,
+            interval: incoming_interval.clone(),
+            created_at: at(),
+            updated_at: at(),
+        });
+
+        let incoming = file(vec![incoming_document]);
+        let mut state = import_state(vec![project(project_id, "p")], vec![], vec![], vec![]);
+        state.events.push(Event {
+            id: event_id,
+            project_id,
+            title: "standup".to_string(),
+            description: None,
+            interval: live_interval,
+            created_at: at(),
+            updated_at: at(),
+        });
+
+        let plan = plan_import(&incoming, &state, ImportMode::Merge).unwrap();
+
+        let (id, title, interval) = plan
+            .operations
+            .iter()
+            .find_map(|operation| match &operation.kind {
+                OperationKind::UpdateEvent {
+                    id,
+                    title,
+                    interval,
+                    ..
+                } => Some((id, title, interval)),
+                _ => None,
+            })
+            .expect("expected UpdateEvent");
+
+        assert_eq!(*id, event_id);
+        assert_eq!(title.as_deref(), Some("renamed"));
+        assert_eq!(interval, &Some(incoming_interval));
     }
 
     #[test]

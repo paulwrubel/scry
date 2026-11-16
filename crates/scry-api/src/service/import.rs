@@ -66,6 +66,7 @@ impl ProjectService {
         let mut tasks = Vec::new();
         let mut comments = Vec::new();
         let mut automations = Vec::new();
+        let mut events = Vec::new();
 
         for project in &projects {
             sections.extend(
@@ -86,6 +87,11 @@ impl ProjectService {
             automations.extend(
                 self.store
                     .get_all_automations_by_project_id(project.id, Some(&mut **tx))
+                    .await?,
+            );
+            events.extend(
+                self.store
+                    .get_all_events_by_project_id(project.id, Some(&mut **tx))
                     .await?,
             );
         }
@@ -117,6 +123,12 @@ impl ProjectService {
                     .iter()
                     .map(|automation| (EntityType::Automation, automation.id)),
             );
+            referenced.extend(
+                document
+                    .events
+                    .iter()
+                    .map(|event| (EntityType::Event, event.id)),
+            );
         }
 
         let mut tombstones = HashSet::new();
@@ -136,6 +148,7 @@ impl ProjectService {
             tasks,
             comments,
             automations,
+            events,
             tombstones,
         })
     }

@@ -17,6 +17,7 @@ export function makeProject(overrides: Partial<ProjectSnapshot> = {}): ProjectSn
     tasks: [],
     comments: [],
     automations: [],
+    events: [],
     ...overrides,
   };
 }

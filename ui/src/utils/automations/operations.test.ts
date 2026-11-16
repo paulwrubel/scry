@@ -66,6 +66,7 @@ function project(automations: Automation[] = []): ProjectSnapshot {
     tasks: [],
     comments: [],
     automations,
+    events: [],
   };
 }
 

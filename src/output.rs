@@ -4,9 +4,9 @@ use crate::error::AppError;
 use crate::state::TaskWithComments;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use scry_core::format::format_when;
+use scry_core::format::{format_interval, format_when};
 use scry_core::ids::TaskId;
-use scry_core::models::{Section, TaskState};
+use scry_core::models::{Event, Section, TaskState};
 use std::collections::HashMap;
 
 /// Print a value as compact JSON on stdout.
@@ -22,6 +22,16 @@ pub fn section_label(section: &Option<Section>) -> &str {
     section
         .as_ref()
         .map_or("No section", |section| section.name.as_str())
+}
+
+/// Render one event line for the human `event list` output.
+pub fn event_line(event: &Event, handle: &str, now: Timestamp, zone: &TimeZone) -> String {
+    format!(
+        "  {}  {}  {}",
+        handle,
+        event.title,
+        format_interval(&event.interval, now, zone)
+    )
 }
 
 /// Render one task line for the human `list` output.

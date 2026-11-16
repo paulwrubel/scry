@@ -61,6 +61,8 @@ scry -p myapp list --section "in progress"
 scry -p myapp automation set --when closed --move-to "in progress"
 scry -p myapp automation set --when enters --section Review --close
 scry -p myapp automation list
+scry -p myapp event add "standup" --start "tomorrow 9am"
+scry -p myapp event list
 ```
 
 Need a server? See [Docker](#docker) or [Server and API](#server-and-api).
@@ -85,7 +87,7 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
 
 ## Backup and restore
 
-`scry export > backup.json` writes every project, with its sections, tasks, comments, and automations, as JSON; `scry import < backup.json` merges it back. Put `-p <name>` before `export` to back up a single project.
+`scry export > backup.json` writes every project, with its sections, tasks, comments, automations, and events, as JSON; `scry import < backup.json` merges it back. Put `-p <name>` before `export` to back up a single project.
 
 ## Core concepts
 
@@ -106,6 +108,9 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
   - Actions do not trigger other rules.
   - A section referenced by an automation cannot be deleted or merged until the rule is removed or changed.
   - Manage with `scry automation list`, `scry automation set --when <trigger> <action>`, and `scry automation remove --when <trigger>`. Use `--section <name>` with `--when enters`, and `--move-to <name>` for the action target.
+- **Events** are project-scoped calendar entries with a title, an optional description, and one start and end.
+  - `scry event add "standup" --start "tomorrow 9am"` creates a one-hour event; `--end` sets an explicit end, and a bare date start such as `--start tomorrow` makes it all-day. Times use your system zone unless you pass `--floating`.
+  - `scry event list` shows a project's events in start order, and `--from <expr> --to <expr>` keeps only those overlapping that window. `scry event show <handle>`, `scry event update`, and `scry event delete` work on one event.
 - **Active project** works like a kubectl context. `scry project use <name>` verifies the name with the server and stores the choice per machine in `$XDG_STATE_HOME/scry/state.toml` (or the `state_file` config option), not in the backend. Task commands use it unless you pass `-p/--project`.
 
 ## External task links

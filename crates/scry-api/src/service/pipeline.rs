@@ -1,9 +1,9 @@
 use crate::error::ServiceError;
 use jiff::Timestamp;
 use scry_core::error::StorageError;
-use scry_core::ids::{CommentId, ProjectId, SectionId, TaskId};
+use scry_core::ids::{CommentId, EventId, ProjectId, SectionId, TaskId};
 use scry_core::models::{
-    Change, ChangeKind, Color, Comment, Entity, FieldValues, Project, Section, Task,
+    Change, ChangeKind, Color, Comment, Entity, Event, FieldValues, Project, Section, Task,
 };
 use scry_core::position::{Position, key_between};
 use scry_core::sync::ack::{AcknowledgmentStatus, ApplyOutcome};
@@ -165,6 +165,10 @@ impl ProjectService {
                     .store
                     .get_all_automations_by_project_id(project_id, Some(&mut **tx))
                     .await?;
+                let events = self
+                    .store
+                    .get_all_events_by_project_id(project_id, Some(&mut **tx))
+                    .await?;
 
                 entities.extend(
                     sections
@@ -182,6 +186,7 @@ impl ProjectService {
                         .into_iter()
                         .map(|automation| Entity::Automation(automation.id)),
                 );
+                entities.extend(events.into_iter().map(|event| Entity::Event(event.id)));
             }
             Entity::Task(task_id) => {
                 let comments = self
@@ -195,7 +200,7 @@ impl ProjectService {
                 );
             }
             // a section's tasks survive and are relocated instead of tombstoned
-            Entity::Section(_) | Entity::Comment(_) | Entity::Automation(_) => {}
+            Entity::Section(_) | Entity::Comment(_) | Entity::Automation(_) | Entity::Event(_) => {}
         }
 
         Ok(entities)
@@ -352,6 +357,13 @@ impl ProjectService {
             .ok_or_else(|| {
                 ServiceError::Storage(StorageError::NotFound(format!("comment {id} not found")))
             })
+    }
+
+    pub(super) async fn require_event(&self, id: EventId) -> Result<Event, ServiceError> {
+        self.store
+            .get_event_by_id(id, None)
+            .await?
+            .ok_or(ServiceError::EventNotFound { id })
     }
 
     pub(super) async fn require_section(&self, id: SectionId) -> Result<Section, ServiceError> {

@@ -101,6 +101,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     ],
     comments: [comment({ id: 'comment-1', contents: 'A comment' })],
     automations: [],
+    events: [],
     ...overrides,
   };
 }

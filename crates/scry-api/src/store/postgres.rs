@@ -5,11 +5,11 @@ use jiff::Timestamp;
 use jiff_sqlx::Timestamp as SqlxTimestamp;
 use jiff_sqlx::ToSqlx;
 use scry_core::error::StorageError;
-use scry_core::ids::{AutomationId, CommentId, Handle, ProjectId, SectionId, TaskId};
+use scry_core::ids::{AutomationId, CommentId, EventId, Handle, ProjectId, SectionId, TaskId};
 use scry_core::models::{
     Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Comment, Entity,
-    EntityType, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectSnapshot, Section,
-    Tags, Task, TaskState,
+    EntityType, Event, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectSnapshot,
+    Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
 use scry_core::store::Store;
@@ -294,6 +294,29 @@ fn automation_from_fields(
         project_id,
         trigger,
         actions,
+        created_at: created_at.to_jiff(),
+        updated_at: updated_at.to_jiff(),
+    })
+}
+
+fn event_from_fields(
+    id: EventId,
+    project_id: ProjectId,
+    title: String,
+    description: Option<String>,
+    event_interval: serde_json::Value,
+    created_at: SqlxTimestamp,
+    updated_at: SqlxTimestamp,
+) -> Result<Event, StorageError> {
+    let interval = serde_json::from_value(event_interval)
+        .map_err(|e| StorageError::Database(format!("event {id} has an invalid interval: {e}")))?;
+
+    Ok(Event {
+        id,
+        project_id,
+        title,
+        description,
+        interval,
         created_at: created_at.to_jiff(),
         updated_at: updated_at.to_jiff(),
     })
@@ -1408,6 +1431,203 @@ impl Store for PostgresStore {
         Ok(())
     }
 
+    async fn create_event(
+        &self,
+        event: Event,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Event, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        let event_interval = serde_json::to_value(&event.interval).map_err(|e| {
+            StorageError::Database(format!("failed to serialize event interval: {}", e))
+        })?;
+
+        match sqlx::query!(
+            r#"
+                INSERT INTO events (id, project_id, title, description, event_interval, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            "#,
+            event.id,
+            event.project_id,
+            event.title.as_str(),
+            event.description.as_deref(),
+            event_interval,
+            event.created_at.to_sqlx(),
+            event.updated_at.to_sqlx(),
+        )
+        .execute(&mut *conn)
+        .await
+        {
+            Ok(result) => match result.rows_affected() {
+                1 => Ok(event),
+                n => Err(StorageError::Database(format!(
+                    "failed to create event: expected 1 row affected, got {n}"
+                ))),
+            },
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to create event: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn get_event_by_id(
+        &self,
+        id: EventId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Option<Event>, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        match sqlx::query!(
+            r#"
+                SELECT
+                    id,
+                    project_id,
+                    title,
+                    description,
+                    event_interval,
+                    created_at,
+                    updated_at
+                FROM events
+                WHERE id = $1
+            "#,
+            id,
+        )
+        .fetch_optional(&mut *conn)
+        .await
+        {
+            Ok(Some(row)) => Ok(Some(event_from_fields(
+                row.id,
+                row.project_id,
+                row.title,
+                row.description,
+                row.event_interval,
+                row.created_at,
+                row.updated_at,
+            )?)),
+            Ok(None) => Ok(None),
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to look up event: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn get_all_events_by_project_id(
+        &self,
+        project_id: ProjectId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Vec<Event>, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        match sqlx::query!(
+            r#"
+                SELECT
+                    id,
+                    project_id,
+                    title,
+                    description,
+                    event_interval,
+                    created_at,
+                    updated_at
+                FROM events
+                WHERE project_id = $1
+                ORDER BY created_at ASC, id ASC
+            "#,
+            project_id,
+        )
+        .fetch_all(&mut *conn)
+        .await
+        {
+            Ok(rows) => rows
+                .into_iter()
+                .map(|row| {
+                    event_from_fields(
+                        row.id,
+                        row.project_id,
+                        row.title,
+                        row.description,
+                        row.event_interval,
+                        row.created_at,
+                        row.updated_at,
+                    )
+                })
+                .collect::<Result<Vec<Event>, StorageError>>(),
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to list events: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn update_event(
+        &self,
+        event: Event,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<Event, StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        let event_interval = serde_json::to_value(&event.interval).map_err(|e| {
+            StorageError::Database(format!("failed to serialize event interval: {}", e))
+        })?;
+
+        match sqlx::query!(
+            r#"
+                UPDATE events
+                SET title = $1, description = $2, event_interval = $3, updated_at = $4
+                WHERE id = $5
+            "#,
+            event.title.as_str(),
+            event.description.as_deref(),
+            event_interval,
+            event.updated_at.to_sqlx(),
+            event.id,
+        )
+        .execute(&mut *conn)
+        .await
+        {
+            Ok(result) => match result.rows_affected() {
+                0 => Err(StorageError::NotFound(format!(
+                    "event with id '{}' not found",
+                    event.id
+                ))),
+                _ => Ok(event),
+            },
+            Err(e) => Err(StorageError::Database(format!(
+                "failed to update event: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn delete_event(
+        &self,
+        id: EventId,
+        tx: Option<&mut PgConnection>,
+    ) -> Result<(), StorageError> {
+        let mut conn = self.connection(tx).await?;
+
+        let result = sqlx::query!(
+            r#"
+                DELETE FROM events
+                WHERE id = $1
+            "#,
+            id,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to delete event: {}", e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StorageError::NotFound(format!(
+                "event with id '{}' not found",
+                id
+            )));
+        }
+
+        Ok(())
+    }
+
     async fn create_project(
         &self,
         project: Project,
@@ -1484,17 +1704,18 @@ impl Store for PostgresStore {
         project_id: ProjectId,
         tx: Option<&mut PgConnection>,
     ) -> Result<ProjectSnapshot, StorageError> {
-        // The five reads are independent; overlapping them hides per-query
+        // The six reads are independent; overlapping them hides per-query
         // latency when Postgres is reached over the network. A missing project
-        // still pays for the four child reads, which is fine on the rare 404 path.
+        // still pays for the five child reads, which is fine on the rare 404 path.
         // a caller's transaction is one connection, so those reads serialize.
-        let (project, sections, tasks, comments, automations) = match tx {
+        let (project, sections, tasks, comments, automations, events) = match tx {
             None => tokio::try_join!(
                 self.get_project_by_id(project_id, None),
                 self.get_all_sections_by_project_id(project_id, None),
                 self.get_all_tasks_by_project_id(project_id, None),
                 self.get_all_comments_by_project_id(project_id, None),
                 self.get_all_automations_by_project_id(project_id, None),
+                self.get_all_events_by_project_id(project_id, None),
             )?,
             Some(tx) => {
                 let project = self.get_project_by_id(project_id, Some(&mut *tx)).await?;
@@ -1510,7 +1731,10 @@ impl Store for PostgresStore {
                 let automations = self
                     .get_all_automations_by_project_id(project_id, Some(&mut *tx))
                     .await?;
-                (project, sections, tasks, comments, automations)
+                let events = self
+                    .get_all_events_by_project_id(project_id, Some(&mut *tx))
+                    .await?;
+                (project, sections, tasks, comments, automations, events)
             }
         };
         let project = project.ok_or_else(|| {
@@ -1523,6 +1747,7 @@ impl Store for PostgresStore {
             tasks,
             comments,
             automations,
+            events,
         })
     }
 

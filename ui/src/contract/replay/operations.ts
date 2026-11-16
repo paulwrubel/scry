@@ -37,7 +37,14 @@ export function applyOperation(state: ClientState, operation: Operation): void {
       if (existing) {
         setProject(existing, project);
       } else {
-        state.projects.push({ ...project, sections: [], tasks: [], comments: [], automations: [] });
+        state.projects.push({
+          ...project,
+          sections: [],
+          tasks: [],
+          comments: [],
+          automations: [],
+          events: [],
+        });
       }
       return;
     }

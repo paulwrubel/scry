@@ -1,6 +1,6 @@
 use scry_core::config::ConfigError;
 use scry_core::error::StorageError;
-use scry_core::ids::{AutomationId, TaskId};
+use scry_core::ids::{AutomationId, EventId, TaskId};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -122,6 +122,9 @@ pub enum ServiceError {
     AutomationNotFound {
         id: AutomationId,
     },
+    EventNotFound {
+        id: EventId,
+    },
     Storage(StorageError),
 }
 
@@ -180,6 +183,7 @@ impl fmt::Display for ServiceError {
                 "Section \"{section}\" is used by an automation. Remove or change that automation first."
             ),
             Self::AutomationNotFound { id } => write!(f, "Automation {id} not found."),
+            Self::EventNotFound { id } => write!(f, "Event {id} not found."),
             Self::Storage(error) => write!(f, "{error}"),
         }
     }
@@ -193,6 +197,7 @@ impl ServiceError {
             Self::SectionNotFound { .. } | Self::TaskNotFound { .. } => "not_found",
             Self::TaskHandleNotFound { .. } | Self::CommentHandleNotFound { .. } => "not_found",
             Self::AutomationNotFound { .. } => "not_found",
+            Self::EventNotFound { .. } => "not_found",
             Self::SectionNameTaken { .. }
             | Self::SectionMergeIntoItself { .. }
             | Self::SectionMoveAnchorItself { .. }

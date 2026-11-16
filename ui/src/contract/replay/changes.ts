@@ -55,7 +55,14 @@ export function applyProjectChange(state: ClientState, change: Change): void {
       if (existing) {
         setProject(existing, project);
       } else {
-        state.projects.push({ ...project, sections: [], tasks: [], comments: [], automations: [] });
+        state.projects.push({
+          ...project,
+          sections: [],
+          tasks: [],
+          comments: [],
+          automations: [],
+          events: [],
+        });
       }
       return;
     }

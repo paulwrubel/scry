@@ -44,6 +44,7 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
     ],
     comments: [],
     automations: [],
+    events: [],
     ...overrides,
   };
 }

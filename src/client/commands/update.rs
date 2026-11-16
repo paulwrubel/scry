@@ -9,7 +9,7 @@ use crate::client::{Client, TaskDetails};
 use crate::error::AppError;
 use crate::output::print_json;
 
-use super::parse_due;
+use super::parse_when_arg;
 
 /// Input for the `update` command.
 pub struct UpdateTask<'a> {
@@ -95,7 +95,7 @@ pub async fn update(
     });
 
     let due: Option<Option<When>> = match (input.due, input.no_due) {
-        (Some(expr), false) => Some(Some(parse_due(expr, input.floating)?)),
+        (Some(expr), false) => Some(Some(parse_when_arg(expr, input.floating)?)),
         (None, true) => Some(None),
         (None, false) => None,
         (Some(_), true) => {

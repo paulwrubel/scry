@@ -24,6 +24,9 @@ pub use duplicate::duplicate;
 mod export;
 pub use export::export;
 
+mod event;
+pub use event::{event_add, event_delete, event_list, event_show, event_update};
+
 mod import;
 pub use import::import;
 
@@ -114,8 +117,8 @@ pub(crate) fn system_zone() -> Result<String, AppError> {
         })
 }
 
-/// Parse a CLI due expression against the system zone.
-pub(crate) fn parse_due(expr: &str, floating: bool) -> Result<When, AppError> {
+/// Parse a CLI date/time expression against the system zone.
+pub(crate) fn parse_when_arg(expr: &str, floating: bool) -> Result<When, AppError> {
     parse_when(expr, Timestamp::now(), &system_zone()?, floating)
         .map_err(|error| AppError::Usage(error.to_string()))
 }

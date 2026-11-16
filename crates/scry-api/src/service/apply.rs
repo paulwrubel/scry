@@ -1,12 +1,12 @@
 use super::fields::{
-    comment_field_updates, project_field_updates, section_field_updates, subject,
-    task_field_updates, update_changes_locked_external_field,
+    comment_field_updates, event_field_updates, project_field_updates, section_field_updates,
+    subject, task_field_updates, update_changes_locked_external_field,
 };
 use super::{AutomationEvaluation, ProjectService, position_error};
 use crate::error::ServiceError;
 use jiff::Timestamp;
 use scry_core::models::{
-    Automation, ChangeKind, Comment, Entity, EntityType, Project, Section, Task,
+    Automation, ChangeKind, Comment, Entity, EntityType, Event, Project, Section, Task,
 };
 use scry_core::position::n_keys_between;
 use scry_core::sync::ack::{OperationAcknowledgment, RejectionReason};
@@ -19,7 +19,10 @@ fn rejected(
     op: &Operation,
     reason: RejectionReason,
 ) -> Result<(OperationAcknowledgment, Option<i64>), ServiceError> {
-    Ok((OperationAcknowledgment::rejected(op.operation_id, reason), None))
+    Ok((
+        OperationAcknowledgment::rejected(op.operation_id, reason),
+        None,
+    ))
 }
 
 impl ProjectService {
@@ -608,6 +611,94 @@ impl ProjectService {
 
                 if existed {
                     self.store.delete_automation(*id, Some(&mut **tx)).await?;
+                }
+                seqs.into_iter().max()
+            }
+            OperationKind::CreateEvent {
+                id,
+                project_id,
+                title,
+                description,
+                interval,
+                created_at,
+                updated_at,
+            } => {
+                if self
+                    .store
+                    .get_project_by_id(*project_id, Some(&mut **tx))
+                    .await?
+                    .is_none()
+                {
+                    return rejected(op, RejectionReason::NotFound);
+                }
+                if self
+                    .store
+                    .is_tombstoned(EntityType::Project, *project_id, Some(&mut **tx))
+                    .await?
+                {
+                    return rejected(op, RejectionReason::Tombstoned);
+                }
+
+                let event = Event {
+                    id: *id,
+                    project_id: *project_id,
+                    title: title.clone(),
+                    description: description
+                        .clone()
+                        .filter(|description| !description.is_empty()),
+                    interval: interval.clone(),
+                    created_at: *created_at,
+                    updated_at: (*updated_at).unwrap_or(*created_at),
+                };
+                self.store
+                    .create_event(event.clone(), Some(&mut **tx))
+                    .await?;
+
+                let field_values =
+                    serde_json::to_value(&event).expect("an event serializes to JSON");
+                Some(
+                    self.record_change(
+                        tx,
+                        op,
+                        Entity::Event(*id),
+                        ChangeKind::Create,
+                        field_values,
+                    )
+                    .await?,
+                )
+            }
+            OperationKind::UpdateEvent { id, updated_at, .. } => {
+                let Some(mut event) = self.store.get_event_by_id(*id, Some(&mut **tx)).await?
+                else {
+                    return rejected(op, RejectionReason::NotFound);
+                };
+
+                let mut field_values = event_field_updates(&mut event, &op.kind);
+                event.updated_at = (*updated_at).unwrap_or_else(Timestamp::now);
+                field_values["updated_at"] = json!(event.updated_at);
+                self.store.update_event(event, Some(&mut **tx)).await?;
+                Some(
+                    self.record_change(
+                        tx,
+                        op,
+                        Entity::Event(*id),
+                        ChangeKind::Update,
+                        field_values,
+                    )
+                    .await?,
+                )
+            }
+            OperationKind::DeleteEvent { id } => {
+                let existed = self
+                    .store
+                    .get_event_by_id(*id, Some(&mut **tx))
+                    .await?
+                    .is_some();
+                let entities = self.affected_entities(tx, Entity::Event(*id)).await?;
+                let seqs = self.record_deletes(tx, op, &entities).await?;
+
+                if existed {
+                    self.store.delete_event(*id, Some(&mut **tx)).await?;
                 }
                 seqs.into_iter().max()
             }

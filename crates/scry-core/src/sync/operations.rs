@@ -1,10 +1,10 @@
-use crate::ids::{AutomationId, CommentId, ProjectId, SectionId, TaskId};
+use crate::ids::{AutomationId, CommentId, EventId, ProjectId, SectionId, TaskId};
 use crate::models::{
     AutomationAction, AutomationTrigger, Color, ExternalIdentity, ExternalMetadata, Priority, Tags,
     TaskState,
 };
 use crate::position::Position;
-use crate::temporal::When;
+use crate::temporal::{Interval, When};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -303,6 +303,38 @@ pub enum OperationKind {
     DeleteAutomation {
         id: AutomationId,
     },
+    CreateEvent {
+        id: EventId,
+        project_id: ProjectId,
+        title: String,
+        description: Option<String>,
+        interval: Interval,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        created_at: Timestamp,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
+    },
+    /// `description` distinguishes all three states: `None` leaves it,
+    /// `Some(None)` clears it, `Some(Some(text))` sets it.
+    UpdateEvent {
+        id: EventId,
+        title: Option<String>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        description: Option<Option<String>>,
+        interval: Option<Interval>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        updated_at: Option<Timestamp>,
+    },
+    DeleteEvent {
+        id: EventId,
+    },
 }
 
 #[cfg(test)]
@@ -596,6 +628,87 @@ mod tests {
 
         let serialized = serde_json::to_value(&operation).unwrap();
         assert_eq!(serialized.get("kind"), Some(&json!("delete_automation")));
+        assert_eq!(serialized, value);
+    }
+
+    #[test]
+    fn create_event_round_trips() {
+        let value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "kind": "create_event",
+            "id": Uuid::new_v4(),
+            "project_id": Uuid::new_v4(),
+            "title": "standup",
+            "description": null,
+            "interval": {
+                "start": {"kind": "date", "date": "2026-11-16"},
+                "end": {"kind": "date", "date": "2026-11-17"}
+            },
+            "created_at": "2026-01-01T00:00:00Z"
+        });
+
+        let operation: Operation = serde_json::from_value(value.clone()).unwrap();
+        let OperationKind::CreateEvent { interval, .. } = &operation.kind else {
+            panic!("expected CreateEvent");
+        };
+        assert!(interval.is_all_day());
+
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized.get("kind"), Some(&json!("create_event")));
+        assert_eq!(serialized, value);
+    }
+
+    #[test]
+    fn update_event_distinguishes_an_absent_description_from_a_clear() {
+        let id = Uuid::new_v4();
+        let base = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "kind": "update_event",
+            "id": id,
+            "title": "renamed"
+        });
+        let operation: Operation = serde_json::from_value(base).unwrap();
+        let OperationKind::UpdateEvent { description, .. } = &operation.kind else {
+            panic!("expected UpdateEvent");
+        };
+        assert!(description.is_none());
+
+        let cleared = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "kind": "update_event",
+            "id": id,
+            "description": null
+        });
+        let operation: Operation = serde_json::from_value(cleared).unwrap();
+        let OperationKind::UpdateEvent { description, .. } = &operation.kind else {
+            panic!("expected UpdateEvent");
+        };
+        assert_eq!(description, &Some(None));
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized.get("description"), Some(&json!(null)));
+    }
+
+    #[test]
+    fn delete_event_round_trips() {
+        let id = Uuid::new_v4();
+        let value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "kind": "delete_event",
+            "id": id
+        });
+
+        let operation: Operation = serde_json::from_value(value.clone()).unwrap();
+        let OperationKind::DeleteEvent { id: parsed } = &operation.kind else {
+            panic!("expected DeleteEvent");
+        };
+        assert_eq!(*parsed, id);
+
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized.get("kind"), Some(&json!("delete_event")));
         assert_eq!(serialized, value);
     }
 }

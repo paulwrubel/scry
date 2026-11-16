@@ -5,6 +5,7 @@ import type { Color } from './Color';
 import type { ColorChange } from './ColorChange';
 import type { ExternalIdentity } from './ExternalIdentity';
 import type { ExternalMetadata } from './ExternalMetadata';
+import type { Interval } from './Interval';
 import type { Position } from './Position';
 import type { Priority } from './Priority';
 import type { Tags } from './Tags';
@@ -123,4 +124,23 @@ export type OperationKind =
       actions: Array<AutomationAction>;
       updated_at?: string | null;
     }
-  | { kind: 'delete_automation'; id: string };
+  | { kind: 'delete_automation'; id: string }
+  | {
+      kind: 'create_event';
+      id: string;
+      project_id: string;
+      title: string;
+      description: string | null;
+      interval: Interval;
+      created_at: string;
+      updated_at?: string | null;
+    }
+  | {
+      kind: 'update_event';
+      id: string;
+      title: string | null;
+      description?: string | null;
+      interval: Interval | null;
+      updated_at?: string | null;
+    }
+  | { kind: 'delete_event'; id: string };
