@@ -1523,6 +1523,7 @@ impl Store for PostgresStore {
             tasks,
             comments,
             automations,
+            events: Vec::new(),
         })
     }
 

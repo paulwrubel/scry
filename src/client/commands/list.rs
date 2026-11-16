@@ -82,6 +82,7 @@ pub async fn list(
             .flat_map(|task| task.comments.clone().unwrap_or_default())
             .collect(),
         automations: Vec::new(),
+        events: Vec::new(),
     };
 
     let zone = TimeZone::system();

@@ -13,6 +13,7 @@ pub type SectionId = Uuid;
 pub type TaskId = Uuid;
 pub type CommentId = Uuid;
 pub type AutomationId = Uuid;
+pub type EventId = Uuid;
 
 const CANONICAL_DASH_POSITIONS: [usize; 4] = [8, 12, 16, 20];
 

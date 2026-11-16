@@ -1030,6 +1030,7 @@ mod tests {
             tasks: vec![task],
             comments: vec![comment],
             automations: Vec::new(),
+            events: Vec::new(),
         }
     }
 
@@ -1454,6 +1455,7 @@ mod import_tests {
             tasks,
             comments,
             automations: Vec::new(),
+            events: Vec::new(),
         }
     }
 

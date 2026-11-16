@@ -195,7 +195,7 @@ impl ProjectService {
                 );
             }
             // a section's tasks survive and are relocated instead of tombstoned
-            Entity::Section(_) | Entity::Comment(_) | Entity::Automation(_) => {}
+            Entity::Section(_) | Entity::Comment(_) | Entity::Automation(_) | Entity::Event(_) => {}
         }
 
         Ok(entities)

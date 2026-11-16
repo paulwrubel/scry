@@ -119,6 +119,7 @@ describe('replica confirmed state', () => {
           tasks: [],
           comments: [],
           automations: [],
+          events: [],
         },
       ],
     };
@@ -687,6 +688,7 @@ function sampleState(): ClientState {
         tasks: [taskA, taskB],
         comments: [comment],
         automations: [],
+        events: [],
       },
     ],
   };
@@ -763,6 +765,7 @@ function orderedState(): ClientState {
         tasks: [taskA, taskB],
         comments: [comment],
         automations: [],
+        events: [],
       },
       {
         id: 'aaa-project',
@@ -774,6 +777,7 @@ function orderedState(): ClientState {
         tasks: [],
         comments: [],
         automations: [],
+        events: [],
       },
     ],
   };

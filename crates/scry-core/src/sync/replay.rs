@@ -11,11 +11,12 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{
-    Automation, AutomationAction, Change, ChangeKind, Color, Comment, EntityType, Priority,
+    Automation, AutomationAction, Change, ChangeKind, Color, Comment, EntityType, Event, Priority,
     Project, ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use crate::position::Position;
 use crate::sync::operations::{ColorChange, Operation, OperationKind};
+use crate::temporal::Interval;
 
 /// A client's local replica: the projects it has confirmed, each with the full
 /// project document.
@@ -455,6 +456,24 @@ fn apply_change(state: &mut ClientState, change: &Change) {
         (EntityType::Automation, ChangeKind::Delete) => {
             remove_automation(state, change.entity_id);
         }
+        (EntityType::Event, ChangeKind::Create) => {
+            if let Ok(event) = serde_json::from_value::<Event>(change.field_values.clone())
+                && let Some(existing) = state
+                    .projects
+                    .iter_mut()
+                    .find(|snapshot| snapshot.project.id == event.project_id)
+            {
+                upsert_event(existing, event);
+            }
+        }
+        (EntityType::Event, ChangeKind::Update) => {
+            if let Some(event) = find_event_mut(state, change.entity_id) {
+                apply_event_values(event, &change.field_values);
+            }
+        }
+        (EntityType::Event, ChangeKind::Delete) => {
+            remove_event(state, change.entity_id);
+        }
     }
 }
 
@@ -494,6 +513,21 @@ fn apply_section_values(section: &mut Section, values: &serde_json::Value) {
         section.position = position;
     }
     apply_updated_at(&mut section.updated_at, values);
+}
+
+fn apply_event_values(event: &mut Event, values: &serde_json::Value) {
+    if let Some(title) = values.get("title").and_then(|value| value.as_str()) {
+        event.title = title.to_string();
+    }
+    if let Some(description) = values.get("description") {
+        event.description = description.as_str().map(str::to_string);
+    }
+    if let Some(interval) = values.get("interval")
+        && let Ok(interval) = serde_json::from_value::<Interval>(interval.clone())
+    {
+        event.interval = interval;
+    }
+    apply_updated_at(&mut event.updated_at, values);
 }
 
 fn apply_task_values(task: &mut Task, values: &serde_json::Value) {
@@ -547,6 +581,7 @@ fn snapshot(project: Project) -> ProjectSnapshot {
         tasks: Vec::new(),
         comments: Vec::new(),
         automations: Vec::new(),
+        events: Vec::new(),
     }
 }
 
@@ -598,6 +633,18 @@ fn upsert_automation(snapshot: &mut ProjectSnapshot, automation: Automation) {
     }
 }
 
+fn upsert_event(snapshot: &mut ProjectSnapshot, event: Event) {
+    if let Some(existing) = snapshot
+        .events
+        .iter_mut()
+        .find(|existing| existing.id == event.id)
+    {
+        *existing = event;
+    } else {
+        snapshot.events.push(event);
+    }
+}
+
 fn find_section_mut(state: &mut ClientState, id: Uuid) -> Option<&mut Section> {
     state.projects.iter_mut().find_map(|snapshot| {
         snapshot
@@ -630,6 +677,13 @@ fn find_automation_mut(state: &mut ClientState, id: Uuid) -> Option<&mut Automat
             .iter_mut()
             .find(|automation| automation.id == id)
     })
+}
+
+fn find_event_mut(state: &mut ClientState, id: Uuid) -> Option<&mut Event> {
+    state
+        .projects
+        .iter_mut()
+        .find_map(|snapshot| snapshot.events.iter_mut().find(|event| event.id == id))
 }
 
 fn remove_section(state: &mut ClientState, id: Uuid) {
@@ -671,5 +725,11 @@ fn remove_automation(state: &mut ClientState, id: Uuid) {
         snapshot
             .automations
             .retain(|automation| automation.id != id);
+    }
+}
+
+fn remove_event(state: &mut ClientState, id: Uuid) {
+    for snapshot in &mut state.projects {
+        snapshot.events.retain(|event| event.id != id);
     }
 }

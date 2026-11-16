@@ -11,6 +11,7 @@ const TASK_ID: &str = "44444444-4444-4444-8444-444444444444";
 const NEW_TASK_ID: &str = "55555555-5555-4555-8555-555555555555";
 const COMMENT_ID: &str = "66666666-6666-4666-8666-666666666666";
 const AUTOMATION_ID: &str = "88888888-8888-4888-8888-888888888888";
+const EVENT_ID: &str = "99999999-9999-4999-8999-999999999999";
 const OPERATION_ID: &str = "c0000000-0000-4000-8000-000000000001";
 const NOW: &str = "2026-01-01T00:00:00Z";
 const EDITED: &str = "2026-02-02T00:00:00Z";
@@ -160,6 +161,63 @@ fn automation_change(kind: &str, field_values: serde_json::Value) -> Change {
 
 fn only_task(state: &ClientState) -> &Task {
     &state.projects[0].tasks[0]
+}
+
+fn event_change(kind: &str, field_values: serde_json::Value) -> Change {
+    serde_json::from_value(json!({
+        "seq": 2,
+        "entity_type": "event",
+        "entity_id": EVENT_ID,
+        "kind": kind,
+        "operation_id": OPERATION_ID,
+        "client_timestamp": null,
+        "field_values": field_values,
+        "created_at": NOW
+    }))
+    .unwrap()
+}
+
+fn zoned_interval(start: &str, end: &str) -> serde_json::Value {
+    json!({
+        "start": {"kind": "zoned", "datetime": start, "zone": "America/Chicago"},
+        "end": {"kind": "zoned", "datetime": end, "zone": "America/Chicago"},
+    })
+}
+
+#[test]
+fn apply_changes_creates_updates_and_deletes_an_event() {
+    let created = event_change(
+        "create",
+        json!({
+            "id": EVENT_ID,
+            "project_id": PROJECT_ID,
+            "title": "standup",
+            "description": null,
+            "interval": zoned_interval("2026-01-02T09:00:00", "2026-01-02T10:00:00"),
+            "created_at": NOW,
+            "updated_at": NOW,
+        }),
+    );
+    let state = apply_changes(&confirmed(), &[created]);
+    assert_eq!(state.projects[0].events.len(), 1);
+    assert_eq!(state.projects[0].events[0].title, "standup");
+
+    let updated = event_change(
+        "update",
+        json!({
+            "title": "planning",
+            "interval": zoned_interval("2026-01-02T11:00:00", "2026-01-02T12:00:00"),
+            "updated_at": EDITED,
+        }),
+    );
+    let state = apply_changes(&state, &[updated]);
+    let event = &state.projects[0].events[0];
+    assert_eq!(event.title, "planning");
+    assert_eq!(event.updated_at, utc(EDITED));
+
+    let deleted = event_change("delete", json!({}));
+    let state = apply_changes(&state, &[deleted]);
+    assert!(state.projects[0].events.is_empty());
 }
 
 #[test]

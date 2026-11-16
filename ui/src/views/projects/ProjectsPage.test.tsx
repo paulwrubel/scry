@@ -24,6 +24,7 @@ function projectSnapshot(id: string, name: string): ProjectSnapshot {
     tasks: [],
     comments: [],
     automations: [],
+    events: [],
   };
 }
 

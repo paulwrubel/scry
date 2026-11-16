@@ -432,6 +432,7 @@ function buildSnapshots(
       tasks: [],
       comments: [],
       automations: [],
+      events: [],
     };
     snapshots.set(project.id, snapshot);
   }

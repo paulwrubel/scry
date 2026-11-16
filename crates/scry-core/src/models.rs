@@ -1,5 +1,5 @@
 use crate::position::Position;
-use crate::temporal::When;
+use crate::temporal::{Interval, When};
 use anstyle::AnsiColor;
 use clap::ValueEnum;
 use itertools::Itertools;
@@ -9,7 +9,7 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 use uuid::Uuid;
 
-pub use crate::ids::{AutomationId, CommentId, ProjectId, SectionId, TaskId};
+pub use crate::ids::{AutomationId, CommentId, EventId, ProjectId, SectionId, TaskId};
 
 /// Why a stored enum name could not be parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -379,6 +379,26 @@ pub struct Task {
     pub external_metadata: Option<ExternalMetadata>,
 }
 
+/// A calendar event.
+///
+/// `interval` is the event's start and exclusive end, so an all-day event is a
+/// date range and a timed one is a wall clock, an instant, or a zoned wall
+/// clock. Both ends are always the same kind.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Event {
+    pub id: EventId,
+    pub project_id: ProjectId,
+    pub title: String,
+    pub description: Option<String>,
+    pub interval: Interval,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub created_at: Timestamp,
+    #[serde(default = "Timestamp::now")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub updated_at: Timestamp,
+}
+
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Comment {
@@ -479,6 +499,7 @@ pub enum EntityType {
     Task,
     Comment,
     Automation,
+    Event,
 }
 
 impl EntityType {
@@ -489,6 +510,7 @@ impl EntityType {
             Self::Task => "task",
             Self::Comment => "comment",
             Self::Automation => "automation",
+            Self::Event => "event",
         }
     }
 }
@@ -503,10 +525,18 @@ impl FromStr for EntityType {
             "task" | "Task" => Ok(Self::Task),
             "comment" | "Comment" => Ok(Self::Comment),
             "automation" | "Automation" => Ok(Self::Automation),
+            "event" | "Event" => Ok(Self::Event),
             _ => Err(ParseFieldError::new(
                 "change entity type",
                 value,
-                &["project", "section", "task", "comment", "automation"],
+                &[
+                    "project",
+                    "section",
+                    "task",
+                    "comment",
+                    "automation",
+                    "event",
+                ],
             )),
         }
     }
@@ -527,6 +557,7 @@ pub enum Entity {
     Task(TaskId),
     Comment(CommentId),
     Automation(AutomationId),
+    Event(EventId),
 }
 
 impl Entity {
@@ -537,6 +568,7 @@ impl Entity {
             Self::Task(_) => EntityType::Task,
             Self::Comment(_) => EntityType::Comment,
             Self::Automation(_) => EntityType::Automation,
+            Self::Event(_) => EntityType::Event,
         }
     }
 
@@ -546,7 +578,8 @@ impl Entity {
             | Self::Section(id)
             | Self::Task(id)
             | Self::Comment(id)
-            | Self::Automation(id) => *id,
+            | Self::Automation(id)
+            | Self::Event(id) => *id,
         }
     }
 }
@@ -621,7 +654,8 @@ pub struct Change {
     pub created_at: Timestamp,
 }
 
-/// A project together with all of its sections, tasks, comments, and automations.
+/// A project together with all of its sections, tasks, comments, automations,
+/// and events.
 ///
 /// This is scry's canonical project document: `GET /projects/{id}/snapshot`
 /// returns it directly, and each entry in a snapshot file is the same
@@ -639,6 +673,8 @@ pub struct ProjectSnapshot {
     pub comments: Vec<Comment>,
     #[serde(default)]
     pub automations: Vec<Automation>,
+    #[serde(default)]
+    pub events: Vec<Event>,
 }
 
 #[cfg(test)]
@@ -671,6 +707,7 @@ mod tests {
             "automation".parse::<EntityType>(),
             Ok(EntityType::Automation)
         );
+        assert_eq!("event".parse::<EntityType>(), Ok(EntityType::Event));
         assert_eq!("Task".parse::<EntityType>(), Ok(EntityType::Task));
         assert_eq!("delete".parse::<ChangeKind>(), Ok(ChangeKind::Delete));
         assert_eq!("Update".parse::<ChangeKind>(), Ok(ChangeKind::Update));

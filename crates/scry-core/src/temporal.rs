@@ -3,11 +3,15 @@
 //! form. A zoned value resolves to an instant only in [`Zoned::to_instant`],
 //! where jiff shifts a DST gap forward and picks the earlier instant of a fold.
 
+use jiff::Span;
 use jiff::Timestamp;
 use jiff::civil;
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
+
+/// The default length of an event that names only a start.
+pub const DEFAULT_EVENT_MINUTES: i64 = 60;
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +52,17 @@ impl When {
 
     pub fn is_overdue(&self, now: Timestamp, tz: &TimeZone) -> bool {
         self.deadline(tz).is_ok_and(|deadline| now >= deadline)
+    }
+
+    /// The first instant this value covers. A date starts at local midnight and
+    /// a floating time is read in the caller's zone, since neither carries one.
+    pub fn start_instant(&self, tz: &TimeZone) -> Result<Timestamp, TemporalError> {
+        match self {
+            When::Date { date } => Self::resolve(date.at(0, 0, 0, 0), tz),
+            When::Floating { datetime } => Self::resolve(*datetime, tz),
+            When::Instant { timestamp } => Ok(*timestamp),
+            When::Zoned(zoned) => zoned.to_instant(),
+        }
     }
 
     // Only dates and floating times need this, and neither carries a zone, so
@@ -125,6 +140,7 @@ impl<'de> Deserialize<'de> for Zoned {
 }
 
 /// `start` is inclusive and `end` is exclusive, so adjacent ranges never overlap.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Interval {
     start: When,
@@ -179,6 +195,62 @@ impl Interval {
             _ => None,
         }
     }
+
+    /// Whether both ends are dates, which makes this an all-day interval.
+    pub fn is_all_day(&self) -> bool {
+        matches!(
+            (&self.start, &self.end),
+            (When::Date { .. }, When::Date { .. })
+        )
+    }
+
+    pub fn start_instant(&self, tz: &TimeZone) -> Result<Timestamp, TemporalError> {
+        self.start.start_instant(tz)
+    }
+
+    pub fn end_instant(&self, tz: &TimeZone) -> Result<Timestamp, TemporalError> {
+        self.end.start_instant(tz)
+    }
+
+    /// Whether this interval overlaps the half-open window `[from, to)`.
+    pub fn overlaps(
+        &self,
+        from: Timestamp,
+        to: Timestamp,
+        tz: &TimeZone,
+    ) -> Result<bool, TemporalError> {
+        Ok(self.start_instant(tz)? < to && from < self.end_instant(tz)?)
+    }
+
+    /// The interval that starts at `start` and runs for
+    /// [`DEFAULT_EVENT_MINUTES`]: a whole calendar day for a date, one hour for
+    /// a time. A zoned end keeps its civil duration across a DST change.
+    pub fn from_start(start: When) -> Result<Self, TemporalError> {
+        let end = match &start {
+            When::Date { date } => When::Date {
+                date: date.tomorrow().map_err(TemporalError::jiff)?,
+            },
+            When::Floating { datetime } => When::Floating {
+                datetime: add_default_minutes(*datetime)?,
+            },
+            When::Instant { timestamp } => When::Instant {
+                timestamp: timestamp
+                    .checked_add(Span::new().minutes(DEFAULT_EVENT_MINUTES))
+                    .map_err(TemporalError::jiff)?,
+            },
+            When::Zoned(zoned) => When::Zoned(Zoned::new(
+                add_default_minutes(zoned.datetime())?,
+                zoned.zone(),
+            )?),
+        };
+        Self::new(start, end)
+    }
+}
+
+fn add_default_minutes(datetime: civil::DateTime) -> Result<civil::DateTime, TemporalError> {
+    datetime
+        .checked_add(Span::new().minutes(DEFAULT_EVENT_MINUTES))
+        .map_err(TemporalError::jiff)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -442,5 +514,83 @@ mod tests {
         );
         assert!(date_deadline < floating_deadline);
         assert!(floating_deadline < instant_deadline);
+    }
+
+    #[test]
+    fn from_start_gives_a_day_for_a_date_and_an_hour_for_a_time() {
+        let all_day = Interval::from_start(date_when(3)).unwrap();
+        assert_eq!(all_day.end(), &date_when(4));
+        assert!(all_day.is_all_day());
+
+        let floating = Interval::from_start(floating_when(9)).unwrap();
+        assert_eq!(
+            floating.end(),
+            &When::Floating {
+                datetime: date(2026, 11, 3).at(10, 0, 0, 0),
+            }
+        );
+
+        let zoned = Interval::from_start(zoned_when(3, 9, "America/Chicago")).unwrap();
+        assert_eq!(zoned.end(), &zoned_when(3, 10, "America/Chicago"));
+
+        let instant = Interval::from_start(instant()).unwrap();
+        assert_eq!(
+            instant.end(),
+            &When::Instant {
+                timestamp: "2026-11-03T16:00:00Z".parse().unwrap(),
+            }
+        );
+    }
+
+    #[test]
+    fn starts_resolve_to_the_first_instant_covered() {
+        let tz = zone("America/Chicago");
+        assert_eq!(
+            date_when(3).start_instant(&tz).unwrap(),
+            local_instant(&tz, date(2026, 11, 3).at(0, 0, 0, 0))
+        );
+        assert_eq!(
+            floating_when(9).start_instant(&tz).unwrap(),
+            local_instant(&tz, date(2026, 11, 3).at(9, 0, 0, 0))
+        );
+        assert_eq!(
+            zoned_when(3, 9, "America/Chicago")
+                .start_instant(&tz)
+                .unwrap(),
+            "2026-11-03T15:00:00Z".parse().unwrap()
+        );
+        assert_eq!(
+            instant().start_instant(&tz).unwrap(),
+            "2026-11-03T15:00:00Z".parse().unwrap()
+        );
+    }
+
+    #[test]
+    fn overlap_uses_an_exclusive_end() {
+        let tz = zone("America/Chicago");
+        let interval = Interval::new(floating_when(9), floating_when(10)).unwrap();
+        let hour = |value: i8| local_instant(&tz, date(2026, 11, 3).at(value, 0, 0, 0));
+
+        // windows touching either boundary do not overlap, because the end is
+        // exclusive and the event starts at 09:00
+        assert!(!interval.overlaps(hour(8), hour(9), &tz).unwrap());
+        assert!(interval.overlaps(hour(8), hour(10), &tz).unwrap());
+        assert!(interval.overlaps(hour(9), hour(10), &tz).unwrap());
+        assert!(!interval.overlaps(hour(10), hour(11), &tz).unwrap());
+    }
+
+    #[test]
+    fn all_day_overlap_is_read_in_the_viewers_zone() {
+        let interval = Interval::new(date_when(3), date_when(4)).unwrap();
+        let chicago = zone("America/Chicago");
+
+        let start = local_instant(&chicago, date(2026, 11, 3).at(0, 0, 0, 0));
+        let end = local_instant(&chicago, date(2026, 11, 4).at(0, 0, 0, 0));
+        assert!(interval.overlaps(start, end, &chicago).unwrap());
+
+        // an earlier window does not overlap, because the date starts at
+        // midnight in the zone the caller supplies
+        let before = local_instant(&chicago, date(2026, 11, 2).at(23, 0, 0, 0));
+        assert!(!interval.overlaps(before, start, &chicago).unwrap());
     }
 }
