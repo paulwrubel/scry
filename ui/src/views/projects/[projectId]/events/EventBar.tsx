@@ -20,7 +20,7 @@ export function EventBar(props: EventBarProps) {
       to={`/projects/${projectId}/events/${event.id}${monthQuery}`}
       title={event.title}
       style={{ left: `${(startIndex * 100) / 7}%`, width: `${(days * 100) / 7}%` }}
-      className={`bg-panel hover:bg-line pointer-events-auto absolute inset-y-0 flex items-center gap-1 overflow-hidden px-1.5 text-[11px] leading-none transition-colors ${
+      className={`bg-panel hover:bg-line pointer-events-auto absolute inset-y-px flex items-center gap-1 overflow-hidden px-1.5 text-[11px] leading-none transition-colors ${
         continuesBefore ? '' : 'rounded-l'
       } ${continuesAfter ? '' : 'rounded-r'}`}
     >

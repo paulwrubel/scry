@@ -2,16 +2,18 @@ import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
 import type { Event } from '@/generated/Event';
 import type { Interval } from '@/generated/Interval';
+import type { EventPlacement, WeekLane } from './calendar';
 import {
   MONTH_PARAM,
   applyMonth,
   dayKey,
-  placeWeek,
   eventSpan,
+  fitLanes,
   monthGrid,
   monthKey,
   monthLabel,
   parseMonth,
+  placeWeek,
   shiftMonth,
 } from './calendar';
 
@@ -277,5 +279,57 @@ describe('placeWeek', () => {
         ZONE,
       ),
     ).toEqual([]);
+  });
+});
+
+describe('fitLanes', () => {
+  function placement(startIndex: number, endIndex: number): EventPlacement {
+    return {
+      event: event(`event-${startIndex}-${endIndex}`, dateInterval('2026-11-01', '2026-11-02')),
+      startIndex,
+      endIndex,
+      continuesBefore: false,
+      continuesAfter: false,
+      startTime: null,
+      endTime: null,
+    };
+  }
+
+  function lane(startIndex: number, endIndex = startIndex): WeekLane {
+    return [placement(startIndex, endIndex)];
+  }
+
+  it('keeps every lane when the height is unknown', () => {
+    const result = fitLanes([lane(0), lane(1), lane(2)], null);
+
+    expect(result.visible).toHaveLength(3);
+    expect(result.hiddenByDay).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('keeps every lane when they fit', () => {
+    const result = fitLanes([lane(0), lane(1)], 3);
+
+    expect(result.visible).toHaveLength(2);
+    expect(result.hiddenByDay).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('hides the tail and counts it against each day it covers', () => {
+    const result = fitLanes([lane(0), lane(2), lane(2, 4)], 2);
+
+    expect(result.visible).toHaveLength(1);
+    expect(result.hiddenByDay).toEqual([0, 0, 2, 1, 1, 0, 0]);
+  });
+
+  it('adds up the bars hidden on the same day', () => {
+    const result = fitLanes([lane(0), lane(1), lane(2), lane(2)], 3);
+
+    expect(result.hiddenByDay).toEqual([0, 0, 2, 0, 0, 0, 0]);
+  });
+
+  it('keeps a single slot for the count when only one row fits', () => {
+    const result = fitLanes([lane(0), lane(2)], 1);
+
+    expect(result.visible).toEqual([]);
+    expect(result.hiddenByDay).toEqual([1, 0, 1, 0, 0, 0, 0]);
   });
 });
