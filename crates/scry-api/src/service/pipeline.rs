@@ -1,9 +1,9 @@
 use crate::error::ServiceError;
 use jiff::Timestamp;
 use scry_core::error::StorageError;
-use scry_core::ids::{CommentId, ProjectId, SectionId, TaskId};
+use scry_core::ids::{CommentId, EventId, ProjectId, SectionId, TaskId};
 use scry_core::models::{
-    Change, ChangeKind, Color, Comment, Entity, FieldValues, Project, Section, Task,
+    Change, ChangeKind, Color, Comment, Entity, Event, FieldValues, Project, Section, Task,
 };
 use scry_core::position::{Position, key_between};
 use scry_core::sync::ack::{AcknowledgmentStatus, ApplyOutcome};
@@ -357,6 +357,13 @@ impl ProjectService {
             .ok_or_else(|| {
                 ServiceError::Storage(StorageError::NotFound(format!("comment {id} not found")))
             })
+    }
+
+    pub(super) async fn require_event(&self, id: EventId) -> Result<Event, ServiceError> {
+        self.store
+            .get_event_by_id(id, None)
+            .await?
+            .ok_or(ServiceError::EventNotFound { id })
     }
 
     pub(super) async fn require_section(&self, id: SectionId) -> Result<Section, ServiceError> {

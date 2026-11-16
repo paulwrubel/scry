@@ -1,4 +1,5 @@
 use crate::error::ServiceError;
+use jiff::Timestamp;
 use scry_core::error::StorageError;
 use scry_core::ids::{SectionId, TaskId};
 use scry_core::models::{
@@ -7,7 +8,7 @@ use scry_core::models::{
 use scry_core::store::ArcStore;
 use scry_core::sync::ack::{OperationAcknowledgment, RejectionReason};
 use scry_core::sync::operations::{OPERATION_VERSION, Operation, OperationKind};
-use scry_core::temporal::When;
+use scry_core::temporal::{Interval, When};
 use uuid::Uuid;
 
 mod apply;
@@ -141,6 +142,31 @@ pub struct TaskPatch {
 #[derive(Debug, Clone)]
 pub struct TaskChangeResult {
     pub task: Task,
+}
+
+/// Input for creating an event.
+#[derive(Debug, Clone)]
+pub struct NewEvent {
+    pub title: String,
+    pub description: Option<String>,
+    pub interval: Interval,
+}
+
+/// Partial event input. `None` leaves a field unchanged; `Some("")` on
+/// `description` clears it.
+#[derive(Debug, Clone, Default)]
+pub struct EventPatch {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub interval: Option<Interval>,
+}
+
+/// A half-open instant window for listing events: `from` is inclusive and
+/// `to` is exclusive.
+#[derive(Debug, Clone, Copy)]
+pub struct EventWindow {
+    pub from: Timestamp,
+    pub to: Timestamp,
 }
 
 /// Partial project input. `None` leaves a field unchanged; `Some("")` on

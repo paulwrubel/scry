@@ -49,6 +49,7 @@ fn build_api_router() -> Router<ScryState> {
         .nest("/tasks", build_tasks_router())
         .nest("/comments", build_comments_router())
         .nest("/automations", build_automations_router())
+        .nest("/events", build_events_router())
         .fallback(not_found)
 }
 
@@ -97,6 +98,10 @@ fn build_projects_router() -> Router<ScryState> {
         .route(
             "/{project_id}/automations",
             get(handlers::get_automations).post(handlers::create_automation),
+        )
+        .route(
+            "/{project_id}/events",
+            get(handlers::get_events_by_project).post(handlers::create_event),
         )
         .route(
             "/{project_id}/snapshot",
@@ -156,6 +161,16 @@ fn build_automations_router() -> Router<ScryState> {
         get(handlers::get_automation)
             .put(handlers::update_automation)
             .delete(handlers::delete_automation),
+    )
+}
+
+/// Routes nested under `/events`.
+fn build_events_router() -> Router<ScryState> {
+    Router::new().route(
+        "/{id}",
+        get(handlers::get_event)
+            .put(handlers::update_event)
+            .delete(handlers::delete_event),
     )
 }
 

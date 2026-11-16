@@ -22,6 +22,9 @@ pub use create_automation::create_automation;
 mod create_comment;
 pub use create_comment::create_comment;
 
+mod create_event;
+pub use create_event::create_event;
+
 mod create_project;
 pub use create_project::create_project;
 
@@ -39,6 +42,9 @@ pub use delete_automation::delete_automation;
 
 mod delete_comment;
 pub use delete_comment::delete_comment;
+
+mod delete_event;
+pub use delete_event::delete_event;
 
 mod delete_project_by_id;
 pub use delete_project_by_id::delete_project_by_id;
@@ -75,6 +81,12 @@ pub use get_comments_by_project::get_comments_by_project;
 
 mod get_comments_by_task;
 pub use get_comments_by_task::get_comments_by_task;
+
+mod get_event;
+pub use get_event::get_event;
+
+mod get_events_by_project;
+pub use get_events_by_project::get_events_by_project;
 
 mod get_project;
 pub use get_project::get_project;
@@ -144,6 +156,9 @@ pub use update_automation::update_automation;
 
 mod update_comment;
 pub use update_comment::update_comment;
+
+mod update_event;
+pub use update_event::update_event;
 
 mod update_project;
 pub use update_project::update_project;
