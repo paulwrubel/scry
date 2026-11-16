@@ -34,7 +34,7 @@ const routes = [
               {
                 path: 'projects/:projectId/events',
                 element: <ProjectEventsLayout />,
-                children: [{ path: ':eventId' }],
+                children: [{ path: 'days/:date' }, { path: ':eventId' }],
               },
               { path: 'projects/:projectId/settings', element: <ProjectSettingsPage /> },
               { path: '*', element: <Navigate to="/" replace /> },

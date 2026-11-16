@@ -1,20 +1,26 @@
 import { Drawer } from 'flowbite-react';
+import { DateTime } from 'luxon';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { DEVICE_ZONE } from '@/contract/due';
 import type { Event } from '@/generated/Event';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useReplicaSnapshot } from '@/providers/Replica';
+import { dayKey } from '@/utils/events/calendar';
+import { DayEvents } from '@/views/projects/[projectId]/events/DayEvents';
 import { EventsPage } from '@/views/projects/[projectId]/events/EventsPage';
 import { EventDetail } from '@/views/projects/[projectId]/events/[eventId]/EventDetail';
-import { drawerTheme } from './drawerTheme';
+import { dayDrawerTheme, drawerTheme } from './drawerTheme';
 
-type Panel = { project: ProjectSnapshot; event: Event | null; defaultDate: string | null };
+type Panel =
+  | { kind: 'event'; project: ProjectSnapshot; event: Event | null; defaultDate: string | null }
+  | { kind: 'day'; project: ProjectSnapshot; day: DateTime };
 
 export function ProjectEventsLayout() {
-  const { projectId, eventId } = useParams();
+  const { projectId, eventId, date } = useParams();
   const { visible } = useReplicaSnapshot();
   const navigate = useNavigate();
-  const { search } = useLocation();
+  const { search, state } = useLocation();
   const [lastPanel, setLastPanel] = useState<Panel | null>(null);
 
   const project = visible.projects.find((candidate) => candidate.id === projectId);
@@ -22,30 +28,39 @@ export function ProjectEventsLayout() {
   const event = creating
     ? undefined
     : project?.events.find((candidate) => candidate.id === eventId);
-  const open = project !== undefined && (creating || event !== undefined);
+  const day = date === undefined ? undefined : parseDay(date);
+  const open = project !== undefined && (creating || event !== undefined || day !== undefined);
+
   const live: Panel | null =
     project === undefined || !open
       ? null
-      : {
-          project,
-          event: event ?? null,
-          defaultDate: new URLSearchParams(search).get('date'),
-        };
+      : day !== undefined
+        ? { kind: 'day', project, day }
+        : {
+            kind: 'event',
+            project,
+            event: event ?? null,
+            defaultDate: new URLSearchParams(search).get('date'),
+          };
   const panel = live ?? lastPanel;
 
   // the visible month rides along so closing the drawer returns to it
-  function leave(target: string) {
+  function calendarPath(target: string, extra: string): string {
     const params = new URLSearchParams(search);
     params.delete('date');
-    const query = params.toString();
-    navigate(`${target}${query.length === 0 ? '' : `?${query}`}`);
+    const query = [params.toString(), extra].filter((part) => part.length > 0).join('&');
+    return `${target}${query.length === 0 ? '' : `?${query}`}`;
   }
 
   function close() {
     if (live !== null) {
       setLastPanel(live);
     }
-    leave(`/projects/${projectId}/events`);
+    navigate(calendarPath(`/projects/${projectId}/events`, ''));
+  }
+
+  function createOn(target: DateTime) {
+    navigate(calendarPath(`/projects/${projectId}/events/new`, `date=${dayKey(target)}`));
   }
 
   return (
@@ -64,22 +79,61 @@ export function ProjectEventsLayout() {
         open={open}
         position="bottom"
         backdrop={false}
-        theme={drawerTheme}
+        theme={panel?.kind === 'day' ? dayDrawerTheme : drawerTheme}
+        className={
+          open && wantsWidthTransition(state)
+            ? 'transition-[width,transform] duration-300 ease-out'
+            : 'transition-transform duration-300 ease-out'
+        }
         onClose={close}
         aria-hidden={!open}
         inert={!open}
       >
-        {panel === null ? null : (
+        {panel === null ? null : panel.kind === 'day' ? (
+          <DayEvents
+            key={`day:${dayKey(panel.day)}:${open}`}
+            project={panel.project}
+            day={panel.day}
+            monthQuery={monthQuery(search)}
+            onCreate={() => createOn(panel.day)}
+            onClose={close}
+          />
+        ) : (
           <EventDetail
             key={`${panel.event?.id ?? 'new'}:${open}`}
             project={panel.project}
             event={panel.event}
             defaultDate={panel.defaultDate}
-            onSaved={(id) => leave(`/projects/${projectId}/events/${id}`)}
+            onSaved={(id) => navigate(calendarPath(`/projects/${projectId}/events/${id}`, ''))}
             onClose={close}
           />
         )}
       </Drawer>
     </div>
+  );
+}
+
+function parseDay(value: string): DateTime | undefined {
+  const day = DateTime.fromISO(value, { zone: DEVICE_ZONE });
+  return day.isValid ? day.startOf('day') : undefined;
+}
+
+function monthQuery(search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete('date');
+  const query = params.toString();
+  return query.length === 0 ? '' : `?${query}`;
+}
+
+/// The day list sets this on the links to an event, because moving from one
+/// panel to the other changes the drawer's width while it is open. Any other
+/// navigation leaves the width change instant, so opening a panel never
+/// animates from whichever panel came before it.
+function wantsWidthTransition(state: unknown): boolean {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    'animateWidth' in state &&
+    state.animateWidth === true
   );
 }

@@ -8,6 +8,7 @@ import {
   applyMonth,
   dayKey,
   eventSpan,
+  eventsOnDay,
   fitLanes,
   monthGrid,
   monthKey,
@@ -331,5 +332,36 @@ describe('fitLanes', () => {
 
     expect(result.visible).toEqual([]);
     expect(result.hiddenByDay).toEqual([1, 0, 1, 0, 0, 0, 0]);
+  });
+});
+
+describe('eventsOnDay', () => {
+  it('keeps the events covering the day and puts all-day first', () => {
+    const events = [
+      event('standup', timedInterval('2026-11-06T09:00:00', '2026-11-06T10:00:00')),
+      event('offsite', dateInterval('2026-11-05', '2026-11-08')),
+      event('later', timedInterval('2026-11-06T14:00:00', '2026-11-06T15:00:00')),
+    ];
+
+    expect(eventsOnDay(events, day('2026-11-06'), ZONE).map((item) => item.id)).toEqual([
+      'offsite',
+      'standup',
+      'later',
+    ]);
+  });
+
+  it('covers a multi-day event through its inclusive last day', () => {
+    const events = [event('offsite', dateInterval('2026-11-05', '2026-11-08'))];
+
+    expect(eventsOnDay(events, day('2026-11-07'), ZONE).map((item) => item.id)).toEqual([
+      'offsite',
+    ]);
+    expect(eventsOnDay(events, day('2026-11-08'), ZONE)).toEqual([]);
+  });
+
+  it('drops days no event covers', () => {
+    const events = [event('standup', timedInterval('2026-11-06T09:00:00', '2026-11-06T10:00:00'))];
+
+    expect(eventsOnDay(events, day('2026-11-05'), ZONE)).toEqual([]);
   });
 });

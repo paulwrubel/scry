@@ -12,11 +12,11 @@ export type MonthGridProps = {
   today: DateTime;
   projectId: string;
   monthQuery: string;
-  onSelectDay: (day: DateTime) => void;
+  onShowDay: (day: DateTime) => void;
 };
 
 export function MonthGrid(props: MonthGridProps) {
-  const { weeks, lanes, month, today, projectId, monthQuery, onSelectDay } = props;
+  const { weeks, lanes, month, today, projectId, monthQuery, onShowDay } = props;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -37,7 +37,7 @@ export function MonthGrid(props: MonthGridProps) {
             today={today}
             projectId={projectId}
             monthQuery={monthQuery}
-            onSelectDay={onSelectDay}
+            onShowDay={onShowDay}
           />
         ))}
       </div>

@@ -62,8 +62,8 @@ export function EventsPage() {
         today={today}
         projectId={project.id}
         monthQuery={`?${monthParams}`}
-        onSelectDay={(day) =>
-          navigate(`/projects/${project.id}/events/new?date=${dayKey(day)}&${monthParams}`)
+        onShowDay={(day) =>
+          navigate(`/projects/${project.id}/events/days/${dayKey(day)}?${monthParams}`)
         }
       />
     </div>

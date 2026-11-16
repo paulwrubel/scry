@@ -51,6 +51,33 @@ function hiddenCount(columns: number): number[] {
   return Array.from({ length: columns }, () => 0);
 }
 
+/// The events that cover `day`, all-day ones first and then by start time.
+export function eventsOnDay(events: readonly Event[], day: DateTime, zone: string): Event[] {
+  const target = day.setZone(zone).startOf('day');
+
+  return events
+    .filter((event) => {
+      const span = eventSpan(event, zone);
+      return target >= span.first && target <= span.last;
+    })
+    .sort((left, right) => compareEventStarts(left, right, zone));
+}
+
+function compareEventStarts(left: Event, right: Event, zone: string): number {
+  const leftStart = displayedClock(left.interval.start, zone);
+  const rightStart = displayedClock(right.interval.start, zone);
+
+  if (leftStart === null || rightStart === null) {
+    if (leftStart !== rightStart) {
+      return leftStart === null ? -1 : 1;
+    }
+  } else if (leftStart.toMillis() !== rightStart.toMillis()) {
+    return leftStart.toMillis() - rightStart.toMillis();
+  }
+
+  return left.title.localeCompare(right.title);
+}
+
 /// The visible month, read from the URL and falling back to the current one so
 /// a default view keeps a clean link.
 export function parseMonth(params: URLSearchParams, now: DateTime = DateTime.now()): Month {

@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { DateTime } from 'luxon';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent } from '@testing-library/react';
 import { makeEvent } from '@/test/fixtures';
 import type { EventPlacement, WeekLane } from '@/utils/events/calendar';
 import { WeekRow } from './WeekRow';
@@ -39,7 +40,7 @@ function lane(title: string, startIndex: number, endIndex = startIndex): WeekLan
   return [placement(title, startIndex, endIndex)];
 }
 
-function renderWeek(lanes: WeekLane[]) {
+function renderWeek(lanes: WeekLane[], onShowDay: (day: DateTime) => void = () => undefined) {
   render(
     <MemoryRouter>
       <WeekRow
@@ -49,7 +50,7 @@ function renderWeek(lanes: WeekLane[]) {
         today={DateTime.fromISO('2026-11-20', { zone: ZONE })}
         projectId="project-1"
         monthQuery="?month=2026-11"
-        onSelectDay={() => undefined}
+        onShowDay={onShowDay}
       />
     </MemoryRouter>,
   );
@@ -64,6 +65,17 @@ describe('WeekRow overflow', () => {
     expect(screen.queryByText('three')).toBeNull();
     expect(screen.queryByText('four')).toBeNull();
     expect(screen.getByText('+2 more')).toBeDefined();
+  });
+
+  it('opens the day from the overflow count', () => {
+    const shown: { date: string | null } = { date: null };
+    renderWeek([lane('one', 0), lane('two', 1), lane('three', 2), lane('four', 2)], (day) => {
+      shown.date = day.toISODate();
+    });
+
+    fireEvent.click(screen.getByText('+2 more'));
+
+    expect(shown.date).toBe('2026-11-03');
   });
 
   it('shows every lane when the week is tall enough', () => {

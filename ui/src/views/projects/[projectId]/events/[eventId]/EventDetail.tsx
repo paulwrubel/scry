@@ -2,6 +2,7 @@ import { Alert, Button, Card, Label, TextInput } from 'flowbite-react';
 import { DateTime } from 'luxon';
 import { useState } from 'react';
 import { z } from 'zod';
+import { BackButton } from '@/components/BackButton';
 import { fieldErrorMessage } from '@/components/form-controls/fieldErrors';
 import { DEVICE_ZONE } from '@/contract/due';
 import {
@@ -145,28 +146,7 @@ export function EventDetail(props: EventDetailProps) {
     <>
       <div className="flex min-h-full flex-col gap-4 p-6">
         <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            aria-label="Back to calendar"
-            title="Back to calendar"
-            onClick={onClose}
-            className="border-line text-muted hover:border-line-hover inline-flex h-11 w-11 items-center justify-center rounded-lg border transition-colors hover:text-zinc-200 md:h-8 md:w-8"
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              className="h-5 w-5 md:h-4 md:w-4"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
-              />
-            </svg>
-          </button>
+          <BackButton label="Back to calendar" onClick={onClose} />
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="min-w-0 text-2xl font-semibold wrap-break-word">
               {event === null ? 'New event' : event.title}
@@ -312,11 +292,7 @@ export function EventDetail(props: EventDetailProps) {
               </form.AppField>
             </div>
 
-            <p className="text-muted text-xs">
-              Leave the start time empty for an all-day event. The end defaults to one hour later,
-              or the same whole day. Moving a single-day start moves the end with it; a multi-day
-              end stays put.
-            </p>
+            <p className="text-muted text-xs">Leave the start time empty for an all-day event.</p>
 
             <form.AppField name="description">
               {(field) => (
