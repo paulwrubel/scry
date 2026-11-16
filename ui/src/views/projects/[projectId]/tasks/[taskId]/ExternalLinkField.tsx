@@ -134,7 +134,7 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
             selector={(state) => ({ isValid: state.isValid, isSubmitting: state.isSubmitting })}
           >
             {({ isValid, isSubmitting }) => (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <Button
                   size="xs"
                   color="alternative"

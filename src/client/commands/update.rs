@@ -2,11 +2,14 @@
 
 use scry_core::github::parse_github_identity;
 use scry_core::models::{ExternalIdentity, ExternalMetadata, Priority, Section, SectionId, Task};
+use scry_core::temporal::When;
 use serde::Serialize;
 
 use crate::client::{Client, TaskDetails};
 use crate::error::AppError;
 use crate::output::print_json;
+
+use super::parse_due;
 
 /// Input for the `update` command.
 pub struct UpdateTask<'a> {
@@ -20,6 +23,9 @@ pub struct UpdateTask<'a> {
     pub no_section: bool,
     pub external_url: Option<&'a str>,
     pub clear_external_url: bool,
+    pub due: Option<&'a str>,
+    pub no_due: bool,
+    pub floating: bool,
 }
 
 /// Update a task.
@@ -37,6 +43,8 @@ pub async fn update(
         && !input.no_section
         && input.external_url.is_none()
         && !input.clear_external_url
+        && input.due.is_none()
+        && !input.no_due
     {
         return Err(AppError::Usage(
             "No flags provided. Use 'scry update --help' for available options.".to_string(),
@@ -86,12 +94,25 @@ pub async fn update(
             .collect()
     });
 
+    let due: Option<Option<When>> = match (input.due, input.no_due) {
+        (Some(expr), false) => Some(Some(parse_due(expr, input.floating)?)),
+        (None, true) => Some(None),
+        (None, false) => None,
+        (Some(_), true) => {
+            return Err(AppError::Usage(
+                "specify at most one of --due or --no-due".to_string(),
+            ));
+        }
+    };
+
     #[derive(Serialize)]
     struct UpdateTaskRequest<'a> {
         title: Option<&'a str>,
         description: Option<&'a str>,
         priority: Option<Priority>,
         tags: Option<Vec<String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        due: Option<Option<When>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         section_id: Option<SectionId>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,6 +129,7 @@ pub async fn update(
         description: input.description,
         priority: input.priority,
         tags,
+        due,
         section_id,
         new_section: input.new_section,
         clear_section: input.no_section,

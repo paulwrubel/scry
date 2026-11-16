@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/providers/Auth';
 import { useReplicaSnapshot } from '@/providers/Replica';
@@ -49,8 +50,8 @@ export function formatLastSyncedAt(value: string | null): string {
   if (value === null) {
     return 'Never';
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = DateTime.fromISO(value);
+  if (!date.isValid) {
     return 'Never';
   }
   return formatDateTime(date);

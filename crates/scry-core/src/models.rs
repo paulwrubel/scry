@@ -1,4 +1,5 @@
 use crate::position::Position;
+use crate::temporal::When;
 use anstyle::AnsiColor;
 use clap::ValueEnum;
 use itertools::Itertools;
@@ -308,6 +309,7 @@ pub enum TaskSortingMode {
     Manual,
     #[value(aliases(["pri"]))]
     Priority,
+    Due,
 }
 
 impl Display for TaskSortingMode {
@@ -366,6 +368,8 @@ pub struct Task {
     pub position: Position,
     pub state: TaskState,
     pub tags: Tags,
+    #[serde(default)]
+    pub due: Option<When>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_at: Timestamp,
     #[serde(default = "Timestamp::now")]

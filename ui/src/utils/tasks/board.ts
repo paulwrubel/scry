@@ -1,3 +1,4 @@
+import { DEVICE_ZONE } from '@/contract/due';
 import { keyBetween } from '@/contract/positions';
 import { compareTasks } from '@/contract/task-order';
 import type { Priority } from '@/generated/Priority';
@@ -239,7 +240,7 @@ export function previewAtPointer(
 export function sectionTasks(project: ProjectSnapshot, sectionId: string | null): Task[] {
   return project.tasks
     .filter((task) => task.section_id === sectionId)
-    .sort((left, right) => compareTasks('manual', left, right));
+    .sort((left, right) => compareTasks('manual', left, right, DEVICE_ZONE));
 }
 
 export function insertPosition(tasks: readonly Task[], index: number): string {
@@ -299,5 +300,5 @@ export function dropPositionForPriority(
 }
 
 function orderTasks(tasks: Task[], mode: TaskSortingMode): Task[] {
-  return tasks.sort((left, right) => compareTasks(mode, left, right));
+  return tasks.sort((left, right) => compareTasks(mode, left, right, DEVICE_ZONE));
 }

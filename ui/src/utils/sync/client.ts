@@ -1,4 +1,5 @@
 import type { OperationAcknowledgment } from '@/generated/OperationAcknowledgment';
+import { nowIso } from '@/utils/date';
 import type { Snapshot } from '@/generated/Snapshot';
 import type { SyncResponse } from '@/generated/SyncResponse';
 import { getAPIURL, getSnapshot, postSync } from '@/utils/api';
@@ -147,7 +148,7 @@ export function createSyncClient(options: SyncClientOptions): SyncClient {
         throw error;
       }
 
-      lastSyncedAt = new Date().toISOString();
+      lastSyncedAt = nowIso();
       persist();
       status = 'idle';
       error = null;

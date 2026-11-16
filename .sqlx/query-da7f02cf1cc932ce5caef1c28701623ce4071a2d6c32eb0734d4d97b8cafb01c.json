@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE tasks\n                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7, due = $8, external_identity = $9, external_metadata = $10, updated_at = $11\n                WHERE id = $12\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "da7f02cf1cc932ce5caef1c28701623ce4071a2d6c32eb0734d4d97b8cafb01c"
+}

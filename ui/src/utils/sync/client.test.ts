@@ -466,6 +466,7 @@ function task(overrides: Partial<Task> = {}): Task {
     position: 'a0',
     state: 'open',
     tags: [],
+    due: null,
     created_at: '2026-01-01T00:00:01Z',
     updated_at: '2026-01-01T00:00:01Z',
     external_identity: null,

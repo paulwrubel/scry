@@ -17,6 +17,8 @@ import {
   replicaError,
 } from './types';
 
+const EPOCH_ISO = '1970-01-01T00:00:00.000Z';
+
 const PROJECT_ID = 'project-1';
 const SECTION_A_ID = 'section-a';
 const SECTION_B_ID = 'section-b';
@@ -458,7 +460,7 @@ describe('replica schema migration', () => {
         id: COMMENT_ID,
         task_id: TASK_A_ID,
         contents: 'legacy',
-        created_at: new Date(0).toISOString(),
+        created_at: EPOCH_ISO,
       },
     });
     legacy.close();
@@ -587,6 +589,7 @@ function extraTask(id: string, title: string): Task {
     position: 'a2',
     state: 'open',
     tags: [],
+    due: null,
     created_at: '2026-01-01T00:00:05Z',
     updated_at: '2026-01-01T00:00:05Z',
     external_identity: null,
@@ -642,6 +645,7 @@ function sampleState(): ClientState {
     position: 'a0',
     state: 'open',
     tags: ['alpha', 'beta'],
+    due: null,
     created_at: '2026-01-01T00:00:02Z',
     updated_at: '2026-01-01T00:00:02Z',
     external_identity: null,
@@ -657,6 +661,7 @@ function sampleState(): ClientState {
     position: 'a1',
     state: 'closed',
     tags: [],
+    due: null,
     created_at: '2026-01-01T00:00:03Z',
     updated_at: '2026-01-01T00:00:03Z',
     external_identity: null,
@@ -716,6 +721,7 @@ function orderedState(): ClientState {
     position: 'a0',
     state: 'open',
     tags: ['first'],
+    due: null,
     created_at: '2026-03-01T00:00:02Z',
     updated_at: '2026-03-01T00:00:02Z',
     external_identity: null,
@@ -731,6 +737,7 @@ function orderedState(): ClientState {
     position: 'a1',
     state: 'closed',
     tags: [],
+    due: null,
     created_at: '2026-03-01T00:00:03Z',
     updated_at: '2026-03-01T00:00:03Z',
     external_identity: null,

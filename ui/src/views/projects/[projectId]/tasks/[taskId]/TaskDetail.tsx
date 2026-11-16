@@ -5,6 +5,7 @@ import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Priority } from '@/generated/Priority';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Task } from '@/generated/Task';
+import type { When } from '@/generated/When';
 import { useEnqueue } from '@/hooks/useEnqueue';
 import type { TaskFieldPatch } from '@/utils/tasks/operations';
 import {
@@ -47,6 +48,7 @@ export function TaskDetail(props: TaskDetailProps) {
       description: task.description ?? '',
       priority: task.priority,
       tags: task.tags,
+      due: task.due,
       ...overrides,
     };
   }
@@ -88,6 +90,7 @@ export function TaskDetail(props: TaskDetailProps) {
   const savePriority = (priority: Priority) => saveFields(patch({ priority }), task.section_id);
   const saveSection = (sectionId: string | null) => saveFields(patch({}), sectionId);
   const saveTags = (tags: string[]) => saveFields(patch({ tags }), task.section_id);
+  const saveDue = (due: When | null) => saveFields(patch({ due }), task.section_id);
 
   async function handleToggleState() {
     try {
@@ -126,6 +129,7 @@ export function TaskDetail(props: TaskDetailProps) {
           project={project}
           onSavePriority={savePriority}
           onSaveSection={saveSection}
+          onSaveDue={saveDue}
         />
         <ExternalLinkField task={task} onSave={saveExternalIdentity} />
         {error === null ? null : <Alert color="failure">{error}</Alert>}

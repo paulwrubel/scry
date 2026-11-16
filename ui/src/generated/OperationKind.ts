@@ -9,6 +9,7 @@ import type { Position } from './Position';
 import type { Priority } from './Priority';
 import type { Tags } from './Tags';
 import type { TaskState } from './TaskState';
+import type { When } from './When';
 
 /**
  * The operation vocabulary: one variant per `ProjectService` mutation, entity at a
@@ -70,6 +71,7 @@ export type OperationKind =
       position: Position;
       state: TaskState;
       tags: Tags;
+      due?: When | null;
       created_at: string;
       updated_at?: string | null;
       external_identity?: ExternalIdentity | null;
@@ -83,6 +85,7 @@ export type OperationKind =
       priority: Priority | null;
       tags: Tags | null;
       state: TaskState | null;
+      due?: When | null;
       external_identity?: ExternalIdentity | null;
       external_metadata?: ExternalMetadata | null;
       updated_at?: string | null;

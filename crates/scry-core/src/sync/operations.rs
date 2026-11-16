@@ -4,6 +4,7 @@ use crate::models::{
     TaskState,
 };
 use crate::position::Position;
+use crate::temporal::When;
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -191,6 +192,8 @@ pub enum OperationKind {
         #[serde(default)]
         state: TaskState,
         tags: Tags,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        due: Option<When>,
         #[cfg_attr(feature = "ts", ts(type = "string"))]
         created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -201,12 +204,13 @@ pub enum OperationKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         external_metadata: Option<Box<ExternalMetadata>>,
     },
-    /// Covers title, description, priority, tags, state, external identity, and
-    /// external metadata: section and position belong to
+    /// Covers title, description, priority, tags, state, due, external identity,
+    /// and external metadata: section and position belong to
     /// [`OperationKind::MoveTask`].
     /// `description` distinguishes all three states: `None` leaves it,
     /// `Some(None)` clears it, `Some(Some(text))` sets it.
     /// `Some(tags)` sets them, empty `Tags` clears them, `None` leaves them.
+    /// `due` likewise: `None` leaves it, `Some(None)` clears it, `Some(Some(when))` sets it.
     UpdateTask {
         id: TaskId,
         title: Option<String>,
@@ -220,6 +224,13 @@ pub enum OperationKind {
         priority: Option<Priority>,
         tags: Option<Tags>,
         state: Option<TaskState>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(type = "When | null"))]
+        due: Option<Option<When>>,
         #[serde(
             default,
             skip_serializing_if = "Option::is_none",

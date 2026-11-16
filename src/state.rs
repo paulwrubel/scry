@@ -6,6 +6,7 @@ use scry_core::models::{
 };
 use scry_core::ordering::compare_tasks;
 use scry_core::position::Position;
+use scry_core::temporal::When;
 use serde::Serialize;
 
 // Aug 9, 2026 at 4:40pm
@@ -43,6 +44,7 @@ pub struct TaskWithComments {
     pub(crate) state: TaskState,
     pub(crate) position: Position,
     pub(crate) tags: Tags,
+    pub(crate) due: Option<When>,
     pub(crate) created_at: Timestamp,
     pub(crate) updated_at: Timestamp,
     pub(crate) comments: Vec<Comment>,
@@ -62,6 +64,7 @@ impl TaskWithComments {
             state: task.state,
             position: task.position.clone(),
             tags: task.tags.clone(),
+            due: task.due.clone(),
             created_at: task.created_at,
             updated_at: task.updated_at,
             comments: comments.into_iter().collect(),
@@ -89,6 +92,7 @@ impl From<&TaskWithComments> for Task {
             position: value.position.clone(),
             state: value.state,
             tags: value.tags.clone(),
+            due: value.due.clone(),
             created_at: value.created_at,
             updated_at: value.updated_at,
             external_identity: value.external_identity.clone(),
@@ -97,8 +101,19 @@ impl From<&TaskWithComments> for Task {
     }
 }
 
+/// Which tasks with a due value to keep in a listing.
+pub struct DueFilter {
+    pub overdue: bool,
+    pub after: Option<Timestamp>,
+    pub before: Option<Timestamp>,
+}
+
 impl ProjectState {
-    pub fn from_snapshot(snapshot: ProjectSnapshot) -> Self {
+    pub fn from_snapshot(
+        snapshot: ProjectSnapshot,
+        mode: TaskSortingMode,
+        zone: &TimeZone,
+    ) -> Self {
         let ProjectSnapshot {
             project,
             sections,
@@ -126,7 +141,7 @@ impl ProjectState {
                         task.state == TaskState::Open && task.section_id == Some(section.id)
                     })
                     .collect();
-                sort_tasks(&mut section_tasks);
+                sort_tasks(&mut section_tasks, mode, zone);
                 SectionWithTasks {
                     section: Some(section.clone()),
                     tasks_with_comments: section_tasks
@@ -141,7 +156,7 @@ impl ProjectState {
             .iter()
             .filter(|task| task.state == TaskState::Open && task.section_id.is_none())
             .collect();
-        sort_tasks(&mut unsectioned_tasks);
+        sort_tasks(&mut unsectioned_tasks, mode, zone);
         if !unsectioned_tasks.is_empty() {
             sections_with_tasks.push(SectionWithTasks {
                 section: None,
@@ -156,7 +171,7 @@ impl ProjectState {
             .iter()
             .filter(|task| task.state == TaskState::Closed)
             .collect();
-        sort_tasks(&mut closed);
+        sort_tasks(&mut closed, mode, zone);
         let closed_tasks = closed.into_iter().map(task_with_comments).collect();
 
         Self {
@@ -213,6 +228,61 @@ impl ProjectState {
         &self.project
     }
 
+    pub fn with_due_filter(self, filter: DueFilter, now: Timestamp, zone: &TimeZone) -> Self {
+        if !filter.overdue && filter.after.is_none() && filter.before.is_none() {
+            return self;
+        }
+
+        let matches = |task: &TaskWithComments| {
+            let Some(due) = &task.due else {
+                return false;
+            };
+            if filter.overdue && !(task.state == TaskState::Open && due.is_overdue(now, zone)) {
+                return false;
+            }
+            let Ok(deadline) = due.deadline(zone) else {
+                return false;
+            };
+            if filter.after.is_some_and(|after| deadline <= after) {
+                return false;
+            }
+            if filter.before.is_some_and(|before| deadline >= before) {
+                return false;
+            }
+            true
+        };
+
+        let sections_with_tasks: Vec<SectionWithTasks> = self
+            .sections_with_tasks
+            .into_iter()
+            .filter_map(|swt| {
+                let tasks_with_comments: Vec<TaskWithComments> = swt
+                    .tasks_with_comments
+                    .into_iter()
+                    .filter(matches)
+                    .collect();
+
+                if swt.section.is_none() && tasks_with_comments.is_empty() {
+                    None
+                } else {
+                    Some(SectionWithTasks {
+                        section: swt.section,
+                        tasks_with_comments,
+                    })
+                }
+            })
+            .collect();
+
+        let closed_tasks: Vec<TaskWithComments> =
+            self.closed_tasks.into_iter().filter(matches).collect();
+
+        Self {
+            project: self.project,
+            sections_with_tasks,
+            closed_tasks,
+        }
+    }
+
     pub fn section_groups(&self) -> impl DoubleEndedIterator<Item = &SectionWithTasks> + '_ {
         self.sections_with_tasks.iter()
     }
@@ -222,8 +292,8 @@ impl ProjectState {
     }
 }
 
-fn sort_tasks(tasks: &mut [&Task]) {
-    tasks.sort_by(|left, right| compare_tasks(TaskSortingMode::Manual, left, right));
+fn sort_tasks(tasks: &mut [&Task], mode: TaskSortingMode, zone: &TimeZone) {
+    tasks.sort_by(|left, right| compare_tasks(mode, left, right, zone));
 }
 
 #[cfg(test)]
@@ -250,6 +320,10 @@ mod tests {
 
     fn ts(rfc3339: &str) -> Timestamp {
         rfc3339.parse().expect("valid timestamp")
+    }
+
+    fn test_zone() -> TimeZone {
+        TimeZone::get("America/Chicago").expect("valid test zone")
     }
 
     fn project() -> Project {
@@ -292,6 +366,7 @@ mod tests {
             position: Position::parse(position).expect("valid test position"),
             state,
             tags: Tags::default(),
+            due: None,
             created_at: ts("2026-01-01T00:00:00Z"),
             updated_at: ts("2026-01-01T00:00:00Z"),
             external_identity: None,
@@ -382,7 +457,7 @@ mod tests {
             automations: Vec::new(),
         };
 
-        let state = ProjectState::from_snapshot(snapshot);
+        let state = ProjectState::from_snapshot(snapshot, TaskSortingMode::Manual, &test_zone());
 
         assert_eq!(
             group_ids(&state),
@@ -428,7 +503,7 @@ mod tests {
             automations: Vec::new(),
         };
 
-        let state = ProjectState::from_snapshot(snapshot);
+        let state = ProjectState::from_snapshot(snapshot, TaskSortingMode::Manual, &test_zone());
 
         assert_eq!(
             group_ids(&state),
@@ -458,7 +533,7 @@ mod tests {
             automations: Vec::new(),
         };
 
-        let state = ProjectState::from_snapshot(snapshot);
+        let state = ProjectState::from_snapshot(snapshot, TaskSortingMode::Manual, &test_zone());
 
         assert_eq!(
             group_ids(&state),
@@ -508,7 +583,8 @@ mod tests {
 
     #[test]
     fn tasks_are_ordered_by_position_then_id() {
-        let state = ProjectState::from_snapshot(sorting_snapshot());
+        let state =
+            ProjectState::from_snapshot(sorting_snapshot(), TaskSortingMode::Manual, &test_zone());
 
         assert_eq!(
             section_open_ids(&state, Some(section_id(10))),
@@ -545,8 +621,9 @@ mod tests {
             automations: Vec::new(),
         };
 
-        let by_title = ProjectState::from_snapshot(snapshot.clone())
-            .with_substring_filter("login".to_string());
+        let by_title =
+            ProjectState::from_snapshot(snapshot.clone(), TaskSortingMode::Manual, &test_zone())
+                .with_substring_filter("login".to_string());
         assert_eq!(
             group_ids(&by_title),
             vec![
@@ -555,8 +632,8 @@ mod tests {
             ]
         );
 
-        let by_tag =
-            ProjectState::from_snapshot(snapshot).with_substring_filter("Urgent".to_string());
+        let by_tag = ProjectState::from_snapshot(snapshot, TaskSortingMode::Manual, &test_zone())
+            .with_substring_filter("Urgent".to_string());
         assert_eq!(
             group_ids(&by_tag),
             vec![

@@ -1,15 +1,14 @@
 //! `add`.
 
-use scry_core::github::{parse_github_identity, placeholder_title};
-use scry_core::models::{ExternalIdentity, Priority, Section, SectionId};
-use serde::Serialize;
-
+use super::{parse_due, project_by_name};
 use crate::client::{Client, TaskDetails};
 use crate::config::ScryConfig;
 use crate::error::AppError;
 use crate::output::print_json;
-
-use super::project_by_name;
+use scry_core::github::{parse_github_identity, placeholder_title};
+use scry_core::models::{ExternalIdentity, Priority, Section, SectionId};
+use scry_core::temporal::When;
+use serde::Serialize;
 
 /// Input for the `add` command.
 pub struct AddTask<'a> {
@@ -21,6 +20,8 @@ pub struct AddTask<'a> {
     pub section: Option<&'a str>,
     pub new_section: Option<&'a str>,
     pub external_url: Option<&'a str>,
+    pub due: Option<&'a str>,
+    pub floating: bool,
 }
 
 /// Add a task to a project.
@@ -74,12 +75,19 @@ pub async fn add(
             .collect()
     });
 
+    let due = input
+        .due
+        .map(|expr| parse_due(expr, input.floating))
+        .transpose()?;
+
     #[derive(Serialize)]
     struct CreateTaskRequest<'a> {
         title: &'a str,
         description: Option<&'a str>,
         priority: Option<Priority>,
         tags: Option<Vec<String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        due: Option<When>,
         #[serde(skip_serializing_if = "Option::is_none")]
         section_id: Option<SectionId>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -93,6 +101,7 @@ pub async fn add(
         description: input.description,
         priority: input.priority,
         tags,
+        due,
         section_id,
         new_section: new_section_name,
         external_identity,

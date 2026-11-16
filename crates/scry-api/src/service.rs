@@ -7,6 +7,7 @@ use scry_core::models::{
 use scry_core::store::ArcStore;
 use scry_core::sync::ack::{OperationAcknowledgment, RejectionReason};
 use scry_core::sync::operations::{OPERATION_VERSION, Operation, OperationKind};
+use scry_core::temporal::When;
 use uuid::Uuid;
 
 mod apply;
@@ -61,6 +62,7 @@ fn create_task_operation(task: &Task) -> OperationKind {
         position: task.position.clone(),
         state: task.state,
         tags: task.tags.clone(),
+        due: task.due.clone(),
         created_at: task.created_at,
         updated_at: None,
         external_identity: task.external_identity.clone(),
@@ -113,6 +115,7 @@ pub struct NewTask {
     pub description: Option<String>,
     pub priority: Option<Priority>,
     pub tags: Option<Tags>,
+    pub due: Option<When>,
     pub section: SectionInput,
     pub external_identity: Option<ExternalIdentity>,
     pub external_metadata: Option<ExternalMetadata>,
@@ -129,6 +132,7 @@ pub struct TaskPatch {
     pub tags: Option<Tags>,
     pub section: SectionInput,
     pub state: Option<TaskState>,
+    pub due: Option<Option<When>>,
     pub external_identity: Option<Option<ExternalIdentity>>,
     pub external_metadata: Option<Option<ExternalMetadata>>,
 }

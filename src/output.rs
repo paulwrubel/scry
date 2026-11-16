@@ -2,6 +2,9 @@
 
 use crate::error::AppError;
 use crate::state::TaskWithComments;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
+use scry_core::format::format_when;
 use scry_core::ids::TaskId;
 use scry_core::models::{Section, TaskState};
 use std::collections::HashMap;
@@ -22,7 +25,12 @@ pub fn section_label(section: &Option<Section>) -> &str {
 }
 
 /// Render one task line for the human `list` output.
-pub fn task_line(task: &TaskWithComments, handles: &HashMap<TaskId, String>) -> String {
+pub fn task_line(
+    task: &TaskWithComments,
+    handles: &HashMap<TaskId, String>,
+    now: Timestamp,
+    zone: &TimeZone,
+) -> String {
     let checkbox = match task.state {
         TaskState::Open => "[ ]",
         TaskState::Closed => "[x]",
@@ -36,6 +44,9 @@ pub fn task_line(task: &TaskWithComments, handles: &HashMap<TaskId, String>) -> 
     let mut line = format!("  {}  {}", id, checkbox);
     line.push_str(&format!("  {}", task.priority.as_str()));
     line.push_str(&format!("  {}", task.title));
+    if let Some(due) = &task.due {
+        line.push_str(&format!("  due:{}", format_when(due, now, zone)));
+    }
 
     let tags = task
         .tags

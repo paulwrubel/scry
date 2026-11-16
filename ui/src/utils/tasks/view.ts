@@ -7,11 +7,12 @@ export const SHOW_PRIORITY_PARAM = 'show_priority';
 
 export const DEFAULT_TASK_SORTING_MODE: TaskSortingMode = 'manual';
 
-export const TASK_SORTING_MODES: readonly TaskSortingMode[] = ['manual', 'priority'];
+export const TASK_SORTING_MODES: readonly TaskSortingMode[] = ['manual', 'priority', 'due'];
 
 export const TASK_SORTING_OPTIONS: readonly { value: TaskSortingMode; label: string }[] = [
   { value: 'manual', label: TASK_SORTING_MODE_LABELS.manual },
   { value: 'priority', label: TASK_SORTING_MODE_LABELS.priority },
+  { value: 'due', label: TASK_SORTING_MODE_LABELS.due },
 ];
 
 export function isTaskSortingMode(value: string): value is TaskSortingMode {

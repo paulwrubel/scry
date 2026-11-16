@@ -45,12 +45,18 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     position: 'a0',
     state: 'open',
     tags: [],
+    due: null,
     created_at: CREATED_AT,
     updated_at: CREATED_AT,
     external_identity: null,
     external_metadata: null,
     ...overrides,
   };
+}
+
+/** A task with a due date set, for tests that need one. */
+export function makeDueTask(overrides: Partial<Task> = {}): Task {
+  return makeTask({ due: { kind: 'date', date: '2026-01-15' }, ...overrides });
 }
 
 export type ReplicaSnapshotOverrides = Partial<

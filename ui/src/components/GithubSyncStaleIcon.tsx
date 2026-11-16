@@ -1,10 +1,11 @@
+import type { DateTime } from 'luxon';
 import { HiClock } from 'react-icons/hi2';
 import type { Task } from '@/generated/Task';
 import { githubSyncStale, lastSyncedAt } from '@/utils/github';
 
 export type GithubSyncStaleIconProps = {
   task: Task;
-  now?: number;
+  now?: DateTime;
 };
 
 export function GithubSyncStaleIcon(props: GithubSyncStaleIconProps) {

@@ -38,6 +38,7 @@ impl ProjectService {
             position: position.clone(),
             state: TaskState::Open,
             tags: input.tags.unwrap_or_default(),
+            due: input.due,
             created_at,
             updated_at: created_at,
             external_identity: input.external_identity,
@@ -80,6 +81,7 @@ impl ProjectService {
             position: position.clone(),
             state: source.state,
             tags: source.tags,
+            due: source.due.clone(),
             created_at,
             updated_at: created_at,
             external_identity: source.external_identity.clone(),
@@ -152,6 +154,7 @@ impl ProjectService {
             || patch.priority.is_some()
             || patch.tags.is_some()
             || patch.state.is_some()
+            || patch.due.is_some()
             || patch.external_identity.is_some()
             || patch.external_metadata.is_some()
         {
@@ -165,6 +168,7 @@ impl ProjectService {
                 priority: patch.priority,
                 tags: patch.tags,
                 state: patch.state,
+                due: patch.due,
                 external_identity: patch.external_identity,
                 external_metadata: patch
                     .external_metadata
@@ -280,6 +284,7 @@ impl ProjectService {
                 priority: None,
                 tags: None,
                 state: Some(task.state),
+                due: None,
                 external_identity: None,
                 external_metadata: None,
                 updated_at: None,
@@ -304,6 +309,7 @@ impl ProjectService {
                 priority: None,
                 tags: None,
                 state: Some(task.state),
+                due: None,
                 external_identity: None,
                 external_metadata: None,
                 updated_at: None,

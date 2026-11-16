@@ -1,25 +1,45 @@
 //! `list`.
-use super::project_by_name;
+use super::{parse_due, project_by_name};
 use crate::client::{Client, ProjectDetail};
 use crate::color;
 use crate::config::ScryConfig;
 use crate::error::AppError;
 use crate::output::{print_json, section_label, task_line};
-use crate::state::ProjectState;
+use crate::state::{DueFilter, ProjectState};
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 use scry_core::ids::TaskId;
-use scry_core::models::{ProjectSnapshot, Task};
+use scry_core::models::{ProjectSnapshot, Task, TaskSortingMode};
 use std::collections::HashMap;
+
+/// Filters and ordering for `scry list`.
+pub struct ListOptions<'a> {
+    pub section: Option<&'a str>,
+    pub search: Option<&'a str>,
+    pub include_closed: bool,
+    pub overdue: bool,
+    pub due_before: Option<&'a str>,
+    pub due_after: Option<&'a str>,
+    pub sort: TaskSortingMode,
+}
 
 /// List a project's tasks.
 pub async fn list(
     client: &Client,
     config: &ScryConfig,
     project_flag: Option<&str>,
-    section: Option<&str>,
-    search: Option<&str>,
-    include_closed: bool,
+    options: ListOptions<'_>,
     output_json: bool,
 ) -> Result<(), AppError> {
+    let ListOptions {
+        section,
+        search,
+        include_closed,
+        overdue,
+        due_before,
+        due_after,
+        sort,
+    } = options;
     let project = project_by_name(client, config, project_flag).await?;
 
     let project_id = project.id.to_string();
@@ -64,10 +84,38 @@ pub async fn list(
         automations: Vec::new(),
     };
 
-    let mut state = ProjectState::from_snapshot(snapshot);
+    let zone = TimeZone::system();
+    let now = Timestamp::now();
+
+    let mut state = ProjectState::from_snapshot(snapshot, sort, &zone);
     if let Some(search) = search.filter(|search| !search.is_empty()) {
         state = state.with_substring_filter(search.to_string());
     }
+
+    let after = match due_after {
+        Some(expr) => Some(
+            parse_due(expr, false)?
+                .deadline(&zone)
+                .map_err(|error| AppError::Usage(error.to_string()))?,
+        ),
+        None => None,
+    };
+    let before = match due_before {
+        Some(expr) => Some(
+            parse_due(expr, false)?
+                .deadline(&zone)
+                .map_err(|error| AppError::Usage(error.to_string()))?,
+        ),
+        None => None,
+    };
+
+    let filter = DueFilter {
+        overdue,
+        after,
+        before,
+    };
+
+    state = state.with_due_filter(filter, now, &zone);
 
     let groups: Vec<_> = state
         .section_groups()
@@ -114,14 +162,14 @@ pub async fn list(
         );
 
         for task in &group.tasks_with_comments {
-            anstream::println!("{}", task_line(task, &handles));
+            anstream::println!("{}", task_line(task, &handles, now, &zone));
         }
     }
 
     if include_closed {
         println!("Closed ({}):", state.closed_tasks().len());
         for task in state.closed_tasks() {
-            anstream::println!("{}", task_line(task, &handles));
+            anstream::println!("{}", task_line(task, &handles, now, &zone));
         }
     }
 

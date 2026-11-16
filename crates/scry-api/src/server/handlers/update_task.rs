@@ -5,6 +5,7 @@ use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use scry_core::ids::Handle;
 use scry_core::models::{ExternalIdentity, ExternalMetadata, Priority, SectionId, Tags, TaskState};
+use scry_core::temporal::When;
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -23,6 +24,8 @@ pub struct UpdateTaskRequest {
     #[serde(default)]
     pub clear_section: bool,
     pub state: Option<TaskState>,
+    #[serde(default, with = "scry_core::sync::double_option")]
+    pub due: Option<Option<When>>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -77,6 +80,7 @@ pub async fn update_task(
         tags: body.tags.map(Tags::from),
         section,
         state: body.state,
+        due: body.due,
         external_identity: body.external_identity,
         external_metadata: body.external_metadata,
     };

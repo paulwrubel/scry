@@ -5,6 +5,7 @@ import type { Position } from './Position';
 import type { Priority } from './Priority';
 import type { Tags } from './Tags';
 import type { TaskState } from './TaskState';
+import type { When } from './When';
 
 export type Task = {
   id: string;
@@ -16,6 +17,7 @@ export type Task = {
   position: Position;
   state: TaskState;
   tags: Tags;
+  due: When | null;
   created_at: string;
   updated_at: string;
   external_identity: ExternalIdentity | null;

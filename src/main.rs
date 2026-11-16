@@ -15,7 +15,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::AppError;
 use scry_core::ids::Handle;
-use scry_core::models::{Color, Priority};
+use scry_core::models::{Color, Priority, TaskSortingMode};
 use scry_core::snapshot::ImportMode;
 use std::path::{Path, PathBuf};
 
@@ -84,6 +84,12 @@ enum Command {
         /// Link the task to a GitHub issue or pull request
         #[arg(long, value_name = "URL")]
         external_url: Option<String>,
+        /// Set the due date or time
+        #[arg(long, value_name = "EXPR")]
+        due: Option<String>,
+        /// Treat a time-bearing due value as floating (no zone)
+        #[arg(long, requires = "due")]
+        floating: bool,
     },
     /// Move a task to a section or place it within its group
     #[command(group(
@@ -143,6 +149,15 @@ enum Command {
         /// Remove the external identity and metadata
         #[arg(long, conflicts_with = "external_url")]
         clear_external_url: bool,
+        /// Set the due date or time
+        #[arg(long, value_name = "EXPR", conflicts_with = "no_due")]
+        due: Option<String>,
+        /// Clear the due date or time
+        #[arg(long, conflicts_with = "due")]
+        no_due: bool,
+        /// Treat a time-bearing due value as floating (no zone)
+        #[arg(long, requires = "due")]
+        floating: bool,
     },
     /// Duplicate an existing task
     Duplicate {
@@ -188,6 +203,18 @@ enum Command {
         /// Include closed tasks after the open sections
         #[arg(long)]
         include_closed: bool,
+        /// Show only overdue tasks
+        #[arg(long)]
+        overdue: bool,
+        /// Only show tasks due before this date or time
+        #[arg(long, value_name = "EXPR")]
+        due_before: Option<String>,
+        /// Only show tasks due after this date or time
+        #[arg(long, value_name = "EXPR")]
+        due_after: Option<String>,
+        /// Sort order for the listed tasks
+        #[arg(long, value_enum, default_value_t = TaskSortingMode::Manual)]
+        sort: TaskSortingMode,
     },
     /// Manage comments on a task
     #[command(subcommand)]
@@ -508,15 +535,25 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             section,
             search,
             include_closed,
+            overdue,
+            due_before,
+            due_after,
+            sort,
         }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::list(
                 &client,
                 &config,
                 cli.project.as_deref(),
-                section.as_deref(),
-                search.as_deref(),
-                *include_closed,
+                client::ListOptions {
+                    section: section.as_deref(),
+                    search: search.as_deref(),
+                    include_closed: *include_closed,
+                    overdue: *overdue,
+                    due_before: due_before.as_deref(),
+                    due_after: due_after.as_deref(),
+                    sort: *sort,
+                },
                 output_json,
             )
             .await;
@@ -533,6 +570,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             section,
             new_section,
             external_url,
+            due,
+            floating,
         }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::add(
@@ -547,6 +586,8 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     section: section.as_deref(),
                     new_section: new_section.as_deref(),
                     external_url: external_url.as_deref(),
+                    due: due.as_deref(),
+                    floating: *floating,
                 },
                 output_json,
             )
@@ -563,6 +604,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             no_section,
             external_url,
             clear_external_url,
+            due,
+            no_due,
+            floating,
         }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::update(
@@ -578,6 +622,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                     no_section: *no_section,
                     external_url: external_url.as_deref(),
                     clear_external_url: *clear_external_url,
+                    due: due.as_deref(),
+                    no_due: *no_due,
+                    floating: *floating,
                 },
                 output_json,
             )

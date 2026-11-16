@@ -28,7 +28,7 @@ mod import;
 pub use import::import;
 
 mod list;
-pub use list::list;
+pub use list::{ListOptions, list};
 
 mod move_task;
 pub use move_task::{MoveTask, TaskMovePlacement, move_task};
@@ -90,13 +90,35 @@ pub use sync::{Provider, sync};
 mod update;
 pub use update::{UpdateTask, update};
 
-use scry_core::models::{Project, Section};
-
 use crate::client::{BatchTaskResult, Client};
 use crate::client_state::ClientState;
 use crate::config::ScryConfig;
 use crate::error::AppError;
 use crate::output::print_json;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
+use scry_core::models::{Project, Section};
+use scry_core::parse::parse_when;
+use scry_core::temporal::When;
+
+/// The system's IANA time zone, or a usage error asking for an explicit zone.
+pub(crate) fn system_zone() -> Result<String, AppError> {
+    TimeZone::system()
+        .iana_name()
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            AppError::Usage(
+                "could not determine the system time zone; add an explicit zone to the expression"
+                    .to_string(),
+            )
+        })
+}
+
+/// Parse a CLI due expression against the system zone.
+pub(crate) fn parse_due(expr: &str, floating: bool) -> Result<When, AppError> {
+    parse_when(expr, Timestamp::now(), &system_zone()?, floating)
+        .map_err(|error| AppError::Usage(error.to_string()))
+}
 
 /// Resolve a project from `-p` or the local active project.
 ///
