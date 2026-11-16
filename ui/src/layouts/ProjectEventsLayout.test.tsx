@@ -15,11 +15,12 @@ function projectSnapshot(): ProjectSnapshot {
 }
 
 function LocationProbe() {
-  const location = useLocation();
+  const { pathname, search } = useLocation();
+
   return (
     <span data-testid="path">
-      {location.pathname}
-      {location.search}
+      {pathname}
+      {search}
     </span>
   );
 }
