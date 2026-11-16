@@ -8,27 +8,27 @@ The confirmed copy is disposable: it can be thrown away and re-fetched with a bo
 
 ## Storage choice
 
-The Replica uses `idb`, a small promise wrapper around IndexedDB, rather than raw IndexedDB or Dexie. The schema is five simple object stores with explicit transactions; there is no need for a query framework, reactive layer, or migration DSL. `fake-indexeddb` supplies the IndexedDB API in Vitest, so the same code runs unmodified in tests.
+The Replica uses `idb`, a small promise wrapper around IndexedDB, rather than raw IndexedDB or Dexie. The schema is a handful of simple object stores with explicit transactions; there is no need for a query framework, reactive layer, or migration DSL. `fake-indexeddb` supplies the IndexedDB API in Vitest, so the same code runs unmodified in tests.
 
 ## Database layout
 
 One IndexedDB database named `scry-replica` holds:
 
-- `projects`, `sections`, `tasks`, and `comments`, each keyed by the entity's UUID `id`;
+- `projects`, `sections`, `tasks`, `comments`, `automations`, and `events`, each keyed by the entity's UUID `id`;
 - `outbox`, with an auto-increment `seq` key and a unique `operation_id` index;
-- `meta`, holding `schema_version`, `needs_bootstrap`, and the four order arrays (`project_order`, `section_order`, `task_order`, `comment_order`).
+- `meta`, holding `schema_version`, `needs_bootstrap`, and the order arrays (`project_order`, `section_order`, `task_order`, `comment_order`).
 
-IndexedDB returns records in key order, and UUID keys do not carry the order of `ClientState` arrays. The order arrays record that order so a reload can rebuild each project's `sections`, `tasks`, and `comments` exactly as they were persisted. Any entity not present in an order array is appended, so a partially written or hand-edited database still hydrates.
+IndexedDB returns records in key order, and UUID keys do not carry the order of `ClientState` arrays. The order arrays record that order so a reload can rebuild each project's `sections`, `tasks`, and `comments` exactly as they were persisted. `automations` and `events` have no client-side order, so they are appended as they load. Any entity not present in an order array is appended, so a partially written or hand-edited database still hydrates.
 
 ## Read and write path
 
-At startup, `openReplica` reads the four confirmed stores plus `meta` in one readonly transaction and hydrates `ClientState`, then loads the outbox. `bootstrap` rewrites the confirmed stores and their order arrays in one readwrite transaction through `saveConfirmed`, which clears the stores first so the new state fully replaces the old one. `applySyncResult` applies only changes newer than the stored cursor and writes them together with the new cursor in one transaction, so a stale response cannot roll the confirmed state back.
+At startup, `openReplica` reads the confirmed stores plus `meta` in one readonly transaction and hydrates `ClientState`, then loads the outbox. `bootstrap` rewrites the confirmed stores and their order arrays in one readwrite transaction through `saveConfirmed`, which clears the stores first so the new state fully replaces the old one. `applySyncResult` applies only changes newer than the stored cursor and writes them together with the new cursor in one transaction, so a stale response cannot roll the confirmed state back.
 
 Confirmed writes and outbox writes use separate transactions, so no atomicity is claimed between them. A crash between an outbox append and a confirmed rewrite leaves a pending operation that will replay on the next open, which is the intended outcome.
 
 ## Schema lifecycle
 
-`CONFIRMED_SCHEMA_VERSION` versions the shape of the confirmed state. When the stored version does not match, the Replica clears only the four confirmed stores, writes the current version and `needs_bootstrap = true`, and returns an empty confirmed state. The `outbox` is left untouched, so pending operations survive the wipe and replay against the next bootstrap. `bootstrap` writes `needs_bootstrap = false` along with the fresh confirmed state.
+`CONFIRMED_SCHEMA_VERSION` versions the shape of the confirmed state. When the stored version does not match, the Replica clears only the confirmed stores, writes the current version and `needs_bootstrap = true`, and returns an empty confirmed state. The `outbox` is left untouched, so pending operations survive the wipe and replay against the next bootstrap. `bootstrap` writes `needs_bootstrap = false` along with the fresh confirmed state.
 
 IndexedDB structural upgrades are separate from this version and run through the `upgrade` callback. A future structural upgrade must preserve the `outbox` store and its contents unless the operation wire format itself is being replaced, as in the version 3 notes-to-comments upgrade, which cleared the outbox.
 

@@ -1,6 +1,4 @@
 import { Drawer } from 'flowbite-react';
-import type { DrawerTheme } from 'flowbite-react';
-import type { DeepPartial } from 'flowbite-react/types';
 import { useCallback, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { MIN_HANDLE_LENGTH, shortestHandles } from '@/contract/handles';
@@ -9,27 +7,9 @@ import type { Task } from '@/generated/Task';
 import { useReplicaSnapshot } from '@/providers/Replica';
 import { BoardPage } from '@/views/projects/[projectId]/BoardPage';
 import { TaskDetail } from '@/views/projects/[projectId]/tasks/[taskId]/TaskDetail';
+import { drawerTheme } from './drawerTheme';
 
 type Panel = { project: ProjectSnapshot; task: Task };
-
-const mobileSheetClasses =
-  'inset-x-0 bottom-0 h-[75dvh] w-full rounded-t-xl border-t pb-[env(safe-area-inset-bottom)]';
-const desktopDrawerClasses =
-  'md:inset-y-4 md:right-4 md:left-auto md:h-auto md:w-[54rem] md:rounded-xl md:border md:pb-0 md:shadow-2xl';
-
-const drawerTheme: DeepPartial<DrawerTheme> = {
-  root: {
-    base: 'fixed z-40 overflow-y-auto border-line bg-surface p-0 transition-transform duration-300 ease-out',
-    // Flowbite accepts one Drawer position per render, so the bottom sheet
-    // restores the desktop right-drawer geometry at the md breakpoint.
-    position: {
-      bottom: {
-        on: `${mobileSheetClasses} ${desktopDrawerClasses}`,
-        off: `${mobileSheetClasses} ${desktopDrawerClasses} translate-y-full md:translate-y-0 md:translate-x-[calc(100%_+_1rem)]`,
-      },
-    },
-  },
-};
 
 export function ProjectLayout() {
   const { projectId, taskId } = useParams();

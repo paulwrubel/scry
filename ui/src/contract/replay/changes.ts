@@ -3,6 +3,7 @@ import type { AutomationAction } from '@/generated/AutomationAction';
 import type { Change } from '@/generated/Change';
 import type { Color } from '@/generated/Color';
 import type { Comment } from '@/generated/Comment';
+import type { Event } from '@/generated/Event';
 import type { Project } from '@/generated/Project';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
@@ -10,17 +11,20 @@ import type { Task } from '@/generated/Task';
 import {
   findAutomation,
   findComment,
+  findEvent,
   findProject,
   findProjectForTask,
   findSection,
   findTask,
   removeAutomation,
   removeComment,
+  removeEvent,
   removeSection,
   removeTask,
   setProject,
   upsertAutomation,
   upsertComment,
+  upsertEvent,
   upsertSection,
   upsertTask,
 } from './state';
@@ -42,6 +46,9 @@ export function applyChange(state: ClientState, change: Change): void {
       return;
     case 'automation':
       applyAutomationChange(state, change);
+      return;
+    case 'event':
+      applyEventChange(state, change);
       return;
   }
 }
@@ -191,6 +198,31 @@ export function applyAutomationChange(state: ClientState, change: Change): void 
   }
 }
 
+export function applyEventChange(state: ClientState, change: Change): void {
+  switch (change.kind) {
+    case 'create': {
+      // a create change carries the full serialized event, so the untyped field map matches the generated type
+      const event = change.field_values as Event;
+      const snapshot = findProject(state, event.project_id);
+      if (snapshot) {
+        upsertEvent(snapshot, event);
+      }
+      return;
+    }
+    case 'update': {
+      const event = findEvent(state, change.entity_id);
+      if (event) {
+        applyEventValues(event, change.field_values);
+      }
+      return;
+    }
+    case 'delete': {
+      removeEvent(state, change.entity_id);
+      return;
+    }
+  }
+}
+
 export function applyProjectValues(
   snapshot: ProjectSnapshot,
   values: Record<string, unknown>,
@@ -263,5 +295,22 @@ export function applyTaskValues(task: Task, values: Record<string, unknown>): vo
   }
   if (typeof values.updated_at === 'string') {
     task.updated_at = values.updated_at;
+  }
+}
+
+export function applyEventValues(event: Event, values: Record<string, unknown>): void {
+  if (typeof values.title === 'string') {
+    event.title = values.title;
+  }
+  if ('description' in values) {
+    event.description = typeof values.description === 'string' ? values.description : null;
+  }
+  if ('interval' in values) {
+    // change field values are serialized Event fields, so their JSON shape
+    // matches the generated types even though the map is untyped
+    event.interval = values.interval as Event['interval'];
+  }
+  if (typeof values.updated_at === 'string') {
+    event.updated_at = values.updated_at;
   }
 }

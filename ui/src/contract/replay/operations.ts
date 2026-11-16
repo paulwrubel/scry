@@ -1,5 +1,6 @@
 import type { Automation } from '@/generated/Automation';
 import type { Comment } from '@/generated/Comment';
+import type { Event } from '@/generated/Event';
 import type { Operation } from '@/generated/Operation';
 import type { Project } from '@/generated/Project';
 import type { Section } from '@/generated/Section';
@@ -7,17 +8,20 @@ import type { Task } from '@/generated/Task';
 import {
   findAutomation,
   findComment,
+  findEvent,
   findProject,
   findProjectForTask,
   findSection,
   findTask,
   removeAutomation,
   removeComment,
+  removeEvent,
   removeSection,
   removeTask,
   setProject,
   upsertAutomation,
   upsertComment,
+  upsertEvent,
   upsertSection,
   upsertTask,
 } from './state';
@@ -241,6 +245,45 @@ export function applyOperation(state: ClientState, operation: Operation): void {
     }
     case 'delete_automation': {
       removeAutomation(state, operation.id);
+      return;
+    }
+    case 'create_event': {
+      const event: Event = {
+        id: operation.id,
+        project_id: operation.project_id,
+        title: operation.title,
+        description: operation.description,
+        interval: operation.interval,
+        created_at: operation.created_at,
+        updated_at: operation.updated_at ?? operation.created_at,
+      };
+      const snapshot = findProject(state, event.project_id);
+      if (snapshot) {
+        upsertEvent(snapshot, event);
+      }
+      return;
+    }
+    case 'update_event': {
+      const event = findEvent(state, operation.id);
+      if (!event) {
+        return;
+      }
+      if (operation.title !== undefined && operation.title !== null) {
+        event.title = operation.title;
+      }
+      if (operation.description !== undefined) {
+        event.description = operation.description;
+      }
+      if (operation.interval !== undefined && operation.interval !== null) {
+        event.interval = operation.interval;
+      }
+      if (operation.updated_at !== undefined && operation.updated_at !== null) {
+        event.updated_at = operation.updated_at;
+      }
+      return;
+    }
+    case 'delete_event': {
+      removeEvent(state, operation.id);
       return;
     }
   }

@@ -3,6 +3,7 @@ import { Providers } from './layouts/Providers';
 import { AuthenticatedRouteLayout } from './layouts/AuthenticatedRouteLayout';
 import { authLoader } from './layouts/authLoader';
 import { Layout } from './layouts/Layout';
+import { ProjectEventsLayout } from './layouts/ProjectEventsLayout';
 import { ProjectLayout } from './layouts/ProjectLayout';
 import { ProjectRedirect } from './layouts/ProjectRedirect';
 import { ProjectTasksRedirect } from './layouts/ProjectTasksRedirect';
@@ -29,6 +30,11 @@ const routes = [
                 path: 'projects/:projectId/tasks',
                 element: <ProjectLayout />,
                 children: [{ path: ':taskId' }],
+              },
+              {
+                path: 'projects/:projectId/events',
+                element: <ProjectEventsLayout />,
+                children: [{ path: ':eventId' }],
               },
               { path: 'projects/:projectId/settings', element: <ProjectSettingsPage /> },
               { path: '*', element: <Navigate to="/" replace /> },

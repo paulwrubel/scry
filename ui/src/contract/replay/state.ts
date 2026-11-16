@@ -1,5 +1,6 @@
 import type { Automation } from '@/generated/Automation';
 import type { Comment } from '@/generated/Comment';
+import type { Event } from '@/generated/Event';
 import type { Project } from '@/generated/Project';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import type { Section } from '@/generated/Section';
@@ -57,6 +58,16 @@ export function findAutomation(state: ClientState, id: string): Automation | und
   return undefined;
 }
 
+export function findEvent(state: ClientState, id: string): Event | undefined {
+  for (const snapshot of state.projects) {
+    const event = snapshot.events.find((existing) => existing.id === id);
+    if (event) {
+      return event;
+    }
+  }
+  return undefined;
+}
+
 export function setProject(snapshot: ProjectSnapshot, project: Project): void {
   snapshot.id = project.id;
   snapshot.name = project.name;
@@ -101,6 +112,15 @@ export function upsertAutomation(snapshot: ProjectSnapshot, automation: Automati
   }
 }
 
+export function upsertEvent(snapshot: ProjectSnapshot, event: Event): void {
+  const index = snapshot.events.findIndex((existing) => existing.id === event.id);
+  if (index === -1) {
+    snapshot.events.push(event);
+  } else {
+    snapshot.events[index] = event;
+  }
+}
+
 export function removeSection(state: ClientState, id: string): void {
   for (const snapshot of state.projects) {
     const index = snapshot.sections.findIndex((section) => section.id === id);
@@ -136,5 +156,11 @@ export function removeComment(state: ClientState, id: string): void {
 export function removeAutomation(state: ClientState, id: string): void {
   for (const snapshot of state.projects) {
     snapshot.automations = snapshot.automations.filter((automation) => automation.id !== id);
+  }
+}
+
+export function removeEvent(state: ClientState, id: string): void {
+  for (const snapshot of state.projects) {
+    snapshot.events = snapshot.events.filter((event) => event.id !== id);
   }
 }

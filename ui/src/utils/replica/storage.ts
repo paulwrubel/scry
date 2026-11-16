@@ -5,6 +5,7 @@ import { applyChanges as applyConfirmedChanges } from '@/contract/replay';
 import type { Automation } from '@/generated/Automation';
 import type { Change } from '@/generated/Change';
 import type { Comment } from '@/generated/Comment';
+import type { Event } from '@/generated/Event';
 import type { Operation } from '@/generated/Operation';
 import type { Project } from '@/generated/Project';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
@@ -26,6 +27,7 @@ export type ReplicaDB = {
   tasks: { key: string; value: Task };
   comments: { key: string; value: Comment };
   automations: { key: string; value: Automation };
+  events: { key: string; value: Event };
   outbox: {
     key: number;
     value: StoredOutboxEntry;
@@ -52,6 +54,7 @@ const CONFIRMED_STORES = [
   'tasks',
   'comments',
   'automations',
+  'events',
   'meta',
 ] as const;
 type ConfirmedStoreName = (typeof CONFIRMED_STORES)[number];
@@ -89,6 +92,9 @@ export async function openReplicaDatabase(
         }
         if (!db.objectStoreNames.contains('automations')) {
           db.createObjectStore('automations', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('events')) {
+          db.createObjectStore('events', { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains('outbox')) {
           const outbox = db.createObjectStore('outbox', {
@@ -136,6 +142,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
       tasks,
       comments,
       automations,
+      events,
       schemaVersion,
       projectOrder,
       sectionOrder,
@@ -149,6 +156,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
       tx.objectStore('tasks').getAll(),
       tx.objectStore('comments').getAll(),
       tx.objectStore('automations').getAll(),
+      tx.objectStore('events').getAll(),
       meta.get(SCHEMA_VERSION_KEY),
       meta.get(PROJECT_ORDER_KEY),
       meta.get(SECTION_ORDER_KEY),
@@ -170,6 +178,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
         migration.objectStore('tasks').clear(),
         migration.objectStore('comments').clear(),
         migration.objectStore('automations').clear(),
+        migration.objectStore('events').clear(),
       ]);
       await migrationMeta.put(CONFIRMED_SCHEMA_VERSION, SCHEMA_VERSION_KEY);
       await migrationMeta.put(true, NEEDS_BOOTSTRAP_KEY);
@@ -186,6 +195,7 @@ export async function loadConfirmed(db: IDBPDatabase<ReplicaDB>): Promise<Loaded
         tasks,
         comments,
         automations,
+        events,
         projectOrder,
         sectionOrder,
         taskOrder,
@@ -234,6 +244,7 @@ async function writeConfirmed(
   const tasks = tx.objectStore('tasks');
   const comments = tx.objectStore('comments');
   const automations = tx.objectStore('automations');
+  const events = tx.objectStore('events');
   const meta = tx.objectStore('meta');
 
   await Promise.all([
@@ -242,6 +253,7 @@ async function writeConfirmed(
     tasks.clear(),
     comments.clear(),
     automations.clear(),
+    events.clear(),
   ]);
 
   const projectOrder: string[] = [];
@@ -255,6 +267,7 @@ async function writeConfirmed(
       tasks: snapshotTasks,
       comments: snapshotComments,
       automations: snapshotAutomations,
+      events: snapshotEvents,
       ...project
     } = snapshot;
     projectOrder.push(project.id);
@@ -273,6 +286,9 @@ async function writeConfirmed(
     }
     for (const automation of snapshotAutomations) {
       await automations.put(automation);
+    }
+    for (const event of snapshotEvents) {
+      await events.put(event);
     }
   }
 
@@ -304,6 +320,7 @@ export async function applyConfirmedChangesIfNewer(
       tasks,
       comments,
       automations,
+      events,
       projectOrder,
       sectionOrder,
       taskOrder,
@@ -315,6 +332,7 @@ export async function applyConfirmedChangesIfNewer(
       tx.objectStore('tasks').getAll(),
       tx.objectStore('comments').getAll(),
       tx.objectStore('automations').getAll(),
+      tx.objectStore('events').getAll(),
       meta.get(PROJECT_ORDER_KEY),
       meta.get(SECTION_ORDER_KEY),
       meta.get(TASK_ORDER_KEY),
@@ -328,6 +346,7 @@ export async function applyConfirmedChangesIfNewer(
       tasks,
       comments,
       automations,
+      events,
       projectOrder,
       sectionOrder,
       taskOrder,
@@ -401,6 +420,7 @@ function buildClientState(
   tasks: readonly Task[],
   comments: readonly Comment[],
   automations: readonly Automation[],
+  events: readonly Event[],
   projectOrder: unknown,
   sectionOrder: unknown,
   taskOrder: unknown,
@@ -413,6 +433,7 @@ function buildClientState(
       orderById(tasks, asStringArray(taskOrder)),
       orderById(comments, asStringArray(commentOrder)),
       automations,
+      events,
     ),
   };
 }
@@ -423,6 +444,7 @@ function buildSnapshots(
   tasks: readonly Task[],
   comments: readonly Comment[],
   automations: readonly Automation[],
+  events: readonly Event[],
 ): ProjectSnapshot[] {
   const snapshots = new Map<string, ProjectSnapshot>();
   for (const project of projects) {
@@ -456,6 +478,10 @@ function buildSnapshots(
 
   for (const automation of automations) {
     snapshots.get(automation.project_id)?.automations.push(automation);
+  }
+
+  for (const event of events) {
+    snapshots.get(event.project_id)?.events.push(event);
   }
 
   return [...snapshots.values()];

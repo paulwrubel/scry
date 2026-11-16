@@ -43,7 +43,7 @@ view-logs:
 # run the ui dev server against the docker stack
 [group('run')]
 run-ui: run-docker setup-ui-env
-    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run dev
+    cd ui && . "$HOME/.nvm/nvm.sh" && nvm use && npm run dev -- --host 0.0.0.0
 
 # regenerate the Postgres offline query cache
 [group('build')]
