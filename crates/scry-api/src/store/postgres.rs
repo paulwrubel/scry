@@ -7,9 +7,9 @@ use jiff_sqlx::ToSqlx;
 use scry_core::error::StorageError;
 use scry_core::ids::{AutomationId, CommentId, EventId, Handle, ProjectId, SectionId, TaskId};
 use scry_core::models::{
-    Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, Color, Comment, Entity,
-    EntityType, Event, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectSnapshot,
-    Section, Tags, Task, TaskState,
+    Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, ClosedReason, Color,
+    Comment, Entity, EntityType, Event, ExternalIdentity, ExternalMetadata, Priority, Project,
+    ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
 use scry_core::store::Store;
@@ -161,6 +161,8 @@ struct TaskRow {
     section_id: Option<Uuid>,
     position: String,
     state: String,
+    closed_reason: Option<String>,
+    closed_at: Option<SqlxTimestamp>,
     tags: String,
     due: Option<serde_json::Value>,
     created_at: SqlxTimestamp,
@@ -181,6 +183,11 @@ impl TryFrom<TaskRow> for Task {
         let priority = row
             .priority
             .parse::<Priority>()
+            .map_err(|error| StorageError::Database(format!("task {id}: {error}")))?;
+        let closed_reason = row
+            .closed_reason
+            .map(|reason| reason.parse::<ClosedReason>())
+            .transpose()
             .map_err(|error| StorageError::Database(format!("task {id}: {error}")))?;
 
         let external_identity: Option<ExternalIdentity> = row
@@ -213,6 +220,8 @@ impl TryFrom<TaskRow> for Task {
             position: Position::parse(row.position)
                 .map_err(|e| StorageError::Database(format!("invalid task position: {e}")))?,
             state,
+            closed_reason,
+            closed_at: row.closed_at.map(|at| at.to_jiff()),
             tags: Tags::from(row.tags.as_str()),
             due,
             created_at: row.created_at.to_jiff(),
@@ -356,8 +365,8 @@ impl Store for PostgresStore {
 
         match sqlx::query!(
             r#"
-                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, tags, due, created_at, updated_at, external_identity, external_metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                INSERT INTO tasks (id, project_id, title, description, priority, section_id, position, state, closed_reason, closed_at, tags, due, created_at, updated_at, external_identity, external_metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             "#,
             task.id,
             task.project_id,
@@ -367,6 +376,8 @@ impl Store for PostgresStore {
             task.section_id,
             task.position.as_str(),
             task.state.as_str(),
+            task.closed_reason.map(|reason| reason.as_str()),
+            task.closed_at.map(|at| at.to_sqlx()),
             task.tags.to_string(),
             due,
             task.created_at.to_sqlx(),
@@ -406,6 +417,8 @@ impl Store for PostgresStore {
                     section_id,
                     position,
                     state,
+                    closed_reason,
+                    closed_at,
                     tags,
                     due,
                     created_at,
@@ -492,6 +505,8 @@ impl Store for PostgresStore {
                     section_id,
                     position,
                     state,
+                    closed_reason,
+                    closed_at,
                     tags,
                     due,
                     created_at,
@@ -537,6 +552,8 @@ impl Store for PostgresStore {
                     section_id,
                     position,
                     state,
+                    closed_reason,
+                    closed_at,
                     tags,
                     due,
                     created_at,
@@ -596,8 +613,8 @@ impl Store for PostgresStore {
         match sqlx::query!(
             r#"
                 UPDATE tasks
-                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, tags = $7, due = $8, external_identity = $9, external_metadata = $10, updated_at = $11
-                WHERE id = $12
+                SET title = $1, description = $2, priority = $3, section_id = $4, position = $5, state = $6, closed_reason = $7, closed_at = $8, tags = $9, due = $10, external_identity = $11, external_metadata = $12, updated_at = $13
+                WHERE id = $14
             "#,
             &task.title,
             task.description.as_deref(),
@@ -605,6 +622,8 @@ impl Store for PostgresStore {
             task.section_id,
             task.position.as_str(),
             task.state.as_str(),
+            task.closed_reason.map(|reason| reason.as_str()),
+            task.closed_at.map(|at| at.to_sqlx()),
             task.tags.to_string(),
             due,
             external_identity,

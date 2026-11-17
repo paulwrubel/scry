@@ -207,7 +207,6 @@ async fn decode<T: DeserializeOwned>(response: Response) -> Result<T, AppError> 
 struct ApiErrorBody {
     kind: String,
     message: String,
-    #[serde(default)]
     details: Option<serde_json::Value>,
 }
 

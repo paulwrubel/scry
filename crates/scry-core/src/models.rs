@@ -140,6 +140,57 @@ impl TryFrom<&str> for TaskState {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClosedReason {
+    #[default]
+    Completed,
+    Cancelled,
+    Skipped,
+}
+
+impl ClosedReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Skipped => "skipped",
+        }
+    }
+}
+
+impl FromStr for ClosedReason {
+    type Err = ParseFieldError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "completed" | "Completed" => Ok(Self::Completed),
+            "cancelled" | "Cancelled" => Ok(Self::Cancelled),
+            "skipped" | "Skipped" => Ok(Self::Skipped),
+            _ => Err(ParseFieldError::new(
+                "closed reason",
+                value,
+                &["completed", "cancelled", "skipped"],
+            )),
+        }
+    }
+}
+
+impl TryFrom<&str> for ClosedReason {
+    type Error = ParseFieldError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl Display for ClosedReason {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 /// Identifies a GitHub issue or pull request that a task tracks.
 ///
 /// It deliberately does not record whether the number is an issue or a pull,
@@ -367,8 +418,11 @@ pub struct Task {
     pub section_id: Option<SectionId>,
     pub position: Position,
     pub state: TaskState,
+    pub closed_reason: Option<ClosedReason>,
+    /// When the task closed; cleared when the task is reopened.
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub closed_at: Option<Timestamp>,
     pub tags: Tags,
-    #[serde(default)]
     pub due: Option<When>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_at: Timestamp,
@@ -679,7 +733,7 @@ pub struct ProjectSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChangeKind, EntityType, Priority, TaskState};
+    use super::{ChangeKind, ClosedReason, EntityType, Priority, TaskState};
 
     #[test]
     fn parses_kebab_and_variant_names() {
@@ -712,6 +766,27 @@ mod tests {
         assert_eq!("delete".parse::<ChangeKind>(), Ok(ChangeKind::Delete));
         assert_eq!("Update".parse::<ChangeKind>(), Ok(ChangeKind::Update));
         assert_eq!(EntityType::try_from("Section"), Ok(EntityType::Section));
+    }
+
+    #[test]
+    fn parses_closed_reasons() {
+        assert_eq!(
+            "completed".parse::<ClosedReason>(),
+            Ok(ClosedReason::Completed)
+        );
+        assert_eq!(
+            "Cancelled".parse::<ClosedReason>(),
+            Ok(ClosedReason::Cancelled)
+        );
+        assert_eq!("skipped".parse::<ClosedReason>(), Ok(ClosedReason::Skipped));
+        assert_eq!(ClosedReason::try_from("Skipped"), Ok(ClosedReason::Skipped));
+    }
+
+    #[test]
+    fn rejects_unknown_closed_reasons() {
+        assert!("done".parse::<ClosedReason>().is_err());
+        assert!("".parse::<ClosedReason>().is_err());
+        assert!("COMPLETED".parse::<ClosedReason>().is_err());
     }
 
     #[test]

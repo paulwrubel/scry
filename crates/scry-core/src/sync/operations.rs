@@ -1,7 +1,7 @@
 use crate::ids::{AutomationId, CommentId, EventId, ProjectId, SectionId, TaskId};
 use crate::models::{
-    AutomationAction, AutomationTrigger, Color, ExternalIdentity, ExternalMetadata, Priority, Tags,
-    TaskState,
+    AutomationAction, AutomationTrigger, ClosedReason, Color, ExternalIdentity, ExternalMetadata,
+    Priority, Tags, TaskState,
 };
 use crate::position::Position;
 use crate::temporal::{Interval, When};
@@ -65,8 +65,8 @@ impl std::error::Error for OperationError {}
 
 /// One sync operation as it travels over the wire.
 ///
-/// `timestamp` is an optional client-supplied wall-clock time that the server
-/// records but never compares; REST and import operations leave it unset. `operation_version`
+/// `timestamp` is a nullable client-supplied wall-clock time that the server
+/// records but never compares; REST and import operations leave it null. `operation_version`
 /// is validated by [`Operation::validate`] rather than during deserialization so one
 /// unsupported operation can still be acknowledged on its own instead of failing the
 /// whole batch.
@@ -75,7 +75,6 @@ impl std::error::Error for OperationError {}
 pub struct Operation {
     pub operation_id: Uuid,
     pub operation_version: u16,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub timestamp: Option<Timestamp>,
     #[serde(flatten)]
@@ -191,6 +190,11 @@ pub enum OperationKind {
         position: Position,
         #[serde(default)]
         state: TaskState,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        closed_reason: Option<ClosedReason>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        closed_at: Option<Timestamp>,
         tags: Tags,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         due: Option<When>,
@@ -211,6 +215,12 @@ pub enum OperationKind {
     /// `Some(None)` clears it, `Some(Some(text))` sets it.
     /// `Some(tags)` sets them, empty `Tags` clears them, `None` leaves them.
     /// `due` likewise: `None` leaves it, `Some(None)` clears it, `Some(Some(when))` sets it.
+    /// `state: Some(Closed)` records `closed_reason` (defaulting to `completed`
+    /// when absent) and `closed_at` (the operation's edit time when absent);
+    /// `state: Some(Open)` clears both. An explicit `closed_reason` or
+    /// `closed_at` is applied only while the resulting task is closed, which is
+    /// how snapshot import restores them; on an open task they are ignored and
+    /// the fields are cleared. `None` leaves them.
     UpdateTask {
         id: TaskId,
         title: Option<String>,
@@ -224,6 +234,20 @@ pub enum OperationKind {
         priority: Option<Priority>,
         tags: Option<Tags>,
         state: Option<TaskState>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(type = "ClosedReason | null"))]
+        closed_reason: Option<Option<ClosedReason>>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        closed_at: Option<Option<Timestamp>>,
         #[serde(
             default,
             skip_serializing_if = "Option::is_none",
@@ -346,6 +370,7 @@ mod tests {
         let mut value = json!({
             "operation_id": Uuid::new_v4(),
             "operation_version": OPERATION_VERSION,
+            "timestamp": null,
             "kind": "update_task",
             "id": Uuid::new_v4(),
         });
@@ -553,6 +578,7 @@ mod tests {
         let value = json!({
             "operation_id": Uuid::new_v4(),
             "operation_version": OPERATION_VERSION,
+            "timestamp": null,
             "kind": "create_automation",
             "id": Uuid::new_v4(),
             "project_id": Uuid::new_v4(),
@@ -589,6 +615,7 @@ mod tests {
         let value = json!({
             "operation_id": Uuid::new_v4(),
             "operation_version": OPERATION_VERSION,
+            "timestamp": null,
             "kind": "update_automation",
             "id": Uuid::new_v4(),
             "actions": [{ "kind": "set_priority", "priority": "elevated" }]
@@ -616,6 +643,7 @@ mod tests {
         let value = json!({
             "operation_id": Uuid::new_v4(),
             "operation_version": OPERATION_VERSION,
+            "timestamp": null,
             "kind": "delete_automation",
             "id": id
         });
@@ -636,6 +664,7 @@ mod tests {
         let value = json!({
             "operation_id": Uuid::new_v4(),
             "operation_version": OPERATION_VERSION,
+            "timestamp": null,
             "kind": "create_event",
             "id": Uuid::new_v4(),
             "project_id": Uuid::new_v4(),
@@ -665,6 +694,7 @@ mod tests {
         let base = json!({
             "operation_id": Uuid::new_v4(),
             "operation_version": OPERATION_VERSION,
+            "timestamp": null,
             "kind": "update_event",
             "id": id,
             "title": "renamed"
@@ -678,6 +708,7 @@ mod tests {
         let cleared = json!({
             "operation_id": Uuid::new_v4(),
             "operation_version": OPERATION_VERSION,
+            "timestamp": null,
             "kind": "update_event",
             "id": id,
             "description": null
@@ -697,6 +728,7 @@ mod tests {
         let value = json!({
             "operation_id": Uuid::new_v4(),
             "operation_version": OPERATION_VERSION,
+            "timestamp": null,
             "kind": "delete_event",
             "id": id
         });

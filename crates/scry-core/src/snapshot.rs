@@ -13,8 +13,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use uuid::Uuid;
 
-pub const SNAPSHOT_VERSION: u32 = 5;
-pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 4;
+pub const SNAPSHOT_VERSION: u32 = 6;
+pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 5;
 
 /// The bare server-wide snapshot: every project document plus the cursor a
 /// client should pull from next.
@@ -35,7 +35,7 @@ pub struct SnapshotFile {
     pub projects: Vec<ProjectSnapshot>,
     /// The highest changes-log `seq` reflected by this export, when the
     /// caller asked for a sync cursor. Omitted from JSON when absent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_seen_seq: Option<i64>,
 }
 
@@ -556,6 +556,8 @@ pub fn plan_import(
                     section_id,
                     position: incoming_task.position.clone(),
                     state: incoming_task.state,
+                    closed_reason: incoming_task.closed_reason,
+                    closed_at: incoming_task.closed_at,
                     tags: incoming_task.tags.clone(),
                     due: incoming_task.due.clone(),
                     created_at: incoming_task.created_at,
@@ -580,6 +582,8 @@ pub fn plan_import(
                 let tags = tags_differ(&live_task.tags, &incoming_task.tags)
                     .then(|| incoming_task.tags.clone());
                 let state = changed(&live_task.state, &incoming_task.state);
+                let closed_reason = changed(&live_task.closed_reason, &incoming_task.closed_reason);
+                let closed_at = changed(&live_task.closed_at, &incoming_task.closed_at);
                 let due = changed(&live_task.due, &incoming_task.due);
 
                 if title.is_some()
@@ -587,6 +591,8 @@ pub fn plan_import(
                     || priority.is_some()
                     || tags.is_some()
                     || state.is_some()
+                    || closed_reason.is_some()
+                    || closed_at.is_some()
                     || due.is_some()
                 {
                     plan.operations.push(operation(OperationKind::UpdateTask {
@@ -596,6 +602,8 @@ pub fn plan_import(
                         priority,
                         tags,
                         state,
+                        closed_reason,
+                        closed_at,
                         due,
                         external_identity: None,
                         external_metadata: None,
@@ -628,6 +636,8 @@ pub fn plan_import(
                 section_id,
                 position: incoming_task.position.clone(),
                 state: incoming_task.state,
+                closed_reason: incoming_task.closed_reason,
+                closed_at: incoming_task.closed_at,
                 tags: incoming_task.tags.clone(),
                 due: incoming_task.due.clone(),
                 created_at: incoming_task.created_at,
@@ -1073,6 +1083,8 @@ mod tests {
             section_id,
             position: position("a0"),
             state: TaskState::Open,
+            closed_reason: None,
+            closed_at: None,
             tags: Tags::default(),
             due: None,
             created_at: at(),
@@ -1119,12 +1131,12 @@ mod tests {
 
     #[test]
     fn parse_rejects_unsupported_version() {
-        let v6 = r#"{ "version": 6, "projects": [] }"#;
+        let v7 = r#"{ "version": 7, "projects": [] }"#;
 
         assert!(matches!(
-            parse_file(v6),
+            parse_file(v7),
             Err(SnapshotFileError::UnsupportedVersion {
-                found: 6,
+                found: 7,
                 supported: SNAPSHOT_VERSION
             })
         ));
@@ -1205,22 +1217,31 @@ mod tests {
 
         let mut value = serde_json::to_value(snapshot_file(vec![document]))
             .expect("snapshot file should serialize");
-        value["version"] = json!(4);
+        value["version"] = json!(5);
         let project = value["projects"]
             .as_array_mut()
             .expect("projects should be an array")
             .first_mut()
             .and_then(|project| project.as_object_mut())
             .expect("project should be an object");
-        // version 4 predates events; the field defaults back to empty
-        project.remove("events");
+        // version 5 predates close metadata; both fields default back to none
+        let task = project
+            .get_mut("tasks")
+            .and_then(|tasks| tasks.as_array_mut())
+            .and_then(|tasks| tasks.first_mut())
+            .and_then(|task| task.as_object_mut())
+            .expect("task should be an object");
+        task.remove("closed_reason");
+        task.remove("closed_at");
 
         let parsed = parse_file(&value.to_string()).expect("previous version should parse");
 
-        assert_eq!(parsed.version, 4);
+        assert_eq!(parsed.version, 5);
         let document = &parsed.projects[0];
         assert_eq!(document.sections.len(), 1);
         assert_eq!(document.tasks.len(), 1);
+        assert_eq!(document.tasks[0].closed_reason, None);
+        assert_eq!(document.tasks[0].closed_at, None);
         assert_eq!(document.comments.len(), 1);
         assert_eq!(document.automations.len(), 1);
         assert!(document.events.is_empty());
@@ -1531,6 +1552,8 @@ mod import_tests {
             section_id,
             position: Position::parse("a0").unwrap(),
             state: TaskState::Open,
+            closed_reason: None,
+            closed_at: None,
             tags: Tags::default(),
             due: None,
             created_at: at(),

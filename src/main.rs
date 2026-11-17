@@ -15,7 +15,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use config::{ScryConfig, ScrySecrets};
 use error::AppError;
 use scry_core::ids::Handle;
-use scry_core::models::{Color, Priority, TaskSortingMode};
+use scry_core::models::{ClosedReason, Color, Priority, TaskSortingMode};
 use scry_core::snapshot::ImportMode;
 use std::path::{Path, PathBuf};
 
@@ -174,6 +174,12 @@ enum Command {
         /// The task IDs or unique handle prefixes
         #[arg(required = true, num_args = 1..)]
         ids: Vec<Handle>,
+        /// Record the close as cancelled
+        #[arg(long, conflicts_with = "skipped")]
+        cancelled: bool,
+        /// Record the close as skipped
+        #[arg(long)]
+        skipped: bool,
     },
     /// Open closed tasks
     Open {
@@ -732,9 +738,20 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::delete(&client, id.as_str(), output_json).await;
         }
-        Some(Command::Close { ids }) => {
+        Some(Command::Close {
+            ids,
+            cancelled,
+            skipped,
+        }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-            return client::close_tasks(&client, ids, output_json).await;
+            let reason = if *cancelled {
+                ClosedReason::Cancelled
+            } else if *skipped {
+                ClosedReason::Skipped
+            } else {
+                ClosedReason::Completed
+            };
+            return client::close_tasks(&client, ids, reason, output_json).await;
         }
         Some(Command::Open { ids }) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;

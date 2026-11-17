@@ -1,0 +1,2 @@
+ALTER TABLE tasks DROP COLUMN IF EXISTS closed_at;
+ALTER TABLE tasks DROP COLUMN IF EXISTS closed_reason;

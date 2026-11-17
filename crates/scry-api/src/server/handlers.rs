@@ -10,9 +10,6 @@ use serde::Serialize;
 
 mod batch;
 
-mod close_task;
-pub use close_task::close_task;
-
 mod close_tasks;
 pub use close_tasks::close_tasks;
 
@@ -135,9 +132,6 @@ pub use move_section::move_section;
 
 mod move_task;
 pub use move_task::move_task;
-
-mod open_task;
-pub use open_task::open_task;
 
 mod open_tasks;
 pub use open_tasks::open_tasks;

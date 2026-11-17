@@ -17,9 +17,7 @@ pub struct ProjectDetail {
 pub struct TaskDetails {
     #[serde(flatten)]
     pub task: Task,
-    #[serde(default)]
     pub comments: Option<Vec<Comment>>,
-    #[serde(default)]
     pub handle: Option<String>,
 }
 

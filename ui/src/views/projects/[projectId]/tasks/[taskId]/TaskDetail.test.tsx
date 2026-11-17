@@ -61,6 +61,8 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     section_id: null,
     position: 'a0',
     state: 'open',
+    closed_reason: null,
+    closed_at: null,
     tags: [],
     due: null,
     created_at: CREATED_AT,
@@ -330,15 +332,40 @@ describe('TaskDetail', () => {
     });
   });
 
-  it('closes an open task', async () => {
+  it('closes an open task as completed', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
     fireEvent.click(screen.getByRole('button', { name: 'Close task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
 
     await waitFor(() => {
       expect(enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'update_task', id: TASK_ID, state: 'closed' }),
+        expect.objectContaining({
+          kind: 'update_task',
+          id: TASK_ID,
+          state: 'closed',
+          closed_reason: 'completed',
+        }),
+      );
+    });
+  });
+
+  it('closes an open task as cancelled', async () => {
+    const enqueue = vi.fn(async () => undefined);
+    renderTask(projectSnapshot(), enqueue);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelled' }));
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'update_task',
+          id: TASK_ID,
+          state: 'closed',
+          closed_reason: 'cancelled',
+        }),
       );
     });
   });

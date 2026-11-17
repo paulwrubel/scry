@@ -24,16 +24,14 @@ pub struct UpdateTaskRequest {
     #[serde(default)]
     pub clear_section: bool,
     pub state: Option<TaskState>,
-    #[serde(default, with = "scry_core::sync::double_option")]
+    #[serde(with = "scry_core::sync::double_option")]
     pub due: Option<Option<When>>,
     #[serde(
-        default,
         skip_serializing_if = "Option::is_none",
         with = "scry_core::sync::double_option"
     )]
     pub external_identity: Option<Option<ExternalIdentity>>,
     #[serde(
-        default,
         skip_serializing_if = "Option::is_none",
         with = "scry_core::sync::double_option"
     )]

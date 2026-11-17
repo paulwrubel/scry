@@ -45,6 +45,8 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     section_id: null,
     position: 'a0',
     state: 'open',
+    closed_reason: null,
+    closed_at: null,
     tags: [],
     due: null,
     created_at: CREATED_AT,
@@ -114,6 +116,7 @@ describe('createTaskOperation', () => {
 
     expect(operation).toMatchObject({
       operation_version: 1,
+      timestamp: expect.any(String),
       kind: 'create_task',
       project_id: PROJECT_ID,
       title: 'New task',
@@ -428,7 +431,7 @@ describe('setTaskStateOperation', () => {
     expect(setTaskStateOperation(task({ id: TASK_ID, title: 'Title' }), 'open')).toBeNull();
   });
 
-  it('updates only the state', () => {
+  it('closes with the completed reason by default', () => {
     expect(setTaskStateOperation(task({ id: TASK_ID, title: 'Title' }), 'closed')).toMatchObject({
       kind: 'update_task',
       id: TASK_ID,
@@ -436,6 +439,27 @@ describe('setTaskStateOperation', () => {
       priority: null,
       tags: null,
       state: 'closed',
+      closed_reason: 'completed',
+    });
+  });
+
+  it('closes with an explicit reason', () => {
+    expect(
+      setTaskStateOperation(task({ id: TASK_ID, title: 'Title' }), 'closed', 'cancelled'),
+    ).toMatchObject({
+      kind: 'update_task',
+      state: 'closed',
+      closed_reason: 'cancelled',
+    });
+  });
+
+  it('reopens without a close reason', () => {
+    expect(
+      setTaskStateOperation(task({ id: TASK_ID, title: 'Title', state: 'closed' }), 'open'),
+    ).toMatchObject({
+      kind: 'update_task',
+      state: 'open',
+      closed_reason: null,
     });
   });
 });

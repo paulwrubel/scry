@@ -1,8 +1,8 @@
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use scry_core::models::{
-    Comment, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectId, ProjectSnapshot,
-    Section, SectionId, Tags, Task, TaskId, TaskSortingMode, TaskState,
+    ClosedReason, Comment, ExternalIdentity, ExternalMetadata, Priority, Project, ProjectId,
+    ProjectSnapshot, Section, SectionId, Tags, Task, TaskId, TaskSortingMode, TaskState,
 };
 use scry_core::ordering::compare_tasks;
 use scry_core::position::Position;
@@ -42,6 +42,8 @@ pub struct TaskWithComments {
     pub(crate) priority: Priority,
     pub(crate) section_id: Option<SectionId>,
     pub(crate) state: TaskState,
+    pub(crate) closed_reason: Option<ClosedReason>,
+    pub(crate) closed_at: Option<Timestamp>,
     pub(crate) position: Position,
     pub(crate) tags: Tags,
     pub(crate) due: Option<When>,
@@ -62,6 +64,8 @@ impl TaskWithComments {
             priority: task.priority,
             section_id: task.section_id,
             state: task.state,
+            closed_reason: task.closed_reason,
+            closed_at: task.closed_at,
             position: task.position.clone(),
             tags: task.tags.clone(),
             due: task.due.clone(),
@@ -91,6 +95,8 @@ impl From<&TaskWithComments> for Task {
             section_id: value.section_id,
             position: value.position.clone(),
             state: value.state,
+            closed_reason: value.closed_reason,
+            closed_at: value.closed_at,
             tags: value.tags.clone(),
             due: value.due.clone(),
             created_at: value.created_at,
@@ -365,6 +371,8 @@ mod tests {
             section_id,
             position: Position::parse(position).expect("valid test position"),
             state,
+            closed_reason: None,
+            closed_at: None,
             tags: Tags::default(),
             due: None,
             created_at: ts("2026-01-01T00:00:00Z"),

@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { SiGithub } from 'react-icons/si';
 import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
 import { Link, useLocation } from 'react-router-dom';
+import { ClosedReasonIcon } from './ClosedReasonIcon';
 import { GithubSyncStaleIcon } from '@/components/GithubSyncStaleIcon';
 import { TitleText } from '@/components/TitleText';
 import { formatDue, isOverdue } from '@/contract/due';
@@ -40,6 +41,7 @@ export function TaskCard(props: TaskCardProps) {
         ? 'Open GitHub issue'
         : 'Open GitHub item';
   const githubError = externalError(task);
+  const closedReason = task.state === 'closed' ? (task.closed_reason ?? null) : null;
   const hasBadges = task.tags.length > 0 || githubError !== null;
   const description = task.description?.trim() ?? '';
   const hasDescription = description.length > 0;
@@ -133,14 +135,19 @@ export function TaskCard(props: TaskCardProps) {
             {githubError === null ? null : <Badge color="failure">GitHub: {githubError}</Badge>}
           </div>
         ) : null}
-        {dueLabel === null ? null : (
-          <p
-            className={`text-right text-xs ${dueOverdue ? 'text-danger' : 'text-muted'}`}
-            aria-label={dueOverdue ? `Overdue, was due ${dueText}` : `Due ${dueText}`}
-            title={dueOverdue ? `Overdue, was due ${dueText}` : `Due ${dueText}`}
-          >
-            {dueLabel}
-          </p>
+        {dueLabel === null && closedReason === null ? null : (
+          <div className="flex items-end justify-between gap-2">
+            <ClosedReasonIcon reason={closedReason} />
+            {dueLabel === null ? null : (
+              <p
+                className={`ml-auto text-right text-xs ${dueOverdue ? 'text-danger' : 'text-muted'}`}
+                aria-label={dueOverdue ? `Overdue, was due ${dueText}` : `Due ${dueText}`}
+                title={dueOverdue ? `Overdue, was due ${dueText}` : `Due ${dueText}`}
+              >
+                {dueLabel}
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>

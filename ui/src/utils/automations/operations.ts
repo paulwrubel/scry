@@ -116,6 +116,7 @@ export function createAutomationOperation(
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'create_automation',
     id: newId(),
     project_id: projectId,
@@ -133,6 +134,7 @@ export function updateAutomationOperation(
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_automation',
     id: automation.id,
     actions,
@@ -144,6 +146,7 @@ export function deleteAutomationOperation(automation: Automation): Operation {
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'delete_automation',
     id: automation.id,
   };

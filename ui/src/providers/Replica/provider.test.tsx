@@ -36,6 +36,7 @@ function SnapshotProbe() {
     void replica.enqueue({
       operation_id: 'op-1',
       operation_version: 1,
+      timestamp: null,
       kind: 'create_project',
       id: 'project-1',
       name: 'Project',

@@ -21,6 +21,8 @@ fn task(id: u128, title: &str, position: &str, priority: Priority) -> Task {
         section_id: None,
         position: Position::parse(position).expect("test uses a valid position"),
         state: TaskState::Open,
+        closed_reason: None,
+        closed_at: None,
         tags: Tags::default(),
         due: None,
         created_at: Timestamp::from_second(0).expect("valid timestamp"),

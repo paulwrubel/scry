@@ -64,6 +64,8 @@ function task(overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task {
     section_id: null,
     position: 'a0',
     state: 'open',
+    closed_reason: null,
+    closed_at: null,
     tags: [],
     due: null,
     created_at: CREATED_AT,
@@ -394,6 +396,7 @@ describe('BoardPage', () => {
     expect(enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         operation_version: 1,
+        timestamp: expect.any(String),
         kind: 'create_task',
         project_id: project.id,
         title: 'New task',

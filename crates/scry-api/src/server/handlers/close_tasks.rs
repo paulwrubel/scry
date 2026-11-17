@@ -7,12 +7,14 @@ use axum::Json;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use scry_core::ids::Handle;
+use scry_core::models::ClosedReason;
 use serde::Deserialize;
 
 /// Request body for a batch close.
 #[derive(Deserialize)]
 pub struct CloseTasksRequest {
     pub handles: Vec<String>,
+    pub reason: Option<ClosedReason>,
 }
 
 /// Close every handle in the request, reporting one outcome per handle.
@@ -21,11 +23,12 @@ pub async fn close_tasks(
     Json(body): Json<CloseTasksRequest>,
 ) -> Response {
     let mut results = Vec::with_capacity(body.handles.len());
+    let reason = body.reason.unwrap_or_default();
 
     for raw in body.handles {
         let result = match raw.parse::<Handle>() {
             Ok(handle) => match state.service.get_task_by_handle(&handle).await {
-                Ok(task) => match state.service.close_task_by_id(task.id).await {
+                Ok(task) => match state.service.close_task_by_id(task.id, reason).await {
                     Ok(task) => BatchTaskResult::success(raw.clone(), task),
                     Err(error) => BatchTaskResult::failure(raw.clone(), AppError::from(error)),
                 },

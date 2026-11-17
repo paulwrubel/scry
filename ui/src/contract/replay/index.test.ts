@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Automation } from '@/generated/Automation';
 import type { AutomationAction } from '@/generated/AutomationAction';
 import type { Change } from '@/generated/Change';
+import type { ClosedReason } from '@/generated/ClosedReason';
 import type { Comment } from '@/generated/Comment';
 import type { Event } from '@/generated/Event';
 import type { Operation } from '@/generated/Operation';
@@ -47,6 +48,8 @@ function task(title: string): Task {
     section_id: SECTION_ID,
     position: 'a0',
     state: 'open',
+    closed_reason: null,
+    closed_at: null,
     tags: [],
     due: null,
     created_at: CREATED_AT,
@@ -79,6 +82,7 @@ function updateTask(title: string, operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'update_task',
     id: TASK_ID,
     title,
@@ -118,6 +122,7 @@ function moveSection(position: string, operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'move_section',
     id: SECTION_ID,
     position,
@@ -128,6 +133,7 @@ function deleteProject(operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'delete_project',
     id: PROJECT_ID,
   };
@@ -163,6 +169,7 @@ function createAutomation(operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'create_automation',
     id: AUTOMATION_ID,
     project_id: PROJECT_ID,
@@ -176,6 +183,7 @@ function updateAutomation(operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'update_automation',
     id: AUTOMATION_ID,
     actions: [{ kind: 'set_priority', priority: 'elevated' }],
@@ -186,6 +194,7 @@ function deleteAutomation(operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'delete_automation',
     id: AUTOMATION_ID,
   };
@@ -223,6 +232,7 @@ function createEvent(operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'create_event',
     id: EVENT_ID,
     project_id: PROJECT_ID,
@@ -237,6 +247,7 @@ function updateEvent(operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'update_event',
     id: EVENT_ID,
     title: 'standup v2',
@@ -248,6 +259,7 @@ function deleteEvent(operationId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'delete_event',
     id: EVENT_ID,
   };
@@ -334,6 +346,7 @@ describe('op replay', () => {
     const legacy = {
       operation_id: 'op-legacy',
       operation_version: 1,
+      timestamp: null,
       kind: 'create_project',
       id: PROJECT_ID,
       name: 'Legacy project',
@@ -341,7 +354,7 @@ describe('op replay', () => {
       task_sorting_mode: 'priority',
       show_priority: true,
       created_at: CREATED_AT,
-    } as Operation;
+    } as Operation; // the fixture carries fields the current Operation type dropped
 
     const result = replayOperations({ projects: [] }, [legacy]);
 
@@ -357,13 +370,14 @@ describe('op replay', () => {
     const legacy = {
       operation_id: 'op-legacy',
       operation_version: 1,
+      timestamp: null,
       kind: 'update_project',
       id: PROJECT_ID,
       name: 'Renamed',
       description: 'Updated',
       task_sorting_mode: 'priority',
       show_priority: false,
-    } as Operation;
+    } as Operation; // the fixture carries fields the current Operation type dropped
 
     const result = replayOperations(state(), [legacy]);
 
@@ -371,6 +385,60 @@ describe('op replay', () => {
       name: 'Renamed',
       description: 'Updated',
     });
+  });
+});
+
+describe('task close replay', () => {
+  function setTaskState(
+    nextState: 'open' | 'closed',
+    operationId: string,
+    extras: { closed_reason?: ClosedReason | null; updated_at?: string } = {},
+  ): Operation {
+    return {
+      operation_id: operationId,
+      operation_version: 1,
+      timestamp: null,
+      kind: 'update_task',
+      id: TASK_ID,
+      title: null,
+      priority: null,
+      tags: null,
+      state: nextState,
+      ...extras,
+    };
+  }
+
+  it('defaults the reason and closed_at when a task closes', () => {
+    const closedAt = '2026-01-02T00:00:00Z';
+    const close = setTaskState('closed', 'op-close', { updated_at: closedAt });
+    const result = replayOperations(state(), [close]);
+
+    expect(result.projects[0].tasks[0].closed_reason).toBe('completed');
+    expect(result.projects[0].tasks[0].closed_at).toBe(closedAt);
+  });
+
+  it('keeps an explicit close reason', () => {
+    const closedAt = '2026-01-02T00:00:00Z';
+    const close = setTaskState('closed', 'op-close', {
+      closed_reason: 'skipped',
+      updated_at: closedAt,
+    });
+    const result = replayOperations(state(), [close]);
+
+    expect(result.projects[0].tasks[0].closed_reason).toBe('skipped');
+    expect(result.projects[0].tasks[0].closed_at).toBe(closedAt);
+  });
+
+  it('clears the close metadata when a task reopens', () => {
+    const close = setTaskState('closed', 'op-close', {
+      closed_reason: 'skipped',
+      updated_at: '2026-01-02T00:00:00Z',
+    });
+    const reopen = setTaskState('open', 'op-open', { updated_at: '2026-01-03T00:00:00Z' });
+    const result = replayOperations(state(), [close, reopen]);
+
+    expect(result.projects[0].tasks[0].closed_reason).toBeNull();
+    expect(result.projects[0].tasks[0].closed_at).toBeNull();
   });
 });
 

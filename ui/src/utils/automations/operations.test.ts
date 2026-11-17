@@ -206,6 +206,7 @@ describe('automation operations', () => {
     ]);
     expect(create).toMatchObject({
       operation_version: 1,
+      timestamp: expect.any(String),
       kind: 'create_automation',
       project_id: PROJECT_ID,
       trigger: { kind: 'task_created' },
@@ -218,6 +219,7 @@ describe('automation operations', () => {
     const update = updateAutomationOperation(existing, [{ kind: 'open_task' }]);
     expect(update).toMatchObject({
       operation_version: 1,
+      timestamp: expect.any(String),
       kind: 'update_automation',
       id: AUTOMATION_ID,
       actions: [{ kind: 'open_task' }],
@@ -226,6 +228,7 @@ describe('automation operations', () => {
     const remove = deleteAutomationOperation(existing);
     expect(remove).toMatchObject({
       operation_version: 1,
+      timestamp: expect.any(String),
       kind: 'delete_automation',
       id: AUTOMATION_ID,
     });

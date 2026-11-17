@@ -39,6 +39,8 @@ function task(overrides: Partial<Task> = {}): Task {
     section_id: null,
     position: 'a0',
     state: 'open',
+    closed_reason: null,
+    closed_at: null,
     tags: [],
     due: null,
     created_at: '2026-01-01T00:00:00Z',

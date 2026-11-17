@@ -1,5 +1,7 @@
+use jiff::Timestamp;
 use scry_core::models::{
-    Comment, Entity, Event, ExternalMetadata, FieldValues, Project, Section, Task,
+    ClosedReason, Comment, Entity, Event, ExternalMetadata, FieldValues, Project, Section, Task,
+    TaskState,
 };
 use scry_core::sync::operations::{ColorChange as OperationColorChange, OperationKind};
 use serde_json::{Map, Value, json};
@@ -29,7 +31,11 @@ pub(super) fn subject(op: &OperationKind) -> Entity {
     }
 }
 
-pub(super) fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldValues {
+pub(super) fn task_field_updates(
+    task: &mut Task,
+    op: &OperationKind,
+    updated_at: Timestamp,
+) -> FieldValues {
     let mut fields = Map::new();
 
     match op {
@@ -39,6 +45,8 @@ pub(super) fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldVa
             priority,
             tags,
             state,
+            closed_reason,
+            closed_at,
             due,
             external_identity,
             external_metadata,
@@ -60,9 +68,36 @@ pub(super) fn task_field_updates(task: &mut Task, op: &OperationKind) -> FieldVa
                 task.tags = tags.clone();
                 fields.insert("tags".into(), json!(tags));
             }
+            let previous_state = task.state;
+            let previous_reason = task.closed_reason;
+            let previous_at = task.closed_at;
             if let Some(state) = state {
                 task.state = *state;
                 fields.insert("state".into(), json!(state));
+            }
+            if task.state == TaskState::Closed {
+                if let Some(reason) = closed_reason {
+                    task.closed_reason = *reason;
+                }
+                if let Some(at) = closed_at {
+                    task.closed_at = *at;
+                }
+                if state.is_some_and(|value| value != previous_state) {
+                    task.closed_reason =
+                        Some(task.closed_reason.unwrap_or(ClosedReason::Completed));
+                    task.closed_at = Some(task.closed_at.unwrap_or(updated_at));
+                }
+            } else {
+                task.closed_reason = None;
+                task.closed_at = None;
+            }
+            let reason_applied = task.state == TaskState::Closed && closed_reason.is_some();
+            if reason_applied || task.closed_reason != previous_reason {
+                fields.insert("closed_reason".into(), json!(task.closed_reason));
+            }
+            let at_applied = task.state == TaskState::Closed && closed_at.is_some();
+            if at_applied || task.closed_at != previous_at {
+                fields.insert("closed_at".into(), json!(task.closed_at));
             }
             if let Some(due) = due {
                 task.due = due.clone();
@@ -248,6 +283,11 @@ mod tests {
     use scry_core::position::Position;
     use uuid::Uuid;
 
+    fn updates(task: &mut Task, op: &OperationKind) -> FieldValues {
+        let updated_at = task.updated_at;
+        task_field_updates(task, op, updated_at)
+    }
+
     fn task(title: &str, description: Option<&str>) -> Task {
         let created_at = Timestamp::now();
         Task {
@@ -259,6 +299,8 @@ mod tests {
             section_id: None,
             position: Position::parse("a0").expect("a0 is a valid position"),
             state: TaskState::Open,
+            closed_reason: None,
+            closed_at: None,
             tags: Tags::from(vec!["alpha"]),
             due: None,
             created_at,
@@ -278,13 +320,15 @@ mod tests {
             priority: None,
             tags: None,
             state: None,
+            closed_reason: None,
+            closed_at: None,
             due: None,
             external_identity: None,
             external_metadata: None,
             updated_at: None,
         };
 
-        let fields = task_field_updates(&mut task, &op);
+        let fields = updates(&mut task, &op);
 
         assert_eq!(task.title, "new");
         assert_eq!(task.description.as_deref(), Some("kept"));
@@ -300,7 +344,7 @@ mod tests {
         let mut task = task("old", None);
         let id = task.id;
 
-        task_field_updates(
+        updates(
             &mut task,
             &OperationKind::UpdateTask {
                 id,
@@ -309,13 +353,15 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                closed_reason: None,
+                closed_at: None,
                 due: None,
                 external_identity: None,
                 external_metadata: None,
                 updated_at: None,
             },
         );
-        let fields = task_field_updates(
+        let fields = updates(
             &mut task,
             &OperationKind::UpdateTask {
                 id,
@@ -324,6 +370,8 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                closed_reason: None,
+                closed_at: None,
                 due: None,
                 external_identity: None,
                 external_metadata: None,
@@ -393,6 +441,8 @@ mod tests {
             priority: None,
             tags: None,
             state,
+            closed_reason: None,
+            closed_at: None,
             due: None,
             external_identity,
             external_metadata,
@@ -411,7 +461,7 @@ mod tests {
         };
         let metadata = github_metadata();
 
-        let fields = task_field_updates(
+        let fields = updates(
             &mut task,
             &OperationKind::UpdateTask {
                 id,
@@ -420,6 +470,8 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                closed_reason: None,
+                closed_at: None,
                 due: None,
                 external_identity: Some(Some(identity.clone())),
                 external_metadata: Some(Some(Box::new(metadata.clone()))),
@@ -433,7 +485,7 @@ mod tests {
         assert_eq!(fields["external_identity"], json!(identity));
         assert_eq!(fields["external_metadata"], json!(metadata));
 
-        let fields = task_field_updates(
+        let fields = updates(
             &mut task,
             &OperationKind::UpdateTask {
                 id,
@@ -442,6 +494,8 @@ mod tests {
                 priority: None,
                 tags: None,
                 state: None,
+                closed_reason: None,
+                closed_at: None,
                 due: None,
                 external_identity: Some(None),
                 external_metadata: Some(None),
@@ -581,5 +635,136 @@ mod tests {
         );
 
         assert!(!update_changes_locked_external_field(&task, &op));
+    }
+
+    fn close_op(
+        id: Uuid,
+        state: TaskState,
+        closed_reason: Option<ClosedReason>,
+        closed_at: Option<Timestamp>,
+    ) -> OperationKind {
+        OperationKind::UpdateTask {
+            id,
+            title: None,
+            description: None,
+            priority: None,
+            tags: None,
+            state: Some(state),
+            closed_reason: closed_reason.map(Some),
+            closed_at: closed_at.map(Some),
+            due: None,
+            external_identity: None,
+            external_metadata: None,
+            updated_at: None,
+        }
+    }
+
+    #[test]
+    fn closing_without_a_reason_records_completed() {
+        let mut task = task("t", None);
+        let id = task.id;
+
+        let fields = updates(&mut task, &close_op(id, TaskState::Closed, None, None));
+
+        assert_eq!(task.closed_reason, Some(ClosedReason::Completed));
+        assert_eq!(task.closed_at, Some(task.updated_at));
+        let fields = fields.as_object().expect("the field map is an object");
+        assert_eq!(fields["closed_reason"], json!(ClosedReason::Completed));
+        assert_eq!(fields["closed_at"], json!(task.updated_at));
+    }
+
+    #[test]
+    fn closing_records_an_explicit_reason() {
+        let mut task = task("t", None);
+        let id = task.id;
+
+        let fields = updates(
+            &mut task,
+            &close_op(id, TaskState::Closed, Some(ClosedReason::Skipped), None),
+        );
+
+        assert_eq!(task.closed_reason, Some(ClosedReason::Skipped));
+        assert_eq!(task.closed_at, Some(task.updated_at));
+        let fields = fields.as_object().expect("the field map is an object");
+        assert_eq!(fields["closed_reason"], json!(ClosedReason::Skipped));
+    }
+
+    #[test]
+    fn reopening_clears_close_metadata() {
+        let mut task = task("t", None);
+        task.state = TaskState::Closed;
+        task.closed_reason = Some(ClosedReason::Cancelled);
+        task.closed_at = Some(task.updated_at);
+        let id = task.id;
+
+        let fields = updates(&mut task, &close_op(id, TaskState::Open, None, None));
+
+        assert_eq!(task.state, TaskState::Open);
+        assert_eq!(task.closed_reason, None);
+        assert_eq!(task.closed_at, None);
+        let fields = fields.as_object().expect("the field map is an object");
+        assert_eq!(fields["closed_reason"], json!(null));
+        assert_eq!(fields["closed_at"], json!(null));
+    }
+
+    #[test]
+    fn close_fields_are_ignored_on_an_open_task() {
+        let mut task = task("t", None);
+        let id = task.id;
+        let op = OperationKind::UpdateTask {
+            id,
+            title: None,
+            description: None,
+            priority: None,
+            tags: None,
+            state: None,
+            closed_reason: Some(Some(ClosedReason::Cancelled)),
+            closed_at: Some(Some(Timestamp::now())),
+            due: None,
+            external_identity: None,
+            external_metadata: None,
+            updated_at: None,
+        };
+
+        let fields = updates(&mut task, &op);
+
+        assert_eq!(task.state, TaskState::Open);
+        assert_eq!(task.closed_reason, None);
+        assert_eq!(task.closed_at, None);
+        let fields = fields.as_object().expect("the field map is an object");
+        assert!(!fields.contains_key("closed_reason"));
+        assert!(!fields.contains_key("closed_at"));
+    }
+
+    #[test]
+    fn explicit_close_fields_apply_while_closed() {
+        let mut task = task("t", None);
+        task.state = TaskState::Closed;
+        task.closed_reason = Some(ClosedReason::Completed);
+        task.closed_at = Some(task.updated_at);
+        let id = task.id;
+        let at = Timestamp::now();
+        let op = OperationKind::UpdateTask {
+            id,
+            title: None,
+            description: None,
+            priority: None,
+            tags: None,
+            state: None,
+            closed_reason: Some(Some(ClosedReason::Skipped)),
+            closed_at: Some(Some(at)),
+            due: None,
+            external_identity: None,
+            external_metadata: None,
+            updated_at: None,
+        };
+
+        let fields = updates(&mut task, &op);
+
+        assert_eq!(task.closed_reason, Some(ClosedReason::Skipped));
+        assert_eq!(task.closed_at, Some(at));
+        let fields = fields.as_object().expect("the field map is an object");
+        assert_eq!(fields["closed_reason"], json!(ClosedReason::Skipped));
+        assert_eq!(fields["closed_at"], json!(at));
     }
 }

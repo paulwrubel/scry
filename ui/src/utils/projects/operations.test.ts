@@ -72,6 +72,7 @@ describe('deleteProjectOperation', () => {
       kind: 'delete_project',
       id: 'project-1',
       operation_version: 1,
+      timestamp: expect.any(String),
     });
     expect(operation.operation_id).toEqual(expect.any(String));
   });
@@ -92,6 +93,7 @@ describe('createProjectOperation', () => {
       name: 'New project',
       description: 'Details',
       operation_version: 1,
+      timestamp: expect.any(String),
     });
     expect(operation.id).toEqual(expect.any(String));
     expect(operation.operation_id).not.toBe(operation.id);
