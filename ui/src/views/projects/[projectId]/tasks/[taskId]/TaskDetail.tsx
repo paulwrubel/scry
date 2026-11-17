@@ -1,5 +1,6 @@
 import { Alert, Card } from 'flowbite-react';
 import { useState } from 'react';
+import type { ClosedReason } from '@/generated/ClosedReason';
 import type { Comment } from '@/generated/Comment';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
 import type { Priority } from '@/generated/Priority';
@@ -92,9 +93,9 @@ export function TaskDetail(props: TaskDetailProps) {
   const saveTags = (tags: string[]) => saveFields(patch({ tags }), task.section_id);
   const saveDue = (due: When | null) => saveFields(patch({ due }), task.section_id);
 
-  async function handleToggleState() {
+  async function handleSetState(state: Task['state'], reason?: ClosedReason) {
     try {
-      const operation = setTaskStateOperation(task, task.state === 'open' ? 'closed' : 'open');
+      const operation = setTaskStateOperation(task, state, reason);
       if (operation !== null) {
         await enqueue(operation);
       }
@@ -148,7 +149,8 @@ export function TaskDetail(props: TaskDetailProps) {
         <div className="border-line mt-auto flex flex-wrap items-center gap-2 border-t pt-4">
           <TaskActions
             task={task}
-            onToggleState={handleToggleState}
+            onClose={(reason) => handleSetState('closed', reason)}
+            onReopen={() => handleSetState('open')}
             onRequestDelete={() => setConfirmingDelete(true)}
           />
         </div>

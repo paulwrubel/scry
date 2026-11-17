@@ -42,6 +42,8 @@ const task: Task = {
   section_id: null,
   position: 'a0',
   state: 'open',
+  closed_reason: null,
+  closed_at: null,
   tags: [],
   due: null,
   created_at: CREATED_AT,
@@ -304,5 +306,46 @@ describe('TaskCard', () => {
     );
 
     expect(screen.getByRole('img', { name: 'GitHub not synced yet' })).toBeDefined();
+  });
+
+  it('shows the skipped reason icon on a closed task', () => {
+    render(
+      <MemoryRouter>
+        <TaskCard
+          projectId="project-1"
+          task={{ ...task, state: 'closed', closed_reason: 'skipped', closed_at: CREATED_AT }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('img', { name: 'Closed as Skipped' })).toBeDefined();
+  });
+
+  it('shows the completed reason icon on a closed task', () => {
+    render(
+      <MemoryRouter>
+        <TaskCard
+          projectId="project-1"
+          task={{ ...task, state: 'closed', closed_reason: 'completed', closed_at: CREATED_AT }}
+          showPriority={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('img', { name: 'Closed as Completed' })).toBeDefined();
+  });
+
+  it('does not show a reason icon for a legacy closed task without one', () => {
+    const legacy: Task = { ...task, state: 'closed' };
+    Reflect.deleteProperty(legacy, 'closed_reason');
+
+    render(
+      <MemoryRouter>
+        <TaskCard projectId="project-1" task={legacy} showPriority={false} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('img', { name: /Closed as/ })).toBeNull();
   });
 });

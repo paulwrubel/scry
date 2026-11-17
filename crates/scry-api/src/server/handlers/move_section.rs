@@ -24,7 +24,6 @@ pub enum MoveSectionPlacement {
 #[derive(Deserialize)]
 pub struct MoveSectionRequest {
     pub placement: MoveSectionPlacement,
-    #[serde(default)]
     pub anchor_id: Option<SectionId>,
 }
 

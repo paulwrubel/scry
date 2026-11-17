@@ -32,6 +32,7 @@ export function createEventOperation(
     operation: {
       operation_id: newId(),
       operation_version: 1,
+      timestamp: nowIso(),
       kind: 'create_event',
       id,
       project_id: project.id,
@@ -64,6 +65,7 @@ export function updateEventOperation(event: Event, patch: EventFieldPatch): Oper
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_event',
     id: event.id,
     title: titleChanged ? title : null,
@@ -77,6 +79,7 @@ export function deleteEventOperation(event: Event): Operation {
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'delete_event',
     id: event.id,
   };

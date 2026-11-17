@@ -34,6 +34,8 @@ function projectSnapshot(overrides: Partial<ProjectSnapshot> = {}): ProjectSnaps
         section_id: 'section-1',
         position: 'a0',
         state: 'open',
+        closed_reason: null,
+        closed_at: null,
         tags: [],
         due: null,
         created_at: CREATED_AT,

@@ -525,6 +525,8 @@ mod tests {
             section_id: None,
             position: Position::parse("a0").unwrap(),
             state: TaskState::Open,
+            closed_reason: None,
+            closed_at: None,
             tags: Tags::default(),
             due: None,
             created_at: timestamp("2024-01-01T00:00:00Z"),

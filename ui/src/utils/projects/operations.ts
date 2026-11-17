@@ -35,6 +35,7 @@ export function updateProjectOperation(
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_project',
     id: project.id,
     name: nameChanged ? name : null,
@@ -51,6 +52,7 @@ export function createProjectOperation(draft: ProjectDraft): Operation {
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'create_project',
     id: newId(),
     name,
@@ -64,6 +66,7 @@ export function deleteProjectOperation(project: ProjectSnapshot): Operation {
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'delete_project',
     id: project.id,
   };

@@ -14,7 +14,6 @@ use crate::server::ScryState;
 #[derive(Deserialize)]
 pub struct CreateEventRequest {
     pub title: String,
-    #[serde(default)]
     pub description: Option<String>,
     pub interval: Interval,
 }

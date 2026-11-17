@@ -4,7 +4,7 @@ use crate::service::placement::task_placement_position;
 use jiff::Timestamp;
 use scry_core::error::StorageError;
 use scry_core::ids::{ProjectId, SectionId, TaskId};
-use scry_core::models::{Project, Task, TaskState};
+use scry_core::models::{ClosedReason, Project, Task, TaskState};
 use scry_core::position::key_between;
 use scry_core::sync::operations::OperationKind;
 use uuid::Uuid;
@@ -37,6 +37,8 @@ impl ProjectService {
             section_id,
             position: position.clone(),
             state: TaskState::Open,
+            closed_reason: None,
+            closed_at: None,
             tags: input.tags.unwrap_or_default(),
             due: input.due,
             created_at,
@@ -80,6 +82,8 @@ impl ProjectService {
             section_id: source.section_id,
             position: position.clone(),
             state: source.state,
+            closed_reason: source.closed_reason,
+            closed_at: source.closed_at,
             tags: source.tags,
             due: source.due.clone(),
             created_at,
@@ -168,6 +172,8 @@ impl ProjectService {
                 priority: patch.priority,
                 tags: patch.tags,
                 state: patch.state,
+                closed_reason: None,
+                closed_at: None,
                 due: patch.due,
                 external_identity: patch.external_identity,
                 external_metadata: patch
@@ -269,7 +275,11 @@ impl ProjectService {
         })
     }
 
-    pub async fn close_task_by_id(&self, task_id: TaskId) -> Result<Task, ServiceError> {
+    pub async fn close_task_by_id(
+        &self,
+        task_id: TaskId,
+        reason: ClosedReason,
+    ) -> Result<Task, ServiceError> {
         let mut task = self.require_task(task_id).await?;
         if task.state == TaskState::Closed {
             return Ok(task);
@@ -284,6 +294,8 @@ impl ProjectService {
                 priority: None,
                 tags: None,
                 state: Some(task.state),
+                closed_reason: Some(Some(reason)),
+                closed_at: None,
                 due: None,
                 external_identity: None,
                 external_metadata: None,
@@ -309,6 +321,8 @@ impl ProjectService {
                 priority: None,
                 tags: None,
                 state: Some(task.state),
+                closed_reason: None,
+                closed_at: None,
                 due: None,
                 external_identity: None,
                 external_metadata: None,

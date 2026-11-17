@@ -30,7 +30,6 @@ pub struct MoveTaskRequest {
     placement: MoveTaskPlacement,
     #[serde(default, deserialize_with = "deserialize_section_id")]
     section_id: Option<Option<SectionId>>,
-    #[serde(default)]
     anchor_id: Option<TaskId>,
 }
 

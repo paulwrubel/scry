@@ -20,6 +20,7 @@ export function createSectionOperation(project: ProjectSnapshot, name: string): 
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'create_section',
     id: newId(),
     project_id: project.id,
@@ -35,6 +36,7 @@ export function moveSectionOperation(sectionId: string, position: string): Opera
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'move_section',
     id: sectionId,
     position,
@@ -46,6 +48,7 @@ export function deleteSectionOperation(sectionId: string): Operation {
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'delete_section',
     id: sectionId,
   };
@@ -60,6 +63,7 @@ export function updateSectionOperation(sectionId: string, name: string): Operati
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_section',
     id: sectionId,
     name: trimmed,
@@ -72,6 +76,7 @@ export function setSectionColorOperation(sectionId: string, color: Color | null)
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_section',
     id: sectionId,
     name: null,

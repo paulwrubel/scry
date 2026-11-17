@@ -119,6 +119,7 @@ export function applyOperation(state: ClientState, operation: Operation): void {
       return;
     }
     case 'create_task': {
+      const updated_at = operation.updated_at ?? operation.created_at;
       const task: Task = {
         id: operation.id,
         project_id: operation.project_id,
@@ -128,10 +129,13 @@ export function applyOperation(state: ClientState, operation: Operation): void {
         section_id: operation.section_id,
         position: operation.position,
         state: operation.state,
+        closed_reason:
+          operation.state === 'closed' ? (operation.closed_reason ?? 'completed') : null,
+        closed_at: operation.state === 'closed' ? (operation.closed_at ?? updated_at) : null,
         tags: operation.tags,
         due: operation.due ?? null,
         created_at: operation.created_at,
-        updated_at: operation.updated_at ?? operation.created_at,
+        updated_at,
         external_identity: operation.external_identity ?? null,
         external_metadata: operation.external_metadata ?? null,
       };
@@ -161,6 +165,12 @@ export function applyOperation(state: ClientState, operation: Operation): void {
       if (operation.state !== undefined && operation.state !== null) {
         task.state = operation.state;
       }
+      if (operation.closed_reason !== undefined) {
+        task.closed_reason = operation.closed_reason;
+      }
+      if (operation.closed_at !== undefined) {
+        task.closed_at = operation.closed_at;
+      }
       if (operation.due !== undefined) {
         task.due = operation.due;
       }
@@ -172,6 +182,15 @@ export function applyOperation(state: ClientState, operation: Operation): void {
       }
       if (operation.updated_at !== undefined && operation.updated_at !== null) {
         task.updated_at = operation.updated_at;
+      }
+      // mirror the server's state transition defaults
+      if (operation.state === 'closed') {
+        task.closed_reason = task.closed_reason ?? 'completed';
+        task.closed_at = task.closed_at ?? task.updated_at;
+      }
+      if (operation.state === 'open') {
+        task.closed_reason = null;
+        task.closed_at = null;
       }
       return;
     }

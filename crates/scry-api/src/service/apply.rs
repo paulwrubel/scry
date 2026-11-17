@@ -6,7 +6,7 @@ use super::{AutomationEvaluation, ProjectService, position_error};
 use crate::error::ServiceError;
 use jiff::Timestamp;
 use scry_core::models::{
-    Automation, ChangeKind, Comment, Entity, EntityType, Event, Project, Section, Task,
+    Automation, ChangeKind, Comment, Entity, EntityType, Event, Project, Section, Task, TaskState,
 };
 use scry_core::position::n_keys_between;
 use scry_core::sync::ack::{OperationAcknowledgment, RejectionReason};
@@ -316,6 +316,8 @@ impl ProjectService {
                 section_id,
                 position,
                 state,
+                closed_reason,
+                closed_at,
                 tags,
                 due,
                 created_at,
@@ -353,6 +355,16 @@ impl ProjectService {
                     }
                 }
 
+                let updated_at = (*updated_at).unwrap_or(*created_at);
+                let (closed_reason, closed_at) = if *state == TaskState::Closed {
+                    (
+                        Some(closed_reason.unwrap_or_default()),
+                        Some(closed_at.unwrap_or(updated_at)),
+                    )
+                } else {
+                    (None, None)
+                };
+
                 let task = Task {
                     id: *id,
                     project_id: *project_id,
@@ -364,10 +376,12 @@ impl ProjectService {
                     section_id: *section_id,
                     position: position.clone(),
                     state: *state,
+                    closed_reason,
+                    closed_at,
                     tags: tags.clone(),
                     due: due.clone(),
                     created_at: *created_at,
-                    updated_at: (*updated_at).unwrap_or(*created_at),
+                    updated_at,
                     external_identity: external_identity.clone(),
                     external_metadata: external_metadata.as_deref().cloned(),
                 };
@@ -395,8 +409,9 @@ impl ProjectService {
                 }
 
                 let before = task.clone();
-                let mut field_values = task_field_updates(&mut task, &op.kind);
-                task.updated_at = (*updated_at).unwrap_or_else(Timestamp::now);
+                let edited_at = (*updated_at).unwrap_or_else(Timestamp::now);
+                let mut field_values = task_field_updates(&mut task, &op.kind, edited_at);
+                task.updated_at = edited_at;
                 field_values["updated_at"] = json!(task.updated_at);
                 task_transition = Some((Some(before), task.clone()));
                 self.store.update_task(task, Some(&mut **tx)).await?;

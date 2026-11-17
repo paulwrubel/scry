@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    tags,\n                    due,\n                    created_at,\n                    updated_at,\n                    external_identity,\n                    external_metadata\n                FROM tasks\n                WHERE project_id = $1\n                ORDER BY position ASC, id ASC\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    priority,\n                    section_id,\n                    position,\n                    state,\n                    closed_reason,\n                    closed_at,\n                    tags,\n                    due,\n                    created_at,\n                    updated_at,\n                    external_identity,\n                    external_metadata\n                FROM tasks\n                WHERE project_id = $1\n                ORDER BY position ASC, id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -93,6 +93,28 @@
       },
       {
         "ordinal": 8,
+        "name": "closed_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "closed_reason"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "closed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "closed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
         "name": "tags",
         "type_info": "Text",
         "origin": {
@@ -103,7 +125,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 11,
         "name": "due",
         "type_info": "Jsonb",
         "origin": {
@@ -114,7 +136,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -125,7 +147,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 13,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -136,7 +158,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 14,
         "name": "external_identity",
         "type_info": "Jsonb",
         "origin": {
@@ -147,7 +169,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 15,
         "name": "external_metadata",
         "type_info": "Jsonb",
         "origin": {
@@ -172,6 +194,8 @@
       true,
       false,
       false,
+      true,
+      true,
       false,
       true,
       false,
@@ -180,5 +204,5 @@
       true
     ]
   },
-  "hash": "5ce469e17fb197e620ec958b07a5180d5761e1af6d420ce934bd28167b941f9f"
+  "hash": "6663bd176eb268b9fdcaaf1f29e34573138a57cb028261b29ec600b3f661e25f"
 }

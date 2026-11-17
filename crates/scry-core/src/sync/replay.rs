@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{
-    Automation, AutomationAction, Change, ChangeKind, Color, Comment, EntityType, Event, Priority,
-    Project, ProjectSnapshot, Section, Tags, Task, TaskState,
+    Automation, AutomationAction, Change, ChangeKind, ClosedReason, Color, Comment, EntityType,
+    Event, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use crate::position::Position;
 use crate::sync::operations::{ColorChange, Operation, OperationKind};
@@ -177,6 +177,8 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             section_id,
             position,
             state: task_state,
+            closed_reason,
+            closed_at,
             tags,
             due,
             created_at,
@@ -184,6 +186,15 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             external_identity,
             external_metadata,
         } => {
+            let updated_at = (*updated_at).unwrap_or(*created_at);
+            let (closed_reason, closed_at) = if *task_state == TaskState::Closed {
+                (
+                    Some(closed_reason.unwrap_or_default()),
+                    Some(closed_at.unwrap_or(updated_at)),
+                )
+            } else {
+                (None, None)
+            };
             let task = Task {
                 id: *id,
                 project_id: *project_id,
@@ -193,10 +204,12 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 section_id: *section_id,
                 position: position.clone(),
                 state: *task_state,
+                closed_reason,
+                closed_at,
                 tags: tags.clone(),
                 due: due.clone(),
                 created_at: *created_at,
-                updated_at: (*updated_at).unwrap_or(*created_at),
+                updated_at,
                 external_identity: external_identity.clone(),
                 external_metadata: external_metadata.as_deref().cloned(),
             };
@@ -215,6 +228,8 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             priority,
             tags,
             state: task_state,
+            closed_reason,
+            closed_at,
             due,
             external_identity,
             external_metadata,
@@ -236,6 +251,28 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 if let Some(task_state) = task_state {
                     task.state = *task_state;
                 }
+                if let Some(closed_reason) = closed_reason {
+                    task.closed_reason = *closed_reason;
+                }
+                if let Some(closed_at) = closed_at {
+                    task.closed_at = *closed_at;
+                }
+                if let Some(updated_at) = updated_at {
+                    task.updated_at = *updated_at;
+                }
+                if let Some(task_state) = task_state {
+                    if *task_state == TaskState::Closed {
+                        if task.closed_reason.is_none() {
+                            task.closed_reason = Some(ClosedReason::Completed);
+                        }
+                        if task.closed_at.is_none() {
+                            task.closed_at = Some(task.updated_at);
+                        }
+                    } else {
+                        task.closed_reason = None;
+                        task.closed_at = None;
+                    }
+                }
                 if let Some(due) = due {
                     task.due = due.clone();
                 }
@@ -244,9 +281,6 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(metadata) = external_metadata {
                     task.external_metadata = metadata.as_deref().cloned();
-                }
-                if let Some(updated_at) = updated_at {
-                    task.updated_at = *updated_at;
                 }
             }
         }
@@ -602,6 +636,17 @@ fn apply_task_values(task: &mut Task, values: &serde_json::Value) {
         && let Ok(state) = serde_json::from_value::<TaskState>(state.clone())
     {
         task.state = state;
+    }
+    if let Some(closed_reason) = values.get("closed_reason")
+        && let Ok(closed_reason) =
+            serde_json::from_value::<Option<ClosedReason>>(closed_reason.clone())
+    {
+        task.closed_reason = closed_reason;
+    }
+    if let Some(closed_at) = values.get("closed_at")
+        && let Ok(closed_at) = serde_json::from_value::<Option<Timestamp>>(closed_at.clone())
+    {
+        task.closed_at = closed_at;
     }
     if let Some(due) = values.get("due") {
         task.due = serde_json::from_value(due.clone()).ok();

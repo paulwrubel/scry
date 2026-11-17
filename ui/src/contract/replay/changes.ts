@@ -293,6 +293,16 @@ export function applyTaskValues(task: Task, values: Record<string, unknown>): vo
     // matches the generated types even though the map is untyped
     task.external_metadata = values.external_metadata as Task['external_metadata'];
   }
+  if ('closed_reason' in values) {
+    // change field values are serialized Task fields, so their JSON shape
+    // matches the generated types even though the map is untyped
+    task.closed_reason = values.closed_reason as Task['closed_reason'];
+  }
+  if ('closed_at' in values) {
+    // change field values are serialized Task fields, so their JSON shape
+    // matches the generated types even though the map is untyped
+    task.closed_at = values.closed_at as Task['closed_at'];
+  }
   if (typeof values.updated_at === 'string') {
     task.updated_at = values.updated_at;
   }

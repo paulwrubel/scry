@@ -1,5 +1,7 @@
 use jiff::Timestamp;
-use scry_core::models::{AutomationAction, AutomationTrigger, Change, Priority, Task, TaskState};
+use scry_core::models::{
+    AutomationAction, AutomationTrigger, Change, ClosedReason, Priority, Task, TaskState,
+};
 use scry_core::sync::operations::{Operation, OperationKind};
 use scry_core::sync::replay::{ClientState, apply_changes, replay_operations, visible_state};
 use serde_json::json;
@@ -494,6 +496,77 @@ fn apply_changes_applies_task_updated_at() {
     let state = apply_changes(&confirmed(), &[change]);
 
     assert_eq!(only_task(&state).updated_at, utc(EDITED));
+}
+
+#[test]
+fn close_operation_records_the_edit_time_and_default_reason() {
+    let operation: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "update_task",
+        "id": TASK_ID,
+        "state": "closed",
+        "updated_at": EDITED
+    }))
+    .unwrap();
+
+    let state = replay_operations(&confirmed(), &[operation]);
+    let task = only_task(&state);
+
+    assert_eq!(task.state, TaskState::Closed);
+    assert_eq!(task.closed_reason, Some(ClosedReason::Completed));
+    assert_eq!(task.closed_at, Some(utc(EDITED)));
+}
+
+#[test]
+fn close_operation_honors_an_explicit_reason() {
+    let operation: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "update_task",
+        "id": TASK_ID,
+        "state": "closed",
+        "closed_reason": "skipped",
+        "updated_at": EDITED
+    }))
+    .unwrap();
+
+    let state = replay_operations(&confirmed(), &[operation]);
+    let task = only_task(&state);
+
+    assert_eq!(task.closed_reason, Some(ClosedReason::Skipped));
+    assert_eq!(task.closed_at, Some(utc(EDITED)));
+}
+
+#[test]
+fn reopen_operation_clears_close_metadata() {
+    let closed: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "update_task",
+        "id": TASK_ID,
+        "state": "closed",
+        "closed_reason": "skipped",
+        "updated_at": EDITED
+    }))
+    .unwrap();
+    let reopened: Operation = serde_json::from_value(json!({
+        "operation_id": OPERATION_ID,
+        "operation_version": 1,
+        "kind": "update_task",
+        "id": TASK_ID,
+        "state": "open",
+        "updated_at": "2026-03-03T00:00:00Z"
+    }))
+    .unwrap();
+
+    let state = replay_operations(&confirmed(), &[closed]);
+    let state = replay_operations(&state, &[reopened]);
+    let task = only_task(&state);
+
+    assert_eq!(task.state, TaskState::Open);
+    assert_eq!(task.closed_reason, None);
+    assert_eq!(task.closed_at, None);
 }
 
 #[test]

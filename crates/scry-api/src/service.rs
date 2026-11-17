@@ -62,6 +62,8 @@ fn create_task_operation(task: &Task) -> OperationKind {
         section_id: task.section_id,
         position: task.position.clone(),
         state: task.state,
+        closed_reason: task.closed_reason,
+        closed_at: task.closed_at,
         tags: task.tags.clone(),
         due: task.due.clone(),
         created_at: task.created_at,

@@ -5,7 +5,7 @@ use crate::color;
 use crate::error::AppError;
 use crate::output::{print_json, section_label};
 use crate::state::format_local;
-use scry_core::models::Section;
+use scry_core::models::{Section, TaskState};
 
 /// Show one task with its comments.
 pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<(), AppError> {
@@ -55,6 +55,13 @@ pub async fn show(client: &Client, handle: &str, output_json: bool) -> Result<()
         )
     );
     anstream::println!("State:       {}", state_label);
+    if let (TaskState::Closed, Some(reason)) = (task.state, task.closed_reason) {
+        let closed = match task.closed_at {
+            Some(closed_at) => format!("{} at {}", reason.as_str(), format_local(closed_at)),
+            None => reason.as_str().to_string(),
+        };
+        anstream::println!("Closed:      {}", closed);
+    }
     let tags = task
         .tags
         .iter()

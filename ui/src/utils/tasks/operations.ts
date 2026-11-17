@@ -1,3 +1,4 @@
+import type { ClosedReason } from '@/generated/ClosedReason';
 import { sameDue } from '@/contract/due';
 import { nowIso } from '@/utils/date';
 import { keyBetween } from '@/contract/positions';
@@ -41,6 +42,7 @@ export function createTaskOperation(
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'create_task',
     id: newId(),
     project_id: project.id,
@@ -90,6 +92,7 @@ export function updateTaskOperation(task: Task, patch: TaskFieldPatch): Operatio
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_task',
     id: task.id,
     title: titleChanged ? title : null,
@@ -113,6 +116,7 @@ export function externalIdentityOperation(
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_task',
     id: task.id,
     title: null,
@@ -138,6 +142,7 @@ export function moveTaskOperation(
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'move_task',
     id: task.id,
     section_id: sectionId,
@@ -169,7 +174,11 @@ export function taskFieldOperations(
   return operations;
 }
 
-export function setTaskStateOperation(task: Task, state: TaskState): Operation | null {
+export function setTaskStateOperation(
+  task: Task,
+  state: TaskState,
+  closedReason: ClosedReason = 'completed',
+): Operation | null {
   if (task.state === state) {
     return null;
   }
@@ -177,6 +186,7 @@ export function setTaskStateOperation(task: Task, state: TaskState): Operation |
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_task',
     id: task.id,
     title: null,
@@ -184,6 +194,7 @@ export function setTaskStateOperation(task: Task, state: TaskState): Operation |
     priority: null,
     tags: null,
     state,
+    closed_reason: state === 'closed' ? closedReason : null,
     updated_at: nowIso(),
   };
 }
@@ -192,6 +203,7 @@ export function deleteTaskOperation(task: Task): Operation {
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'delete_task',
     id: task.id,
   };
@@ -207,6 +219,7 @@ export function createCommentOperation(task: Task, contents: string): Operation 
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'create_comment',
     id: newId(),
     task_id: task.id,
@@ -225,6 +238,7 @@ export function updateCommentOperation(comment: Comment, contents: string): Oper
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'update_comment',
     id: comment.id,
     contents: text,
@@ -236,6 +250,7 @@ export function deleteCommentOperation(comment: Comment): Operation {
   return {
     operation_id: newId(),
     operation_version: 1,
+    timestamp: nowIso(),
     kind: 'delete_comment',
     id: comment.id,
   };

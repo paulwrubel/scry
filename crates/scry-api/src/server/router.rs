@@ -136,8 +136,6 @@ fn build_tasks_router() -> Router<ScryState> {
         )
         .route("/{id}/move", post(handlers::move_task))
         .route("/{id}/duplicate", post(handlers::duplicate_task))
-        .route("/{id}/close", post(handlers::close_task))
-        .route("/{id}/open", post(handlers::open_task))
         .route(
             "/{id}/comments",
             get(handlers::get_comments_by_task).post(handlers::create_comment),

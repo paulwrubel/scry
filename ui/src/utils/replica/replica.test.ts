@@ -489,6 +489,7 @@ describe('replica schema migration', () => {
       operation: {
         operation_id: 'op-note',
         operation_version: 1,
+        timestamp: null,
         kind: 'create_note',
         id: COMMENT_ID,
         task_id: TASK_A_ID,
@@ -514,6 +515,7 @@ describe('replica schema migration', () => {
     await replica.enqueue({
       ...updateTaskOperation('op-old', TASK_A_ID, 'Old operation'),
       operation_version: 1,
+      timestamp: null,
     });
     replica.close();
 
@@ -561,6 +563,7 @@ function createTaskOperation(operationId: string, task: Task): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'create_task',
     id: task.id,
     project_id: task.project_id,
@@ -579,6 +582,7 @@ function updateTaskOperation(operationId: string, taskId: string, title: string)
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'update_task',
     id: taskId,
     title,
@@ -593,6 +597,7 @@ function deleteTaskOperation(operationId: string, taskId: string): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
+    timestamp: null,
     kind: 'delete_task',
     id: taskId,
   };
@@ -621,6 +626,8 @@ function extraTask(id: string, title: string): Task {
     section_id: null,
     position: 'a2',
     state: 'open',
+    closed_reason: null,
+    closed_at: null,
     tags: [],
     due: null,
     created_at: '2026-01-01T00:00:05Z',
@@ -677,6 +684,8 @@ function sampleState(): ClientState {
     section_id: SECTION_A_ID,
     position: 'a0',
     state: 'open',
+    closed_reason: null,
+    closed_at: null,
     tags: ['alpha', 'beta'],
     due: null,
     created_at: '2026-01-01T00:00:02Z',
@@ -693,6 +702,8 @@ function sampleState(): ClientState {
     section_id: SECTION_B_ID,
     position: 'a1',
     state: 'closed',
+    closed_reason: null,
+    closed_at: null,
     tags: [],
     due: null,
     created_at: '2026-01-01T00:00:03Z',
@@ -754,6 +765,8 @@ function orderedState(): ClientState {
     section_id: 'zzz-section',
     position: 'a0',
     state: 'open',
+    closed_reason: null,
+    closed_at: null,
     tags: ['first'],
     due: null,
     created_at: '2026-03-01T00:00:02Z',
@@ -770,6 +783,8 @@ function orderedState(): ClientState {
     section_id: 'aaa-section',
     position: 'a1',
     state: 'closed',
+    closed_reason: null,
+    closed_at: null,
     tags: [],
     due: null,
     created_at: '2026-03-01T00:00:03Z',
