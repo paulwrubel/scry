@@ -449,6 +449,20 @@ enum EventCommand {
         /// Treat a time-bearing value as floating (no zone)
         #[arg(long, requires = "start")]
         floating: bool,
+        /// Recurrence rule, for example FREQ=WEEKLY;BYDAY=MO
+        #[arg(long, value_name = "RRULE")]
+        recur: Option<String>,
+        /// Inclusive end for the recurrence (requires --recur)
+        #[arg(
+            long,
+            value_name = "EXPR",
+            requires = "recur",
+            conflicts_with = "count"
+        )]
+        until: Option<String>,
+        /// Number of occurrences (requires --recur)
+        #[arg(long, value_name = "N", requires = "recur", conflicts_with = "until")]
+        count: Option<u32>,
     },
     /// Update an event
     Update {
@@ -469,11 +483,31 @@ enum EventCommand {
         /// Treat a time-bearing value as floating (no zone)
         #[arg(long, requires = "start")]
         floating: bool,
+        /// New recurrence rule
+        #[arg(long, value_name = "RRULE", conflicts_with = "no_recur")]
+        recur: Option<String>,
+        /// Remove the recurrence rule
+        #[arg(long, conflicts_with_all = ["recur", "until", "count"])]
+        no_recur: bool,
+        /// Inclusive end for the recurrence (requires --recur)
+        #[arg(
+            long,
+            value_name = "EXPR",
+            requires = "recur",
+            conflicts_with = "count"
+        )]
+        until: Option<String>,
+        /// Number of occurrences (requires --recur)
+        #[arg(long, value_name = "N", requires = "recur", conflicts_with = "until")]
+        count: Option<u32>,
     },
     /// Delete an event
     Delete {
         /// The event ID or a unique handle prefix
         id: Handle,
+        /// Delete only the occurrence starting at this expression
+        #[arg(long, value_name = "EXPR")]
+        occurrence: Option<String>,
     },
     /// Show full details for an event
     Show {
@@ -992,6 +1026,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             start,
             end,
             floating,
+            recur,
+            until,
+            count,
         })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::event_add(
@@ -1003,6 +1040,9 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 start,
                 end.as_deref(),
                 *floating,
+                recur.as_deref(),
+                until.as_deref(),
+                *count,
                 output_json,
             )
             .await;
@@ -1014,6 +1054,10 @@ async fn run(cli: Cli) -> Result<(), AppError> {
             start,
             end,
             floating,
+            recur,
+            no_recur,
+            until,
+            count,
         })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::event_update(
@@ -1026,14 +1070,25 @@ async fn run(cli: Cli) -> Result<(), AppError> {
                 start.as_deref(),
                 end.as_deref(),
                 *floating,
+                recur.as_deref(),
+                until.as_deref(),
+                *count,
+                *no_recur,
                 output_json,
             )
             .await;
         }
-        Some(Command::Event(EventCommand::Delete { id })) => {
+        Some(Command::Event(EventCommand::Delete { id, occurrence })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
-            return client::event_delete(&client, &config, cli.project.as_deref(), id, output_json)
-                .await;
+            return client::event_delete(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                id,
+                occurrence.as_deref(),
+                output_json,
+            )
+            .await;
         }
         Some(Command::Event(EventCommand::Show { id })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;

@@ -110,7 +110,9 @@ This remains a single-user authentication model. GitHub SSO and multi-user proje
   - Manage with `scry automation list`, `scry automation set --when <trigger> <action>`, and `scry automation remove --when <trigger>`. Use `--section <name>` with `--when enters`, and `--move-to <name>` for the action target.
 - **Events** are project-scoped calendar entries with a title, an optional description, and one start and end.
   - `scry event add "standup" --start "tomorrow 9am"` creates a one-hour event; `--end` sets an explicit end, and a bare date start such as `--start tomorrow` makes it all-day. Times use your system zone unless you pass `--floating`.
-  - `scry event list` shows a project's events in start order, and `--from <expr> --to <expr>` keeps only those overlapping that window. `scry event show <handle>`, `scry event update`, and `scry event delete` work on one event.
+  - `--recur <RRULE>` makes the event repeat, for example `--recur "FREQ=WEEKLY;BYDAY=MO"`. Add `--until <expr>` for an inclusive end or `--count <n>` for a fixed number of occurrences; the two are mutually exclusive and both require `--recur`.
+  - `scry event update <handle> --recur <RRULE>` replaces the rule and keeps any occurrences already excluded; `--no-recur` clears it. `scry event delete <handle> --occurrence <expr>` removes only the occurrence starting at that expression instead of the whole series.
+  - `scry event list` shows a project's events in start order, and `--from <expr> --to <expr>` keeps only those overlapping that window, expanding a recurring series into one line per occurrence. Without a window, a recurring event appears once. `scry event show <handle>`, `scry event update`, and `scry event delete` work on one event.
 - **Active project** works like a kubectl context. `scry project use <name>` verifies the name with the server and stores the choice per machine in `$XDG_STATE_HOME/scry/state.toml` (or the `state_file` config option), not in the backend. Task commands use it unless you pass `-p/--project`.
 
 ## External task links
