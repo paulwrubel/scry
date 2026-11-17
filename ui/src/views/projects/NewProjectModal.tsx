@@ -54,7 +54,7 @@ export function NewProjectModal(props: NewProjectModalProps) {
   useCloseRequest(true, onClose);
 
   return (
-    <Modal show onClose={onClose}>
+    <Modal show onClose={onClose} dismissible>
       <ModalHeader>New project</ModalHeader>
       <ModalBody>
         <form

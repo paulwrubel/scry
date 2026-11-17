@@ -273,6 +273,7 @@ export function applyOperation(state: ClientState, operation: Operation): void {
         title: operation.title,
         description: operation.description,
         interval: operation.interval,
+        recurrence: operation.recurrence,
         created_at: operation.created_at,
         updated_at: operation.updated_at ?? operation.created_at,
       };
@@ -295,6 +296,9 @@ export function applyOperation(state: ClientState, operation: Operation): void {
       }
       if (operation.interval !== undefined && operation.interval !== null) {
         event.interval = operation.interval;
+      }
+      if (operation.recurrence !== undefined) {
+        event.recurrence = operation.recurrence;
       }
       if (operation.updated_at !== undefined && operation.updated_at !== null) {
         event.updated_at = operation.updated_at;

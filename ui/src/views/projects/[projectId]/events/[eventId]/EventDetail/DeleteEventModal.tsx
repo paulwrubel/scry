@@ -22,7 +22,7 @@ export function DeleteEventModal(props: DeleteEventModalProps) {
     event.recurrence !== null && event.recurrence !== undefined && occurrence !== null;
 
   return (
-    <Modal show={show} onClose={onClose}>
+    <Modal show={show} onClose={onClose} dismissible>
       <ModalHeader>Delete event</ModalHeader>
       <ModalBody>
         {deletingOccurrence ? (

@@ -16,7 +16,7 @@ export function DeleteTaskModal(props: DeleteTaskModalProps) {
   useCloseRequest(show, onClose);
 
   return (
-    <Modal show={show} onClose={onClose}>
+    <Modal show={show} onClose={onClose} dismissible>
       <ModalHeader>Delete task</ModalHeader>
       <ModalBody>
         <p className="text-sm">

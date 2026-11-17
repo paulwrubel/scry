@@ -37,7 +37,7 @@ export function DeleteProjectModal(props: DeleteProjectModalProps) {
   }
 
   return (
-    <Modal show onClose={onClose}>
+    <Modal show onClose={onClose} dismissible>
       <ModalHeader>Delete project</ModalHeader>
       <ModalBody>
         <p className="text-sm">

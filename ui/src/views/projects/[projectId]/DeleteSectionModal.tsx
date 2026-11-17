@@ -17,7 +17,7 @@ export function DeleteSectionModal(props: DeleteSectionModalProps) {
   useCloseRequest(show, onClose);
 
   return (
-    <Modal show={show} onClose={onClose}>
+    <Modal show={show} onClose={onClose} dismissible>
       <ModalHeader>Delete section</ModalHeader>
       <ModalBody>
         <div className="flex flex-col gap-3">

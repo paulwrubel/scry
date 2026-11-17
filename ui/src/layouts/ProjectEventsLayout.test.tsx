@@ -64,7 +64,7 @@ describe('ProjectEventsLayout', () => {
   it('opens the editor for an event id', () => {
     renderLayout(`/projects/${PROJECT_ID}/events/event-1?month=2026-11`);
 
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'No changes' })).toBeDefined();
   });
 
   it('closes the day list back to the calendar at the same month', () => {

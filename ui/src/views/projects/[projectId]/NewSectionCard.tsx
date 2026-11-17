@@ -61,7 +61,7 @@ export function NewSectionCard(props: NewSectionCardProps) {
           <span className="text-base font-normal italic">Add section</span>
         </button>
       </Card>
-      <Modal show={open} onClose={close}>
+      <Modal show={open} onClose={close} dismissible>
         <ModalHeader>Add section</ModalHeader>
         <ModalBody>
           <form

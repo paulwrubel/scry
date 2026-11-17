@@ -110,6 +110,17 @@ describe('EventDetail', () => {
     expect(screen.getByLabelText<HTMLInputElement>('End date').value).toBe('2026-11-22');
   });
 
+  it('disables Save again when a field returns to its original value', () => {
+    renderDetail(makeEvent());
+
+    const title = screen.getByLabelText('Title');
+    fireEvent.change(title, { target: { value: 'Changed title' } });
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeTruthy();
+
+    fireEvent.change(title, { target: { value: 'Event title' } });
+    expect(screen.getByRole('button', { name: 'No changes' })).toBeTruthy();
+  });
+
   it('saves an edited title through the outbox', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderDetail(makeEvent(), { enqueue });

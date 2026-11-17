@@ -42,7 +42,7 @@ export function InstallSection() {
         )}
       </div>
 
-      <Modal show={showInstructions} onClose={closeInstructions}>
+      <Modal show={showInstructions} onClose={closeInstructions} dismissible>
         <ModalHeader>
           {isIos ? 'Install on iPhone or iPad' : 'Install from your browser'}
         </ModalHeader>

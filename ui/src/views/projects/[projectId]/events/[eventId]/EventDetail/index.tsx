@@ -27,6 +27,7 @@ import {
 } from '@/utils/events/operations';
 import type { EventFieldPatch } from '@/utils/events/operations';
 import { DeleteEventModal } from './DeleteEventModal';
+import { RecurrenceField } from './RecurrenceField';
 
 const INPUT_CLASS =
   'border-line-strong bg-surface text-zinc-200 focus:border-line-hover w-full rounded-lg border p-2 text-sm focus:outline-none';
@@ -364,44 +365,47 @@ export function EventDetail(props: EventDetailProps) {
               )}
             </form.AppField>
 
-            <form.AppField name="recurrence">
-              {(field) => {
-                const recurrenceError =
-                  field.state.meta.isTouched || form.state.isSubmitted
-                    ? fieldErrorMessage(field.state.meta.errors)
-                    : null;
-
-                return (
-                  <Label className="flex flex-col items-stretch gap-1.5">
-                    <span>Repeat rule</span>
-                    <TextInput
-                      aria-label="Repeat rule"
-                      placeholder="FREQ=WEEKLY;BYDAY=MO"
+            <form.Subscribe selector={(state) => state.values.startDate}>
+              {(startDate) => (
+                <form.AppField name="recurrence">
+                  {(field) => (
+                    <RecurrenceField
                       value={field.state.value}
-                      onChange={(changeEvent) => field.handleChange(changeEvent.target.value)}
+                      startDate={startDate}
+                      onChange={field.handleChange}
+                      error={
+                        field.state.meta.isTouched || form.state.isSubmitted
+                          ? fieldErrorMessage(field.state.meta.errors)
+                          : null
+                      }
                     />
-                    <p className="text-muted text-xs">
-                      Leave empty for a one-off event. Supported parts: FREQ, INTERVAL, BYDAY,
-                      BYMONTHDAY, BYMONTH, COUNT, UNTIL, and WKST.
-                    </p>
-                    {recurrenceError === null ? null : (
-                      <p className="text-danger text-sm" role="alert">
-                        {recurrenceError}
-                      </p>
-                    )}
-                  </Label>
-                );
-              }}
-            </form.AppField>
+                  )}
+                </form.AppField>
+              )}
+            </form.Subscribe>
 
             <div className="flex items-center justify-end">
-              <Button type="submit" disabled={form.state.isSubmitting}>
-                {form.state.isSubmitting
-                  ? 'Saving...'
-                  : event === null
-                    ? 'Create event'
-                    : 'Save changes'}
-              </Button>
+              <form.Subscribe
+                selector={(state) => ({
+                  isDefaultValue: state.isDefaultValue,
+                  isSubmitting: state.isSubmitting,
+                })}
+              >
+                {({ isDefaultValue, isSubmitting }) => (
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || (event !== null && isDefaultValue)}
+                  >
+                    {isSubmitting
+                      ? 'Saving...'
+                      : event === null
+                        ? 'Create event'
+                        : isDefaultValue
+                          ? 'No changes'
+                          : 'Save changes'}
+                  </Button>
+                )}
+              </form.Subscribe>
             </div>
           </form>
         </Card>

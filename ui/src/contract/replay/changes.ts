@@ -320,6 +320,10 @@ export function applyEventValues(event: Event, values: Record<string, unknown>):
     // matches the generated types even though the map is untyped
     event.interval = values.interval as Event['interval'];
   }
+  if ('recurrence' in values) {
+    event.recurrence =
+      values.recurrence === null ? null : (values.recurrence as Event['recurrence']);
+  }
   if (typeof values.updated_at === 'string') {
     event.updated_at = values.updated_at;
   }
