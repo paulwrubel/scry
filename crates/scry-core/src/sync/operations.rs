@@ -4,6 +4,7 @@ use crate::models::{
     Priority, Tags, TaskState,
 };
 use crate::position::Position;
+use crate::recurrence::RRule;
 use crate::temporal::{Interval, When};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -333,6 +334,8 @@ pub enum OperationKind {
         title: String,
         description: Option<String>,
         interval: Interval,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        recurrence: Option<RRule>,
         #[cfg_attr(feature = "ts", ts(type = "string"))]
         created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -352,6 +355,13 @@ pub enum OperationKind {
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         description: Option<Option<String>>,
         interval: Option<Interval>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(as = "Option<RRule>"))]
+        recurrence: Option<Option<RRule>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         updated_at: Option<Timestamp>,
@@ -686,6 +696,96 @@ mod tests {
         let serialized = serde_json::to_value(&operation).unwrap();
         assert_eq!(serialized.get("kind"), Some(&json!("create_event")));
         assert_eq!(serialized, value);
+    }
+
+    #[test]
+    fn create_event_round_trips_recurrence() {
+        let value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "timestamp": null,
+            "kind": "create_event",
+            "id": Uuid::new_v4(),
+            "project_id": Uuid::new_v4(),
+            "title": "standup",
+            "description": null,
+            "interval": {
+                "start": {"kind": "date", "date": "2026-11-16"},
+                "end": {"kind": "date", "date": "2026-11-17"}
+            },
+            "recurrence": {
+                "text": "FREQ=WEEKLY;BYDAY=MO",
+                "exdates": [{"kind": "date", "date": "2026-11-23"}]
+            },
+            "created_at": "2026-01-01T00:00:00Z"
+        });
+
+        let operation: Operation = serde_json::from_value(value.clone()).unwrap();
+        let OperationKind::CreateEvent { recurrence, .. } = &operation.kind else {
+            panic!("expected CreateEvent");
+        };
+        assert_eq!(
+            recurrence,
+            &Some(RRule {
+                text: "FREQ=WEEKLY;BYDAY=MO".to_string(),
+                exdates: vec![When::Date {
+                    date: jiff::civil::date(2026, 11, 23)
+                }],
+            })
+        );
+
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[test]
+    fn update_event_distinguishes_absent_null_and_set_recurrence() {
+        let operation_json = |recurrence: Option<serde_json::Value>| {
+            let mut value = json!({
+                "operation_id": Uuid::new_v4(),
+                "operation_version": OPERATION_VERSION,
+                "timestamp": null,
+                "kind": "update_event",
+                "id": Uuid::new_v4(),
+            });
+            if let Some(recurrence) = recurrence {
+                value["recurrence"] = recurrence;
+            }
+            value
+        };
+
+        let absent: Operation = serde_json::from_value(operation_json(None)).unwrap();
+        let OperationKind::UpdateEvent { recurrence, .. } = &absent.kind else {
+            panic!("expected UpdateEvent");
+        };
+        assert_eq!(recurrence, &None);
+
+        let cleared: Operation = serde_json::from_value(operation_json(Some(json!(null)))).unwrap();
+        let OperationKind::UpdateEvent { recurrence, .. } = &cleared.kind else {
+            panic!("expected UpdateEvent");
+        };
+        assert_eq!(recurrence, &Some(None));
+        assert_eq!(
+            serde_json::to_value(&cleared).unwrap().get("recurrence"),
+            Some(&json!(null))
+        );
+
+        let rule = json!({ "text": "FREQ=DAILY" });
+        let set: Operation = serde_json::from_value(operation_json(Some(rule.clone()))).unwrap();
+        let OperationKind::UpdateEvent { recurrence, .. } = &set.kind else {
+            panic!("expected UpdateEvent");
+        };
+        assert_eq!(
+            recurrence,
+            &Some(Some(RRule {
+                text: "FREQ=DAILY".to_string(),
+                exdates: Vec::new(),
+            }))
+        );
+        assert_eq!(
+            serde_json::to_value(&set).unwrap().get("recurrence"),
+            Some(&rule)
+        );
     }
 
     #[test]

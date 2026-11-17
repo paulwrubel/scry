@@ -1,6 +1,6 @@
 import type { DateTime } from 'luxon';
 import { useElementHeight } from '@/hooks/useElementHeight';
-import { dayKey, fitLanes } from '@/utils/events/calendar';
+import { dayKey, eventKey, fitLanes } from '@/utils/events/calendar';
 import type { Month, WeekLane } from '@/utils/events/calendar';
 import { DayCell } from './DayCell';
 import { EventBar } from './EventBar';
@@ -42,7 +42,7 @@ export function WeekRow(props: WeekRowProps) {
             <div key={laneIndex} className="relative" style={{ height: LANE_HEIGHT }}>
               {lane.map((placement) => (
                 <EventBar
-                  key={placement.event.id}
+                  key={eventKey(placement.event)}
                   placement={placement}
                   projectId={projectId}
                   monthQuery={monthQuery}

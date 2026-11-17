@@ -1,6 +1,10 @@
 use crate::error::ServiceError;
 use crate::service::fields::update_changes_locked_external_field;
 use crate::service::placement::task_placement_position;
+use crate::service::{
+    ApplyMode, NewTask, ProjectService, SectionInput, TaskChangeResult, TaskPatch, TaskPlacement,
+    create_task_operation, new_operation, position_error,
+};
 use jiff::Timestamp;
 use scry_core::error::StorageError;
 use scry_core::ids::{ProjectId, SectionId, TaskId};
@@ -8,11 +12,6 @@ use scry_core::models::{ClosedReason, Project, Task, TaskState};
 use scry_core::position::key_between;
 use scry_core::sync::operations::OperationKind;
 use uuid::Uuid;
-
-use super::super::{
-    ApplyMode, NewTask, ProjectService, SectionInput, TaskChangeResult, TaskPatch, TaskPlacement,
-    create_task_operation, new_operation, position_error,
-};
 
 impl ProjectService {
     pub async fn create_task_in_project(

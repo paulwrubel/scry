@@ -1,12 +1,11 @@
 use crate::error::ServiceError;
+use crate::service::{ApplyMode, ProjectService, UpdateProject, new_operation};
 use jiff::Timestamp;
 use scry_core::error::StorageError;
 use scry_core::ids::ProjectId;
 use scry_core::models::{Project, ProjectSnapshot};
 use scry_core::sync::operations::OperationKind;
 use uuid::Uuid;
-
-use super::super::{ApplyMode, ProjectService, UpdateProject, new_operation};
 
 impl ProjectService {
     /// Create a project.

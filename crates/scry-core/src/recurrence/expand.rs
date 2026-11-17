@@ -1,0 +1,541 @@
+//! Window expansion. This follows the iCalendar model: an RRULE is expanded on
+//! the series' own wall-clock calendar, one period at a time, and every candidate
+//! is then rebuilt into the series' original `When` kind. Wall-clock arithmetic
+//! is what keeps a 09:00 series at 09:00 across a DST change instead of drifting
+//! by an hour; resolution to an instant happens only in `Expander::emit`, through
+//! `When::start_instant`.
+
+use super::error::MAX_CANDIDATES;
+use super::{Frequency, RRule, RecurError, Recurrence, Until};
+use crate::temporal::{Interval, When, Zoned};
+use jiff::civil::{Date, DateTime, Weekday};
+use jiff::tz::TimeZone;
+use jiff::{Span, Timestamp};
+
+/// Expand `recurrence` over the half-open window `[from, to)`, ordered by start.
+/// The base interval is always the first occurrence; only intervals that
+/// overlap the window are returned.
+pub fn occurrences(
+    interval: &Interval,
+    rrule: &RRule,
+    from: Timestamp,
+    to: Timestamp,
+    tz: &TimeZone,
+) -> Result<Vec<Interval>, RecurError> {
+    let rule = rrule.validate(interval.start())?;
+    let base = CivilWhen::from(interval.start());
+    let end = CivilWhen::from(interval.end());
+    let duration = end.civil - base.civil;
+    let base_civil = base.civil;
+
+    let mut expander = Expander {
+        base,
+        duration,
+        rule: &rule,
+        exdates: &rrule.exdates,
+        tz,
+        from,
+        to,
+        generated: 0,
+        examined: 0,
+        out: Vec::new(),
+    };
+
+    expander.tick()?;
+    if matches!(expander.emit(base_civil)?, Flow::Stop) {
+        return Ok(expander.out);
+    }
+
+    match rule.freq {
+        Frequency::Daily => expand_daily(&mut expander)?,
+        Frequency::Weekly => expand_weekly(&mut expander)?,
+        Frequency::Monthly => expand_monthly(&mut expander)?,
+        Frequency::Yearly => expand_yearly(&mut expander)?,
+    }
+
+    Ok(expander.out)
+}
+
+/// The original `When` shape, retained so every generated value is rebuilt with
+/// the same semantics as the series start.
+enum Kind {
+    Date,
+    Floating,
+    Instant,
+    Zoned(String),
+}
+
+impl Kind {
+    /// Rebuild a generated civil value as this kind. A zoned value keeps its
+    /// stored IANA zone, which is what makes DST resolution correct.
+    fn rebuild(&self, datetime: DateTime) -> Result<When, RecurError> {
+        Ok(match self {
+            Self::Date => When::Date {
+                date: datetime.date(),
+            },
+            Self::Floating => When::Floating { datetime },
+            Self::Instant => When::Instant {
+                timestamp: datetime
+                    .to_zoned_datetime(TimeZone::UTC)
+                    .map_err(|error| RecurError::Invalid(error.to_string()))?
+                    .timestamp(),
+            },
+            Self::Zoned(zone) => When::Zoned(
+                Zoned::new(datetime, zone)
+                    .map_err(|error| RecurError::Invalid(error.to_string()))?,
+            ),
+        })
+    }
+}
+
+/// A `When` reduced to the zone-free value used for arithmetic and the kind
+/// needed to rebuild it. Keeping the two together prevents a candidate from
+/// being rebuilt with a different kind's semantics.
+pub(super) struct CivilWhen {
+    kind: Kind,
+    civil: DateTime,
+}
+
+impl From<&When> for CivilWhen {
+    /// Read a stored value without resolving it. A `Zoned` value already carries
+    /// a validated zone, so this direction cannot fail.
+    fn from(when: &When) -> Self {
+        match when {
+            When::Date { date } => Self {
+                kind: Kind::Date,
+                civil: date.at(0, 0, 0, 0),
+            },
+            When::Floating { datetime } => Self {
+                kind: Kind::Floating,
+                civil: *datetime,
+            },
+            When::Instant { timestamp } => Self {
+                kind: Kind::Instant,
+                civil: timestamp.to_zoned_datetime(TimeZone::UTC).datetime(),
+            },
+            When::Zoned(zoned) => Self {
+                kind: Kind::Zoned(zoned.zone().to_owned()),
+                civil: zoned.datetime(),
+            },
+        }
+    }
+}
+
+impl CivilWhen {
+    /// Put a generated date at this value's time of day.
+    fn at(&self, date: Date) -> DateTime {
+        date.at(
+            self.civil.hour(),
+            self.civil.minute(),
+            self.civil.second(),
+            self.civil.subsec_nanosecond(),
+        )
+    }
+
+    /// Rebuild a generated civil value as the original kind.
+    fn to_when(&self, civil: DateTime) -> Result<When, RecurError> {
+        self.kind.rebuild(civil)
+    }
+}
+
+impl TryFrom<&CivilWhen> for When {
+    type Error = RecurError;
+
+    /// Rebuild this value's own civil datetime as its original kind.
+    fn try_from(value: &CivilWhen) -> Result<Self, Self::Error> {
+        value.to_when(value.civil)
+    }
+}
+
+/// Step whole days and keep the dates that satisfy the BY filters.
+fn expand_daily(expander: &mut Expander<'_>) -> Result<(), RecurError> {
+    let base = expander.base.civil;
+    let step = expander.rule.interval as i64;
+    let mut index: i64 = 1;
+    loop {
+        expander.tick()?;
+        let Some(offset) = index.checked_mul(step) else {
+            break;
+        };
+        let Some(date) = base.date().checked_add(Span::new().days(offset)).ok() else {
+            break;
+        };
+        index += 1;
+        if !day_matches(date, expander.rule) {
+            continue;
+        }
+        let candidate = expander.base.at(date);
+        if matches!(expander.emit(candidate)?, Flow::Stop) {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Step whole weeks from the week containing the base date, with WKST setting
+/// that week's first day, and emit the selected weekdays in order.
+fn expand_weekly(expander: &mut Expander<'_>) -> Result<(), RecurError> {
+    let base = expander.base.civil;
+    let base_date = base.date();
+    let Some(week_start) = start_of_week(base_date, expander.rule.wkst) else {
+        return Ok(());
+    };
+
+    let mut weekdays: Vec<Weekday> = if expander.rule.by_day.is_empty() {
+        vec![base_date.weekday()]
+    } else {
+        expander.rule.by_day.iter().map(|day| day.weekday).collect()
+    };
+    weekdays.sort_by_key(|weekday| weekday.to_monday_zero_offset());
+    weekdays.dedup();
+    let mut offsets: Vec<i64> = weekdays
+        .iter()
+        .map(|weekday| weekday.since(expander.rule.wkst) as i64)
+        .collect();
+    // offsets are days from WKST, so sorting them keeps candidates in order
+    offsets.sort_unstable();
+    offsets.dedup();
+
+    let step_days = expander.rule.interval as i64 * 7;
+    let mut index: i64 = 0;
+    loop {
+        expander.tick()?;
+        let Some(offset) = index.checked_mul(step_days) else {
+            break;
+        };
+        let Some(start) = week_start.checked_add(Span::new().days(offset)).ok() else {
+            break;
+        };
+        index += 1;
+
+        let mut stop = false;
+        for offset in &offsets {
+            expander.tick()?;
+            let Some(date) = start.checked_add(Span::new().days(*offset)).ok() else {
+                continue;
+            };
+            let candidate = expander.base.at(date);
+            if candidate <= base || !day_matches(date, expander.rule) {
+                continue;
+            }
+            if matches!(expander.emit(candidate)?, Flow::Stop) {
+                stop = true;
+                break;
+            }
+        }
+        if stop {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Step whole months and emit the dates selected by BYMONTHDAY, BYDAY, or the
+/// base day of month.
+fn expand_monthly(expander: &mut Expander<'_>) -> Result<(), RecurError> {
+    let base = expander.base.civil;
+    let base_date = base.date();
+    let first = base_date.first_of_month();
+    let base_day = base_date.day();
+    let step = expander.rule.interval as i64;
+
+    let mut index: i64 = 0;
+    loop {
+        expander.tick()?;
+        let Some(offset) = index.checked_mul(step) else {
+            break;
+        };
+        let Some(month_start) = first.checked_add(Span::new().months(offset)).ok() else {
+            break;
+        };
+        index += 1;
+
+        let mut stop = false;
+        for date in day_selection(
+            expander.rule,
+            month_start.year(),
+            month_start.month(),
+            base_day,
+        ) {
+            expander.tick()?;
+            let candidate = expander.base.at(date);
+            if candidate <= base {
+                continue;
+            }
+            if !expander.rule.by_month.is_empty() && !expander.rule.by_month.contains(&date.month())
+            {
+                continue;
+            }
+            if matches!(expander.emit(candidate)?, Flow::Stop) {
+                stop = true;
+                break;
+            }
+        }
+        if stop {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Step whole years, choosing months from BYMONTH, the BY expansions, or the
+/// base month, and handle ordinal BYDAY across the whole year.
+fn expand_yearly(expander: &mut Expander<'_>) -> Result<(), RecurError> {
+    let base = expander.base.civil;
+    let base_date = base.date();
+    let base_day = base_date.day();
+    let base_year = base_date.year() as i64;
+    let ordinal_only = expander.rule.by_month.is_empty()
+        && expander.rule.by_month_day.is_empty()
+        && !expander.rule.by_day.is_empty()
+        && expander.rule.by_day.iter().all(|day| day.ordinal.is_some());
+    let step = expander.rule.interval as i64;
+
+    let mut index: i64 = 0;
+    loop {
+        expander.tick()?;
+        let Some(offset) = index.checked_mul(step) else {
+            break;
+        };
+        let Some(year) = base_year.checked_add(offset) else {
+            break;
+        };
+        if !(-9999..=9999).contains(&year) {
+            break;
+        }
+        let year = year as i16;
+        index += 1;
+
+        let mut dates: Vec<Date> = Vec::new();
+        if ordinal_only {
+            for day in &expander.rule.by_day {
+                let date = day
+                    .ordinal
+                    .and_then(|ordinal| nth_weekday_of_year(year, ordinal, day.weekday));
+                if let Some(date) = date {
+                    dates.push(date);
+                }
+            }
+        } else {
+            let months: Vec<i8> = if !expander.rule.by_month.is_empty() {
+                let mut months = expander.rule.by_month.clone();
+                months.sort_unstable();
+                months.dedup();
+                months
+            } else if !expander.rule.by_month_day.is_empty() || !expander.rule.by_day.is_empty() {
+                (1..=12).collect()
+            } else {
+                vec![base_date.month()]
+            };
+            for month in months {
+                dates.extend(day_selection(expander.rule, year, month, base_day));
+            }
+        }
+        dates.sort_unstable();
+        dates.dedup();
+
+        let mut stop = false;
+        for date in dates {
+            expander.tick()?;
+            let candidate = expander.base.at(date);
+            if candidate <= base {
+                continue;
+            }
+            if matches!(expander.emit(candidate)?, Flow::Stop) {
+                stop = true;
+                break;
+            }
+        }
+        if stop {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// The first day of the week containing `date`, counting from WKST.
+fn start_of_week(date: Date, wkst: Weekday) -> Option<Date> {
+    date.checked_sub(Span::new().days(date.weekday().since(wkst) as i64))
+        .ok()
+}
+
+/// Apply BYMONTH, BYMONTHDAY, and BYDAY as filters, which is their role for a
+/// DAILY rule.
+fn day_matches(date: Date, rule: &Recurrence) -> bool {
+    if !rule.by_month.is_empty() && !rule.by_month.contains(&date.month()) {
+        return false;
+    }
+    if !rule.by_month_day.is_empty() {
+        let days_in_month = date.days_in_month() as i16;
+        let matched = rule.by_month_day.iter().any(|day| {
+            let resolved = if *day > 0 {
+                *day as i16
+            } else {
+                days_in_month + *day as i16 + 1
+            };
+            date.day() as i16 == resolved
+        });
+        if !matched {
+            return false;
+        }
+    }
+    rule.by_day.is_empty() || rule.by_day.iter().any(|day| day.weekday == date.weekday())
+}
+
+/// The dates one month contributes, chosen by BYMONTHDAY, BYDAY (including
+/// ordinals), or the base day of month when neither is present.
+fn day_selection(rule: &Recurrence, year: i16, month: i8, base_day: i8) -> Vec<Date> {
+    let Ok(first) = Date::new(year, month, 1) else {
+        return Vec::new();
+    };
+    let days_in_month = first.days_in_month();
+    let mut days = Vec::new();
+
+    if !rule.by_month_day.is_empty() {
+        for day in &rule.by_month_day {
+            let resolved = if *day > 0 {
+                *day as i16
+            } else {
+                days_in_month as i16 + *day as i16 + 1
+            };
+            if !(1..=days_in_month as i16).contains(&resolved) {
+                continue;
+            }
+            if let Ok(date) = Date::new(year, month, resolved as i8) {
+                days.push(date);
+            }
+        }
+    } else if !rule.by_day.is_empty() {
+        for by_day in &rule.by_day {
+            match by_day.ordinal {
+                Some(ordinal) => {
+                    days.extend(first.nth_weekday_of_month(ordinal, by_day.weekday).ok());
+                }
+                None => {
+                    let offset = by_day.weekday.since(first.weekday()) as i64;
+                    let mut current = first.checked_add(Span::new().days(offset));
+                    while let Ok(date) = current {
+                        if date.month() != month {
+                            break;
+                        }
+                        days.push(date);
+                        current = date.checked_add(Span::new().days(7));
+                    }
+                }
+            }
+        }
+    } else if let Ok(date) = Date::new(year, month, base_day) {
+        days.push(date);
+    }
+
+    days.sort_unstable();
+    days.dedup();
+    days
+}
+
+/// The nth weekday of a whole year, used when YEARLY has an ordinal BYDAY and no
+/// BYMONTH.
+fn nth_weekday_of_year(year: i16, ordinal: i8, weekday: Weekday) -> Option<Date> {
+    if ordinal == 0 {
+        return None;
+    }
+    let first = Date::new(year, 1, 1).ok()?;
+    let last = Date::new(year, 12, 31).ok()?;
+    let (anchor, delta, weeks) = if ordinal > 0 {
+        (
+            first,
+            weekday.since(first.weekday()) as i64,
+            (ordinal as i64 - 1) * 7,
+        )
+    } else {
+        (
+            last,
+            -(last.weekday().since(weekday) as i64),
+            (ordinal as i64 + 1) * 7,
+        )
+    };
+    let date = anchor.checked_add(Span::new().days(delta + weeks)).ok()?;
+    (date.year() == year).then_some(date)
+}
+
+/// Whether generation should continue or stop at the current candidate.
+enum Flow {
+    Continue,
+    Stop,
+}
+
+/// Generation state shared by the four frequency loops.
+struct Expander<'a> {
+    base: CivilWhen,
+    duration: Span,
+    rule: &'a Recurrence,
+    exdates: &'a [When],
+    tz: &'a TimeZone,
+    from: Timestamp,
+    to: Timestamp,
+    generated: u32,
+    examined: usize,
+    out: Vec<Interval>,
+}
+
+impl Expander<'_> {
+    /// Count one examined candidate and enforce the cap that keeps an unbounded
+    /// rule from looping forever.
+    fn tick(&mut self) -> Result<(), RecurError> {
+        self.examined += 1;
+        if self.examined > MAX_CANDIDATES {
+            return Err(RecurError::OccurrenceLimit);
+        }
+        Ok(())
+    }
+
+    /// Turn a civil candidate into an interval, apply COUNT, UNTIL, EXDATE, and
+    /// the window, and push it when it survives. Stops once a candidate starts at
+    /// or after the window end.
+    fn emit(&mut self, datetime: DateTime) -> Result<Flow, RecurError> {
+        let start = self.base.to_when(datetime)?;
+        let start_instant = start
+            .start_instant(self.tz)
+            .map_err(|error| RecurError::Invalid(error.to_string()))?;
+
+        if self.rule.count.is_some_and(|count| self.generated >= count) {
+            return Ok(Flow::Stop);
+        }
+
+        let allowed = match &self.rule.until {
+            None => true,
+            Some(Until::Date(until)) => datetime.date() <= *until,
+            Some(Until::Instant(until)) => start_instant <= *until,
+        };
+        if !allowed {
+            return Ok(Flow::Stop);
+        }
+        self.generated += 1;
+
+        let end_datetime = datetime
+            .checked_add(self.duration)
+            .map_err(|error| RecurError::Invalid(error.to_string()))?;
+        let end = self.base.to_when(end_datetime)?;
+        let interval =
+            Interval::new(start, end).map_err(|error| RecurError::Invalid(error.to_string()))?;
+
+        if start_instant >= self.to {
+            return Ok(Flow::Stop);
+        }
+
+        let excluded = self.exdates.iter().any(|exdate| {
+            exdate
+                .start_instant(self.tz)
+                .is_ok_and(|excluded| excluded == start_instant)
+        });
+        if !excluded
+            && interval
+                .overlaps(self.from, self.to, self.tz)
+                .map_err(|error| RecurError::Invalid(error.to_string()))?
+        {
+            self.out.push(interval);
+        }
+
+        Ok(Flow::Continue)
+    }
+}

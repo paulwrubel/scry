@@ -5,6 +5,7 @@ use scry_core::ids::{SectionId, TaskId};
 use scry_core::models::{
     Change, Color, ExternalIdentity, ExternalMetadata, Priority, Tags, Task, TaskState,
 };
+use scry_core::recurrence::RRule;
 use scry_core::store::ArcStore;
 use scry_core::sync::ack::{OperationAcknowledgment, RejectionReason};
 use scry_core::sync::operations::{OPERATION_VERSION, Operation, OperationKind};
@@ -152,15 +153,18 @@ pub struct NewEvent {
     pub title: String,
     pub description: Option<String>,
     pub interval: Interval,
+    pub recurrence: Option<RRule>,
 }
 
 /// Partial event input. `None` leaves a field unchanged; `Some("")` on
-/// `description` clears it.
+/// `description` clears it; `recurrence` absent leaves it unchanged,
+/// `Some(None)` clears it, and `Some(Some(rule))` sets it.
 #[derive(Debug, Clone, Default)]
 pub struct EventPatch {
     pub title: Option<String>,
     pub description: Option<String>,
     pub interval: Option<Interval>,
+    pub recurrence: Option<Option<RRule>>,
 }
 
 /// A half-open instant window for listing events: `from` is inclusive and

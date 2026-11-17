@@ -828,13 +828,19 @@ pub fn plan_import(
                 let title = changed(&live_event.title, &incoming_event.title);
                 let description = changed(&live_event.description, &description);
                 let interval = changed(&live_event.interval, &incoming_event.interval);
+                let recurrence = changed(&live_event.recurrence, &incoming_event.recurrence);
 
-                if title.is_some() || description.is_some() || interval.is_some() {
+                if title.is_some()
+                    || description.is_some()
+                    || interval.is_some()
+                    || recurrence.is_some()
+                {
                     plan.operations.push(operation(OperationKind::UpdateEvent {
                         id: live_event.id,
                         title,
                         description,
                         interval,
+                        recurrence,
                         updated_at: Some(incoming_event.updated_at),
                     }));
                 }
@@ -861,6 +867,7 @@ pub fn plan_import(
                 title: incoming_event.title.clone(),
                 description,
                 interval: incoming_event.interval.clone(),
+                recurrence: incoming_event.recurrence.clone(),
                 created_at: incoming_event.created_at,
                 updated_at: Some(incoming_event.updated_at),
             }));
@@ -1028,6 +1035,7 @@ mod tests {
         TaskState,
     };
     use crate::position::Position;
+    use crate::recurrence::RRule;
     use crate::temporal::{Interval, When};
     use jiff::Timestamp;
     use jiff::civil::date;
@@ -1297,6 +1305,10 @@ mod tests {
                 ),
             )
             .unwrap(),
+            recurrence: Some(RRule {
+                text: "FREQ=WEEKLY;BYDAY=MO".to_owned(),
+                exdates: Vec::new(),
+            }),
             created_at: at(),
             updated_at: at(),
         };
@@ -2265,6 +2277,7 @@ mod import_tests {
             title: "standup".to_string(),
             description: None,
             interval: interval.clone(),
+            recurrence: None,
             created_at: at(),
             updated_at: at(),
         });
@@ -2314,6 +2327,7 @@ mod import_tests {
             title: "renamed".to_string(),
             description: None,
             interval: incoming_interval.clone(),
+            recurrence: None,
             created_at: at(),
             updated_at: at(),
         });
@@ -2326,6 +2340,7 @@ mod import_tests {
             title: "standup".to_string(),
             description: None,
             interval: live_interval,
+            recurrence: None,
             created_at: at(),
             updated_at: at(),
         });

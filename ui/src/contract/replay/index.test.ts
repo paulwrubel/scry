@@ -7,6 +7,7 @@ import type { Comment } from '@/generated/Comment';
 import type { Event } from '@/generated/Event';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import type { RRule } from '@/generated/RRule';
 import type { Section } from '@/generated/Section';
 import type { Task } from '@/generated/Task';
 import type { ClientState } from './index';
@@ -228,7 +229,7 @@ function event(title = 'standup'): Event {
   };
 }
 
-function createEvent(operationId: string): Operation {
+function createEvent(operationId: string, recurrence?: RRule): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
@@ -239,11 +240,12 @@ function createEvent(operationId: string): Operation {
     title: 'standup',
     description: null,
     interval: event().interval,
+    recurrence,
     created_at: CREATED_AT,
   };
 }
 
-function updateEvent(operationId: string): Operation {
+function updateEvent(operationId: string, recurrence?: RRule | null): Operation {
   return {
     operation_id: operationId,
     operation_version: 1,
@@ -252,6 +254,7 @@ function updateEvent(operationId: string): Operation {
     id: EVENT_ID,
     title: 'standup v2',
     interval: null,
+    recurrence,
   };
 }
 
@@ -499,6 +502,17 @@ describe('event replay', () => {
     expect(result.projects[0].events[0].title).toBe('standup v2');
   });
 
+  it('replayOperations applies a recurrence on create and update', () => {
+    const weekly = { text: 'FREQ=WEEKLY;BYDAY=TU,TH,SU' };
+    const created = replayOperations(state(), [createEvent('op-create-recurring', weekly)]);
+    expect(created.projects[0].events[0].recurrence).toEqual(weekly);
+
+    const updated = replayOperations(created, [
+      updateEvent('op-update-recurring', { text: 'FREQ=DAILY' }),
+    ]);
+    expect(updated.projects[0].events[0].recurrence).toEqual({ text: 'FREQ=DAILY' });
+  });
+
   it('replayOperations removes an event', () => {
     const confirmed = state();
     confirmed.projects[0].events = [event()];
@@ -525,7 +539,12 @@ describe('event replay', () => {
       end: { kind: 'date', date: '2026-11-09' },
     });
 
-    const deleted = applyChanges(updated, [eventChange('delete', {})]);
+    const recurring = applyChanges(updated, [
+      eventChange('update', { recurrence: { text: 'FREQ=WEEKLY' } }),
+    ]);
+    expect(recurring.projects[0].events[0].recurrence).toEqual({ text: 'FREQ=WEEKLY' });
+
+    const deleted = applyChanges(recurring, [eventChange('delete', {})]);
     expect(deleted.projects[0].events).toEqual([]);
   });
 });

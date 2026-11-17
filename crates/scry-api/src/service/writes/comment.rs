@@ -1,11 +1,10 @@
 use crate::error::ServiceError;
+use crate::service::{ApplyMode, ProjectService, new_operation};
 use jiff::Timestamp;
 use scry_core::ids::{CommentId, ProjectId, TaskId};
 use scry_core::models::Comment;
 use scry_core::sync::operations::OperationKind;
 use uuid::Uuid;
-
-use super::super::{ApplyMode, ProjectService, new_operation};
 
 impl ProjectService {
     pub async fn add_comment(

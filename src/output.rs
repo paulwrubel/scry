@@ -7,6 +7,7 @@ use jiff::tz::TimeZone;
 use scry_core::format::{format_interval, format_when};
 use scry_core::ids::TaskId;
 use scry_core::models::{Event, Section, TaskState};
+use scry_core::temporal::Interval;
 use std::collections::HashMap;
 
 /// Print a value as compact JSON on stdout.
@@ -25,12 +26,21 @@ pub fn section_label(section: &Option<Section>) -> &str {
 }
 
 /// Render one event line for the human `event list` output.
-pub fn event_line(event: &Event, handle: &str, now: Timestamp, zone: &TimeZone) -> String {
+///
+/// The interval is passed separately from the event so a recurring series can
+/// print one line per expanded occurrence.
+pub fn event_line(
+    event: &Event,
+    interval: &Interval,
+    handle: &str,
+    now: Timestamp,
+    zone: &TimeZone,
+) -> String {
     format!(
         "  {}  {}  {}",
         handle,
         event.title,
-        format_interval(&event.interval, now, zone)
+        format_interval(interval, now, zone)
     )
 }
 

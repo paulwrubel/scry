@@ -10,6 +10,7 @@ import {
   applyMonth,
   applyWeek,
   dayKey,
+  expandEvents,
   monthGrid,
   monthLabel,
   parseCalendarView,
@@ -37,8 +38,19 @@ export function EventsPage() {
   const week = weekDays(parseWeek(searchParams, DEVICE_ZONE, today));
   const weeks: DateTime[][] = view === 'month' ? monthGrid(month, DEVICE_ZONE) : [week];
   const events = project?.events ?? [];
-  const lanes = view === 'month' ? weeks.map((item) => placeWeek(events, item, DEVICE_ZONE)) : [];
-  const query = searchParams.toString();
+  const lanes =
+    view === 'month'
+      ? weeks.map((item) =>
+          placeWeek(
+            expandEvents(events, item[0], item[6].plus({ days: 1 }), DEVICE_ZONE),
+            item,
+            DEVICE_ZONE,
+          ),
+        )
+      : [];
+  const calendarParams = new URLSearchParams(searchParams);
+  calendarParams.delete('occurrence');
+  const query = calendarParams.toString();
   const querySuffix = query.length === 0 ? '' : `?${query}`;
 
   if (project === undefined) {
@@ -91,6 +103,7 @@ export function EventsPage() {
   function createEventPath(): string {
     const params = new URLSearchParams(searchParams);
     params.delete('date');
+    params.delete('occurrence');
 
     // a new event opened from the week view defaults to a day that is on screen
     if (view === 'week') {

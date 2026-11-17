@@ -1,6 +1,9 @@
 import { DateTime } from 'luxon';
 import { instantOf, isAllDay, displayedClock } from '@/contract/interval';
+import { expandRecurrence } from '@/contract/recur';
 import type { Event } from '@/generated/Event';
+import type { Interval } from '@/generated/Interval';
+import type { When } from '@/generated/When';
 
 export const MONTH_PARAM = 'month';
 export const VIEW_PARAM = 'view';
@@ -10,8 +13,13 @@ export type Month = { year: number; month: number };
 
 export type CalendarView = 'month' | 'week';
 
+export type CalendarEvent = Event & {
+  /// The occurrence's own start, present only for an expanded series.
+  occurrenceStart?: When;
+};
+
 export type EventPlacement = {
-  event: Event;
+  event: CalendarEvent;
   /// Inclusive column range within the week, 0–6.
   startIndex: number;
   endIndex: number;
@@ -56,7 +64,11 @@ function hiddenCount(columns: number): number[] {
 }
 
 /// The events that cover `day`, all-day ones first and then by start time.
-export function eventsOnDay(events: readonly Event[], day: DateTime, zone: string): Event[] {
+export function eventsOnDay(
+  events: readonly CalendarEvent[],
+  day: DateTime,
+  zone: string,
+): CalendarEvent[] {
   const target = day.setZone(zone).startOf('day');
 
   return events
@@ -80,6 +92,108 @@ function compareEventStarts(left: Event, right: Event, zone: string): number {
   }
 
   return left.title.localeCompare(right.title);
+}
+
+/// Expand every recurring event over the window and leave plain events alone,
+/// sorted by their actual start. An invalid stored rule falls back to the
+/// series once so one bad event cannot blank the whole calendar.
+export function expandEvents(
+  events: readonly Event[],
+  from: DateTime,
+  to: DateTime,
+  zone: string,
+): CalendarEvent[] {
+  const expanded: CalendarEvent[] = [];
+
+  for (const event of events) {
+    const rrule = event.recurrence;
+    if (rrule === null || rrule === undefined) {
+      expanded.push(event);
+      continue;
+    }
+
+    let intervals: Interval[];
+    try {
+      intervals = expandRecurrence(event.interval, rrule, from, to, zone);
+    } catch {
+      intervals = [event.interval];
+    }
+
+    for (const interval of intervals) {
+      expanded.push({ ...event, interval, occurrenceStart: interval.start });
+    }
+  }
+
+  expanded.sort((left, right) => {
+    const difference =
+      instantOf(left.interval.start, zone).toMillis() -
+      instantOf(right.interval.start, zone).toMillis();
+    return difference === 0 ? left.id.localeCompare(right.id) : difference;
+  });
+
+  return expanded;
+}
+
+/// A stable React key for a series row or one expanded occurrence.
+export function eventKey(event: CalendarEvent): string {
+  return event.occurrenceStart === undefined
+    ? event.id
+    : `${event.id}:${JSON.stringify(event.occurrenceStart)}`;
+}
+
+/// The event detail path, carrying the occurrence start when this is a series occurrence.
+export function eventPath(projectId: string, event: CalendarEvent, query: string): string {
+  const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+
+  if (event.occurrenceStart !== undefined) {
+    params.set('occurrence', JSON.stringify(event.occurrenceStart));
+  }
+
+  const suffix = params.size === 0 ? '' : `?${params.toString()}`;
+  return `/projects/${projectId}/events/${event.id}${suffix}`;
+}
+
+/// Read the encoded occurrence start from an event detail link. Returns null
+/// for a missing or malformed value rather than trusting arbitrary JSON.
+export function parseOccurrence(value: string | null): When | null {
+  if (value === null) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+
+  return isWhen(parsed) ? parsed : null;
+}
+
+function isWhen(value: unknown): value is When {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) {
+    return false;
+  }
+
+  const kind = value.kind;
+  if (kind === 'date') {
+    return 'date' in value && typeof value.date === 'string';
+  }
+  if (kind === 'floating') {
+    return 'datetime' in value && typeof value.datetime === 'string';
+  }
+  if (kind === 'instant') {
+    return 'timestamp' in value && typeof value.timestamp === 'string';
+  }
+  if (kind === 'zoned') {
+    return (
+      'datetime' in value &&
+      typeof value.datetime === 'string' &&
+      'zone' in value &&
+      typeof value.zone === 'string'
+    );
+  }
+  return false;
 }
 
 /// The visible month, read from the URL and falling back to the current one so
@@ -225,7 +339,7 @@ export function eventSpan(event: Event, zone: string): { first: DateTime; last: 
 /// week and stacked into lanes so overlapping bars never share a row. One bar
 /// per event per week is what lets a multi-day event span columns.
 export function placeWeek(
-  events: readonly Event[],
+  events: readonly CalendarEvent[],
   days: readonly DateTime[],
   zone: string,
 ): WeekLane[] {
@@ -302,7 +416,7 @@ function daysBetween(from: DateTime, to: DateTime): number {
 
 /// The events the week view draws in its top band: every all-day event, plus
 /// the timed ones whose span reaches into a second day.
-export function spanningEvents(events: readonly Event[], zone: string): Event[] {
+export function spanningEvents(events: readonly CalendarEvent[], zone: string): CalendarEvent[] {
   return events.filter((event) => {
     if (isAllDay(event.interval)) {
       return true;
@@ -313,7 +427,7 @@ export function spanningEvents(events: readonly Event[], zone: string): Event[] 
 }
 
 export type TimedPlacement = {
-  event: Event;
+  event: CalendarEvent;
   /// Minutes from local midnight, where 1440 is the midnight that ends the day.
   startMinute: number;
   endMinute: number;
@@ -325,14 +439,18 @@ export type TimedPlacement = {
 
 /// The timed events that cover each day, laid out in side-by-side columns.
 export function placeTimedWeek(
-  events: readonly Event[],
+  events: readonly CalendarEvent[],
   days: readonly DateTime[],
   zone: string,
 ): TimedPlacement[][] {
   return days.map((day) => placeTimedDay(events, day, zone));
 }
 
-function placeTimedDay(events: readonly Event[], day: DateTime, zone: string): TimedPlacement[] {
+function placeTimedDay(
+  events: readonly CalendarEvent[],
+  day: DateTime,
+  zone: string,
+): TimedPlacement[] {
   const dayStart = day.startOf('day');
   const dayEnd = dayStart.plus({ days: 1 });
 

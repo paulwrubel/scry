@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
 import type { Event } from '@/generated/Event';
 import type { Interval } from '@/generated/Interval';
+import type { When } from '@/generated/When';
 import type { EventPlacement, WeekLane } from './calendar';
 import {
   MONTH_PARAM,
@@ -11,14 +12,18 @@ import {
   applyMonth,
   applyWeek,
   dayKey,
+  eventKey,
+  eventPath,
   eventSpan,
   eventsOnDay,
+  expandEvents,
   fitLanes,
   monthGrid,
   monthKey,
   monthLabel,
   parseCalendarView,
   parseMonth,
+  parseOccurrence,
   parseWeek,
   placeTimedWeek,
   placeWeek,
@@ -58,6 +63,10 @@ function event(id: string, interval: Interval): Event {
     created_at: CREATED_AT,
     updated_at: CREATED_AT,
   };
+}
+
+function recurringEvent(id: string, interval: Interval, text: string, exdates: When[] = []): Event {
+  return { ...event(id, interval), recurrence: exdates.length > 0 ? { text, exdates } : { text } };
 }
 
 function day(value: string): DateTime {
@@ -579,5 +588,132 @@ describe('weekDays', () => {
     expect(dayKey(days[0])).toBe('2026-11-01');
     expect(dayKey(days[6])).toBe('2026-11-07');
     expect(days.every((item) => item.hour === 0)).toBe(true);
+  });
+});
+
+describe('expandEvents', () => {
+  const from = day('2026-11-01');
+  const to = day('2026-11-08');
+
+  it('shifts an occurrence of a series that began before the window', () => {
+    const expanded = expandEvents(
+      [recurringEvent('weekly', dateInterval('2026-10-05', '2026-10-06'), 'FREQ=WEEKLY')],
+      from,
+      to,
+      ZONE,
+    );
+
+    expect(expanded).toHaveLength(1);
+    expect(expanded[0].id).toBe('weekly');
+    expect(expanded[0].occurrenceStart).toEqual({ kind: 'date', date: '2026-11-02' });
+    expect(expanded[0].interval).toEqual(dateInterval('2026-11-02', '2026-11-03'));
+  });
+
+  it('keeps two occurrences of one series that fall inside the window', () => {
+    const expanded = expandEvents(
+      [
+        recurringEvent(
+          'twice',
+          dateInterval('2026-10-05', '2026-10-06'),
+          'FREQ=WEEKLY;BYDAY=MO,TH',
+        ),
+      ],
+      from,
+      to,
+      ZONE,
+    );
+
+    expect(expanded.map((item) => item.occurrenceStart)).toEqual([
+      { kind: 'date', date: '2026-11-02' },
+      { kind: 'date', date: '2026-11-05' },
+    ]);
+  });
+
+  it('removes exactly the occurrence named by an EXDATE', () => {
+    const expanded = expandEvents(
+      [
+        recurringEvent('daily', dateInterval('2026-11-02', '2026-11-03'), 'FREQ=DAILY;COUNT=5', [
+          { kind: 'date', date: '2026-11-03' },
+        ]),
+      ],
+      from,
+      to,
+      ZONE,
+    );
+
+    expect(expanded.map((item) => item.occurrenceStart)).toEqual([
+      { kind: 'date', date: '2026-11-02' },
+      { kind: 'date', date: '2026-11-04' },
+      { kind: 'date', date: '2026-11-05' },
+      { kind: 'date', date: '2026-11-06' },
+    ]);
+  });
+
+  it('returns a non-recurring event unchanged', () => {
+    const plain = event('plain', dateInterval('2026-11-03', '2026-11-04'));
+
+    expect(expandEvents([plain], from, to, ZONE)[0]).toBe(plain);
+  });
+});
+
+describe('eventKey', () => {
+  it('differs for two occurrences of one series', () => {
+    const expanded = expandEvents(
+      [
+        recurringEvent(
+          'twice',
+          dateInterval('2026-10-05', '2026-10-06'),
+          'FREQ=WEEKLY;BYDAY=MO,TH',
+        ),
+      ],
+      day('2026-11-01'),
+      day('2026-11-08'),
+      ZONE,
+    );
+
+    expect(expanded).toHaveLength(2);
+    expect(eventKey(expanded[0]).startsWith('twice:')).toBe(true);
+    expect(eventKey(expanded[0])).not.toBe(eventKey(expanded[1]));
+  });
+});
+
+describe('eventPath', () => {
+  it('adds an encoded occurrence and keeps the existing parameters', () => {
+    const [occurrence] = expandEvents(
+      [recurringEvent('weekly', dateInterval('2026-10-05', '2026-10-06'), 'FREQ=WEEKLY')],
+      day('2026-11-01'),
+      day('2026-11-08'),
+      ZONE,
+    );
+
+    const path = eventPath('project-1', occurrence, '?month=2026-11&view=week');
+    const [base, query] = path.split('?');
+    const queryParams = new URLSearchParams(query);
+
+    expect(base).toBe('/projects/project-1/events/weekly');
+    expect(queryParams.get('month')).toBe('2026-11');
+    expect(queryParams.get('view')).toBe('week');
+    expect(queryParams.get('occurrence')).toBe(JSON.stringify(occurrence.occurrenceStart));
+    expect(path).toContain('%22kind%22');
+  });
+});
+
+describe('parseOccurrence', () => {
+  it('reads a valid encoded occurrence', () => {
+    const encoded = JSON.stringify({ kind: 'date', date: '2026-11-02' });
+
+    expect(parseOccurrence(encoded)).toEqual({ kind: 'date', date: '2026-11-02' });
+  });
+
+  it('returns null for a missing value', () => {
+    expect(parseOccurrence(null)).toBeNull();
+  });
+
+  it('returns null for malformed JSON or a wrong shape', () => {
+    expect(parseOccurrence('not json')).toBeNull();
+    expect(parseOccurrence(JSON.stringify({ kind: 'date' }))).toBeNull();
+    expect(
+      parseOccurrence(JSON.stringify({ kind: 'zoned', datetime: '2026-11-02T09:00' })),
+    ).toBeNull();
   });
 });

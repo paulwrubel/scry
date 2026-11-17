@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatTimeOfDay } from '@/contract/interval';
+import { eventPath } from '@/utils/events/calendar';
 import type { EventPlacement } from '@/utils/events/calendar';
 
 export type EventBarProps = {
@@ -17,7 +18,7 @@ export function EventBar(props: EventBarProps) {
 
   return (
     <Link
-      to={`/projects/${projectId}/events/${event.id}${monthQuery}`}
+      to={eventPath(projectId, event, monthQuery)}
       title={event.title}
       style={{ left: `${(startIndex * 100) / 7}%`, width: `${(days * 100) / 7}%` }}
       className={`bg-panel hover:bg-line pointer-events-auto absolute inset-y-px flex items-center gap-1 overflow-hidden px-1.5 text-[11px] leading-none transition-colors ${

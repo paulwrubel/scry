@@ -138,6 +138,7 @@ pub(super) fn event_field_updates(event: &mut Event, op: &OperationKind) -> Fiel
         title,
         description,
         interval,
+        recurrence,
         ..
     } = op
     {
@@ -152,6 +153,10 @@ pub(super) fn event_field_updates(event: &mut Event, op: &OperationKind) -> Fiel
         if let Some(interval) = interval {
             event.interval = interval.clone();
             fields.insert("interval".into(), json!(interval));
+        }
+        if let Some(recurrence) = recurrence {
+            event.recurrence = recurrence.clone();
+            fields.insert("recurrence".into(), json!(recurrence));
         }
     }
 

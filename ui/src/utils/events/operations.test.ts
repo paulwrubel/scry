@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { Event } from '@/generated/Event';
 import type { Interval } from '@/generated/Interval';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
-import { createEventOperation, deleteEventOperation, updateEventOperation } from './operations';
+import type { RRule } from '@/generated/RRule';
+import type { When } from '@/generated/When';
+import {
+  createEventOperation,
+  deleteEventOperation,
+  deleteOccurrenceOperation,
+  updateEventOperation,
+} from './operations';
 
 const CREATED_AT = '2026-01-01T00:00:00Z';
 const EVENT_ID = 'event-1';
@@ -12,6 +19,8 @@ const INTERVAL: Interval = {
   start: { kind: 'date', date: '2026-11-06' },
   end: { kind: 'date', date: '2026-11-07' },
 };
+
+const RECURRENCE: RRule = { text: 'FREQ=WEEKLY;BYDAY=MO' };
 
 const NEXT_INTERVAL: Interval = {
   start: { kind: 'date', date: '2026-11-08' },
@@ -52,6 +61,7 @@ describe('createEventOperation', () => {
       title: '  Standup  ',
       description: '  ',
       interval: INTERVAL,
+      recurrence: null,
     });
 
     expect(created).not.toBeNull();
@@ -70,14 +80,31 @@ describe('createEventOperation', () => {
       title: 'Standup',
       description: 'Daily sync',
       interval: INTERVAL,
+      recurrence: null,
     });
 
     expect(created?.operation).toMatchObject({ description: 'Daily sync' });
   });
 
+  it('includes a supplied recurrence', () => {
+    const created = createEventOperation(project(), {
+      title: 'Standup',
+      description: '',
+      interval: INTERVAL,
+      recurrence: RECURRENCE,
+    });
+
+    expect(created?.operation).toMatchObject({ recurrence: RECURRENCE });
+  });
+
   it('refuses a blank title', () => {
     expect(
-      createEventOperation(project(), { title: '   ', description: '', interval: INTERVAL }),
+      createEventOperation(project(), {
+        title: '   ',
+        description: '',
+        interval: INTERVAL,
+        recurrence: null,
+      }),
     ).toBeNull();
   });
 });
@@ -89,6 +116,7 @@ describe('updateEventOperation', () => {
         title: 'Standup',
         description: '',
         interval: INTERVAL,
+        recurrence: null,
       }),
     ).toBeNull();
   });
@@ -98,6 +126,7 @@ describe('updateEventOperation', () => {
       title: 'Standup v2',
       description: '',
       interval: INTERVAL,
+      recurrence: null,
     });
 
     expect(operation).toMatchObject({
@@ -114,6 +143,7 @@ describe('updateEventOperation', () => {
       title: 'Standup',
       description: '',
       interval: INTERVAL,
+      recurrence: null,
     });
 
     expect(operation).toMatchObject({ description: null });
@@ -124,15 +154,54 @@ describe('updateEventOperation', () => {
       title: 'Standup',
       description: '',
       interval: NEXT_INTERVAL,
+      recurrence: null,
     });
 
     expect(operation).toMatchObject({ title: null, interval: NEXT_INTERVAL });
     expect(operation).toMatchObject({ description: undefined });
   });
 
+  it('sets a recurrence', () => {
+    const operation = updateEventOperation(event(), {
+      title: 'Standup',
+      description: '',
+      interval: INTERVAL,
+      recurrence: RECURRENCE,
+    });
+
+    expect(operation).toMatchObject({ recurrence: RECURRENCE });
+  });
+
+  it('clears a recurrence with a null patch', () => {
+    const operation = updateEventOperation(event({ recurrence: RECURRENCE }), {
+      title: 'Standup',
+      description: '',
+      interval: INTERVAL,
+      recurrence: null,
+    });
+
+    expect(operation).toMatchObject({ recurrence: null });
+  });
+
+  it('returns nothing when the recurrence is unchanged', () => {
+    expect(
+      updateEventOperation(event({ recurrence: RECURRENCE }), {
+        title: 'Standup',
+        description: '',
+        interval: INTERVAL,
+        recurrence: RECURRENCE,
+      }),
+    ).toBeNull();
+  });
+
   it('refuses a blank title', () => {
     expect(
-      updateEventOperation(event(), { title: '  ', description: '', interval: NEXT_INTERVAL }),
+      updateEventOperation(event(), {
+        title: '  ',
+        description: '',
+        interval: NEXT_INTERVAL,
+        recurrence: null,
+      }),
     ).toBeNull();
   });
 });
@@ -143,5 +212,44 @@ describe('deleteEventOperation', () => {
       kind: 'delete_event',
       id: EVENT_ID,
     });
+  });
+});
+
+describe('deleteOccurrenceOperation', () => {
+  const OCCURRENCE: When = { kind: 'date', date: '2026-11-13' };
+
+  it('appends exactly one EXDATE', () => {
+    const operation = deleteOccurrenceOperation(event({ recurrence: RECURRENCE }), OCCURRENCE);
+
+    expect(operation).toMatchObject({
+      kind: 'update_event',
+      id: EVENT_ID,
+      recurrence: { text: RECURRENCE.text, exdates: [OCCURRENCE] },
+    });
+  });
+
+  it('keeps the existing EXDATEs', () => {
+    const existing: When = { kind: 'date', date: '2026-11-06' };
+    const operation = deleteOccurrenceOperation(
+      event({ recurrence: { ...RECURRENCE, exdates: [existing] } }),
+      OCCURRENCE,
+    );
+
+    expect(operation).toMatchObject({
+      recurrence: { exdates: [existing, OCCURRENCE] },
+    });
+  });
+
+  it('is a no-op when the occurrence is already excluded', () => {
+    expect(
+      deleteOccurrenceOperation(
+        event({ recurrence: { ...RECURRENCE, exdates: [OCCURRENCE] } }),
+        OCCURRENCE,
+      ),
+    ).toBeNull();
+  });
+
+  it('is a no-op when the event does not repeat', () => {
+    expect(deleteOccurrenceOperation(event(), OCCURRENCE)).toBeNull();
   });
 });

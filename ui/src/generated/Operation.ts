@@ -9,6 +9,7 @@ import type { ExternalMetadata } from './ExternalMetadata';
 import type { Interval } from './Interval';
 import type { Position } from './Position';
 import type { Priority } from './Priority';
+import type { RRule } from './RRule';
 import type { Tags } from './Tags';
 import type { TaskState } from './TaskState';
 import type { When } from './When';
@@ -137,6 +138,7 @@ export type Operation = {
       title: string;
       description: string | null;
       interval: Interval;
+      recurrence?: RRule | null;
       created_at: string;
       updated_at?: string | null;
     }
@@ -146,6 +148,7 @@ export type Operation = {
       title: string | null;
       description?: string | null;
       interval: Interval | null;
+      recurrence?: RRule | null;
       updated_at?: string | null;
     }
   | { kind: 'delete_event'; id: string }

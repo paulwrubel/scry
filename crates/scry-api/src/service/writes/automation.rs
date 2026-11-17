@@ -1,11 +1,10 @@
 use crate::error::ServiceError;
+use crate::service::{ApplyMode, ProjectService, new_operation};
 use jiff::Timestamp;
 use scry_core::ids::{AutomationId, ProjectId};
 use scry_core::models::{Automation, AutomationAction, AutomationTrigger};
 use scry_core::sync::operations::OperationKind;
 use uuid::Uuid;
-
-use super::super::{ApplyMode, ProjectService, new_operation};
 
 impl ProjectService {
     /// Create an automation in a project.

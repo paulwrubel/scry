@@ -1,15 +1,13 @@
 use crate::error::ServiceError;
-use crate::service::placement::section_placement_position;
+use crate::service::{
+    ApplyMode, ColorChange, ProjectService, SectionPlacement, UpdateSection, new_operation,
+    placement::section_placement_position, position_error,
+};
 use scry_core::ids::{ProjectId, SectionId};
 use scry_core::models::{Color, Section};
 use scry_core::position::n_keys_between;
 use scry_core::sync::operations::{ColorChange as OperationColorChange, OperationKind};
 use uuid::Uuid;
-
-use super::super::{
-    ApplyMode, ColorChange, ProjectService, SectionPlacement, UpdateSection, new_operation,
-    position_error,
-};
 
 impl ProjectService {
     pub async fn create_section_in_project(

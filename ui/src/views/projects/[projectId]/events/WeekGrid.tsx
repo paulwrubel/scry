@@ -4,7 +4,15 @@ import { Link } from 'react-router-dom';
 import { DEVICE_ZONE } from '@/contract/due';
 import { formatTimeOfDay } from '@/contract/interval';
 import type { Event } from '@/generated/Event';
-import { dayKey, placeTimedWeek, placeWeek, spanningEvents } from '@/utils/events/calendar';
+import {
+  dayKey,
+  eventKey,
+  eventPath,
+  expandEvents,
+  placeTimedWeek,
+  placeWeek,
+  spanningEvents,
+} from '@/utils/events/calendar';
 import { EventBar } from './EventBar';
 
 const HOUR_HEIGHT = 48;
@@ -22,6 +30,8 @@ export type WeekGridProps = {
 export function WeekGrid(props: WeekGridProps) {
   const { week, events, today, projectId, query, onShowDay } = props;
 
+  const expanded = expandEvents(events, week[0], week[6].plus({ days: 1 }), DEVICE_ZONE);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,8 +41,8 @@ export function WeekGrid(props: WeekGridProps) {
   }, []);
 
   const querySuffix = query.length === 0 ? '' : `?${query}`;
-  const banners = placeWeek(spanningEvents(events, DEVICE_ZONE), week, DEVICE_ZONE);
-  const timedByDay = placeTimedWeek(events, week, DEVICE_ZONE);
+  const banners = placeWeek(spanningEvents(expanded, DEVICE_ZONE), week, DEVICE_ZONE);
+  const timedByDay = placeTimedWeek(expanded, week, DEVICE_ZONE);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -72,7 +82,7 @@ export function WeekGrid(props: WeekGridProps) {
               <div key={laneIndex} className="relative" style={{ height: 22 }}>
                 {lane.map((placement) => (
                   <EventBar
-                    key={placement.event.id}
+                    key={eventKey(placement.event)}
                     placement={placement}
                     projectId={projectId}
                     monthQuery={querySuffix}
@@ -118,8 +128,8 @@ export function WeekGrid(props: WeekGridProps) {
                 ))}
                 {timedByDay[index].map((segment) => (
                   <Link
-                    key={segment.event.id}
-                    to={`/projects/${projectId}/events/${segment.event.id}${querySuffix}`}
+                    key={eventKey(segment.event)}
+                    to={eventPath(projectId, segment.event, querySuffix)}
                     title={segment.event.title}
                     style={{
                       top: `${(segment.startMinute / 1440) * 100}%`,

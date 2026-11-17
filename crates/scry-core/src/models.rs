@@ -1,4 +1,5 @@
 use crate::position::Position;
+use crate::recurrence::RRule;
 use crate::temporal::{Interval, When};
 use anstyle::AnsiColor;
 use clap::ValueEnum;
@@ -437,7 +438,8 @@ pub struct Task {
 ///
 /// `interval` is the event's start and exclusive end, so an all-day event is a
 /// date range and a timed one is a wall clock, an instant, or a zoned wall
-/// clock. Both ends are always the same kind.
+/// clock. Both ends are always the same kind. An event may repeat, in which
+/// case `recurrence` holds the RRULE that generates its occurrences.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
@@ -446,6 +448,8 @@ pub struct Event {
     pub title: String,
     pub description: Option<String>,
     pub interval: Interval,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recurrence: Option<RRule>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_at: Timestamp,
     #[serde(default = "Timestamp::now")]

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    event_interval,\n                    created_at,\n                    updated_at\n                FROM events\n                WHERE project_id = $1\n                ORDER BY created_at ASC, id ASC\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    event_interval,\n                    recurrence,\n                    created_at,\n                    updated_at\n                FROM events\n                WHERE project_id = $1\n                ORDER BY created_at ASC, id ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -60,6 +60,17 @@
       },
       {
         "ordinal": 5,
+        "name": "recurrence",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "recurrence"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -92,9 +103,10 @@
       false,
       true,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "83a588c106b86c71a9bffed45180cbe41d9d38b5e8a363f7a072c06886d13459"
+  "hash": "9fc0065ae72159c4664bfadd0a1f9bf31991fd1606e950a8f4edf5982a58636f"
 }

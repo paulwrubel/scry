@@ -1,7 +1,7 @@
 import { Dropdown, DropdownDivider, DropdownItem } from 'flowbite-react';
 import { useState } from 'react';
 import { HiCheck, HiChevronDown, HiPlus } from 'react-icons/hi2';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useActiveProject } from '@/providers/ActiveProject';
 import { useReplicaSnapshot } from '@/providers/Replica';
 import { NewProjectModal } from '@/views/projects/NewProjectModal';
@@ -13,7 +13,7 @@ const DEFAULT_PROJECT_SECTION = 'tasks';
 // back to the section root
 function projectPath(
   pathname: string,
-  search: string,
+  search: URLSearchParams,
   currentProjectId: string | null,
   nextProjectId: string,
 ): string {
@@ -26,6 +26,7 @@ function projectPath(
       : [...segments.slice(0, at), nextProjectId, section];
   const params = new URLSearchParams(search);
   params.delete('date');
+  params.delete('occurrence');
   const query = params.toString();
   return `${base.join('/')}${query.length === 0 ? '' : `?${query}`}`;
 }
@@ -35,6 +36,7 @@ export function ProjectSwitcher() {
   const snapshot = useReplicaSnapshot();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [creating, setCreating] = useState(false);
 
   const projects = snapshot.visible.projects;
@@ -42,7 +44,7 @@ export function ProjectSwitcher() {
 
   function selectProject(projectId: string) {
     setActiveProjectId(projectId);
-    navigate(projectPath(location.pathname, location.search, activeProjectId, projectId));
+    navigate(projectPath(location.pathname, searchParams, activeProjectId, projectId));
   }
 
   function handleCreated(projectId: string) {

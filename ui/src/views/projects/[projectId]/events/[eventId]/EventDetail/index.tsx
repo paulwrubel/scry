@@ -11,18 +11,23 @@ import {
   intervalToInputs,
   shiftEndInputs,
 } from '@/contract/interval';
+import { parseRrule } from '@/contract/recur';
 import type { Event } from '@/generated/Event';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
+import type { RRule } from '@/generated/RRule';
+import type { When } from '@/generated/When';
 import { useAppForm } from '@/hooks/useAppForm';
 import { useEnqueue } from '@/hooks/useEnqueue';
 import { eventSpan } from '@/utils/events/calendar';
 import {
   createEventOperation,
   deleteEventOperation,
+  deleteOccurrenceOperation,
   updateEventOperation,
 } from '@/utils/events/operations';
 import type { EventFieldPatch } from '@/utils/events/operations';
 import { DeleteEventModal } from './DeleteEventModal';
+import { RecurrenceField } from './RecurrenceField';
 
 const INPUT_CLASS =
   'border-line-strong bg-surface text-zinc-200 focus:border-line-hover w-full rounded-lg border p-2 text-sm focus:outline-none';
@@ -35,11 +40,21 @@ const schema = z
     startTime: z.string(),
     endDate: z.string(),
     endTime: z.string(),
+    recurrence: z.string(),
   })
   .superRefine((value, ctx) => {
     const result = intervalFromInputs(value);
     if (result.interval === null) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: result.error });
+    }
+
+    const recurrence = parseRrule(value.recurrence);
+    if (value.recurrence.trim().length > 0 && recurrence.error !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['recurrence'],
+        message: recurrence.error,
+      });
     }
   });
 
@@ -47,12 +62,13 @@ export type EventDetailProps = {
   project: ProjectSnapshot;
   event: Event | null;
   defaultDate: string | null;
+  occurrence?: When | null;
   onSaved: (eventId: string) => void;
   onClose: () => void;
 };
 
 export function EventDetail(props: EventDetailProps) {
-  const { project, event, defaultDate, onSaved, onClose } = props;
+  const { project, event, defaultDate, occurrence = null, onSaved, onClose } = props;
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,10 +85,21 @@ export function EventDetail(props: EventDetailProps) {
         return;
       }
 
+      const text = value.recurrence.trim();
+      const exdates = event?.recurrence?.exdates;
+      const recurrence: RRule | null =
+        text.length === 0
+          ? null
+          : {
+              text,
+              ...(exdates === undefined || exdates.length === 0 ? {} : { exdates }),
+            };
+
       const patch: EventFieldPatch = {
         title: value.title,
         description: value.description,
         interval: result.interval,
+        recurrence,
       };
 
       setError(null);
@@ -110,6 +137,24 @@ export function EventDetail(props: EventDetailProps) {
     }
   }
 
+  async function handleDeleteOccurrence() {
+    if (event === null || occurrence === null) {
+      return;
+    }
+
+    const operation = deleteOccurrenceOperation(event, occurrence);
+
+    try {
+      if (operation !== null) {
+        await enqueue(operation);
+      }
+      setConfirmingDelete(false);
+      onClose();
+    } catch {
+      setError('Could not delete this occurrence.');
+    }
+  }
+
   // a single-day event's end is really a duration, so it moves with the start;
   // a multi-day end is a committed date and stays where the user put it
   function followStart(
@@ -142,6 +187,12 @@ export function EventDetail(props: EventDetailProps) {
     form.setFieldValue('endTime', end.endTime);
   }
 
+  const showingOccurrence =
+    occurrence !== null &&
+    event !== null &&
+    event.recurrence !== null &&
+    event.recurrence !== undefined;
+
   return (
     <>
       <div className="flex min-h-full flex-col gap-4 p-6">
@@ -163,6 +214,12 @@ export function EventDetail(props: EventDetailProps) {
         </div>
 
         {error === null ? null : <Alert color="failure">{error}</Alert>}
+
+        {showingOccurrence ? (
+          <p className="text-muted text-sm">
+            This is one occurrence of a repeating event. Saving changes the whole series.
+          </p>
+        ) : null}
 
         <Card>
           <form
@@ -308,14 +365,47 @@ export function EventDetail(props: EventDetailProps) {
               )}
             </form.AppField>
 
+            <form.Subscribe selector={(state) => state.values.startDate}>
+              {(startDate) => (
+                <form.AppField name="recurrence">
+                  {(field) => (
+                    <RecurrenceField
+                      value={field.state.value}
+                      startDate={startDate}
+                      onChange={field.handleChange}
+                      error={
+                        field.state.meta.isTouched || form.state.isSubmitted
+                          ? fieldErrorMessage(field.state.meta.errors)
+                          : null
+                      }
+                    />
+                  )}
+                </form.AppField>
+              )}
+            </form.Subscribe>
+
             <div className="flex items-center justify-end">
-              <Button type="submit" disabled={form.state.isSubmitting}>
-                {form.state.isSubmitting
-                  ? 'Saving...'
-                  : event === null
-                    ? 'Create event'
-                    : 'Save changes'}
-              </Button>
+              <form.Subscribe
+                selector={(state) => ({
+                  isDefaultValue: state.isDefaultValue,
+                  isSubmitting: state.isSubmitting,
+                })}
+              >
+                {({ isDefaultValue, isSubmitting }) => (
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || (event !== null && isDefaultValue)}
+                  >
+                    {isSubmitting
+                      ? 'Saving...'
+                      : event === null
+                        ? 'Create event'
+                        : isDefaultValue
+                          ? 'No changes'
+                          : 'Save changes'}
+                  </Button>
+                )}
+              </form.Subscribe>
             </div>
           </form>
         </Card>
@@ -331,9 +421,11 @@ export function EventDetail(props: EventDetailProps) {
       {event === null ? null : (
         <DeleteEventModal
           event={event}
+          occurrence={occurrence}
           show={confirmingDelete}
           onClose={() => setConfirmingDelete(false)}
           onDelete={handleDelete}
+          onDeleteOccurrence={handleDeleteOccurrence}
         />
       )}
     </>
@@ -355,6 +447,7 @@ function initialValues(event: Event | null, defaultDate: string | null) {
       startTime: inputs.startTime,
       endDate: inputs.endDate,
       endTime: inputs.endTime,
+      recurrence: event.recurrence?.text ?? '',
     };
   }
 
@@ -366,5 +459,6 @@ function initialValues(event: Event | null, defaultDate: string | null) {
     startTime: '',
     endDate: defaultEndInputs(startDate, '').endDate,
     endTime: '',
+    recurrence: '',
   };
 }
