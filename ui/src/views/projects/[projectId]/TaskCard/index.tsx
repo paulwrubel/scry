@@ -1,16 +1,11 @@
 import { Badge } from 'flowbite-react';
 import { useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { SiGithub } from 'react-icons/si';
-import { VscGitPullRequest, VscIssues } from 'react-icons/vsc';
-import { Link, useLocation } from 'react-router-dom';
 import { ClosedReasonIcon } from './ClosedReasonIcon';
-import { GithubSyncStaleIcon } from '@/components/GithubSyncStaleIcon';
-import { TitleText } from '@/components/TitleText';
-import { formatDue, isOverdue } from '@/contract/due';
+import { DueDate } from './DueDate';
+import { TaskTitleRow } from './TaskTitleRow';
 import type { Task } from '@/generated/Task';
-import { PRIORITY_DOT_CLASS } from '@/data/priority';
-import { externalError, githubIconColor, githubKind, githubUrl } from '@/utils/github';
+import { externalError } from '@/utils/github';
 import { tagBadgeStyle } from '@/utils/tasks/tagColor';
 
 export type TaskCardProps = {
@@ -26,28 +21,14 @@ export type TaskCardProps = {
 export function TaskCard(props: TaskCardProps) {
   const { projectId, task, showPriority, nodeRef, style, dragging, draggable } = props;
 
-  const { search } = useLocation();
   const press = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
 
-  const closed = task.state === 'closed';
-  const url = githubUrl(task);
-  const kind = githubKind(task);
-  const GitHubIcon = kind === 'pull' ? VscGitPullRequest : kind === 'issue' ? VscIssues : SiGithub;
-  const githubLinkLabel =
-    kind === 'pull'
-      ? 'Open GitHub pull request'
-      : kind === 'issue'
-        ? 'Open GitHub issue'
-        : 'Open GitHub item';
   const githubError = externalError(task);
   const closedReason = task.state === 'closed' ? (task.closed_reason ?? null) : null;
   const hasBadges = task.tags.length > 0 || githubError !== null;
   const description = task.description?.trim() ?? '';
   const hasDescription = description.length > 0;
-  const dueText = task.due === null ? null : formatDue(task.due);
-  const dueLabel = dueText === null ? null : `Due ${dueText}`;
-  const dueOverdue = task.due !== null && isOverdue(task);
 
   return (
     <div
@@ -80,46 +61,7 @@ export function TaskCard(props: TaskCardProps) {
       } ${dragging ? 'opacity-80 shadow-lg' : ''}`}
     >
       <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="flex min-w-0 items-start justify-between gap-2">
-          <Link
-            to={`/projects/${projectId}/tasks/${task.id}${search}`}
-            draggable={false}
-            className="flex min-w-0 flex-1 items-center gap-2"
-          >
-            <span
-              className={`min-w-0 text-sm wrap-break-word hover:text-blue-400 hover:underline ${
-                closed ? 'text-faint line-through' : ''
-              }`}
-            >
-              <TitleText title={task.title} />
-            </span>
-          </Link>
-          <div className="mt-1 flex shrink-0 items-center gap-1.5">
-            <GithubSyncStaleIcon task={task} />
-            {url === null ? null : (
-              <a
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                draggable={false}
-                aria-label={githubLinkLabel}
-                title={githubLinkLabel}
-                className={`${githubIconColor(task)} hover:text-zinc-200`}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <GitHubIcon aria-hidden="true" className="h-3.5 w-3.5" />
-              </a>
-            )}
-            {showPriority && (task.priority === 'critical' || task.priority === 'elevated') ? (
-              <span
-                role="img"
-                aria-label={`${task.priority} priority`}
-                title={task.priority}
-                className={`h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT_CLASS[task.priority]}`}
-              />
-            ) : null}
-          </div>
-        </div>
+        <TaskTitleRow projectId={projectId} task={task} showPriority={showPriority} />
         {hasDescription ? (
           <p className="text-faint line-clamp-2 text-xs wrap-break-word whitespace-pre-wrap">
             {description}
@@ -135,18 +77,10 @@ export function TaskCard(props: TaskCardProps) {
             {githubError === null ? null : <Badge color="failure">GitHub: {githubError}</Badge>}
           </div>
         ) : null}
-        {dueLabel === null && closedReason === null ? null : (
+        {task.due === null && closedReason === null ? null : (
           <div className="flex items-end justify-between gap-2">
             <ClosedReasonIcon reason={closedReason} />
-            {dueLabel === null ? null : (
-              <p
-                className={`ml-auto text-right text-xs ${dueOverdue ? 'text-danger' : 'text-muted'}`}
-                aria-label={dueOverdue ? `Overdue, was due ${dueText}` : `Due ${dueText}`}
-                title={dueOverdue ? `Overdue, was due ${dueText}` : `Due ${dueText}`}
-              >
-                {dueLabel}
-              </p>
-            )}
+            <DueDate due={task.due} state={task.state} />
           </div>
         )}
       </div>
