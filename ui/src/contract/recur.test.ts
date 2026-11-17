@@ -4,12 +4,7 @@ import type { Interval } from '@/generated/Interval';
 import type { RRule } from '@/generated/RRule';
 import type { When } from '@/generated/When';
 import { instantOf } from './interval';
-import {
-  expandRecurrence,
-  formatRrule,
-  parseRrule,
-  type RecurrencePattern,
-} from './recur';
+import { expandRecurrence, formatRrule, parseRrule, type RecurrencePattern } from './recur';
 
 const CHICAGO = 'America/Chicago';
 
