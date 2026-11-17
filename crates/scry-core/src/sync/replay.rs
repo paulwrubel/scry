@@ -383,6 +383,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             title,
             description,
             interval,
+            recurrence,
             created_at,
             updated_at,
         } => {
@@ -392,6 +393,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 title: title.clone(),
                 description: description.clone(),
                 interval: interval.clone(),
+                recurrence: recurrence.clone(),
                 created_at: *created_at,
                 updated_at: (*updated_at).unwrap_or(*created_at),
             };
@@ -408,6 +410,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             title,
             description,
             interval,
+            recurrence,
             updated_at,
         } => {
             if let Some(event) = find_event_mut(state, *id) {
@@ -419,6 +422,9 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(interval) = interval {
                     event.interval = interval.clone();
+                }
+                if let Some(recurrence) = recurrence {
+                    event.recurrence = recurrence.clone();
                 }
                 if let Some(updated_at) = updated_at {
                     event.updated_at = *updated_at;
@@ -611,6 +617,12 @@ fn apply_event_values(event: &mut Event, values: &serde_json::Value) {
         && let Ok(interval) = serde_json::from_value::<Interval>(interval.clone())
     {
         event.interval = interval;
+    }
+    if let Some(recurrence) = values.get("recurrence")
+        && let Ok(recurrence) =
+            serde_json::from_value::<Option<crate::recur::RRule>>(recurrence.clone())
+    {
+        event.recurrence = recurrence;
     }
     apply_updated_at(&mut event.updated_at, values);
 }

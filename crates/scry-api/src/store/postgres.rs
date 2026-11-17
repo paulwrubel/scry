@@ -326,6 +326,7 @@ fn event_from_fields(
         title,
         description,
         interval,
+        recurrence: None,
         created_at: created_at.to_jiff(),
         updated_at: updated_at.to_jiff(),
     })

@@ -28,6 +28,7 @@ impl ProjectService {
                 .description
                 .filter(|description| !description.is_empty()),
             interval: new.interval,
+            recurrence: None,
             created_at,
             updated_at: created_at,
         };
@@ -39,6 +40,7 @@ impl ProjectService {
                 title: event.title.clone(),
                 description: event.description.clone(),
                 interval: event.interval.clone(),
+                recurrence: None,
                 created_at: event.created_at,
                 updated_at: None,
             },
@@ -65,6 +67,7 @@ impl ProjectService {
                 title: patch.title,
                 description,
                 interval: patch.interval,
+                recurrence: None,
                 updated_at: None,
             },
         );
