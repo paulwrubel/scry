@@ -10,6 +10,7 @@ import {
   applyMonth,
   applyWeek,
   dayKey,
+  expandEvents,
   monthGrid,
   monthLabel,
   parseCalendarView,
@@ -37,7 +38,16 @@ export function EventsPage() {
   const week = weekDays(parseWeek(searchParams, DEVICE_ZONE, today));
   const weeks: DateTime[][] = view === 'month' ? monthGrid(month, DEVICE_ZONE) : [week];
   const events = project?.events ?? [];
-  const lanes = view === 'month' ? weeks.map((item) => placeWeek(events, item, DEVICE_ZONE)) : [];
+  const lanes =
+    view === 'month'
+      ? weeks.map((item) =>
+          placeWeek(
+            expandEvents(events, item[0], item[6].plus({ days: 1 }), DEVICE_ZONE),
+            item,
+            DEVICE_ZONE,
+          ),
+        )
+      : [];
   const query = searchParams.toString();
   const querySuffix = query.length === 0 ? '' : `?${query}`;
 

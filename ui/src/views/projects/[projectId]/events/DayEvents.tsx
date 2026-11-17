@@ -7,7 +7,7 @@ import { DEVICE_ZONE } from '@/contract/due';
 import { displayedClock, formatTimeOfDay } from '@/contract/interval';
 import type { Event } from '@/generated/Event';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
-import { eventsOnDay } from '@/utils/events/calendar';
+import { eventKey, eventPath, eventsOnDay, expandEvents } from '@/utils/events/calendar';
 
 export type DayEventsProps = {
   project: ProjectSnapshot;
@@ -21,7 +21,11 @@ export type DayEventsProps = {
 export function DayEvents(props: DayEventsProps) {
   const { project, day, monthQuery, onCreate, onClose } = props;
 
-  const events = eventsOnDay(project.events, day, DEVICE_ZONE);
+  const events = eventsOnDay(
+    expandEvents(project.events, day, day.plus({ days: 1 }), DEVICE_ZONE),
+    day,
+    DEVICE_ZONE,
+  );
 
   return (
     <div className="flex min-h-full flex-col gap-4 p-6">
@@ -41,9 +45,9 @@ export function DayEvents(props: DayEventsProps) {
       ) : (
         <ul className="flex flex-col gap-2">
           {events.map((event) => (
-            <li key={event.id}>
+            <li key={eventKey(event)}>
               <Link
-                to={`/projects/${project.id}/events/${event.id}${monthQuery}`}
+                to={eventPath(project.id, event, monthQuery)}
                 state={{ animateWidth: true }}
                 className="border-line bg-panel hover:border-line-hover flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors"
               >
