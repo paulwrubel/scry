@@ -7,7 +7,7 @@ pub mod models;
 pub mod ordering;
 pub mod parse;
 pub mod position;
-pub mod recur;
+pub mod recurrence;
 pub mod snapshot;
 pub mod store;
 pub mod sync;

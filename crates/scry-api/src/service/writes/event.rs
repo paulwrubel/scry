@@ -4,6 +4,7 @@ use jiff::tz::TimeZone;
 use scry_core::error::StorageError;
 use scry_core::ids::{EventId, ProjectId};
 use scry_core::models::Event;
+use scry_core::recurrence::RecurError;
 use scry_core::sync::operations::OperationKind;
 use scry_core::temporal::TemporalError;
 use uuid::Uuid;
@@ -19,16 +20,25 @@ impl ProjectService {
     ) -> Result<Event, ServiceError> {
         self.require_project(project_id).await?;
 
+        let NewEvent {
+            title,
+            description,
+            interval,
+            recurrence,
+        } = new;
+
+        if let Some(rule) = &recurrence {
+            rule.validate(interval.start()).map_err(recurrence_error)?;
+        }
+
         let created_at = Timestamp::now();
         let event = Event {
             id: Uuid::new_v4(),
             project_id,
-            title: new.title,
-            description: new
-                .description
-                .filter(|description| !description.is_empty()),
-            interval: new.interval,
-            recurrence: None,
+            title,
+            description: description.filter(|description| !description.is_empty()),
+            interval,
+            recurrence,
             created_at,
             updated_at: created_at,
         };
@@ -40,7 +50,7 @@ impl ProjectService {
                 title: event.title.clone(),
                 description: event.description.clone(),
                 interval: event.interval.clone(),
-                recurrence: None,
+                recurrence: event.recurrence.clone(),
                 created_at: event.created_at,
                 updated_at: None,
             },
@@ -49,25 +59,41 @@ impl ProjectService {
         Ok(event)
     }
 
-    /// Update an event's title, description, or interval.
+    /// Update an event's title, description, interval, or recurrence.
     pub async fn update_event(
         &self,
         id: EventId,
         patch: EventPatch,
     ) -> Result<Event, ServiceError> {
-        self.require_event(id).await?;
+        let existing = self.require_event(id).await?;
 
-        let description = patch
-            .description
-            .map(|value| Some(value).filter(|value| !value.is_empty()));
+        let EventPatch {
+            title,
+            description,
+            interval,
+            recurrence,
+        } = patch;
+
+        let description = description.map(|value| Some(value).filter(|value| !value.is_empty()));
+
+        let effective_interval = interval.as_ref().unwrap_or(&existing.interval);
+        let effective_recurrence = match &recurrence {
+            Some(value) => value.clone(),
+            None => existing.recurrence.clone(),
+        };
+        if let Some(rule) = &effective_recurrence {
+            rule.validate(effective_interval.start())
+                .map_err(recurrence_error)?;
+        }
+
         let op = new_operation(
             Uuid::new_v4(),
             OperationKind::UpdateEvent {
                 id,
-                title: patch.title,
+                title,
                 description,
-                interval: patch.interval,
-                recurrence: None,
+                interval,
+                recurrence,
                 updated_at: None,
             },
         );
@@ -127,5 +153,9 @@ impl ProjectService {
 }
 
 fn temporal_error(error: TemporalError) -> ServiceError {
+    ServiceError::Storage(StorageError::Invalid(error.to_string()))
+}
+
+fn recurrence_error(error: RecurError) -> ServiceError {
     ServiceError::Storage(StorageError::Invalid(error.to_string()))
 }

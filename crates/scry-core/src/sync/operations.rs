@@ -4,7 +4,7 @@ use crate::models::{
     Priority, Tags, TaskState,
 };
 use crate::position::Position;
-use crate::recur::RRule;
+use crate::recurrence::RRule;
 use crate::temporal::{Interval, When};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};

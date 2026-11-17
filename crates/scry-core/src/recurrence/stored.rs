@@ -6,7 +6,7 @@ use crate::temporal::When;
 use serde::{Deserialize, Serialize};
 
 use super::error::RecurError;
-use super::recurrence::Recurrence;
+use super::recurrence_rule::Recurrence;
 
 /// The recurrence stored on an event: the RRULE text and the occurrence starts
 /// that were deleted. Occurrences themselves are never stored.

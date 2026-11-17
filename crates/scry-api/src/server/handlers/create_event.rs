@@ -4,6 +4,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use scry_core::ids::ProjectId;
+use scry_core::recurrence::RRule;
 use scry_core::temporal::Interval;
 use serde::Deserialize;
 
@@ -16,6 +17,7 @@ pub struct CreateEventRequest {
     pub title: String,
     pub description: Option<String>,
     pub interval: Interval,
+    pub recurrence: Option<RRule>,
 }
 
 /// Create an event in a project and return it.
@@ -32,6 +34,7 @@ pub async fn create_event(
                 title: body.title,
                 description: body.description,
                 interval: body.interval,
+                recurrence: body.recurrence,
             },
         )
         .await

@@ -1035,7 +1035,7 @@ mod tests {
         TaskState,
     };
     use crate::position::Position;
-    use crate::recur::RRule;
+    use crate::recurrence::RRule;
     use crate::temporal::{Interval, When};
     use jiff::Timestamp;
     use jiff::civil::date;

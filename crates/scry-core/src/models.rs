@@ -1,5 +1,5 @@
 use crate::position::Position;
-use crate::recur::RRule;
+use crate::recurrence::RRule;
 use crate::temporal::{Interval, When};
 use anstyle::AnsiColor;
 use clap::ValueEnum;

@@ -12,6 +12,7 @@ use scry_core::models::{
     ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
+use scry_core::recurrence::RRule;
 use scry_core::store::Store;
 use scry_core::temporal::When;
 use sqlx::pool::PoolConnection;
@@ -308,17 +309,38 @@ fn automation_from_fields(
     })
 }
 
-fn event_from_fields(
+/// The columns one `events` row contributes, before their JSON is decoded.
+struct EventFields {
     id: EventId,
     project_id: ProjectId,
     title: String,
     description: Option<String>,
     event_interval: serde_json::Value,
+    recurrence: Option<serde_json::Value>,
     created_at: SqlxTimestamp,
     updated_at: SqlxTimestamp,
-) -> Result<Event, StorageError> {
+}
+
+fn event_from_fields(fields: EventFields) -> Result<Event, StorageError> {
+    let EventFields {
+        id,
+        project_id,
+        title,
+        description,
+        event_interval,
+        recurrence,
+        created_at,
+        updated_at,
+    } = fields;
+
     let interval = serde_json::from_value(event_interval)
         .map_err(|e| StorageError::Database(format!("event {id} has an invalid interval: {e}")))?;
+    let recurrence = recurrence
+        .map(serde_json::from_value::<RRule>)
+        .transpose()
+        .map_err(|e| {
+            StorageError::Database(format!("event {id} has an invalid recurrence: {e}"))
+        })?;
 
     Ok(Event {
         id,
@@ -326,7 +348,7 @@ fn event_from_fields(
         title,
         description,
         interval,
-        recurrence: None,
+        recurrence,
         created_at: created_at.to_jiff(),
         updated_at: updated_at.to_jiff(),
     })
@@ -1461,17 +1483,26 @@ impl Store for PostgresStore {
         let event_interval = serde_json::to_value(&event.interval).map_err(|e| {
             StorageError::Database(format!("failed to serialize event interval: {}", e))
         })?;
+        let recurrence = event
+            .recurrence
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!("failed to serialize event recurrence: {}", e))
+            })?;
 
         match sqlx::query!(
             r#"
-                INSERT INTO events (id, project_id, title, description, event_interval, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO events (id, project_id, title, description, event_interval, recurrence, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
             event.id,
             event.project_id,
             event.title.as_str(),
             event.description.as_deref(),
             event_interval,
+            recurrence,
             event.created_at.to_sqlx(),
             event.updated_at.to_sqlx(),
         )
@@ -1506,6 +1537,7 @@ impl Store for PostgresStore {
                     title,
                     description,
                     event_interval,
+                    recurrence,
                     created_at,
                     updated_at
                 FROM events
@@ -1516,15 +1548,16 @@ impl Store for PostgresStore {
         .fetch_optional(&mut *conn)
         .await
         {
-            Ok(Some(row)) => Ok(Some(event_from_fields(
-                row.id,
-                row.project_id,
-                row.title,
-                row.description,
-                row.event_interval,
-                row.created_at,
-                row.updated_at,
-            )?)),
+            Ok(Some(row)) => Ok(Some(event_from_fields(EventFields {
+                id: row.id,
+                project_id: row.project_id,
+                title: row.title,
+                description: row.description,
+                event_interval: row.event_interval,
+                recurrence: row.recurrence,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })?)),
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to look up event: {}",
@@ -1548,6 +1581,7 @@ impl Store for PostgresStore {
                     title,
                     description,
                     event_interval,
+                    recurrence,
                     created_at,
                     updated_at
                 FROM events
@@ -1562,15 +1596,16 @@ impl Store for PostgresStore {
             Ok(rows) => rows
                 .into_iter()
                 .map(|row| {
-                    event_from_fields(
-                        row.id,
-                        row.project_id,
-                        row.title,
-                        row.description,
-                        row.event_interval,
-                        row.created_at,
-                        row.updated_at,
-                    )
+                    event_from_fields(EventFields {
+                        id: row.id,
+                        project_id: row.project_id,
+                        title: row.title,
+                        description: row.description,
+                        event_interval: row.event_interval,
+                        recurrence: row.recurrence,
+                        created_at: row.created_at,
+                        updated_at: row.updated_at,
+                    })
                 })
                 .collect::<Result<Vec<Event>, StorageError>>(),
             Err(e) => Err(StorageError::Database(format!(
@@ -1590,16 +1625,25 @@ impl Store for PostgresStore {
         let event_interval = serde_json::to_value(&event.interval).map_err(|e| {
             StorageError::Database(format!("failed to serialize event interval: {}", e))
         })?;
+        let recurrence = event
+            .recurrence
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!("failed to serialize event recurrence: {}", e))
+            })?;
 
         match sqlx::query!(
             r#"
                 UPDATE events
-                SET title = $1, description = $2, event_interval = $3, updated_at = $4
-                WHERE id = $5
+                SET title = $1, description = $2, event_interval = $3, recurrence = $4, updated_at = $5
+                WHERE id = $6
             "#,
             event.title.as_str(),
             event.description.as_deref(),
             event_interval,
+            recurrence,
             event.updated_at.to_sqlx(),
             event.id,
         )

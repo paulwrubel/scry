@@ -620,7 +620,7 @@ fn apply_event_values(event: &mut Event, values: &serde_json::Value) {
     }
     if let Some(recurrence) = values.get("recurrence")
         && let Ok(recurrence) =
-            serde_json::from_value::<Option<crate::recur::RRule>>(recurrence.clone())
+            serde_json::from_value::<Option<crate::recurrence::RRule>>(recurrence.clone())
     {
         event.recurrence = recurrence;
     }
