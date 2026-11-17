@@ -1,12 +1,12 @@
 import { Drawer } from 'flowbite-react';
 import { DateTime } from 'luxon';
 import { useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DEVICE_ZONE } from '@/contract/due';
 import type { Event } from '@/generated/Event';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { useReplicaSnapshot } from '@/providers/Replica';
-import { dayKey } from '@/utils/events/calendar';
+import { dayKey, parseOccurrence } from '@/utils/events/calendar';
 import { DayEvents } from '@/views/projects/[projectId]/events/DayEvents';
 import { EventsPage } from '@/views/projects/[projectId]/events/EventsPage';
 import { EventDetail } from '@/views/projects/[projectId]/events/[eventId]/EventDetail';
@@ -20,7 +20,8 @@ export function ProjectEventsLayout() {
   const { projectId, eventId, date } = useParams();
   const { visible } = useReplicaSnapshot();
   const navigate = useNavigate();
-  const { search, state } = useLocation();
+  const { state } = useLocation();
+  const [searchParams] = useSearchParams();
   const [lastPanel, setLastPanel] = useState<Panel | null>(null);
 
   const project = visible.projects.find((candidate) => candidate.id === projectId);
@@ -29,6 +30,8 @@ export function ProjectEventsLayout() {
     ? undefined
     : project?.events.find((candidate) => candidate.id === eventId);
   const day = date === undefined ? undefined : parseDay(date);
+  const occurrence = parseOccurrence(searchParams.get('occurrence'));
+  const occurrenceKey = occurrence === null ? '' : JSON.stringify(occurrence);
   const open = project !== undefined && (creating || event !== undefined || day !== undefined);
 
   const live: Panel | null =
@@ -40,14 +43,15 @@ export function ProjectEventsLayout() {
             kind: 'event',
             project,
             event: event ?? null,
-            defaultDate: new URLSearchParams(search).get('date'),
+            defaultDate: searchParams.get('date'),
           };
   const panel = live ?? lastPanel;
 
   // the visible month rides along so closing the drawer returns to it
   function calendarPath(target: string, extra: string): string {
-    const params = new URLSearchParams(search);
+    const params = new URLSearchParams(searchParams);
     params.delete('date');
+    params.delete('occurrence');
     const query = [params.toString(), extra].filter((part) => part.length > 0).join('&');
     return `${target}${query.length === 0 ? '' : `?${query}`}`;
   }
@@ -94,16 +98,17 @@ export function ProjectEventsLayout() {
             key={`day:${dayKey(panel.day)}:${open}`}
             project={panel.project}
             day={panel.day}
-            monthQuery={monthQuery(search)}
+            monthQuery={monthQuery(searchParams)}
             onCreate={() => createOn(panel.day)}
             onClose={close}
           />
         ) : (
           <EventDetail
-            key={`${panel.event?.id ?? 'new'}:${open}`}
+            key={`${panel.event?.id ?? 'new'}:${occurrenceKey}:${open}`}
             project={panel.project}
             event={panel.event}
             defaultDate={panel.defaultDate}
+            occurrence={occurrence}
             onSaved={(id) => navigate(calendarPath(`/projects/${projectId}/events/${id}`, ''))}
             onClose={close}
           />
@@ -118,9 +123,10 @@ function parseDay(value: string): DateTime | undefined {
   return day.isValid ? day.startOf('day') : undefined;
 }
 
-function monthQuery(search: string): string {
+function monthQuery(search: URLSearchParams): string {
   const params = new URLSearchParams(search);
   params.delete('date');
+  params.delete('occurrence');
   const query = params.toString();
   return query.length === 0 ? '' : `?${query}`;
 }

@@ -23,6 +23,7 @@ import {
   monthLabel,
   parseCalendarView,
   parseMonth,
+  parseOccurrence,
   parseWeek,
   placeTimedWeek,
   placeWeek,
@@ -694,5 +695,25 @@ describe('eventPath', () => {
     expect(queryParams.get('view')).toBe('week');
     expect(queryParams.get('occurrence')).toBe(JSON.stringify(occurrence.occurrenceStart));
     expect(path).toContain('%22kind%22');
+  });
+});
+
+describe('parseOccurrence', () => {
+  it('reads a valid encoded occurrence', () => {
+    const encoded = JSON.stringify({ kind: 'date', date: '2026-11-02' });
+
+    expect(parseOccurrence(encoded)).toEqual({ kind: 'date', date: '2026-11-02' });
+  });
+
+  it('returns null for a missing value', () => {
+    expect(parseOccurrence(null)).toBeNull();
+  });
+
+  it('returns null for malformed JSON or a wrong shape', () => {
+    expect(parseOccurrence('not json')).toBeNull();
+    expect(parseOccurrence(JSON.stringify({ kind: 'date' }))).toBeNull();
+    expect(
+      parseOccurrence(JSON.stringify({ kind: 'zoned', datetime: '2026-11-02T09:00' })),
+    ).toBeNull();
   });
 });

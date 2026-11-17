@@ -48,7 +48,9 @@ export function EventsPage() {
           ),
         )
       : [];
-  const query = searchParams.toString();
+  const calendarParams = new URLSearchParams(searchParams);
+  calendarParams.delete('occurrence');
+  const query = calendarParams.toString();
   const querySuffix = query.length === 0 ? '' : `?${query}`;
 
   if (project === undefined) {
@@ -101,6 +103,7 @@ export function EventsPage() {
   function createEventPath(): string {
     const params = new URLSearchParams(searchParams);
     params.delete('date');
+    params.delete('occurrence');
 
     // a new event opened from the week view defaults to a day that is on screen
     if (view === 'week') {

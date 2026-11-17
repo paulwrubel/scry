@@ -153,6 +153,49 @@ export function eventPath(projectId: string, event: CalendarEvent, query: string
   return `/projects/${projectId}/events/${event.id}${suffix}`;
 }
 
+/// Read the encoded occurrence start from an event detail link. Returns null
+/// for a missing or malformed value rather than trusting arbitrary JSON.
+export function parseOccurrence(value: string | null): When | null {
+  if (value === null) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+
+  return isWhen(parsed) ? parsed : null;
+}
+
+function isWhen(value: unknown): value is When {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) {
+    return false;
+  }
+
+  const kind = value.kind;
+  if (kind === 'date') {
+    return 'date' in value && typeof value.date === 'string';
+  }
+  if (kind === 'floating') {
+    return 'datetime' in value && typeof value.datetime === 'string';
+  }
+  if (kind === 'instant') {
+    return 'timestamp' in value && typeof value.timestamp === 'string';
+  }
+  if (kind === 'zoned') {
+    return (
+      'datetime' in value &&
+      typeof value.datetime === 'string' &&
+      'zone' in value &&
+      typeof value.zone === 'string'
+    );
+  }
+  return false;
+}
+
 /// The visible month, read from the URL and falling back to the current one so
 /// a default view keeps a clean link.
 export function parseMonth(params: URLSearchParams, now: DateTime = DateTime.now()): Month {
