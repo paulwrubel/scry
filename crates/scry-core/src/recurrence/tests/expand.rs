@@ -1,8 +1,8 @@
 //! Expansion behavior: DST across all four kinds, BY-rule selection, bounds,
 //! and EXDATE removal.
 
-use super::super::expand::CivilWhen;
 use super::*;
+use crate::recurrence::expand::CivilWhen;
 use crate::temporal::Zoned;
 
 /// A weekly zoned series keeps its 09:00 wall clock across spring-forward.

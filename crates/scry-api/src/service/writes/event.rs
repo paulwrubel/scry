@@ -1,15 +1,14 @@
 use crate::error::ServiceError;
+use crate::service::{ApplyMode, EventPatch, EventWindow, NewEvent, ProjectService, new_operation};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use scry_core::error::StorageError;
 use scry_core::ids::{EventId, ProjectId};
 use scry_core::models::Event;
-use scry_core::recurrence::RecurError;
+use scry_core::recurrence::{RecurError, occurrences};
 use scry_core::sync::operations::OperationKind;
 use scry_core::temporal::TemporalError;
 use uuid::Uuid;
-
-use super::super::{ApplyMode, EventPatch, EventWindow, NewEvent, ProjectService, new_operation};
 
 impl ProjectService {
     /// Create an event in a project.
@@ -130,11 +129,7 @@ impl ProjectService {
         if let Some(window) = window {
             let mut kept = Vec::with_capacity(events.len());
             for event in events {
-                if event
-                    .interval
-                    .overlaps(window.from, window.to, zone)
-                    .map_err(temporal_error)?
-                {
+                if event_overlaps_window(&event, window, zone)? {
                     kept.push(event);
                 }
             }
@@ -152,10 +147,130 @@ impl ProjectService {
     }
 }
 
+/// Whether an event has any occurrence in `window`. A recurring series is
+/// expanded only far enough to answer that question; its occurrences are never
+/// materialized.
+fn event_overlaps_window(
+    event: &Event,
+    window: EventWindow,
+    zone: &TimeZone,
+) -> Result<bool, ServiceError> {
+    if let Some(recurrence) = &event.recurrence {
+        return occurrences(&event.interval, recurrence, window.from, window.to, zone)
+            .map(|occurrences| !occurrences.is_empty())
+            .map_err(recurrence_error);
+    }
+
+    event
+        .interval
+        .overlaps(window.from, window.to, zone)
+        .map_err(temporal_error)
+}
+
 fn temporal_error(error: TemporalError) -> ServiceError {
     ServiceError::Storage(StorageError::Invalid(error.to_string()))
 }
 
 fn recurrence_error(error: RecurError) -> ServiceError {
     ServiceError::Storage(StorageError::Invalid(error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jiff::civil::date;
+    use scry_core::recurrence::RRule;
+    use scry_core::temporal::{Interval, When};
+
+    fn instant(value: &str) -> Timestamp {
+        value.parse().unwrap()
+    }
+
+    fn all_day(start: i8, end: i8) -> Interval {
+        Interval::new(
+            When::Date {
+                date: date(2026, 11, start),
+            },
+            When::Date {
+                date: date(2026, 11, end),
+            },
+        )
+        .unwrap()
+    }
+
+    fn event(interval: Interval, recurrence: Option<RRule>) -> Event {
+        Event {
+            id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            title: "Event".to_string(),
+            description: None,
+            interval,
+            recurrence,
+            created_at: Timestamp::now(),
+            updated_at: Timestamp::now(),
+        }
+    }
+
+    fn window(from: &str, to: &str) -> EventWindow {
+        EventWindow {
+            from: instant(from),
+            to: instant(to),
+        }
+    }
+
+    #[test]
+    fn a_recurring_series_matches_a_later_occurrence() {
+        let event = event(
+            all_day(2, 3),
+            Some(RRule {
+                text: "FREQ=WEEKLY".to_string(),
+                exdates: Vec::new(),
+            }),
+        );
+
+        assert!(
+            event_overlaps_window(
+                &event,
+                window("2026-11-09T00:00:00Z", "2026-11-10T00:00:00Z"),
+                &TimeZone::UTC,
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn a_non_recurring_event_does_not_match_a_later_window() {
+        let event = event(all_day(2, 3), None);
+
+        assert!(
+            !event_overlaps_window(
+                &event,
+                window("2026-11-09T00:00:00Z", "2026-11-10T00:00:00Z"),
+                &TimeZone::UTC,
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn an_excluded_occurrence_does_not_match() {
+        let event = event(
+            all_day(2, 3),
+            Some(RRule {
+                text: "FREQ=WEEKLY".to_string(),
+                exdates: vec![When::Date {
+                    date: date(2026, 11, 9),
+                }],
+            }),
+        );
+
+        assert!(
+            !event_overlaps_window(
+                &event,
+                window("2026-11-09T00:00:00Z", "2026-11-10T00:00:00Z"),
+                &TimeZone::UTC,
+            )
+            .unwrap()
+        );
+    }
 }
