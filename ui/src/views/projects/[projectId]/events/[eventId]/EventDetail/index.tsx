@@ -1,10 +1,10 @@
+import { useSelector } from '@tanstack/react-form';
 import { Alert, Button, Card, Label, TextInput } from 'flowbite-react';
-import { DateTime } from 'luxon';
 import { useState } from 'react';
 import { z } from 'zod';
 import { BackButton } from '@/components/BackButton';
 import { fieldErrorMessage } from '@/components/form-controls/fieldErrors';
-import { DEVICE_ZONE } from '@/contract/due';
+import { DEVICE_ZONE, sameDue } from '@/contract/due';
 import {
   defaultEndInputs,
   intervalFromInputs,
@@ -14,7 +14,6 @@ import {
 import { parseRrule } from '@/contract/recur';
 import type { Event } from '@/generated/Event';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
-import type { RRule } from '@/generated/RRule';
 import type { When } from '@/generated/When';
 import { useAppForm } from '@/hooks/useAppForm';
 import { useEnqueue } from '@/hooks/useEnqueue';
@@ -23,11 +22,17 @@ import {
   createEventOperation,
   deleteEventOperation,
   deleteOccurrenceOperation,
+  setOccurrenceOverrideOperation,
+  splitEventOperations,
+  truncateSeriesOperation,
   updateEventOperation,
 } from '@/utils/events/operations';
-import type { EventFieldPatch } from '@/utils/events/operations';
+import { effectiveOccurrence } from '@/utils/events/overrides';
 import { DeleteEventModal } from './DeleteEventModal';
+import type { DeleteEventMode } from './DeleteEventModal';
+import { OccurrenceModeField } from './OccurrenceModeField';
 import { RecurrenceField } from './RecurrenceField';
+import { buildEventPatch, formHasChanges, initialValues, valuesForMode } from './values';
 
 const INPUT_CLASS =
   'border-line-strong bg-surface text-zinc-200 focus:border-line-hover w-full rounded-lg border p-2 text-sm focus:outline-none';
@@ -41,6 +46,7 @@ const schema = z
     endDate: z.string(),
     endTime: z.string(),
     recurrence: z.string(),
+    applyTo: z.enum(['this', 'following', 'all']),
   })
   .superRefine((value, ctx) => {
     const result = intervalFromInputs(value);
@@ -70,14 +76,19 @@ export type EventDetailProps = {
 export function EventDetail(props: EventDetailProps) {
   const { project, event, defaultDate, occurrence = null, onSaved, onClose } = props;
 
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<DeleteEventMode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [endTouched, setEndTouched] = useState(false);
 
   const enqueue = useEnqueue();
 
+  const selected =
+    event !== null && occurrence !== null
+      ? effectiveOccurrence(event, occurrence, DEVICE_ZONE)
+      : null;
+
   const form = useAppForm({
-    defaultValues: initialValues(event, defaultDate),
+    defaultValues: initialValues(event, defaultDate, occurrence),
     validators: { onChange: schema, onMount: schema },
     onSubmit: async ({ value }) => {
       const result = intervalFromInputs(value);
@@ -85,22 +96,50 @@ export function EventDetail(props: EventDetailProps) {
         return;
       }
 
-      const text = value.recurrence.trim();
-      const exdates = event?.recurrence?.exdates;
-      const recurrence: RRule | null =
-        text.length === 0
-          ? null
-          : {
-              text,
-              ...(exdates === undefined || exdates.length === 0 ? {} : { exdates }),
-            };
+      if (selected !== null && event !== null && occurrence !== null && value.applyTo === 'this') {
+        const operation = setOccurrenceOverrideOperation(event, occurrence, {
+          title: value.title,
+          description: value.description,
+          interval: result.interval,
+        });
+        setError(null);
+        try {
+          if (operation !== null) {
+            await enqueue(operation);
+          }
+        } catch {
+          setError('Could not save this event.');
+        }
+        return;
+      }
 
-      const patch: EventFieldPatch = {
-        title: value.title,
-        description: value.description,
-        interval: result.interval,
-        recurrence,
-      };
+      if (
+        selected !== null &&
+        event !== null &&
+        occurrence !== null &&
+        value.applyTo === 'following'
+      ) {
+        const operations = splitEventOperations(event, occurrence, {
+          title: value.title,
+          description: value.description,
+          interval: result.interval,
+        });
+        if (operations === null) {
+          setError('Could not split this series.');
+          return;
+        }
+        setError(null);
+        try {
+          await enqueue(operations.update);
+          await enqueue(operations.create);
+          onSaved(operations.followingId);
+        } catch {
+          setError('Could not save this event.');
+        }
+        return;
+      }
+
+      const patch = buildEventPatch(event, value, result.interval);
 
       setError(null);
       try {
@@ -124,13 +163,20 @@ export function EventDetail(props: EventDetailProps) {
     },
   });
 
+  const applyTo = useSelector(form.store, (state) => state.values.applyTo);
+  const values = useSelector(form.store, (state) => state.values);
+  const startDateValue = useSelector(form.store, (state) => state.values.startDate);
+  const isSubmitting = useSelector(form.store, (state) => state.isSubmitting);
+  const baseline = valuesForMode(event, defaultDate, occurrence, applyTo);
+  const hasChanges = formHasChanges(values, baseline, applyTo);
+
   async function handleDelete() {
     if (event === null) {
       return;
     }
     try {
       await enqueue(deleteEventOperation(event));
-      setConfirmingDelete(false);
+      setPendingDelete(null);
       onClose();
     } catch {
       setError('Could not delete this event.');
@@ -148,7 +194,38 @@ export function EventDetail(props: EventDetailProps) {
       if (operation !== null) {
         await enqueue(operation);
       }
-      setConfirmingDelete(false);
+      setPendingDelete(null);
+      onClose();
+    } catch {
+      setError('Could not delete this occurrence.');
+    }
+  }
+
+  async function handleDeleteFollowing() {
+    if (event === null || occurrence === null) {
+      return;
+    }
+
+    const operation = truncateSeriesOperation(event, occurrence);
+    if (operation === null) {
+      // removing from the first occurrence leaves nothing, so delete the series
+      if (sameDue(occurrence, event.interval.start)) {
+        try {
+          await enqueue(deleteEventOperation(event));
+          setPendingDelete(null);
+          onClose();
+        } catch {
+          setError('Could not delete this event.');
+        }
+        return;
+      }
+      setError('Could not delete the following events.');
+      return;
+    }
+
+    try {
+      await enqueue(operation);
+      setPendingDelete(null);
       onClose();
     } catch {
       setError('Could not delete this occurrence.');
@@ -170,7 +247,9 @@ export function EventDetail(props: EventDetailProps) {
       return;
     }
 
-    if (!isSingleDay(event)) {
+    const shown = selected?.interval ?? event.interval;
+    const span = eventSpan({ ...event, interval: shown }, DEVICE_ZONE);
+    if (!span.first.hasSame(span.last, 'day')) {
       return;
     }
 
@@ -187,11 +266,7 @@ export function EventDetail(props: EventDetailProps) {
     form.setFieldValue('endTime', end.endTime);
   }
 
-  const showingOccurrence =
-    occurrence !== null &&
-    event !== null &&
-    event.recurrence !== null &&
-    event.recurrence !== undefined;
+  const showingOccurrence = selected !== null;
 
   return (
     <>
@@ -200,7 +275,7 @@ export function EventDetail(props: EventDetailProps) {
           <BackButton label="Back to calendar" onClick={onClose} />
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="min-w-0 text-2xl font-semibold wrap-break-word">
-              {event === null ? 'New event' : event.title}
+              {event === null ? 'New event' : (selected?.title ?? event.title)}
             </h1>
             <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
               <p className="text-muted text-sm">{project.name}</p>
@@ -216,9 +291,27 @@ export function EventDetail(props: EventDetailProps) {
         {error === null ? null : <Alert color="failure">{error}</Alert>}
 
         {showingOccurrence ? (
-          <p className="text-muted text-sm">
-            This is one occurrence of a repeating event. Saving changes the whole series.
-          </p>
+          <form.AppField name="applyTo">
+            {(field) => (
+              <OccurrenceModeField
+                value={field.state.value}
+                onChange={(value) => {
+                  field.handleChange(value);
+
+                  const target = value === 'all' ? event?.interval : selected?.interval;
+                  if (target === undefined) {
+                    return;
+                  }
+
+                  const inputs = intervalToInputs(target);
+                  form.setFieldValue('startDate', inputs.startDate);
+                  form.setFieldValue('startTime', inputs.startTime);
+                  form.setFieldValue('endDate', inputs.endDate);
+                  form.setFieldValue('endTime', inputs.endTime);
+                }}
+              />
+            )}
+          </form.AppField>
         ) : null}
 
         <Card>
@@ -365,100 +458,74 @@ export function EventDetail(props: EventDetailProps) {
               )}
             </form.AppField>
 
-            <form.Subscribe selector={(state) => state.values.startDate}>
-              {(startDate) => (
-                <form.AppField name="recurrence">
-                  {(field) => (
-                    <RecurrenceField
-                      value={field.state.value}
-                      startDate={startDate}
-                      onChange={field.handleChange}
-                      error={
-                        field.state.meta.isTouched || form.state.isSubmitted
-                          ? fieldErrorMessage(field.state.meta.errors)
-                          : null
-                      }
-                    />
-                  )}
-                </form.AppField>
-              )}
-            </form.Subscribe>
+            {event === null || applyTo === 'all' ? (
+              <form.AppField name="recurrence">
+                {(field) => (
+                  <RecurrenceField
+                    value={field.state.value}
+                    startDate={startDateValue}
+                    onChange={field.handleChange}
+                    error={
+                      field.state.meta.isTouched || form.state.isSubmitted
+                        ? fieldErrorMessage(field.state.meta.errors)
+                        : null
+                    }
+                  />
+                )}
+              </form.AppField>
+            ) : null}
 
             <div className="flex items-center justify-end">
-              <form.Subscribe
-                selector={(state) => ({
-                  isDefaultValue: state.isDefaultValue,
-                  isSubmitting: state.isSubmitting,
-                })}
-              >
-                {({ isDefaultValue, isSubmitting }) => (
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || (event !== null && isDefaultValue)}
-                  >
-                    {isSubmitting
-                      ? 'Saving...'
-                      : event === null
-                        ? 'Create event'
-                        : isDefaultValue
-                          ? 'No changes'
-                          : 'Save changes'}
-                  </Button>
-                )}
-              </form.Subscribe>
+              <Button type="submit" disabled={isSubmitting || (event !== null && !hasChanges)}>
+                {isSubmitting
+                  ? 'Saving...'
+                  : event === null
+                    ? 'Create event'
+                    : hasChanges
+                      ? 'Save changes'
+                      : 'No changes'}
+              </Button>
             </div>
           </form>
         </Card>
 
         {event === null ? null : (
-          <div className="border-line mt-auto flex flex-wrap items-center gap-2 border-t pt-4">
-            <Button color="red" onClick={() => setConfirmingDelete(true)}>
-              Delete
-            </Button>
+          <div className="border-line mt-auto flex flex-col gap-2 border-t pt-4 sm:flex-row sm:flex-wrap">
+            {showingOccurrence ? (
+              <>
+                <Button color="red" onClick={() => setPendingDelete('occurrence')}>
+                  Delete this occurrence
+                </Button>
+                <Button color="red" onClick={() => setPendingDelete('following')}>
+                  Delete this and following
+                </Button>
+                <Button color="red" onClick={() => setPendingDelete('series')}>
+                  Delete series
+                </Button>
+              </>
+            ) : (
+              <Button color="red" onClick={() => setPendingDelete('series')}>
+                Delete event
+              </Button>
+            )}
           </div>
         )}
       </div>
-      {event === null ? null : (
+      {event !== null && pendingDelete !== null ? (
         <DeleteEventModal
+          show
           event={event}
-          occurrence={occurrence}
-          show={confirmingDelete}
-          onClose={() => setConfirmingDelete(false)}
-          onDelete={handleDelete}
-          onDeleteOccurrence={handleDeleteOccurrence}
+          mode={pendingDelete}
+          onClose={() => setPendingDelete(null)}
+          onConfirm={
+            pendingDelete === 'occurrence'
+              ? handleDeleteOccurrence
+              : pendingDelete === 'following'
+                ? handleDeleteFollowing
+                : handleDelete
+          }
         />
-      )}
+      ) : null}
     </>
   );
-}
-
-function isSingleDay(event: Event): boolean {
-  const span = eventSpan(event, DEVICE_ZONE);
-  return span.first.hasSame(span.last, 'day');
-}
-
-function initialValues(event: Event | null, defaultDate: string | null) {
-  if (event !== null) {
-    const inputs = intervalToInputs(event.interval);
-    return {
-      title: event.title,
-      description: event.description ?? '',
-      startDate: inputs.startDate,
-      startTime: inputs.startTime,
-      endDate: inputs.endDate,
-      endTime: inputs.endTime,
-      recurrence: event.recurrence?.text ?? '',
-    };
-  }
-
-  const startDate = defaultDate ?? DateTime.now().toISODate() ?? '';
-  return {
-    title: '',
-    description: '',
-    startDate,
-    startTime: '',
-    endDate: defaultEndInputs(startDate, '').endDate,
-    endTime: '',
-    recurrence: '',
-  };
 }

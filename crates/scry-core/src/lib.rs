@@ -1,5 +1,6 @@
 pub mod config;
 pub mod error;
+pub mod event;
 pub mod format;
 pub mod github;
 pub mod ids;

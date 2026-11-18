@@ -63,7 +63,7 @@ fn parse_window(query: &EventListQuery) -> Result<Option<EventWindow>, String> {
 }
 
 /// The viewer's zone, used to turn a date or floating start into an instant.
-fn request_zone(headers: &HeaderMap) -> TimeZone {
+pub(crate) fn request_zone(headers: &HeaderMap) -> TimeZone {
     headers
         .get("time-zone")
         .and_then(|value| value.to_str().ok())

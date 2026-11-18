@@ -1,3 +1,4 @@
+import { useSelector } from '@tanstack/react-form';
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
 import { useState } from 'react';
 import { z } from 'zod';
@@ -53,6 +54,9 @@ export function NewProjectModal(props: NewProjectModalProps) {
   // This modal is mounted only while open.
   useCloseRequest(true, onClose);
 
+  const isValid = useSelector(form.store, (state) => state.isValid);
+  const submitting = useSelector(form.store, (state) => state.isSubmitting);
+
   return (
     <Modal show onClose={onClose} dismissible>
       <ModalHeader>New project</ModalHeader>
@@ -84,22 +88,13 @@ export function NewProjectModal(props: NewProjectModalProps) {
         <Button color="alternative" onClick={onClose}>
           Cancel
         </Button>
-        <form.Subscribe
-          selector={(state) => ({
-            isValid: state.isValid,
-            submitting: state.isSubmitting,
-          })}
+        <Button
+          type="submit"
+          form="new-project-form"
+          disabled={submitting || error !== null || !isValid}
         >
-          {({ isValid, submitting }) => (
-            <Button
-              type="submit"
-              form="new-project-form"
-              disabled={submitting || error !== null || !isValid}
-            >
-              {submitting ? 'Creating...' : 'Create'}
-            </Button>
-          )}
-        </form.Subscribe>
+          {submitting ? 'Creating...' : 'Create'}
+        </Button>
       </ModalFooter>
     </Modal>
   );

@@ -1,60 +1,82 @@
+import { useState } from 'react';
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
 import { TitleText } from '@/components/TitleText';
 import type { Event } from '@/generated/Event';
-import type { When } from '@/generated/When';
 import { useCloseRequest } from '@/hooks/useCloseRequest';
 
+export type DeleteEventMode = 'occurrence' | 'following' | 'series';
+
 export type DeleteEventModalProps = {
-  event: Event;
-  occurrence?: When | null;
   show: boolean;
+  event: Event;
+  mode: DeleteEventMode;
+  onConfirm: () => Promise<void>;
   onClose: () => void;
-  onDelete: () => Promise<void>;
-  onDeleteOccurrence?: () => Promise<void>;
 };
 
 export function DeleteEventModal(props: DeleteEventModalProps) {
-  const { event, occurrence = null, show, onClose, onDelete, onDeleteOccurrence } = props;
+  const { show, event, mode, onConfirm, onClose } = props;
+
+  const [deleting, setDeleting] = useState(false);
 
   useCloseRequest(show, onClose);
 
-  const deletingOccurrence =
-    event.recurrence !== null && event.recurrence !== undefined && occurrence !== null;
+  const recurring = event.recurrence !== null && event.recurrence !== undefined;
+
+  async function confirm() {
+    setDeleting(true);
+    try {
+      await onConfirm();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const heading =
+    mode === 'occurrence'
+      ? 'Delete this occurrence'
+      : mode === 'following'
+        ? 'Delete this and following'
+        : recurring
+          ? 'Delete series'
+          : 'Delete event';
 
   return (
     <Modal show={show} onClose={onClose} dismissible>
-      <ModalHeader>Delete event</ModalHeader>
+      <ModalHeader>{heading}</ModalHeader>
       <ModalBody>
-        {deletingOccurrence ? (
-          <p className="text-sm">
-            Delete this occurrence of “<TitleText title={event.title} />
-            ”? Only this date is removed; the rest of the series stays.
-          </p>
-        ) : (
-          <p className="text-sm">
-            Delete “<TitleText title={event.title} />
-            ”? This permanently deletes the event.
-          </p>
-        )}
+        <p className="text-sm">
+          {mode === 'occurrence' ? (
+            <>
+              Delete “<TitleText title={event.title} />” on this date?
+            </>
+          ) : mode === 'following' ? (
+            <>
+              Delete “<TitleText title={event.title} />” from this date onwards?
+            </>
+          ) : (
+            <>
+              Delete “<TitleText title={event.title} />”{'?'}
+            </>
+          )}
+        </p>
+        <p className="text-muted mt-3 text-sm">
+          {mode === 'occurrence'
+            ? 'Only this date is removed. The rest of the series stays.'
+            : mode === 'following'
+              ? 'This date and every later occurrence are removed.'
+              : recurring
+                ? 'This permanently deletes the event and every one of its occurrences.'
+                : 'This permanently deletes the event.'}
+        </p>
       </ModalBody>
       <ModalFooter className="justify-between">
-        <Button color="alternative" onClick={onClose}>
-          Cancel
+        <Button color="alternative" onClick={onClose} disabled={deleting}>
+          Keep
         </Button>
-        {deletingOccurrence ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button color="red" onClick={() => void onDeleteOccurrence?.()}>
-              Delete this occurrence
-            </Button>
-            <Button color="red" onClick={() => void onDelete()}>
-              Delete series
-            </Button>
-          </div>
-        ) : (
-          <Button color="red" onClick={() => void onDelete()}>
-            Delete event
-          </Button>
-        )}
+        <Button color="red" onClick={() => void confirm()} disabled={deleting}>
+          {deleting ? 'Deleting...' : mode === 'series' && !recurring ? 'Delete event' : 'Delete'}
+        </Button>
       </ModalFooter>
     </Modal>
   );

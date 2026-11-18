@@ -1,3 +1,4 @@
+import { useSelector } from '@tanstack/react-form';
 import { Button } from 'flowbite-react';
 import { useEffect, useRef } from 'react';
 import type { ExternalIdentity } from '@/generated/ExternalIdentity';
@@ -12,6 +13,8 @@ export function NewTaskForm(props: NewTaskFormProps) {
 
   const { form, open, inputRef, openForm, closeForm } = useCreateTaskForm(onCreate);
   const formRef = useRef<HTMLFormElement>(null);
+  const isValid = useSelector(form.store, (state) => state.isValid);
+  const submitting = useSelector(form.store, (state) => state.isSubmitting);
 
   useEffect(() => {
     if (!open) {
@@ -66,23 +69,14 @@ export function NewTaskForm(props: NewTaskFormProps) {
           />
         )}
       </form.AppField>
-      <form.Subscribe
-        selector={(state) => ({
-          isValid: state.isValid,
-          submitting: state.isSubmitting,
-        })}
-      >
-        {({ isValid, submitting }) => (
-          <div className="flex justify-between gap-2">
-            <Button type="button" size="xs" color="alternative" onClick={closeForm}>
-              Cancel
-            </Button>
-            <Button type="submit" size="xs" disabled={submitting || !isValid}>
-              Add
-            </Button>
-          </div>
-        )}
-      </form.Subscribe>
+      <div className="flex justify-between gap-2">
+        <Button type="button" size="xs" color="alternative" onClick={closeForm}>
+          Cancel
+        </Button>
+        <Button type="submit" size="xs" disabled={submitting || !isValid}>
+          Add
+        </Button>
+      </div>
     </form>
   );
 }

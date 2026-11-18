@@ -439,7 +439,8 @@ pub struct Task {
 /// `interval` is the event's start and exclusive end, so an all-day event is a
 /// date range and a timed one is a wall clock, an instant, or a zoned wall
 /// clock. Both ends are always the same kind. An event may repeat, in which
-/// case `recurrence` holds the RRULE that generates its occurrences.
+/// case `recurrence` holds the RRULE that generates its occurrences, and
+/// `overrides` holds edits that apply to single occurrences.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
@@ -450,11 +451,30 @@ pub struct Event {
     pub interval: Interval,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recurrence: Option<RRule>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<EventOverride>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_at: Timestamp,
     #[serde(default = "Timestamp::now")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub updated_at: Timestamp,
+}
+
+/// One edited occurrence of a recurring event.
+///
+/// `original_start` is the occurrence start the series generates, not the
+/// edited start; absent fields inherit from the series. An override that
+/// matches no generated occurrence is ignored at read time.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EventOverride {
+    pub original_start: When,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interval: Option<Interval>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

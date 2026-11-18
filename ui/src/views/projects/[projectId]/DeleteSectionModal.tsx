@@ -42,7 +42,7 @@ export function DeleteSectionModal(props: DeleteSectionModalProps) {
       </ModalBody>
       <ModalFooter className="justify-between">
         <Button color="alternative" onClick={onClose}>
-          Cancel
+          Keep
         </Button>
         <Button
           color="red"

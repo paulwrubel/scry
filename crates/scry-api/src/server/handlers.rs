@@ -142,6 +142,9 @@ pub use refresh_session::refresh_session;
 mod snapshot;
 pub use snapshot::snapshot;
 
+mod split_event;
+pub use split_event::split_event;
+
 mod sync;
 pub use sync::sync;
 

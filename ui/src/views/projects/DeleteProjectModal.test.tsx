@@ -62,7 +62,7 @@ describe('DeleteProjectModal', () => {
     const enqueue = vi.fn(async () => undefined);
     const { onClose, onDeleted } = renderModal(enqueue);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(enqueue).not.toHaveBeenCalled();

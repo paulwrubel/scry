@@ -48,19 +48,17 @@ pub async fn event_list(
 
     let mut expanded: Vec<Event> = Vec::new();
     for event in events {
-        let intervals = match (&event.recurrence, window) {
-            (Some(rule), Some((start, end))) => Some(
-                occurrences(&event.interval, rule, start, end, &zone)
-                    .map_err(|error| AppError::Usage(error.to_string()))?,
-            ),
-            _ => None,
-        };
-        match intervals {
-            Some(intervals) => {
-                for interval in intervals {
-                    let mut occurrence = event.clone();
-                    occurrence.interval = interval;
-                    expanded.push(occurrence);
+        match window {
+            Some((from, to)) => {
+                for occurrence in event
+                    .occurrences(from, to, &zone)
+                    .map_err(|error| AppError::Usage(error.to_string()))?
+                {
+                    let mut occurrence_event = event.clone();
+                    occurrence_event.interval = occurrence.interval;
+                    occurrence_event.title = occurrence.title;
+                    occurrence_event.description = occurrence.description;
+                    expanded.push(occurrence_event);
                 }
             }
             None => expanded.push(event),

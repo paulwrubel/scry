@@ -1,7 +1,7 @@
 use crate::ids::{AutomationId, CommentId, EventId, ProjectId, SectionId, TaskId};
 use crate::models::{
-    AutomationAction, AutomationTrigger, ClosedReason, Color, ExternalIdentity, ExternalMetadata,
-    Priority, Tags, TaskState,
+    AutomationAction, AutomationTrigger, ClosedReason, Color, EventOverride, ExternalIdentity,
+    ExternalMetadata, Priority, Tags, TaskState,
 };
 use crate::position::Position;
 use crate::recurrence::RRule;
@@ -336,6 +336,8 @@ pub enum OperationKind {
         interval: Interval,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         recurrence: Option<RRule>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        overrides: Vec<EventOverride>,
         #[cfg_attr(feature = "ts", ts(type = "string"))]
         created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -344,6 +346,8 @@ pub enum OperationKind {
     },
     /// `description` distinguishes all three states: `None` leaves it,
     /// `Some(None)` clears it, `Some(Some(text))` sets it.
+    /// `overrides: None` leaves the overrides unchanged; `Some(list)` replaces
+    /// the whole set.
     UpdateEvent {
         id: EventId,
         title: Option<String>,
@@ -362,6 +366,8 @@ pub enum OperationKind {
         )]
         #[cfg_attr(feature = "ts", ts(as = "Option<RRule>"))]
         recurrence: Option<Option<RRule>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        overrides: Option<Vec<EventOverride>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         updated_at: Option<Timestamp>,
@@ -736,6 +742,89 @@ mod tests {
 
         let serialized = serde_json::to_value(&operation).unwrap();
         assert_eq!(serialized, value);
+    }
+
+    #[test]
+    fn create_event_round_trips_overrides() {
+        let value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "timestamp": null,
+            "kind": "create_event",
+            "id": Uuid::new_v4(),
+            "project_id": Uuid::new_v4(),
+            "title": "standup",
+            "description": null,
+            "interval": {
+                "start": {"kind": "date", "date": "2026-11-16"},
+                "end": {"kind": "date", "date": "2026-11-17"}
+            },
+            "recurrence": {"text": "FREQ=DAILY"},
+            "overrides": [{
+                "original_start": {"kind": "date", "date": "2026-11-17"},
+                "title": "edited",
+                "interval": {
+                    "start": {"kind": "date", "date": "2026-11-17"},
+                    "end": {"kind": "date", "date": "2026-11-18"}
+                }
+            }],
+            "created_at": "2026-01-01T00:00:00Z"
+        });
+
+        let operation: Operation = serde_json::from_value(value.clone()).unwrap();
+        let OperationKind::CreateEvent { overrides, .. } = &operation.kind else {
+            panic!("expected CreateEvent");
+        };
+        assert_eq!(overrides.len(), 1);
+        assert_eq!(overrides[0].title.as_deref(), Some("edited"));
+        assert!(overrides[0].interval.is_some());
+
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[test]
+    fn update_event_distinguishes_absent_and_present_overrides() {
+        let operation_json = |overrides: Option<serde_json::Value>| {
+            let mut value = json!({
+                "operation_id": Uuid::new_v4(),
+                "operation_version": OPERATION_VERSION,
+                "timestamp": null,
+                "kind": "update_event",
+                "id": Uuid::new_v4(),
+            });
+            if let Some(overrides) = overrides {
+                value["overrides"] = overrides;
+            }
+            value
+        };
+
+        let absent: Operation = serde_json::from_value(operation_json(None)).unwrap();
+        let OperationKind::UpdateEvent { overrides, .. } = &absent.kind else {
+            panic!("expected UpdateEvent");
+        };
+        assert_eq!(overrides, &None);
+        assert!(
+            serde_json::to_value(&absent)
+                .unwrap()
+                .get("overrides")
+                .is_none()
+        );
+
+        let list = json!([{
+            "original_start": {"kind": "date", "date": "2026-11-17"},
+            "title": "edited"
+        }]);
+        let present: Operation =
+            serde_json::from_value(operation_json(Some(list.clone()))).unwrap();
+        let OperationKind::UpdateEvent { overrides, .. } = &present.kind else {
+            panic!("expected UpdateEvent");
+        };
+        assert_eq!(overrides.as_ref().map(Vec::len), Some(1));
+        assert_eq!(
+            serde_json::to_value(&present).unwrap().get("overrides"),
+            Some(&list)
+        );
     }
 
     #[test]

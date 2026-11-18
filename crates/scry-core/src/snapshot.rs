@@ -13,8 +13,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use uuid::Uuid;
 
-pub const SNAPSHOT_VERSION: u32 = 6;
-pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 5;
+pub const SNAPSHOT_VERSION: u32 = 7;
+pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 6;
 
 /// The bare server-wide snapshot: every project document plus the cursor a
 /// client should pull from next.
@@ -829,11 +829,13 @@ pub fn plan_import(
                 let description = changed(&live_event.description, &description);
                 let interval = changed(&live_event.interval, &incoming_event.interval);
                 let recurrence = changed(&live_event.recurrence, &incoming_event.recurrence);
+                let overrides = changed(&live_event.overrides, &incoming_event.overrides);
 
                 if title.is_some()
                     || description.is_some()
                     || interval.is_some()
                     || recurrence.is_some()
+                    || overrides.is_some()
                 {
                     plan.operations.push(operation(OperationKind::UpdateEvent {
                         id: live_event.id,
@@ -841,6 +843,7 @@ pub fn plan_import(
                         description,
                         interval,
                         recurrence,
+                        overrides,
                         updated_at: Some(incoming_event.updated_at),
                     }));
                 }
@@ -868,6 +871,7 @@ pub fn plan_import(
                 description,
                 interval: incoming_event.interval.clone(),
                 recurrence: incoming_event.recurrence.clone(),
+                overrides: incoming_event.overrides.clone(),
                 created_at: incoming_event.created_at,
                 updated_at: Some(incoming_event.updated_at),
             }));
@@ -1139,21 +1143,21 @@ mod tests {
 
     #[test]
     fn parse_rejects_unsupported_version() {
-        let v7 = r#"{ "version": 7, "projects": [] }"#;
+        let v8 = r#"{ "version": 8, "projects": [] }"#;
 
         assert!(matches!(
-            parse_file(v7),
+            parse_file(v8),
             Err(SnapshotFileError::UnsupportedVersion {
-                found: 7,
+                found: 8,
                 supported: SNAPSHOT_VERSION
             })
         ));
 
-        let v3 = r#"{ "version": 3, "projects": [] }"#;
+        let v5 = r#"{ "version": 5, "projects": [] }"#;
         assert!(matches!(
-            parse_file(v3),
+            parse_file(v5),
             Err(SnapshotFileError::UnsupportedVersion {
-                found: 3,
+                found: 5,
                 supported: SNAPSHOT_VERSION
             })
         ));
@@ -1225,26 +1229,11 @@ mod tests {
 
         let mut value = serde_json::to_value(snapshot_file(vec![document]))
             .expect("snapshot file should serialize");
-        value["version"] = json!(5);
-        let project = value["projects"]
-            .as_array_mut()
-            .expect("projects should be an array")
-            .first_mut()
-            .and_then(|project| project.as_object_mut())
-            .expect("project should be an object");
-        // version 5 predates close metadata; both fields default back to none
-        let task = project
-            .get_mut("tasks")
-            .and_then(|tasks| tasks.as_array_mut())
-            .and_then(|tasks| tasks.first_mut())
-            .and_then(|task| task.as_object_mut())
-            .expect("task should be an object");
-        task.remove("closed_reason");
-        task.remove("closed_at");
+        value["version"] = json!(6);
 
         let parsed = parse_file(&value.to_string()).expect("previous version should parse");
 
-        assert_eq!(parsed.version, 5);
+        assert_eq!(parsed.version, 6);
         let document = &parsed.projects[0];
         assert_eq!(document.sections.len(), 1);
         assert_eq!(document.tasks.len(), 1);
@@ -1309,6 +1298,7 @@ mod tests {
                 text: "FREQ=WEEKLY;BYDAY=MO".to_owned(),
                 exdates: Vec::new(),
             }),
+            overrides: Vec::new(),
             created_at: at(),
             updated_at: at(),
         };
@@ -2278,6 +2268,7 @@ mod import_tests {
             description: None,
             interval: interval.clone(),
             recurrence: None,
+            overrides: Vec::new(),
             created_at: at(),
             updated_at: at(),
         });
@@ -2328,6 +2319,7 @@ mod import_tests {
             description: None,
             interval: incoming_interval.clone(),
             recurrence: None,
+            overrides: Vec::new(),
             created_at: at(),
             updated_at: at(),
         });
@@ -2341,6 +2333,7 @@ mod import_tests {
             description: None,
             interval: live_interval,
             recurrence: None,
+            overrides: Vec::new(),
             created_at: at(),
             updated_at: at(),
         });

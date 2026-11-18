@@ -19,10 +19,10 @@ export function TaskActions(props: TaskActionsProps) {
     <div className="flex flex-wrap items-center gap-2">
       {stateLocked ? null : closed ? (
         <Button size="xs" color="alternative" onClick={() => void onReopen()}>
-          Reopen task
+          Reopen
         </Button>
       ) : (
-        <Dropdown size="xs" color="alternative" label="Close task" dismissOnClick>
+        <Dropdown size="xs" color="alternative" label="Close as" dismissOnClick>
           <DropdownItem onClick={() => void onClose('completed')}>Completed</DropdownItem>
           <DropdownItem onClick={() => void onClose('cancelled')}>Cancelled</DropdownItem>
           <DropdownItem onClick={() => void onClose('skipped')}>Skipped</DropdownItem>

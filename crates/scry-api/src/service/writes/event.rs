@@ -1,13 +1,17 @@
 use crate::error::ServiceError;
-use crate::service::{ApplyMode, EventPatch, EventWindow, NewEvent, ProjectService, new_operation};
+use crate::service::{
+    ApplyMode, EventPatch, EventWindow, FollowingEvent, NewEvent, ProjectService, SplitEvents,
+    new_operation,
+};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use scry_core::error::StorageError;
+use scry_core::event::split_series;
 use scry_core::ids::{EventId, ProjectId};
 use scry_core::models::Event;
-use scry_core::recurrence::{RecurError, occurrences};
+use scry_core::recurrence::RecurError;
 use scry_core::sync::operations::OperationKind;
-use scry_core::temporal::TemporalError;
+use scry_core::temporal::When;
 use uuid::Uuid;
 
 impl ProjectService {
@@ -38,6 +42,7 @@ impl ProjectService {
             description: description.filter(|description| !description.is_empty()),
             interval,
             recurrence,
+            overrides: Vec::new(),
             created_at,
             updated_at: created_at,
         };
@@ -50,6 +55,7 @@ impl ProjectService {
                 description: event.description.clone(),
                 interval: event.interval.clone(),
                 recurrence: event.recurrence.clone(),
+                overrides: event.overrides.clone(),
                 created_at: event.created_at,
                 updated_at: None,
             },
@@ -71,6 +77,7 @@ impl ProjectService {
             description,
             interval,
             recurrence,
+            overrides,
         } = patch;
 
         let description = description.map(|value| Some(value).filter(|value| !value.is_empty()));
@@ -93,6 +100,7 @@ impl ProjectService {
                 description,
                 interval,
                 recurrence,
+                overrides,
                 updated_at: None,
             },
         );
@@ -145,30 +153,76 @@ impl ProjectService {
         });
         Ok(events)
     }
+
+    /// Split a recurring event before `original_start`, truncating the existing
+    /// series and creating a following one from `following`.
+    pub async fn split_event(
+        &self,
+        id: EventId,
+        original_start: When,
+        following: FollowingEvent,
+        zone: &TimeZone,
+    ) -> Result<SplitEvents, ServiceError> {
+        let existing = self.require_event(id).await?;
+        let split = split_series(&existing, &original_start, zone)
+            .map_err(recurrence_error)?
+            .ok_or_else(|| {
+                ServiceError::Storage(StorageError::Invalid(
+                    "cannot split before the series start".to_string(),
+                ))
+            })?;
+
+        let new_id = Uuid::new_v4();
+        let now = Timestamp::now();
+
+        let update = new_operation(
+            Uuid::new_v4(),
+            OperationKind::UpdateEvent {
+                id: existing.id,
+                title: None,
+                description: None,
+                interval: None,
+                recurrence: Some(Some(split.truncated.clone())),
+                overrides: Some(split.kept_overrides.clone()),
+                updated_at: Some(now),
+            },
+        );
+        let create = new_operation(
+            Uuid::new_v4(),
+            OperationKind::CreateEvent {
+                id: new_id,
+                project_id: existing.project_id,
+                title: following.title,
+                description: following.description.filter(|value| !value.is_empty()),
+                interval: following.interval,
+                recurrence: Some(split.following.clone()),
+                overrides: split.following_overrides.clone(),
+                created_at: now,
+                updated_at: Some(now),
+            },
+        );
+
+        self.apply_operations(&[update, create], ApplyMode::Atomic)
+            .await?;
+
+        Ok(SplitEvents {
+            previous: self.require_event(id).await?,
+            following: self.require_event(new_id).await?,
+        })
+    }
 }
 
-/// Whether an event has any occurrence in `window`. A recurring series is
-/// expanded only far enough to answer that question; its occurrences are never
-/// materialized.
+/// Whether an event has any occurrence in `window`, expanding a recurring
+/// series with its per-occurrence overrides.
 fn event_overlaps_window(
     event: &Event,
     window: EventWindow,
     zone: &TimeZone,
 ) -> Result<bool, ServiceError> {
-    if let Some(recurrence) = &event.recurrence {
-        return occurrences(&event.interval, recurrence, window.from, window.to, zone)
-            .map(|occurrences| !occurrences.is_empty())
-            .map_err(recurrence_error);
-    }
-
     event
-        .interval
-        .overlaps(window.from, window.to, zone)
-        .map_err(temporal_error)
-}
-
-fn temporal_error(error: TemporalError) -> ServiceError {
-    ServiceError::Storage(StorageError::Invalid(error.to_string()))
+        .occurrences(window.from, window.to, zone)
+        .map(|occurrences| !occurrences.is_empty())
+        .map_err(recurrence_error)
 }
 
 fn recurrence_error(error: RecurError) -> ServiceError {
@@ -206,6 +260,7 @@ mod tests {
             description: None,
             interval,
             recurrence,
+            overrides: Vec::new(),
             created_at: Timestamp::now(),
             updated_at: Timestamp::now(),
         }

@@ -4,19 +4,17 @@
 //! confirmed state, applies new pull changes to it, then replays the operations
 //! that are still in the outbox as plain field sets to get the visible state.
 
-use std::collections::HashSet;
-
-use jiff::Timestamp;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
 use crate::models::{
     Automation, AutomationAction, Change, ChangeKind, ClosedReason, Color, Comment, EntityType,
-    Event, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
+    Event, EventOverride, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use crate::position::Position;
 use crate::sync::operations::{ColorChange, Operation, OperationKind};
 use crate::temporal::Interval;
+use jiff::Timestamp;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use uuid::Uuid;
 
 /// A client's local replica: the projects it has confirmed, each with the full
 /// project document.
@@ -384,6 +382,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             description,
             interval,
             recurrence,
+            overrides,
             created_at,
             updated_at,
         } => {
@@ -394,6 +393,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 description: description.clone(),
                 interval: interval.clone(),
                 recurrence: recurrence.clone(),
+                overrides: overrides.clone(),
                 created_at: *created_at,
                 updated_at: (*updated_at).unwrap_or(*created_at),
             };
@@ -411,6 +411,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             description,
             interval,
             recurrence,
+            overrides,
             updated_at,
         } => {
             if let Some(event) = find_event_mut(state, *id) {
@@ -425,6 +426,9 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(recurrence) = recurrence {
                     event.recurrence = recurrence.clone();
+                }
+                if let Some(overrides) = overrides {
+                    event.overrides = overrides.clone();
                 }
                 if let Some(updated_at) = updated_at {
                     event.updated_at = *updated_at;
@@ -623,6 +627,11 @@ fn apply_event_values(event: &mut Event, values: &serde_json::Value) {
             serde_json::from_value::<Option<crate::recurrence::RRule>>(recurrence.clone())
     {
         event.recurrence = recurrence;
+    }
+    if let Some(overrides) = values.get("overrides")
+        && let Ok(overrides) = serde_json::from_value::<Vec<EventOverride>>(overrides.clone())
+    {
+        event.overrides = overrides;
     }
     apply_updated_at(&mut event.updated_at, values);
 }

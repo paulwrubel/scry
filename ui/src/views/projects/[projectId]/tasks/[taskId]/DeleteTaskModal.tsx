@@ -26,7 +26,7 @@ export function DeleteTaskModal(props: DeleteTaskModalProps) {
       </ModalBody>
       <ModalFooter className="justify-between">
         <Button color="alternative" onClick={onClose}>
-          Cancel
+          Keep
         </Button>
         <Button color="red" onClick={() => void onDelete()}>
           Delete task
