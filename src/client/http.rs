@@ -57,6 +57,24 @@ impl Client {
         decode(response).await
     }
 
+    /// GET a text resource such as a calendar export.
+    pub async fn get_text(&self, segments: &[&str]) -> Result<String, AppError> {
+        let url = self.build_url(segments, &[])?;
+        let response = self
+            .request(Method::GET, url)
+            .send()
+            .await
+            .map_err(|error| self.transport_error(error))?;
+
+        if response.status().is_success() {
+            return response.text().await.map_err(|error| {
+                AppError::Internal(format!("failed to decode server response: {error}"))
+            });
+        }
+
+        Err(decode_error(response).await)
+    }
+
     /// POST a JSON body and decode the JSON response.
     pub async fn post_json<B: Serialize, T: DeserializeOwned>(
         &self,
@@ -65,6 +83,24 @@ impl Client {
         body: &B,
     ) -> Result<T, AppError> {
         self.send_json(Method::POST, segments, query, body).await
+    }
+
+    /// POST a raw text body and decode the JSON response.
+    pub async fn post_text<T: DeserializeOwned>(
+        &self,
+        segments: &[&str],
+        body: &str,
+    ) -> Result<T, AppError> {
+        let url = self.build_url(segments, &[])?;
+        let response = self
+            .request(Method::POST, url)
+            .header("content-type", "text/calendar; charset=utf-8")
+            .body(body.to_owned())
+            .send()
+            .await
+            .map_err(|error| self.transport_error(error))?;
+
+        decode(response).await
     }
 
     /// PUT a JSON body and decode the JSON response.
@@ -179,14 +215,18 @@ fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {
 
 /// Decode a successful body, or turn the server's error document into an error.
 async fn decode<T: DeserializeOwned>(response: Response) -> Result<T, AppError> {
-    let status = response.status();
-
-    if status.is_success() {
+    if response.status().is_success() {
         return response.json::<T>().await.map_err(|error| {
             AppError::Internal(format!("failed to decode server response: {error}"))
         });
     }
 
+    Err(decode_error(response).await)
+}
+
+/// Turn the server's error document, or a bare status, into an error.
+async fn decode_error(response: Response) -> AppError {
+    let status = response.status();
     let body = response
         .json::<ApiErrorBody>()
         .await
@@ -196,11 +236,11 @@ async fn decode<T: DeserializeOwned>(response: Response) -> Result<T, AppError> 
             details: None,
         });
 
-    Err(AppError::Remote {
+    AppError::Remote {
         kind: remote_kind(&body.kind),
         message: body.message,
         details: body.details,
-    })
+    }
 }
 
 #[derive(Deserialize)]

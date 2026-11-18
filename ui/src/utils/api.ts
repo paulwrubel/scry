@@ -50,3 +50,24 @@ export async function logoutSession(fetcher: typeof fetch, baseUrl: string): Pro
     credentials: 'include',
   });
 }
+
+export async function importEvents(
+  fetcher: typeof fetch,
+  baseUrl: string,
+  projectId: string,
+  ics: string,
+): Promise<Response> {
+  return fetcher(`${baseUrl}/projects/${projectId}/events/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/calendar; charset=utf-8' },
+    body: ics,
+  });
+}
+
+export async function exportEvents(
+  fetcher: typeof fetch,
+  baseUrl: string,
+  projectId: string,
+): Promise<Response> {
+  return fetcher(`${baseUrl}/projects/${projectId}/events/export`);
+}

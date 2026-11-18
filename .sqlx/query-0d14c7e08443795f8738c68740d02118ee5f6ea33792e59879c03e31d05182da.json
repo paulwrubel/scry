@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    event_interval,\n                    recurrence,\n                    created_at,\n                    updated_at\n                FROM events\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT\n                    id,\n                    project_id,\n                    title,\n                    description,\n                    event_interval,\n                    recurrence,\n                    external_metadata,\n                    created_at,\n                    updated_at\n                FROM events\n                WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -71,6 +71,17 @@
       },
       {
         "ordinal": 6,
+        "name": "external_metadata",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "external_metadata"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -104,9 +115,10 @@
       true,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "7cdac848bee0f9f8b8cb79daa5e1618b889614c6bdac1512ec6ec7984622639b"
+  "hash": "0d14c7e08443795f8738c68740d02118ee5f6ea33792e59879c03e31d05182da"
 }

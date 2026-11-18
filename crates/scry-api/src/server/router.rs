@@ -5,6 +5,7 @@ use crate::error::AppError;
 use crate::http_auth::{AuthState, require_auth};
 use crate::service::ProjectService;
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderName, Method, StatusCode, header};
 use axum::routing::{get, post};
 use axum::serve;
@@ -103,6 +104,11 @@ fn build_projects_router() -> Router<ScryState> {
             "/{project_id}/events",
             get(handlers::get_events_by_project).post(handlers::create_event),
         )
+        .route(
+            "/{project_id}/events/import",
+            post(handlers::import_events).layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
+        .route("/{project_id}/events/export", get(handlers::export_events))
         .route(
             "/{project_id}/snapshot",
             get(handlers::get_project_snapshot),

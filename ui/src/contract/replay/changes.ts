@@ -329,6 +329,11 @@ export function applyEventValues(event: Event, values: Record<string, unknown>):
     // matches the generated types even though the map is untyped
     event.overrides = values.overrides as Event['overrides'];
   }
+  if ('external_metadata' in values) {
+    // change field values are serialized Event fields, so their JSON shape
+    // matches the generated types even though the map is untyped
+    event.external_metadata = values.external_metadata as Event['external_metadata'];
+  }
   if (typeof values.updated_at === 'string') {
     event.updated_at = values.updated_at;
   }

@@ -1,5 +1,11 @@
 //! `event` commands.
 
+use super::{parse_when_arg, project_by_name, system_zone};
+use crate::client::Client;
+use crate::config::ScryConfig;
+use crate::error::AppError;
+use crate::output::{event_line, print_json};
+use crate::state::format_local;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use scry_core::ids::Handle;
@@ -7,14 +13,7 @@ use scry_core::models::{Event, Project};
 use scry_core::recurrence::{RRule, Recurrence, occurrences};
 use scry_core::temporal::{Interval, When};
 use serde::Serialize;
-
-use crate::client::Client;
-use crate::config::ScryConfig;
-use crate::error::AppError;
-use crate::output::{event_line, print_json};
-use crate::state::format_local;
-
-use super::{parse_when_arg, project_by_name, system_zone};
+use std::path::Path;
 
 /// List a project's events in start order.
 pub async fn event_list(
@@ -205,6 +204,7 @@ pub async fn event_update(
         let mut rule = build_rrule(text, until, count, floating)?;
         if let Some(existing) = &event.recurrence {
             rule.exdates = existing.exdates.clone();
+            rule.rdates = existing.rdates.clone();
         }
         Some(Some(rule))
     } else {
@@ -384,9 +384,76 @@ pub async fn event_show(
                 .join(", ");
             println!("Excluded:    {exdates}");
         }
+        if !rule.rdates.is_empty() {
+            let rdates = rule
+                .rdates
+                .iter()
+                .map(|value| scry_core::format::format_when(value, now, &zone))
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!("Included:    {rdates}");
+        }
     }
     println!("Created at:  {}", format_local(event.created_at));
     println!("Updated at:  {}", format_local(event.updated_at));
+
+    Ok(())
+}
+
+/// Import events from an iCalendar document.
+pub async fn event_import(
+    client: &Client,
+    config: &ScryConfig,
+    project_flag: Option<&str>,
+    file: &Path,
+    output_json: bool,
+) -> Result<(), AppError> {
+    let project: Project = project_by_name(client, config, project_flag).await?;
+    let ics = std::fs::read_to_string(file)
+        .map_err(|error| AppError::Usage(format!("could not read {}: {error}", file.display())))?;
+
+    let project_id = project.id.to_string();
+    let events: Vec<Event> = client
+        .post_text(&["projects", project_id.as_str(), "events", "import"], &ics)
+        .await?;
+
+    if output_json {
+        print_json(&events)?;
+    } else {
+        let plural = if events.len() == 1 { "" } else { "s" };
+        println!(
+            "Imported {} event{} from \"{}\"",
+            events.len(),
+            plural,
+            file.display()
+        );
+    }
+
+    Ok(())
+}
+
+/// Export a project's events as an iCalendar document.
+pub async fn event_export(
+    client: &Client,
+    config: &ScryConfig,
+    project_flag: Option<&str>,
+    file: Option<&Path>,
+) -> Result<(), AppError> {
+    let project: Project = project_by_name(client, config, project_flag).await?;
+    let project_id = project.id.to_string();
+    let calendar = client
+        .get_text(&["projects", project_id.as_str(), "events", "export"])
+        .await?;
+
+    match file {
+        Some(path) => {
+            std::fs::write(path, calendar).map_err(|error| {
+                AppError::Usage(format!("could not write {}: {error}", path.display()))
+            })?;
+            println!("Wrote {}", path.display());
+        }
+        None => print!("{calendar}"),
+    }
 
     Ok(())
 }
@@ -419,6 +486,7 @@ fn build_rrule(
     Ok(RRule {
         text,
         exdates: Vec::new(),
+        rdates: Vec::new(),
     })
 }
 

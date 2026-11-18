@@ -2,8 +2,8 @@
 import type { When } from './When';
 
 /**
- * The recurrence stored on an event: the RRULE text and the occurrence starts
- * that were deleted. Occurrences themselves are never stored.
+ * The recurrence stored on an event: the RRULE text, occurrence starts the user
+ * added, and starts the user removed. Occurrences themselves are never stored.
  */
 export type RRule = {
   /**
@@ -11,4 +11,8 @@ export type RRule = {
    */
   text: string;
   exdates?: Array<When>;
+  /**
+   * Additional starts added to the set, which the RRULE itself does not generate.
+   */
+  rdates?: Array<When>;
 };

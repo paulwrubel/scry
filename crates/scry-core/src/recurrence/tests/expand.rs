@@ -153,6 +153,7 @@ fn exdate_removes_exactly_one_occurrence() {
         exdates: vec![When::Date {
             date: date(2026, 11, 2),
         }],
+        rdates: Vec::new(),
     };
     let interval = all_day(date(2026, 11, 1), date(2026, 11, 2));
 

@@ -25,6 +25,7 @@ export function expandRecurrence(
   const base = civilOf(interval.start);
   const duration = civilDuration(interval.start, interval.end);
   const exdates = rrule.exdates ?? [];
+  const rdates = rrule.rdates ?? [];
   const fromMillis = from.toMillis();
   const toMillis = to.toMillis();
   const out: Interval[] = [];
@@ -73,6 +74,38 @@ export function expandRecurrence(
       break;
     }
   }
+
+  // an RDATE names only a start, so its end is the series' civil duration
+  // applied to that start with the series' own kind; COUNT and UNTIL do not
+  // apply, which also keeps `generated` untouched
+  for (const rdate of rdates) {
+    const candidate = civilOf(rdate).civil;
+    const start = rebuild(base.kind, candidate);
+    const startMillis = instantOf(start, zone).toMillis();
+
+    const alreadyEmitted = out.some(
+      (existing) => instantOf(existing.start, zone).toMillis() === startMillis,
+    );
+    const excluded = exdates.some((exdate) => {
+      const instant = instantOf(exdate, zone);
+      return instant.isValid && instant.toMillis() === startMillis;
+    });
+    if (alreadyEmitted || excluded || startMillis >= toMillis) {
+      continue;
+    }
+
+    const end = rebuild(base.kind, candidate.plus(duration));
+    const occurrence: Interval = { start, end };
+    if (fromMillis < instantOf(occurrence.end, zone).toMillis()) {
+      out.push(occurrence);
+    }
+  }
+
+  // an added start can fall between the generated ones, so restore start order
+  out.sort(
+    (left, right) =>
+      instantOf(left.start, zone).toMillis() - instantOf(right.start, zone).toMillis(),
+  );
 
   return out;
 }

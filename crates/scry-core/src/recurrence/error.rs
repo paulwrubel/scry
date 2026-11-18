@@ -13,7 +13,7 @@ pub enum RecurError {
     Parse { token: String, detail: String },
     /// The rule named a part this subset does not implement.
     Unsupported(String),
-    /// An EXDATE carried a different `When` kind from the series start.
+    /// An RDATE or EXDATE carried a different `When` kind from the series start.
     ExdateKindMismatch,
     /// Generation hit `MAX_CANDIDATES`, which guards against an endless series.
     OccurrenceLimit,
@@ -30,7 +30,7 @@ impl fmt::Display for RecurError {
             }
             Self::Unsupported(part) => write!(f, "unsupported RRULE part: {part}"),
             Self::ExdateKindMismatch => {
-                f.write_str("excluded date must be the same kind as the series start")
+                f.write_str("excluded or included date must be the same kind as the series start")
             }
             Self::OccurrenceLimit => {
                 write!(

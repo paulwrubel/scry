@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Operation } from '@/generated/Operation';
 import type { ProjectSnapshot } from '@/generated/ProjectSnapshot';
 import { ActiveProjectContext } from '@/providers/ActiveProject/context';
+import type { AuthContextType, LoginResult } from '@/providers/Auth/context';
+import { AuthContext } from '@/providers/Auth/context';
 import { InstallPromptContext } from '@/providers/InstallPrompt/context';
 import type { InstallPromptContextType } from '@/providers/InstallPrompt/context';
 import { ReplicaContext } from '@/providers/Replica/context';
@@ -55,6 +57,15 @@ function renderPage(
     clearAllRejectedOperations: () => undefined,
   };
 
+  const authContext: AuthContextType = {
+    accessToken: 'test-token',
+    isAuthenticated: true,
+    isAuthLoading: false,
+    authenticatedFetch: async () => new Response(null, { status: 204 }),
+    login: async (): Promise<LoginResult> => ({ ok: true }),
+    logout: async () => undefined,
+  };
+
   const installPromptContext: InstallPromptContextType = {
     canInstall: false,
     isInstalled: false,
@@ -68,20 +79,22 @@ function renderPage(
 
   render(
     <ReplicaContext.Provider value={replicaContext}>
-      <SyncContext.Provider value={syncContext}>
-        <InstallPromptContext.Provider value={installPromptContext}>
-          <ActiveProjectContext.Provider
-            value={{ activeProjectId, setActiveProjectId, clearActiveProject }}
-          >
-            <MemoryRouter initialEntries={[`/projects/${projectId}/settings`]}>
-              <LocationProbe />
-              <Routes>
-                <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
-              </Routes>
-            </MemoryRouter>
-          </ActiveProjectContext.Provider>
-        </InstallPromptContext.Provider>
-      </SyncContext.Provider>
+      <AuthContext.Provider value={authContext}>
+        <SyncContext.Provider value={syncContext}>
+          <InstallPromptContext.Provider value={installPromptContext}>
+            <ActiveProjectContext.Provider
+              value={{ activeProjectId, setActiveProjectId, clearActiveProject }}
+            >
+              <MemoryRouter initialEntries={[`/projects/${projectId}/settings`]}>
+                <LocationProbe />
+                <Routes>
+                  <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
+                </Routes>
+              </MemoryRouter>
+            </ActiveProjectContext.Provider>
+          </InstallPromptContext.Provider>
+        </SyncContext.Provider>
+      </AuthContext.Provider>
     </ReplicaContext.Provider>,
   );
 

@@ -6,6 +6,7 @@ import { useReplicaSnapshot } from '@/providers/Replica';
 import { DeleteProjectModal } from '@/views/projects/DeleteProjectModal';
 import { AppSection } from './AppSection';
 import { AutomationsSection } from './AutomationsSection';
+import { CalendarSection } from './CalendarSection';
 import { ProjectSettingsForm } from './ProjectSettingsForm';
 
 export function ProjectSettingsPage() {
@@ -61,6 +62,15 @@ export function ProjectSettingsPage() {
           <h2 className="text-lg font-semibold">Automations</h2>
           <p className="text-sm text-zinc-300">Run one action when a task changes.</p>
           <AutomationsSection project={project} />
+        </div>
+      </Card>
+      <Card>
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Calendars</h2>
+          <p className="text-sm text-zinc-300">
+            Import events from an .ics file, or export this project's calendar.
+          </p>
+          <CalendarSection project={project} />
         </div>
       </Card>
       <Card>

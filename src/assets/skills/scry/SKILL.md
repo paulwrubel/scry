@@ -110,13 +110,15 @@ Triggers are `created`, `closed`, `opened`, and `enters` (with `--section`). Act
 
 ## Event commands
 
-| Command                                                                                                                                                                          | Purpose                           |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `scry --json event list [--from <expr> --to <expr>]`                                                                                                                             | List a project's events           |
-| `scry --json event add <title> --start <expr> [--end <expr>] [--description <text>] [--floating] [--recur <rrule>] [--until <expr>\|--count <n>]`                                | Add an event                      |
-| `scry --json event show <id\|handle>`                                                                                                                                            | Show one event                    |
-| `scry --json event update <id\|handle> [--title ...] [--description ...] [--start <expr> --end <expr>] [--floating] [--recur <rrule>\|--no-recur] [--until <expr>\|--count <n>]` | Update an event                   |
-| `scry --json event delete <id\|handle> [--occurrence <expr>]`                                                                                                                    | Delete an event or one occurrence |
+| Command                                                                                                                                                                          | Purpose                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `scry --json event list [--from <expr> --to <expr>]`                                                                                                                             | List a project's events              |
+| `scry --json event add <title> --start <expr> [--end <expr>] [--description <text>] [--floating] [--recur <rrule>] [--until <expr>\|--count <n>]`                                | Add an event                         |
+| `scry --json event show <id\|handle>`                                                                                                                                            | Show one event                       |
+| `scry --json event update <id\|handle> [--title ...] [--description ...] [--start <expr> --end <expr>] [--floating] [--recur <rrule>\|--no-recur] [--until <expr>\|--count <n>]` | Update an event                      |
+| `scry --json event delete <id\|handle> [--occurrence <expr>]`                                                                                                                    | Delete an event or one occurrence    |
+| `scry --json event import <file>`                                                                                                                                                | Import events from an .ics file      |
+| `scry --json event export [file]`                                                                                                                                                | Export this project's events as .ics |
 
 Events are project-scoped calendar entries with a title, an optional description, and one start and
 end. `event add` creates a one-hour event for a timed start, or an all-day event for a bare date;
@@ -126,7 +128,9 @@ pass `--floating`, which requires `--start`. `--recur <rrule>` makes an event re
 rule. `event list` returns events in start order; `--from` and `--to` must be supplied together, keep
 only events overlapping that window, and expand a recurring series into its occurrences. Use
 `event delete --occurrence <expr>` to remove only the occurrence starting at that expression. Event
-arguments follow the same handle rule as tasks.
+arguments follow the same handle rule as tasks. `event import` keeps a series' rule, excluded and
+extra dates, and per-occurrence exceptions; `event export` writes the whole project as an iCalendar
+file.
 
 ## Snapshots
 

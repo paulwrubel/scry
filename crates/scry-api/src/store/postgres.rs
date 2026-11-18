@@ -8,8 +8,8 @@ use scry_core::error::StorageError;
 use scry_core::ids::{AutomationId, CommentId, EventId, Handle, ProjectId, SectionId, TaskId};
 use scry_core::models::{
     Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, ClosedReason, Color,
-    Comment, Entity, EntityType, Event, EventOverride, ExternalIdentity, ExternalMetadata,
-    Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
+    Comment, Entity, EntityType, Event, EventExternalMetadata, EventOverride, ExternalIdentity,
+    ExternalMetadata, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
 use scry_core::recurrence::RRule;
@@ -319,6 +319,7 @@ struct EventFields {
     event_interval: serde_json::Value,
     recurrence: Option<serde_json::Value>,
     overrides: Vec<EventOverride>,
+    external_metadata: Option<serde_json::Value>,
     created_at: SqlxTimestamp,
     updated_at: SqlxTimestamp,
 }
@@ -332,6 +333,7 @@ fn event_from_fields(fields: EventFields) -> Result<Event, StorageError> {
         event_interval,
         recurrence,
         overrides,
+        external_metadata,
         created_at,
         updated_at,
     } = fields;
@@ -344,6 +346,12 @@ fn event_from_fields(fields: EventFields) -> Result<Event, StorageError> {
         .map_err(|e| {
             StorageError::Database(format!("event {id} has an invalid recurrence: {e}"))
         })?;
+    let external_metadata = external_metadata
+        .map(serde_json::from_value::<EventExternalMetadata>)
+        .transpose()
+        .map_err(|e| {
+            StorageError::Database(format!("event {id} has invalid external metadata: {e}"))
+        })?;
 
     Ok(Event {
         id,
@@ -353,6 +361,7 @@ fn event_from_fields(fields: EventFields) -> Result<Event, StorageError> {
         interval,
         recurrence,
         overrides,
+        external_metadata,
         created_at: created_at.to_jiff(),
         updated_at: updated_at.to_jiff(),
     })
@@ -1637,11 +1646,22 @@ impl Store for PostgresStore {
             .map_err(|e| {
                 StorageError::Database(format!("failed to serialize event recurrence: {}", e))
             })?;
+        let external_metadata = event
+            .external_metadata
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!(
+                    "failed to serialize event external metadata: {}",
+                    e
+                ))
+            })?;
 
         match sqlx::query!(
             r#"
-                INSERT INTO events (id, project_id, title, description, event_interval, recurrence, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                INSERT INTO events (id, project_id, title, description, event_interval, recurrence, external_metadata, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
             event.id,
             event.project_id,
@@ -1649,6 +1669,7 @@ impl Store for PostgresStore {
             event.description.as_deref(),
             event_interval,
             recurrence,
+            external_metadata,
             event.created_at.to_sqlx(),
             event.updated_at.to_sqlx(),
         )
@@ -1687,6 +1708,7 @@ impl Store for PostgresStore {
                     description,
                     event_interval,
                     recurrence,
+                    external_metadata,
                     created_at,
                     updated_at
                 FROM events
@@ -1707,6 +1729,7 @@ impl Store for PostgresStore {
                     event_interval: row.event_interval,
                     recurrence: row.recurrence,
                     overrides,
+                    external_metadata: row.external_metadata,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                 })?))
@@ -1735,6 +1758,7 @@ impl Store for PostgresStore {
                     description,
                     event_interval,
                     recurrence,
+                    external_metadata,
                     created_at,
                     updated_at
                 FROM events
@@ -1760,6 +1784,7 @@ impl Store for PostgresStore {
                             event_interval: row.event_interval,
                             recurrence: row.recurrence,
                             overrides: overrides.remove(&row.id).unwrap_or_default(),
+                            external_metadata: row.external_metadata,
                             created_at: row.created_at,
                             updated_at: row.updated_at,
                         })
@@ -1791,17 +1816,29 @@ impl Store for PostgresStore {
             .map_err(|e| {
                 StorageError::Database(format!("failed to serialize event recurrence: {}", e))
             })?;
+        let external_metadata = event
+            .external_metadata
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!(
+                    "failed to serialize event external metadata: {}",
+                    e
+                ))
+            })?;
 
         match sqlx::query!(
             r#"
                 UPDATE events
-                SET title = $1, description = $2, event_interval = $3, recurrence = $4, updated_at = $5
-                WHERE id = $6
+                SET title = $1, description = $2, event_interval = $3, recurrence = $4, external_metadata = $5, updated_at = $6
+                WHERE id = $7
             "#,
             event.title.as_str(),
             event.description.as_deref(),
             event_interval,
             recurrence,
+            external_metadata,
             event.updated_at.to_sqlx(),
             event.id,
         )

@@ -25,7 +25,9 @@ mod export;
 pub use export::export;
 
 mod event;
-pub use event::{event_add, event_delete, event_list, event_show, event_update};
+pub use event::{
+    event_add, event_delete, event_export, event_import, event_list, event_show, event_update,
+};
 
 mod import;
 pub use import::import;

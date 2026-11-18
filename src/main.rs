@@ -514,6 +514,18 @@ enum EventCommand {
         /// The event ID or a unique handle prefix
         id: Handle,
     },
+    /// Import events from an iCalendar (.ics) file
+    Import {
+        /// The .ics file to import
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
+    /// Export this project's events as an iCalendar (.ics) file
+    Export {
+        /// Write to this file instead of stdout
+        #[arg(value_name = "FILE")]
+        file: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1093,6 +1105,22 @@ async fn run(cli: Cli) -> Result<(), AppError> {
         Some(Command::Event(EventCommand::Show { id })) => {
             let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
             return client::event_show(&client, &config, cli.project.as_deref(), id, output_json)
+                .await;
+        }
+        Some(Command::Event(EventCommand::Import { file })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::event_import(
+                &client,
+                &config,
+                cli.project.as_deref(),
+                file,
+                output_json,
+            )
+            .await;
+        }
+        Some(Command::Event(EventCommand::Export { file })) => {
+            let client = client::Client::new(&config, cli.server.as_deref(), &secrets)?;
+            return client::event_export(&client, &config, cli.project.as_deref(), file.as_deref())
                 .await;
         }
         Some(Command::Export) => {

@@ -61,6 +61,9 @@ pub use duplicate_task::duplicate_task;
 mod export;
 pub use export::export;
 
+mod export_events;
+pub use export_events::export_events;
+
 mod export_project;
 pub use export_project::export_project;
 
@@ -117,6 +120,9 @@ pub use get_tasks_by_section::get_tasks_by_section;
 
 mod import;
 pub use import::import;
+
+mod import_events;
+pub use import_events::import_events;
 
 mod logout_session;
 pub use logout_session::logout_session;
