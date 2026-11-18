@@ -143,6 +143,24 @@ describe('WeekGrid', () => {
     expect(screen.getByText('11:00 PM')).toBeDefined();
   });
 
+  it('shades only the weekday columns with a work-hours band', () => {
+    renderGrid([]);
+
+    const bands = screen.getAllByTestId('work-hours-band');
+    expect(bands).toHaveLength(5);
+    expect(bands[0].style.top).toBe('768px');
+    expect(bands[0].style.height).toBe('864px');
+  });
+
+  it('draws a dashed half-hour line inside every hour', () => {
+    renderGrid([]);
+
+    const lines = screen.getAllByTestId('half-hour-line');
+    expect(lines).toHaveLength(168);
+    expect(lines[0].style.top).toBe('48px');
+    expect(lines[23].style.top).toBe('2256px');
+  });
+
   it('links a timed event to the editor with the query preserved', () => {
     renderGrid([
       makeEvent({

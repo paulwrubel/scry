@@ -15,7 +15,9 @@ import {
 } from '@/utils/events/calendar';
 import { EventBar } from './EventBar';
 
-const HOUR_HEIGHT = 48;
+const HOUR_HEIGHT = 96;
+const WORK_HOUR_START = 8;
+const WORK_HOUR_END = 17;
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 export type WeekGridProps = {
@@ -102,7 +104,9 @@ export function WeekGrid(props: WeekGridProps) {
             {HOURS.map((hour) => (
               <div
                 key={hour}
-                className="text-muted absolute right-2 text-[11px]"
+                className={`text-muted absolute right-2 text-[11px] leading-none ${
+                  hour === 0 ? '' : '-translate-y-1/2'
+                }`}
                 style={{ top: hour * HOUR_HEIGHT }}
               >
                 {formatTimeOfDay(DateTime.fromObject({ hour }))}
@@ -111,19 +115,38 @@ export function WeekGrid(props: WeekGridProps) {
           </div>
           {week.map((day, index) => {
             const isToday = day.hasSame(today, 'day');
+            const isWeekday = day.weekday <= 5;
 
             return (
               <div
                 key={dayKey(day)}
-                className={`border-line/60 relative min-w-0 border-l ${
-                  isToday ? 'bg-panel/20' : ''
-                }`}
+                className={`border-line relative min-w-0 border-l ${isToday ? 'bg-panel/20' : ''}`}
               >
+                {isWeekday && (
+                  <div
+                    aria-hidden="true"
+                    data-testid="work-hours-band"
+                    className="pointer-events-none absolute inset-x-0 bg-white/3"
+                    style={{
+                      top: WORK_HOUR_START * HOUR_HEIGHT,
+                      height: (WORK_HOUR_END - WORK_HOUR_START) * HOUR_HEIGHT,
+                    }}
+                  />
+                )}
                 {HOURS.map((hour) => (
                   <div
                     key={hour}
-                    className="border-line/40 absolute inset-x-0 border-t"
+                    className="border-line/80 absolute inset-x-0 border-t"
                     style={{ top: hour * HOUR_HEIGHT }}
+                  />
+                ))}
+                {HOURS.map((hour) => (
+                  <div
+                    key={hour}
+                    aria-hidden="true"
+                    data-testid="half-hour-line"
+                    className="border-line-strong absolute inset-x-0 border-t border-dashed"
+                    style={{ top: hour * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
                   />
                 ))}
                 {timedByDay[index].map((segment) => (
