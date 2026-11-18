@@ -140,6 +140,7 @@ pub(super) fn event_field_updates(event: &mut Event, op: &OperationKind) -> Fiel
         interval,
         recurrence,
         overrides,
+        external_metadata,
         ..
     } = op
     {
@@ -162,6 +163,10 @@ pub(super) fn event_field_updates(event: &mut Event, op: &OperationKind) -> Fiel
         if let Some(overrides) = overrides {
             event.overrides = overrides.clone();
             fields.insert("overrides".into(), json!(overrides));
+        }
+        if let Some(metadata) = external_metadata {
+            event.external_metadata = metadata.clone();
+            fields.insert("external_metadata".into(), json!(metadata));
         }
     }
 

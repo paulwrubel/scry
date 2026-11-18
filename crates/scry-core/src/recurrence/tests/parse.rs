@@ -74,6 +74,7 @@ fn validate_rejects_exdate_kind_mismatch() {
         exdates: vec![When::Instant {
             timestamp: ts("2026-11-02T00:00:00Z"),
         }],
+        rdates: Vec::new(),
     };
     let start = When::Date {
         date: date(2026, 11, 1),
@@ -93,6 +94,7 @@ fn rrule_json_round_trips() {
         exdates: vec![When::Date {
             date: date(2026, 11, 2),
         }],
+        rdates: Vec::new(),
     };
     let value = serde_json::to_value(&rec).unwrap();
     assert_eq!(serde_json::from_value::<RRule>(value).unwrap(), rec);

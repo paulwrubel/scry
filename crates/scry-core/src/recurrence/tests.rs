@@ -19,11 +19,12 @@ fn ts(value: &str) -> Timestamp {
     value.parse().unwrap()
 }
 
-/// A stored rule with no excluded occurrences.
+/// A stored rule with no added or excluded occurrences.
 fn rrule(text: &str) -> RRule {
     RRule {
         text: text.to_owned(),
         exdates: Vec::new(),
+        rdates: Vec::new(),
     }
 }
 

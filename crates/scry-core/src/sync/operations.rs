@@ -1,7 +1,7 @@
 use crate::ids::{AutomationId, CommentId, EventId, ProjectId, SectionId, TaskId};
 use crate::models::{
-    AutomationAction, AutomationTrigger, ClosedReason, Color, EventOverride, ExternalIdentity,
-    ExternalMetadata, Priority, Tags, TaskState,
+    AutomationAction, AutomationTrigger, ClosedReason, Color, EventExternalMetadata, EventOverride,
+    ExternalIdentity, ExternalMetadata, Priority, Tags, TaskState,
 };
 use crate::position::Position;
 use crate::recurrence::RRule;
@@ -338,6 +338,8 @@ pub enum OperationKind {
         recurrence: Option<RRule>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         overrides: Vec<EventOverride>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        external_metadata: Option<EventExternalMetadata>,
         #[cfg_attr(feature = "ts", ts(type = "string"))]
         created_at: Timestamp,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -347,7 +349,8 @@ pub enum OperationKind {
     /// `description` distinguishes all three states: `None` leaves it,
     /// `Some(None)` clears it, `Some(Some(text))` sets it.
     /// `overrides: None` leaves the overrides unchanged; `Some(list)` replaces
-    /// the whole set.
+    /// the whole set. `external_metadata: None` leaves it unchanged;
+    /// `Some(..)` replaces or clears it.
     UpdateEvent {
         id: EventId,
         title: Option<String>,
@@ -368,6 +371,13 @@ pub enum OperationKind {
         recurrence: Option<Option<RRule>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         overrides: Option<Vec<EventOverride>>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "crate::sync::double_option"
+        )]
+        #[cfg_attr(feature = "ts", ts(as = "Option<EventExternalMetadata>"))]
+        external_metadata: Option<Option<EventExternalMetadata>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         updated_at: Option<Timestamp>,
@@ -737,6 +747,7 @@ mod tests {
                 exdates: vec![When::Date {
                     date: jiff::civil::date(2026, 11, 23)
                 }],
+                rdates: Vec::new(),
             })
         );
 
@@ -869,11 +880,48 @@ mod tests {
             &Some(Some(RRule {
                 text: "FREQ=DAILY".to_string(),
                 exdates: Vec::new(),
+                rdates: Vec::new(),
             }))
         );
         assert_eq!(
             serde_json::to_value(&set).unwrap().get("recurrence"),
             Some(&rule)
+        );
+    }
+
+    #[test]
+    fn update_event_round_trips_external_metadata() {
+        let value = json!({
+            "operation_id": Uuid::new_v4(),
+            "operation_version": OPERATION_VERSION,
+            "timestamp": null,
+            "kind": "update_event",
+            "id": Uuid::new_v4(),
+            "external_metadata": {
+                "uid": "abc@example.com",
+                "sequence": 2,
+                "location": "room 1"
+            }
+        });
+
+        let operation: Operation = serde_json::from_value(value.clone()).unwrap();
+        let OperationKind::UpdateEvent {
+            external_metadata, ..
+        } = &operation.kind
+        else {
+            panic!("expected UpdateEvent");
+        };
+        let Some(Some(metadata)) = external_metadata else {
+            panic!("expected external metadata");
+        };
+        assert_eq!(metadata.uid.as_deref(), Some("abc@example.com"));
+        assert_eq!(metadata.sequence, 2);
+        assert_eq!(metadata.location.as_deref(), Some("room 1"));
+
+        let serialized = serde_json::to_value(&operation).unwrap();
+        assert_eq!(
+            serialized.get("external_metadata"),
+            value.get("external_metadata")
         );
     }
 

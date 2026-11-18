@@ -441,6 +441,8 @@ pub struct Task {
 /// clock. Both ends are always the same kind. An event may repeat, in which
 /// case `recurrence` holds the RRULE that generates its occurrences, and
 /// `overrides` holds edits that apply to single occurrences.
+/// `external_metadata` keeps the calendar properties an imported component
+/// carried so an export can reproduce them.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
@@ -453,11 +455,56 @@ pub struct Event {
     pub recurrence: Option<RRule>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overrides: Vec<EventOverride>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_metadata: Option<EventExternalMetadata>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_at: Timestamp,
     #[serde(default = "Timestamp::now")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub updated_at: Timestamp,
+}
+
+/// The calendar properties scry does not model on its own event fields.
+///
+/// scry understands a start, an end, a title, a description, and a rule;
+/// everything else a component carried is kept here so export can reproduce it
+/// rather than silently dropping it. `sequence` defaults to 0, and `extra`
+/// holds the unmapped properties in the order they appeared in the source.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventExternalMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
+    #[serde(default)]
+    pub sequence: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub dtstamp: Option<Timestamp>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra: Vec<ExternalProperty>,
+}
+
+/// One calendar property scry has no field for, with its parameters kept so an
+/// export can write the property back unchanged.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalProperty {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub params: Vec<ExternalParameter>,
+    pub value: String,
+}
+
+/// A name/value pair attached to an [`ExternalProperty`].
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalParameter {
+    pub name: String,
+    pub value: String,
 }
 
 /// One edited occurrence of a recurring event.

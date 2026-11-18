@@ -40,6 +40,33 @@ describe('splitAt', () => {
   });
 });
 
+describe('splitAt RDATEs', () => {
+  it('moves RDATEs before the split to truncated and those at it to following', () => {
+    const split = splitAt(
+      event({
+        recurrence: {
+          text: 'FREQ=DAILY;COUNT=5',
+          rdates: [
+            { kind: 'date', date: '2026-11-07' },
+            { kind: 'date', date: '2026-11-08' },
+          ],
+        },
+      }),
+      SPLIT,
+      ZONE,
+    );
+
+    expect(split?.truncated).toEqual({
+      text: 'FREQ=DAILY;COUNT=2',
+      rdates: [{ kind: 'date', date: '2026-11-07' }],
+    });
+    expect(split?.following).toEqual({
+      text: 'FREQ=DAILY;COUNT=3',
+      rdates: [{ kind: 'date', date: '2026-11-08' }],
+    });
+  });
+});
+
 describe('truncateAt', () => {
   it('keeps the EXDATEs and overrides before the split', () => {
     const before: EventOverride = {

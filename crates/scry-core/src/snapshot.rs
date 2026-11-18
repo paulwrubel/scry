@@ -13,8 +13,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use uuid::Uuid;
 
-pub const SNAPSHOT_VERSION: u32 = 7;
-pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 6;
+pub const SNAPSHOT_VERSION: u32 = 8;
+pub const MIN_SUPPORTED_SNAPSHOT_VERSION: u32 = 7;
 
 /// The bare server-wide snapshot: every project document plus the cursor a
 /// client should pull from next.
@@ -830,12 +830,17 @@ pub fn plan_import(
                 let interval = changed(&live_event.interval, &incoming_event.interval);
                 let recurrence = changed(&live_event.recurrence, &incoming_event.recurrence);
                 let overrides = changed(&live_event.overrides, &incoming_event.overrides);
+                let external_metadata = changed(
+                    &live_event.external_metadata,
+                    &incoming_event.external_metadata,
+                );
 
                 if title.is_some()
                     || description.is_some()
                     || interval.is_some()
                     || recurrence.is_some()
                     || overrides.is_some()
+                    || external_metadata.is_some()
                 {
                     plan.operations.push(operation(OperationKind::UpdateEvent {
                         id: live_event.id,
@@ -844,6 +849,7 @@ pub fn plan_import(
                         interval,
                         recurrence,
                         overrides,
+                        external_metadata,
                         updated_at: Some(incoming_event.updated_at),
                     }));
                 }
@@ -872,6 +878,7 @@ pub fn plan_import(
                 interval: incoming_event.interval.clone(),
                 recurrence: incoming_event.recurrence.clone(),
                 overrides: incoming_event.overrides.clone(),
+                external_metadata: incoming_event.external_metadata.clone(),
                 created_at: incoming_event.created_at,
                 updated_at: Some(incoming_event.updated_at),
             }));
@@ -1143,12 +1150,12 @@ mod tests {
 
     #[test]
     fn parse_rejects_unsupported_version() {
-        let v8 = r#"{ "version": 8, "projects": [] }"#;
+        let v9 = r#"{ "version": 9, "projects": [] }"#;
 
         assert!(matches!(
-            parse_file(v8),
+            parse_file(v9),
             Err(SnapshotFileError::UnsupportedVersion {
-                found: 8,
+                found: 9,
                 supported: SNAPSHOT_VERSION
             })
         ));
@@ -1229,11 +1236,11 @@ mod tests {
 
         let mut value = serde_json::to_value(snapshot_file(vec![document]))
             .expect("snapshot file should serialize");
-        value["version"] = json!(6);
+        value["version"] = json!(7);
 
         let parsed = parse_file(&value.to_string()).expect("previous version should parse");
 
-        assert_eq!(parsed.version, 6);
+        assert_eq!(parsed.version, 7);
         let document = &parsed.projects[0];
         assert_eq!(document.sections.len(), 1);
         assert_eq!(document.tasks.len(), 1);
@@ -1297,8 +1304,10 @@ mod tests {
             recurrence: Some(RRule {
                 text: "FREQ=WEEKLY;BYDAY=MO".to_owned(),
                 exdates: Vec::new(),
+                rdates: Vec::new(),
             }),
             overrides: Vec::new(),
+            external_metadata: None,
             created_at: at(),
             updated_at: at(),
         };
@@ -2269,6 +2278,7 @@ mod import_tests {
             interval: interval.clone(),
             recurrence: None,
             overrides: Vec::new(),
+            external_metadata: None,
             created_at: at(),
             updated_at: at(),
         });
@@ -2320,6 +2330,7 @@ mod import_tests {
             interval: incoming_interval.clone(),
             recurrence: None,
             overrides: Vec::new(),
+            external_metadata: None,
             created_at: at(),
             updated_at: at(),
         });
@@ -2334,6 +2345,7 @@ mod import_tests {
             interval: live_interval,
             recurrence: None,
             overrides: Vec::new(),
+            external_metadata: None,
             created_at: at(),
             updated_at: at(),
         });

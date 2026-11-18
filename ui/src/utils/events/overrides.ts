@@ -150,38 +150,38 @@ export function splitAt(event: Event, originalStart: When, zone: string): Series
     truncatedPattern.until = until;
   }
 
-  const keptExdates: When[] = [];
-  const followingExdates: When[] = [];
-  for (const exdate of event.recurrence.exdates ?? []) {
-    const instant = instantOf(exdate, zone);
-    // an unreadable exdate cannot be placed, so keep it with the truncated side
-    if (!instant.isValid || instant.toMillis() < target.toMillis()) {
-      keptExdates.push(exdate);
-    } else {
-      followingExdates.push(exdate);
-    }
-  }
+  const { kept: keptExdates, following: followingExdates } = partitionAt(
+    event.recurrence.exdates ?? [],
+    (exdate) => instantOf(exdate, zone),
+    target,
+  );
 
-  const keptOverrides: EventOverride[] = [];
-  const followingOverrides: EventOverride[] = [];
-  for (const override of event.overrides ?? []) {
-    const instant = instantOf(override.original_start, zone);
-    // an unreadable start cannot be placed, so keep it with the truncated side
-    if (!instant.isValid || instant.toMillis() < target.toMillis()) {
-      keptOverrides.push(override);
-    } else {
-      followingOverrides.push(override);
-    }
-  }
+  const { kept: keptRdates, following: followingRdates } = partitionAt(
+    event.recurrence.rdates ?? [],
+    (rdate) => instantOf(rdate, zone),
+    target,
+  );
+
+  const { kept: keptOverrides, following: followingOverrides } = partitionAt(
+    event.overrides ?? [],
+    (override) => instantOf(override.original_start, zone),
+    target,
+  );
 
   const truncated: RRule = { text: formatRrule(truncatedPattern) };
   if (keptExdates.length > 0) {
     truncated.exdates = keptExdates;
   }
+  if (keptRdates.length > 0) {
+    truncated.rdates = keptRdates;
+  }
 
   const following: RRule = { text: formatRrule(followingPattern) };
   if (followingExdates.length > 0) {
     following.exdates = followingExdates;
+  }
+  if (followingRdates.length > 0) {
+    following.rdates = followingRdates;
   }
 
   return {
@@ -204,6 +204,28 @@ export function truncateAt(
     return null;
   }
   return { recurrence: split.truncated, overrides: split.keptOverrides };
+}
+
+/// Split values at the target instant. A value whose instant cannot be read
+/// stays with the truncated side, because it cannot be placed after the split.
+function partitionAt<T>(
+  values: T[],
+  instantOfValue: (value: T) => DateTime,
+  target: DateTime,
+): { kept: T[]; following: T[] } {
+  const kept: T[] = [];
+  const following: T[] = [];
+
+  for (const value of values) {
+    const instant = instantOfValue(value);
+    if (!instant.isValid || instant.toMillis() < target.toMillis()) {
+      kept.push(value);
+    } else {
+      following.push(value);
+    }
+  }
+
+  return { kept, following };
 }
 
 function countGeneratedBefore(

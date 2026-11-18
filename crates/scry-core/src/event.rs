@@ -168,10 +168,12 @@ pub fn split_series(
     };
 
     // COUNT budgets every candidate the rule generates, including starts an
-    // EXDATE removes later, so count those before the split without exdates
+    // EXDATE removes later, so count those before the split without exdates or
+    // added starts
     let generated_rule = RRule {
         text: rrule.text.clone(),
         exdates: Vec::new(),
+        rdates: Vec::new(),
     };
     let occurrences_before = occurrences(&event.interval, &generated_rule, base, target, tz)?
         .into_iter()
@@ -207,7 +209,8 @@ pub fn split_series(
         following.count = Some(count - occurrences_before);
     }
 
-    let (kept_exdates, following_exdates) = partition_exdates(rrule, target, tz);
+    let (kept_exdates, following_exdates) = partition_whens(&rrule.exdates, target, tz);
+    let (kept_rdates, following_rdates) = partition_whens(&rrule.rdates, target, tz);
     let (kept_overrides, following_overrides) = partition_overrides(event, target, tz);
 
     Ok(Some(SeriesSplit {
@@ -216,10 +219,12 @@ pub fn split_series(
         truncated: RRule {
             text: truncated.to_rrule(),
             exdates: kept_exdates,
+            rdates: kept_rdates,
         },
         following: RRule {
             text: following.to_rrule(),
             exdates: following_exdates,
+            rdates: following_rdates,
         },
         kept_overrides,
         following_overrides,
@@ -245,16 +250,16 @@ fn generated_start(
     Ok(None)
 }
 
-/// Split exdates at the target instant; an unresolvable value stays with the
-/// truncated series.
-fn partition_exdates(rrule: &RRule, target: Timestamp, tz: &TimeZone) -> (Vec<When>, Vec<When>) {
+/// Split stored starts at the target instant; an unresolvable value stays with
+/// the truncated series.
+fn partition_whens(values: &[When], target: Timestamp, tz: &TimeZone) -> (Vec<When>, Vec<When>) {
     let mut kept = Vec::new();
     let mut following = Vec::new();
-    for exdate in &rrule.exdates {
-        match exdate.start_instant(tz) {
-            Ok(instant) if instant < target => kept.push(exdate.clone()),
-            Ok(_) => following.push(exdate.clone()),
-            Err(_) => kept.push(exdate.clone()),
+    for value in values {
+        match value.start_instant(tz) {
+            Ok(instant) if instant < target => kept.push(value.clone()),
+            Ok(_) => following.push(value.clone()),
+            Err(_) => kept.push(value.clone()),
         }
     }
     (kept, following)
@@ -315,6 +320,7 @@ mod tests {
             interval,
             recurrence,
             overrides: Vec::new(),
+            external_metadata: None,
             created_at: Timestamp::from_second(0).unwrap(),
             updated_at: Timestamp::from_second(0).unwrap(),
         }
@@ -340,6 +346,7 @@ mod tests {
         RRule {
             text: text.to_owned(),
             exdates: Vec::new(),
+            rdates: Vec::new(),
         }
     }
 
@@ -478,6 +485,7 @@ mod tests {
                 exdates: vec![When::Date {
                     date: date(2026, 11, 17),
                 }],
+                rdates: Vec::new(),
             }),
         );
 
@@ -523,5 +531,47 @@ mod tests {
         assert_eq!(split.occurrences_before, 3);
         assert_eq!(split.truncated.text, "FREQ=DAILY;COUNT=3");
         assert_eq!(split.following.text, "FREQ=DAILY;COUNT=7");
+    }
+
+    #[test]
+    fn split_moves_rdates_to_their_side_of_the_split() {
+        let series = event(
+            all_day(date(2026, 11, 16), date(2026, 11, 17)),
+            Some(RRule {
+                text: "FREQ=WEEKLY".to_string(),
+                exdates: Vec::new(),
+                rdates: vec![
+                    When::Date {
+                        date: date(2026, 11, 18),
+                    },
+                    When::Date {
+                        date: date(2026, 11, 25),
+                    },
+                ],
+            }),
+        );
+
+        let split = split_series(
+            &series,
+            &When::Date {
+                date: date(2026, 11, 23),
+            },
+            &TimeZone::UTC,
+        )
+        .unwrap()
+        .expect("split should have occurrences before it");
+
+        assert_eq!(
+            split.truncated.rdates,
+            vec![When::Date {
+                date: date(2026, 11, 18)
+            }]
+        );
+        assert_eq!(
+            split.following.rdates,
+            vec![When::Date {
+                date: date(2026, 11, 25)
+            }]
+        );
     }
 }

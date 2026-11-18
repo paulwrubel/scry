@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE events\n                SET title = $1, description = $2, event_interval = $3, recurrence = $4, external_metadata = $5, updated_at = $6\n                WHERE id = $7\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2e4348ce37f161be3606c3de02960edadaf860b29f1e6c2a81923181a6ad5bf6"
+}

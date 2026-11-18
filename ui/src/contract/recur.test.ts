@@ -199,6 +199,48 @@ describe('expandRecurrence bounds', () => {
   });
 });
 
+describe('expandRecurrence RDATE', () => {
+  it('adds an RDATE beyond a COUNT=1 rule in start order', () => {
+    const got = expandRecurrence(
+      dateInterval('2026-11-01', '2026-11-02'),
+      { text: 'FREQ=DAILY;COUNT=1', rdates: [{ kind: 'date', date: '2026-11-05' }] },
+      utc('2026-11-01T00:00:00Z'),
+      utc('2026-11-10T00:00:00Z'),
+      'UTC',
+    );
+
+    expect(startDates(got)).toEqual(['2026-11-01', '2026-11-05']);
+  });
+
+  it('does not duplicate an RDATE the rule already generated', () => {
+    const got = expandRecurrence(
+      dateInterval('2026-11-01', '2026-11-02'),
+      { text: 'FREQ=DAILY;COUNT=3', rdates: [{ kind: 'date', date: '2026-11-02' }] },
+      utc('2026-11-01T00:00:00Z'),
+      utc('2026-11-10T00:00:00Z'),
+      'UTC',
+    );
+
+    expect(startDates(got)).toEqual(['2026-11-01', '2026-11-02', '2026-11-03']);
+  });
+
+  it('keeps an RDATE listed in EXDATE excluded', () => {
+    const got = expandRecurrence(
+      dateInterval('2026-11-01', '2026-11-02'),
+      {
+        text: 'FREQ=DAILY;COUNT=1',
+        exdates: [{ kind: 'date', date: '2026-11-05' }],
+        rdates: [{ kind: 'date', date: '2026-11-05' }],
+      },
+      utc('2026-11-01T00:00:00Z'),
+      utc('2026-11-10T00:00:00Z'),
+      'UTC',
+    );
+
+    expect(startDates(got)).toEqual(['2026-11-01']);
+  });
+});
+
 describe('expandRecurrence BY rules', () => {
   it('combines INTERVAL, BYDAY, and WKST for weekly', () => {
     const got = expandRecurrence(

@@ -275,6 +275,7 @@ export function applyOperation(state: ClientState, operation: Operation): void {
         interval: operation.interval,
         recurrence: operation.recurrence,
         overrides: operation.overrides,
+        external_metadata: operation.external_metadata,
         created_at: operation.created_at,
         updated_at: operation.updated_at ?? operation.created_at,
       };
@@ -303,6 +304,9 @@ export function applyOperation(state: ClientState, operation: Operation): void {
       }
       if (operation.overrides !== undefined && operation.overrides !== null) {
         event.overrides = operation.overrides;
+      }
+      if (operation.external_metadata !== undefined) {
+        event.external_metadata = operation.external_metadata;
       }
       if (operation.updated_at !== undefined && operation.updated_at !== null) {
         event.updated_at = operation.updated_at;

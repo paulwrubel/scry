@@ -1,0 +1,9 @@
+[package]
+name = "scry-ics"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+calcard = { version = "=0.3.14", default-features = false }
+jiff = { version = "=1.0.0", features = ["serde"] }
+scry-core = { path = "../scry-core" }

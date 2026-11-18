@@ -6,7 +6,8 @@
 
 use crate::models::{
     Automation, AutomationAction, Change, ChangeKind, ClosedReason, Color, Comment, EntityType,
-    Event, EventOverride, Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
+    Event, EventExternalMetadata, EventOverride, Priority, Project, ProjectSnapshot, Section, Tags,
+    Task, TaskState,
 };
 use crate::position::Position;
 use crate::sync::operations::{ColorChange, Operation, OperationKind};
@@ -383,6 +384,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             interval,
             recurrence,
             overrides,
+            external_metadata,
             created_at,
             updated_at,
         } => {
@@ -394,6 +396,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 interval: interval.clone(),
                 recurrence: recurrence.clone(),
                 overrides: overrides.clone(),
+                external_metadata: external_metadata.clone(),
                 created_at: *created_at,
                 updated_at: (*updated_at).unwrap_or(*created_at),
             };
@@ -412,6 +415,7 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
             interval,
             recurrence,
             overrides,
+            external_metadata,
             updated_at,
         } => {
             if let Some(event) = find_event_mut(state, *id) {
@@ -429,6 +433,9 @@ fn apply_operation(state: &mut ClientState, kind: &OperationKind) {
                 }
                 if let Some(overrides) = overrides {
                     event.overrides = overrides.clone();
+                }
+                if let Some(external_metadata) = external_metadata {
+                    event.external_metadata = external_metadata.clone();
                 }
                 if let Some(updated_at) = updated_at {
                     event.updated_at = *updated_at;
@@ -632,6 +639,12 @@ fn apply_event_values(event: &mut Event, values: &serde_json::Value) {
         && let Ok(overrides) = serde_json::from_value::<Vec<EventOverride>>(overrides.clone())
     {
         event.overrides = overrides;
+    }
+    if let Some(external_metadata) = values.get("external_metadata")
+        && let Ok(external_metadata) =
+            serde_json::from_value::<Option<EventExternalMetadata>>(external_metadata.clone())
+    {
+        event.external_metadata = external_metadata;
     }
     apply_updated_at(&mut event.updated_at, values);
 }

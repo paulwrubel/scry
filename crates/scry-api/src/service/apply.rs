@@ -637,6 +637,7 @@ impl ProjectService {
                 interval,
                 recurrence,
                 overrides,
+                external_metadata,
                 created_at,
                 updated_at,
             } => {
@@ -666,6 +667,7 @@ impl ProjectService {
                     interval: interval.clone(),
                     recurrence: recurrence.clone(),
                     overrides: overrides.clone(),
+                    external_metadata: external_metadata.clone(),
                     created_at: *created_at,
                     updated_at: (*updated_at).unwrap_or(*created_at),
                 };

@@ -43,6 +43,7 @@ impl ProjectService {
             interval,
             recurrence,
             overrides: Vec::new(),
+            external_metadata: None,
             created_at,
             updated_at: created_at,
         };
@@ -56,6 +57,7 @@ impl ProjectService {
                 interval: event.interval.clone(),
                 recurrence: event.recurrence.clone(),
                 overrides: event.overrides.clone(),
+                external_metadata: event.external_metadata.clone(),
                 created_at: event.created_at,
                 updated_at: None,
             },
@@ -101,6 +103,7 @@ impl ProjectService {
                 interval,
                 recurrence,
                 overrides,
+                external_metadata: None,
                 updated_at: None,
             },
         );
@@ -184,6 +187,7 @@ impl ProjectService {
                 interval: None,
                 recurrence: Some(Some(split.truncated.clone())),
                 overrides: Some(split.kept_overrides.clone()),
+                external_metadata: None,
                 updated_at: Some(now),
             },
         );
@@ -197,6 +201,7 @@ impl ProjectService {
                 interval: following.interval,
                 recurrence: Some(split.following.clone()),
                 overrides: split.following_overrides.clone(),
+                external_metadata: None,
                 created_at: now,
                 updated_at: Some(now),
             },
@@ -209,6 +214,78 @@ impl ProjectService {
             previous: self.require_event(id).await?,
             following: self.require_event(new_id).await?,
         })
+    }
+
+    /// Import a VCALENDAR into a project, creating one event per series.
+    ///
+    /// The batch is atomic because a series and its per-occurrence overrides
+    /// must land together: a component that fails to apply imports nothing.
+    pub async fn import_ics(
+        &self,
+        project_id: ProjectId,
+        input: &str,
+    ) -> Result<Vec<Event>, ServiceError> {
+        self.require_project(project_id).await?;
+
+        let imported = scry_ics::import(input)
+            .map_err(|error| ServiceError::Storage(StorageError::Invalid(error.to_string())))?;
+
+        let now = Timestamp::now();
+        let mut events = Vec::with_capacity(imported.len());
+        let mut operations = Vec::with_capacity(imported.len());
+
+        for series in imported {
+            let event = Event {
+                id: Uuid::new_v4(),
+                project_id,
+                title: series.title,
+                description: series
+                    .description
+                    .filter(|description| !description.is_empty()),
+                interval: series.interval,
+                recurrence: series.recurrence,
+                overrides: series.overrides,
+                external_metadata: Some(series.external_metadata),
+                created_at: now,
+                updated_at: now,
+            };
+
+            if let Some(rule) = &event.recurrence {
+                rule.validate(event.interval.start())
+                    .map_err(recurrence_error)?;
+            }
+
+            operations.push(new_operation(
+                Uuid::new_v4(),
+                OperationKind::CreateEvent {
+                    id: event.id,
+                    project_id: event.project_id,
+                    title: event.title.clone(),
+                    description: event.description.clone(),
+                    interval: event.interval.clone(),
+                    recurrence: event.recurrence.clone(),
+                    overrides: event.overrides.clone(),
+                    external_metadata: event.external_metadata.clone(),
+                    created_at: event.created_at,
+                    updated_at: Some(now),
+                },
+            ));
+            events.push(event);
+        }
+
+        self.apply_operations(&operations, ApplyMode::Atomic)
+            .await?;
+        Ok(events)
+    }
+
+    /// Export a project's events as a VCALENDAR, read in UTC.
+    ///
+    /// Reading in UTC only affects how a date or floating time is anchored; no
+    /// series can be lost because of it.
+    pub async fn export_ics(&self, project_id: ProjectId) -> Result<String, ServiceError> {
+        let events = self.list_events(project_id, None, &TimeZone::UTC).await?;
+        scry_ics::export_events(&events)
+            .map_err(|error| ServiceError::Storage(StorageError::Invalid(error.to_string())))
     }
 }
 
@@ -261,6 +338,7 @@ mod tests {
             interval,
             recurrence,
             overrides: Vec::new(),
+            external_metadata: None,
             created_at: Timestamp::now(),
             updated_at: Timestamp::now(),
         }
@@ -280,6 +358,7 @@ mod tests {
             Some(RRule {
                 text: "FREQ=WEEKLY".to_string(),
                 exdates: Vec::new(),
+                rdates: Vec::new(),
             }),
         );
 
@@ -316,6 +395,7 @@ mod tests {
                 exdates: vec![When::Date {
                     date: date(2026, 11, 9),
                 }],
+                rdates: Vec::new(),
             }),
         );
 
