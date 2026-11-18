@@ -1948,7 +1948,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "scry"
-version = "0.37.1"
+version = "0.38.0"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1966,7 +1966,7 @@ dependencies = [
 
 [[package]]
 name = "scry-api"
-version = "0.37.1"
+version = "0.38.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1993,7 +1993,7 @@ dependencies = [
 
 [[package]]
 name = "scry-core"
-version = "0.37.1"
+version = "0.38.0"
 dependencies = [
  "anstyle",
  "assert_fs",
@@ -2011,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "scry-ics"
-version = "0.37.1"
+version = "0.38.0"
 dependencies = [
  "calcard",
  "jiff",
