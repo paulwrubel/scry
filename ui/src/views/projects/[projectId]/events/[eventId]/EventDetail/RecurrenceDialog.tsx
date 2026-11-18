@@ -1,3 +1,4 @@
+import { useSelector } from '@tanstack/react-form';
 import {
   Button,
   Checkbox,
@@ -54,6 +55,13 @@ export function RecurrenceDialog(props: RecurrenceDialogProps) {
     },
   });
 
+  const frequency = useSelector(form.store, (state) => state.values.frequency);
+  const monthlyMode = useSelector(form.store, (state) => state.values.monthlyMode);
+  const yearlyMode = useSelector(form.store, (state) => state.values.yearlyMode);
+  const endMode = useSelector(form.store, (state) => state.values.endMode);
+  const values = useSelector(form.store, (state) => state.values);
+  const isValid = useSelector(form.store, (state) => state.isValid);
+
   return (
     <Modal show={show} onClose={onClose} dismissible>
       <form
@@ -74,9 +82,9 @@ export function RecurrenceDialog(props: RecurrenceDialogProps) {
                     value={field.state.value}
                     onChange={(event) => field.handleChange(parseFrequency(event.target.value))}
                   >
-                    {FREQUENCIES.map((frequency) => (
-                      <option key={frequency.value} value={frequency.value}>
-                        {frequency.label}
+                    {FREQUENCIES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </Select>
@@ -97,50 +105,114 @@ export function RecurrenceDialog(props: RecurrenceDialogProps) {
                 </Label>
               )}
             </form.AppField>
-            <form.Subscribe selector={(state) => state.values.frequency}>
-              {(frequency) => <span className="pb-2 text-sm">{UNITS[frequency]}</span>}
-            </form.Subscribe>
+            <span className="pb-2 text-sm">{UNITS[frequency]}</span>
           </div>
 
-          <form.Subscribe selector={(state) => state.values.frequency}>
-            {(frequency) =>
-              frequency === 'weekly' ? (
-                <div className="flex flex-col gap-3">
-                  <form.AppField name="weeklyDays">
+          {frequency === 'weekly' ? (
+            <div className="flex flex-col gap-3">
+              <form.AppField name="weeklyDays">
+                {(field) => (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-sm">On</span>
+                    <div className="flex flex-wrap gap-3">
+                      {WEEKDAYS.map((weekday) => (
+                        <Label key={weekday.value} className="flex items-center gap-1.5">
+                          <Checkbox
+                            checked={field.state.value.includes(weekday.value)}
+                            disabled={weekday.value === startWeekday}
+                            onChange={(event) => {
+                              const next = event.target.checked
+                                ? [...field.state.value, weekday.value]
+                                : field.state.value.filter(
+                                    (candidate) => candidate !== weekday.value,
+                                  );
+                              field.handleChange(next);
+                            }}
+                          />
+                          <span>{weekday.label}</span>
+                        </Label>
+                      ))}
+                    </div>
+                    {field.state.meta.errors.length === 0 ? null : (
+                      <p className="text-danger text-sm" role="alert">
+                        {fieldErrorMessage(field.state.meta.errors)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.AppField>
+              <form.AppField name="weeklyStart">
+                {(field) => (
+                  <Label className="flex max-w-xs flex-col items-stretch gap-1.5">
+                    <span>Week starts on</span>
+                    <Select
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(Number(event.target.value))}
+                    >
+                      {WEEKDAYS.map((weekday) => (
+                        <option key={weekday.value} value={weekday.value}>
+                          {weekday.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Label>
+                )}
+              </form.AppField>
+            </div>
+          ) : frequency === 'monthly' ? (
+            <div className="flex flex-col gap-3">
+              <form.AppField name="monthlyMode">
+                {(field) => (
+                  <Label className="flex flex-col items-stretch gap-1.5">
+                    <span>Pattern</span>
+                    <Select
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(parseMonthlyMode(event.target.value))}
+                    >
+                      <option value="day">Day of the month</option>
+                      <option value="weekday">Weekday of the month</option>
+                    </Select>
+                  </Label>
+                )}
+              </form.AppField>
+              {monthlyMode === 'day' ? (
+                <form.AppField name="monthlyDay">
+                  {(field) => (
+                    <Label className="flex max-w-xs flex-col items-stretch gap-1.5">
+                      <span>Day</span>
+                      <TextInput
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={field.state.value}
+                        onChange={(event) => field.handleChange(Number(event.target.value))}
+                      />
+                    </Label>
+                  )}
+                </form.AppField>
+              ) : (
+                <div className="flex flex-wrap items-end gap-3">
+                  <form.AppField name="monthlyOrdinal">
                     {(field) => (
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-sm">On</span>
-                        <div className="flex flex-wrap gap-3">
-                          {WEEKDAYS.map((weekday) => (
-                            <Label key={weekday.value} className="flex items-center gap-1.5">
-                              <Checkbox
-                                checked={field.state.value.includes(weekday.value)}
-                                disabled={weekday.value === startWeekday}
-                                onChange={(event) => {
-                                  const next = event.target.checked
-                                    ? [...field.state.value, weekday.value]
-                                    : field.state.value.filter(
-                                        (candidate) => candidate !== weekday.value,
-                                      );
-                                  field.handleChange(next);
-                                }}
-                              />
-                              <span>{weekday.label}</span>
-                            </Label>
+                      <Label className="flex flex-col items-stretch gap-1.5">
+                        <span>Which</span>
+                        <Select
+                          value={field.state.value}
+                          onChange={(event) => field.handleChange(Number(event.target.value))}
+                        >
+                          {ORDINALS.map((ordinal) => (
+                            <option key={ordinal.value} value={ordinal.value}>
+                              {ordinal.label}
+                            </option>
                           ))}
-                        </div>
-                        {field.state.meta.errors.length === 0 ? null : (
-                          <p className="text-danger text-sm" role="alert">
-                            {fieldErrorMessage(field.state.meta.errors)}
-                          </p>
-                        )}
-                      </div>
+                        </Select>
+                      </Label>
                     )}
                   </form.AppField>
-                  <form.AppField name="weeklyStart">
+                  <form.AppField name="monthlyWeekday">
                     {(field) => (
-                      <Label className="flex max-w-xs flex-col items-stretch gap-1.5">
-                        <span>Week starts on</span>
+                      <Label className="flex flex-col items-stretch gap-1.5">
+                        <span>Weekday</span>
                         <Select
                           value={field.state.value}
                           onChange={(event) => field.handleChange(Number(event.target.value))}
@@ -155,190 +227,98 @@ export function RecurrenceDialog(props: RecurrenceDialogProps) {
                     )}
                   </form.AppField>
                 </div>
-              ) : frequency === 'monthly' ? (
-                <div className="flex flex-col gap-3">
-                  <form.AppField name="monthlyMode">
+              )}
+            </div>
+          ) : frequency === 'yearly' ? (
+            <div className="flex flex-col gap-3">
+              <form.AppField name="yearlyMode">
+                {(field) => (
+                  <Label className="flex flex-col items-stretch gap-1.5">
+                    <span>Pattern</span>
+                    <Select
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(parseYearlyMode(event.target.value))}
+                    >
+                      <option value="date">Month and day</option>
+                      <option value="weekday">Weekday of the month</option>
+                    </Select>
+                  </Label>
+                )}
+              </form.AppField>
+              <div className="flex flex-wrap items-end gap-3">
+                <form.AppField name="yearlyMonth">
+                  {(field) => (
+                    <Label className="flex flex-col items-stretch gap-1.5">
+                      <span>Month</span>
+                      <Select
+                        value={field.state.value}
+                        onChange={(event) => field.handleChange(Number(event.target.value))}
+                      >
+                        {MONTHS.map((month) => (
+                          <option key={month.value} value={month.value}>
+                            {month.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Label>
+                  )}
+                </form.AppField>
+                {yearlyMode === 'date' ? (
+                  <form.AppField name="yearlyDay">
                     {(field) => (
-                      <Label className="flex flex-col items-stretch gap-1.5">
-                        <span>Pattern</span>
-                        <Select
+                      <Label className="flex w-20 flex-col items-stretch gap-1.5">
+                        <span>Day</span>
+                        <TextInput
+                          type="number"
+                          min={1}
+                          max={31}
                           value={field.state.value}
-                          onChange={(event) =>
-                            field.handleChange(parseMonthlyMode(event.target.value))
-                          }
-                        >
-                          <option value="day">Day of the month</option>
-                          <option value="weekday">Weekday of the month</option>
-                        </Select>
+                          onChange={(event) => field.handleChange(Number(event.target.value))}
+                        />
                       </Label>
                     )}
                   </form.AppField>
-                  <form.Subscribe selector={(state) => state.values.monthlyMode}>
-                    {(mode) =>
-                      mode === 'day' ? (
-                        <form.AppField name="monthlyDay">
-                          {(field) => (
-                            <Label className="flex max-w-xs flex-col items-stretch gap-1.5">
-                              <span>Day</span>
-                              <TextInput
-                                type="number"
-                                min={1}
-                                max={31}
-                                value={field.state.value}
-                                onChange={(event) => field.handleChange(Number(event.target.value))}
-                              />
-                            </Label>
-                          )}
-                        </form.AppField>
-                      ) : (
-                        <div className="flex flex-wrap items-end gap-3">
-                          <form.AppField name="monthlyOrdinal">
-                            {(field) => (
-                              <Label className="flex flex-col items-stretch gap-1.5">
-                                <span>Which</span>
-                                <Select
-                                  value={field.state.value}
-                                  onChange={(event) =>
-                                    field.handleChange(Number(event.target.value))
-                                  }
-                                >
-                                  {ORDINALS.map((ordinal) => (
-                                    <option key={ordinal.value} value={ordinal.value}>
-                                      {ordinal.label}
-                                    </option>
-                                  ))}
-                                </Select>
-                              </Label>
-                            )}
-                          </form.AppField>
-                          <form.AppField name="monthlyWeekday">
-                            {(field) => (
-                              <Label className="flex flex-col items-stretch gap-1.5">
-                                <span>Weekday</span>
-                                <Select
-                                  value={field.state.value}
-                                  onChange={(event) =>
-                                    field.handleChange(Number(event.target.value))
-                                  }
-                                >
-                                  {WEEKDAYS.map((weekday) => (
-                                    <option key={weekday.value} value={weekday.value}>
-                                      {weekday.label}
-                                    </option>
-                                  ))}
-                                </Select>
-                              </Label>
-                            )}
-                          </form.AppField>
-                        </div>
-                      )
-                    }
-                  </form.Subscribe>
-                </div>
-              ) : frequency === 'yearly' ? (
-                <div className="flex flex-col gap-3">
-                  <form.AppField name="yearlyMode">
-                    {(field) => (
-                      <Label className="flex flex-col items-stretch gap-1.5">
-                        <span>Pattern</span>
-                        <Select
-                          value={field.state.value}
-                          onChange={(event) =>
-                            field.handleChange(parseYearlyMode(event.target.value))
-                          }
-                        >
-                          <option value="date">Month and day</option>
-                          <option value="weekday">Weekday of the month</option>
-                        </Select>
-                      </Label>
-                    )}
-                  </form.AppField>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <form.AppField name="yearlyMonth">
+                ) : (
+                  <>
+                    <form.AppField name="yearlyOrdinal">
                       {(field) => (
                         <Label className="flex flex-col items-stretch gap-1.5">
-                          <span>Month</span>
+                          <span>Which</span>
                           <Select
                             value={field.state.value}
                             onChange={(event) => field.handleChange(Number(event.target.value))}
                           >
-                            {MONTHS.map((month) => (
-                              <option key={month.value} value={month.value}>
-                                {month.label}
+                            {ORDINALS.map((ordinal) => (
+                              <option key={ordinal.value} value={ordinal.value}>
+                                {ordinal.label}
                               </option>
                             ))}
                           </Select>
                         </Label>
                       )}
                     </form.AppField>
-                    <form.Subscribe selector={(state) => state.values.yearlyMode}>
-                      {(mode) =>
-                        mode === 'date' ? (
-                          <form.AppField name="yearlyDay">
-                            {(field) => (
-                              <Label className="flex w-20 flex-col items-stretch gap-1.5">
-                                <span>Day</span>
-                                <TextInput
-                                  type="number"
-                                  min={1}
-                                  max={31}
-                                  value={field.state.value}
-                                  onChange={(event) =>
-                                    field.handleChange(Number(event.target.value))
-                                  }
-                                />
-                              </Label>
-                            )}
-                          </form.AppField>
-                        ) : (
-                          <>
-                            <form.AppField name="yearlyOrdinal">
-                              {(field) => (
-                                <Label className="flex flex-col items-stretch gap-1.5">
-                                  <span>Which</span>
-                                  <Select
-                                    value={field.state.value}
-                                    onChange={(event) =>
-                                      field.handleChange(Number(event.target.value))
-                                    }
-                                  >
-                                    {ORDINALS.map((ordinal) => (
-                                      <option key={ordinal.value} value={ordinal.value}>
-                                        {ordinal.label}
-                                      </option>
-                                    ))}
-                                  </Select>
-                                </Label>
-                              )}
-                            </form.AppField>
-                            <form.AppField name="yearlyWeekday">
-                              {(field) => (
-                                <Label className="flex flex-col items-stretch gap-1.5">
-                                  <span>Weekday</span>
-                                  <Select
-                                    value={field.state.value}
-                                    onChange={(event) =>
-                                      field.handleChange(Number(event.target.value))
-                                    }
-                                  >
-                                    {WEEKDAYS.map((weekday) => (
-                                      <option key={weekday.value} value={weekday.value}>
-                                        {weekday.label}
-                                      </option>
-                                    ))}
-                                  </Select>
-                                </Label>
-                              )}
-                            </form.AppField>
-                          </>
-                        )
-                      }
-                    </form.Subscribe>
-                  </div>
-                </div>
-              ) : null
-            }
-          </form.Subscribe>
+                    <form.AppField name="yearlyWeekday">
+                      {(field) => (
+                        <Label className="flex flex-col items-stretch gap-1.5">
+                          <span>Weekday</span>
+                          <Select
+                            value={field.state.value}
+                            onChange={(event) => field.handleChange(Number(event.target.value))}
+                          >
+                            {WEEKDAYS.map((weekday) => (
+                              <option key={weekday.value} value={weekday.value}>
+                                {weekday.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </Label>
+                      )}
+                    </form.AppField>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-3">
             <form.AppField name="endMode">
@@ -356,48 +336,40 @@ export function RecurrenceDialog(props: RecurrenceDialogProps) {
                 </Label>
               )}
             </form.AppField>
-            <form.Subscribe selector={(state) => state.values.endMode}>
-              {(mode) =>
-                mode === 'count' ? (
-                  <form.AppField name="count">
-                    {(field) => (
-                      <Label className="flex max-w-xs flex-col items-stretch gap-1.5">
-                        <span>Occurrences</span>
-                        <TextInput
-                          type="number"
-                          min={1}
-                          value={field.state.value}
-                          onChange={(event) => field.handleChange(Number(event.target.value))}
-                        />
-                      </Label>
-                    )}
-                  </form.AppField>
-                ) : mode === 'until' ? (
-                  <form.AppField name="until">
-                    {(field) => (
-                      <Label className="flex max-w-xs flex-col items-stretch gap-1.5">
-                        <span>End date</span>
-                        <TextInput
-                          type="date"
-                          value={field.state.value}
-                          onChange={(event) => field.handleChange(event.target.value)}
-                        />
-                      </Label>
-                    )}
-                  </form.AppField>
-                ) : null
-              }
-            </form.Subscribe>
+            {endMode === 'count' ? (
+              <form.AppField name="count">
+                {(field) => (
+                  <Label className="flex max-w-xs flex-col items-stretch gap-1.5">
+                    <span>Occurrences</span>
+                    <TextInput
+                      type="number"
+                      min={1}
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(Number(event.target.value))}
+                    />
+                  </Label>
+                )}
+              </form.AppField>
+            ) : endMode === 'until' ? (
+              <form.AppField name="until">
+                {(field) => (
+                  <Label className="flex max-w-xs flex-col items-stretch gap-1.5">
+                    <span>End date</span>
+                    <TextInput
+                      type="date"
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                    />
+                  </Label>
+                )}
+              </form.AppField>
+            ) : null}
           </div>
 
-          <form.Subscribe selector={(state) => state.values}>
-            {(values) => (
-              <div className="flex flex-col gap-1">
-                <span className="text-muted text-xs">RRULE</span>
-                <code className="text-faint overflow-x-auto text-xs">{rruleFromDraft(values)}</code>
-              </div>
-            )}
-          </form.Subscribe>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted text-xs">RRULE</span>
+            <code className="text-faint overflow-x-auto text-xs">{rruleFromDraft(values)}</code>
+          </div>
         </ModalBody>
         <ModalFooter className="justify-between">
           <Button
@@ -415,13 +387,9 @@ export function RecurrenceDialog(props: RecurrenceDialogProps) {
             <Button color="alternative" type="button" onClick={onClose}>
               Cancel
             </Button>
-            <form.Subscribe selector={(state) => state.isValid}>
-              {(isValid) => (
-                <Button type="submit" disabled={!isValid}>
-                  OK
-                </Button>
-              )}
-            </form.Subscribe>
+            <Button type="submit" disabled={!isValid}>
+              OK
+            </Button>
           </div>
         </ModalFooter>
       </form>

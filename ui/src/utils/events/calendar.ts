@@ -1,9 +1,11 @@
 import { DateTime } from 'luxon';
+import { sameDue } from '@/contract/due';
 import { instantOf, isAllDay, displayedClock } from '@/contract/interval';
 import { expandRecurrence } from '@/contract/recur';
 import type { Event } from '@/generated/Event';
 import type { Interval } from '@/generated/Interval';
 import type { When } from '@/generated/When';
+import { generatedInterval, overrideFor } from './overrides';
 
 export const MONTH_PARAM = 'month';
 export const VIEW_PARAM = 'view';
@@ -103,26 +105,7 @@ export function expandEvents(
   to: DateTime,
   zone: string,
 ): CalendarEvent[] {
-  const expanded: CalendarEvent[] = [];
-
-  for (const event of events) {
-    const rrule = event.recurrence;
-    if (rrule === null || rrule === undefined) {
-      expanded.push(event);
-      continue;
-    }
-
-    let intervals: Interval[];
-    try {
-      intervals = expandRecurrence(event.interval, rrule, from, to, zone);
-    } catch {
-      intervals = [event.interval];
-    }
-
-    for (const interval of intervals) {
-      expanded.push({ ...event, interval, occurrenceStart: interval.start });
-    }
-  }
+  const expanded = events.flatMap((event) => expandEvent(event, from, to, zone));
 
   expanded.sort((left, right) => {
     const difference =
@@ -132,6 +115,64 @@ export function expandEvents(
   });
 
   return expanded;
+}
+
+function expandEvent(event: Event, from: DateTime, to: DateTime, zone: string): CalendarEvent[] {
+  const { recurrence } = event;
+  if (recurrence === null || recurrence === undefined) {
+    return [event];
+  }
+
+  let intervals: Interval[];
+  try {
+    intervals = expandRecurrence(event.interval, recurrence, from, to, zone);
+  } catch {
+    intervals = [event.interval];
+  }
+
+  const generated = intervals.map((interval) => {
+    const override = overrideFor(event, interval.start);
+    return {
+      ...event,
+      interval: override?.interval ?? interval,
+      title: override?.title ?? event.title,
+      description: override?.description ?? event.description,
+      occurrenceStart: interval.start,
+    };
+  });
+
+  // an override whose generated start lies outside the window is still shown
+  // when its edited interval moves it into the window; one with no generated
+  // start at all is an orphan and stays hidden
+  const moved = (event.overrides ?? [])
+    .filter(
+      (override) => !intervals.some((interval) => sameDue(interval.start, override.original_start)),
+    )
+    .flatMap((override): CalendarEvent[] => {
+      const generatedIntervalValue = generatedInterval(event, override.original_start, zone);
+      if (generatedIntervalValue === null) {
+        return [];
+      }
+
+      const effective = override.interval ?? generatedIntervalValue;
+      const start = instantOf(effective.start, zone);
+      const end = instantOf(effective.end, zone);
+      if (!(start.toMillis() < to.toMillis() && end.toMillis() > from.toMillis())) {
+        return [];
+      }
+
+      return [
+        {
+          ...event,
+          interval: effective,
+          title: override.title ?? event.title,
+          description: override.description ?? event.description,
+          occurrenceStart: override.original_start,
+        },
+      ];
+    });
+
+  return [...generated, ...moved];
 }
 
 /// A stable React key for a series row or one expanded occurrence.

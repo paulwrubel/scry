@@ -324,6 +324,11 @@ export function applyEventValues(event: Event, values: Record<string, unknown>):
     event.recurrence =
       values.recurrence === null ? null : (values.recurrence as Event['recurrence']);
   }
+  if ('overrides' in values) {
+    // change field values are serialized Event fields, so their JSON shape
+    // matches the generated types even though the map is untyped
+    event.overrides = values.overrides as Event['overrides'];
+  }
   if (typeof values.updated_at === 'string') {
     event.updated_at = values.updated_at;
   }

@@ -3,13 +3,15 @@ use jiff::Timestamp;
 use scry_core::error::StorageError;
 use scry_core::ids::{SectionId, TaskId};
 use scry_core::models::{
-    Change, Color, ExternalIdentity, ExternalMetadata, Priority, Tags, Task, TaskState,
+    Change, Color, Event, EventOverride, ExternalIdentity, ExternalMetadata, Priority, Tags, Task,
+    TaskState,
 };
 use scry_core::recurrence::RRule;
 use scry_core::store::ArcStore;
 use scry_core::sync::ack::{OperationAcknowledgment, RejectionReason};
 use scry_core::sync::operations::{OPERATION_VERSION, Operation, OperationKind};
 use scry_core::temporal::{Interval, When};
+use serde::Serialize;
 use uuid::Uuid;
 
 mod apply;
@@ -158,13 +160,15 @@ pub struct NewEvent {
 
 /// Partial event input. `None` leaves a field unchanged; `Some("")` on
 /// `description` clears it; `recurrence` absent leaves it unchanged,
-/// `Some(None)` clears it, and `Some(Some(rule))` sets it.
+/// `Some(None)` clears it, and `Some(Some(rule))` sets it. `overrides` absent
+/// leaves the overrides unchanged; `Some(list)` replaces the whole set.
 #[derive(Debug, Clone, Default)]
 pub struct EventPatch {
     pub title: Option<String>,
     pub description: Option<String>,
     pub interval: Option<Interval>,
     pub recurrence: Option<Option<RRule>>,
+    pub overrides: Option<Vec<EventOverride>>,
 }
 
 /// A half-open instant window for listing events: `from` is inclusive and
@@ -173,6 +177,21 @@ pub struct EventPatch {
 pub struct EventWindow {
     pub from: Timestamp,
     pub to: Timestamp,
+}
+
+/// The new series a split creates after the split point.
+#[derive(Debug, Clone, Serialize)]
+pub struct FollowingEvent {
+    pub title: String,
+    pub description: Option<String>,
+    pub interval: Interval,
+}
+
+/// Both series produced by splitting a recurring event.
+#[derive(Debug, Clone, Serialize)]
+pub struct SplitEvents {
+    pub previous: Event,
+    pub following: Event,
 }
 
 /// Partial project input. `None` leaves a field unchanged; `Some("")` on

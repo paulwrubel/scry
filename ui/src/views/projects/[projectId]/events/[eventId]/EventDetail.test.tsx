@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Event } from '@/generated/Event';
 import type { Operation } from '@/generated/Operation';
+import type { When } from '@/generated/When';
 import { ReplicaContext } from '@/providers/Replica/context';
 import type { ReplicaContextValue } from '@/providers/Replica/context';
 import { DEVICE_ZONE } from '@/contract/due';
@@ -11,6 +12,7 @@ import { EventDetail } from './EventDetail';
 
 type RenderOptions = {
   defaultDate?: string | null;
+  occurrence?: When | null;
   enqueue?: (operation: Operation) => Promise<void>;
   onSaved?: (eventId: string) => void;
   onClose?: () => void;
@@ -23,6 +25,7 @@ afterEach(() => {
 function renderDetail(event: Event | null, options: RenderOptions = {}) {
   const {
     defaultDate = null,
+    occurrence = null,
     enqueue = vi.fn(async () => undefined),
     onSaved = vi.fn(),
     onClose = vi.fn(),
@@ -42,6 +45,7 @@ function renderDetail(event: Event | null, options: RenderOptions = {}) {
         project={project}
         event={event}
         defaultDate={defaultDate}
+        occurrence={occurrence}
         onSaved={onSaved}
         onClose={onClose}
       />
@@ -121,6 +125,31 @@ describe('EventDetail', () => {
     expect(screen.getByRole('button', { name: 'No changes' })).toBeTruthy();
   });
 
+  it('rebases the dates and reset state when switching an occurrence to all events', () => {
+    const occurrence: When = { kind: 'date', date: '2026-02-05' };
+    renderDetail(
+      makeEvent({
+        interval: {
+          start: { kind: 'date', date: '2026-02-01' },
+          end: { kind: 'date', date: '2026-02-02' },
+        },
+        recurrence: { text: 'FREQ=DAILY;COUNT=5' },
+      }),
+      { occurrence },
+    );
+
+    expect(screen.getByLabelText<HTMLInputElement>('Start date').value).toBe('2026-02-05');
+    expect(screen.getByLabelText<HTMLInputElement>('End date').value).toBe('2026-02-05');
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Apply changes to' }), {
+      target: { value: 'all' },
+    });
+
+    expect(screen.getByLabelText<HTMLInputElement>('Start date').value).toBe('2026-02-01');
+    expect(screen.getByLabelText<HTMLInputElement>('End date').value).toBe('2026-02-01');
+    expect(screen.getByRole('button', { name: 'No changes' })).toBeTruthy();
+  });
+
   it('saves an edited title through the outbox', async () => {
     const enqueue = vi.fn(async () => undefined);
     renderDetail(makeEvent(), { enqueue });
@@ -165,8 +194,10 @@ describe('EventDetail', () => {
     const onClose = vi.fn();
     renderDetail(makeEvent(), { enqueue, onClose });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete event' }));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete event' }));
 
     await waitFor(() => {
       expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ kind: 'delete_event' }));
@@ -185,5 +216,110 @@ describe('EventDetail', () => {
       expect(screen.getByText('An event needs a title.')).toBeDefined();
     });
     expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('saves an edited title as an override on the chosen occurrence', async () => {
+    const enqueue = vi.fn(async () => undefined);
+    const occurrence: When = { kind: 'date', date: '2026-11-08' };
+    renderDetail(makeEvent({ recurrence: { text: 'FREQ=DAILY;COUNT=5' } }), {
+      occurrence,
+      enqueue,
+    });
+
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Standup v2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'update_event',
+          title: null,
+          overrides: expect.arrayContaining([
+            expect.objectContaining({ original_start: occurrence, title: 'Standup v2' }),
+          ]),
+        }),
+      );
+    });
+  });
+
+  it('splits the series when applying to this and following', async () => {
+    const operations: Operation[] = [];
+    const enqueue = vi.fn(async (operation: Operation) => {
+      operations.push(operation);
+    });
+    const saved = vi.fn();
+    const occurrence: When = { kind: 'date', date: '2026-11-08' };
+    renderDetail(makeEvent({ recurrence: { text: 'FREQ=DAILY;COUNT=5' } }), {
+      occurrence,
+      enqueue,
+      onSaved: saved,
+    });
+
+    fireEvent.change(screen.getByLabelText('Apply changes to'), {
+      target: { value: 'following' },
+    });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Standup v2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(saved).toHaveBeenCalled();
+    });
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'update_event',
+        recurrence: { text: 'FREQ=DAILY;COUNT=2' },
+      }),
+    );
+    const created = operations.find((operation) => operation.kind === 'create_event');
+    expect(created).toBeDefined();
+    expect(saved).toHaveBeenCalledWith(created?.id);
+  });
+
+  it('deletes only the chosen occurrence from the panel choices', async () => {
+    const enqueue = vi.fn(async () => undefined);
+    const occurrence: When = { kind: 'date', date: '2026-11-08' };
+    renderDetail(makeEvent({ recurrence: { text: 'FREQ=DAILY;COUNT=5' } }), {
+      occurrence,
+      enqueue,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this occurrence' }));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'update_event',
+          recurrence: { text: 'FREQ=DAILY;COUNT=5', exdates: [occurrence] },
+        }),
+      );
+    });
+    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'delete_event' }));
+  });
+
+  it('truncates the series from the delete modal instead of deleting it', async () => {
+    const enqueue = vi.fn(async () => undefined);
+    const occurrence: When = { kind: 'date', date: '2026-11-08' };
+    renderDetail(makeEvent({ recurrence: { text: 'FREQ=DAILY;COUNT=5' } }), {
+      occurrence,
+      enqueue,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this and following' }));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'update_event',
+          recurrence: { text: 'FREQ=DAILY;COUNT=2' },
+        }),
+      );
+    });
+    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'delete_event' }));
   });
 });

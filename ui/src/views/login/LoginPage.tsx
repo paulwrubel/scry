@@ -1,3 +1,4 @@
+import { useSelector } from '@tanstack/react-form';
 import { Alert, Button, Card } from 'flowbite-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -37,6 +38,8 @@ export function LoginPage() {
       setError(result.message);
     },
   });
+  const isValid = useSelector(form.store, (state) => state.isValid);
+  const submitting = useSelector(form.store, (state) => state.isSubmitting);
 
   if (isAuthenticated) {
     return <Navigate to={redirect} replace />;
@@ -57,18 +60,9 @@ export function LoginPage() {
             {(field) => <field.FormPasswordField label="Please enter the password" />}
           </form.AppField>
           {error === null ? null : <Alert color="failure">{error}</Alert>}
-          <form.Subscribe
-            selector={(state) => ({
-              isValid: state.isValid,
-              submitting: state.isSubmitting,
-            })}
-          >
-            {({ isValid, submitting }) => (
-              <Button type="submit" color="default" disabled={submitting || !isValid}>
-                {submitting ? 'Signing in...' : 'Sign in'}
-              </Button>
-            )}
-          </form.Subscribe>
+          <Button type="submit" color="default" disabled={submitting || !isValid}>
+            {submitting ? 'Signing in...' : 'Sign in'}
+          </Button>
         </form>
       </Card>
     </div>

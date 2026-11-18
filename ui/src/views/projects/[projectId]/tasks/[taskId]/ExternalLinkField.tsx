@@ -1,3 +1,4 @@
+import { useSelector } from '@tanstack/react-form';
 import { Badge, Button } from 'flowbite-react';
 import { useState } from 'react';
 import { HiPencil, HiTrash } from 'react-icons/hi2';
@@ -79,6 +80,9 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
     },
   });
 
+  const isValid = useSelector(form.store, (state) => state.isValid);
+  const isSubmitting = useSelector(form.store, (state) => state.isSubmitting);
+
   function startEditing() {
     form.reset();
     form.setFieldValue('url', url ?? '');
@@ -130,31 +134,25 @@ export function ExternalLinkField(props: ExternalLinkFieldProps) {
               />
             )}
           </form.AppField>
-          <form.Subscribe
-            selector={(state) => ({ isValid: state.isValid, isSubmitting: state.isSubmitting })}
-          >
-            {({ isValid, isSubmitting }) => (
-              <div className="flex items-center justify-between gap-2">
-                <Button
-                  size="xs"
-                  color="alternative"
-                  aria-label="Cancel GitHub link edit"
-                  disabled={saving}
-                  onClick={cancelEditing}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="xs"
-                  aria-label="Save GitHub link"
-                  disabled={!isValid || isSubmitting}
-                >
-                  {saving ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-            )}
-          </form.Subscribe>
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              size="xs"
+              color="alternative"
+              aria-label="Cancel GitHub link edit"
+              disabled={saving}
+              onClick={cancelEditing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              size="xs"
+              aria-label="Save GitHub link"
+              disabled={!isValid || isSubmitting}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
         </form>
         {error === null ? null : (
           <p className="text-danger text-sm" role="alert">

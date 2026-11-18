@@ -4,6 +4,7 @@ import type { AutomationTrigger } from './AutomationTrigger';
 import type { ClosedReason } from './ClosedReason';
 import type { Color } from './Color';
 import type { ColorChange } from './ColorChange';
+import type { EventOverride } from './EventOverride';
 import type { ExternalIdentity } from './ExternalIdentity';
 import type { ExternalMetadata } from './ExternalMetadata';
 import type { Interval } from './Interval';
@@ -139,6 +140,7 @@ export type OperationKind =
       description: string | null;
       interval: Interval;
       recurrence?: RRule | null;
+      overrides?: Array<EventOverride>;
       created_at: string;
       updated_at?: string | null;
     }
@@ -149,6 +151,7 @@ export type OperationKind =
       description?: string | null;
       interval: Interval | null;
       recurrence?: RRule | null;
+      overrides?: Array<EventOverride> | null;
       updated_at?: string | null;
     }
   | { kind: 'delete_event'; id: string };

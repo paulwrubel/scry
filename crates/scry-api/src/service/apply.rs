@@ -636,6 +636,7 @@ impl ProjectService {
                 description,
                 interval,
                 recurrence,
+                overrides,
                 created_at,
                 updated_at,
             } => {
@@ -664,6 +665,7 @@ impl ProjectService {
                         .filter(|description| !description.is_empty()),
                     interval: interval.clone(),
                     recurrence: recurrence.clone(),
+                    overrides: overrides.clone(),
                     created_at: *created_at,
                     updated_at: (*updated_at).unwrap_or(*created_at),
                 };

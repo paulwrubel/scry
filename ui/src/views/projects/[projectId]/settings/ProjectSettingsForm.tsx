@@ -1,3 +1,4 @@
+import { useSelector } from '@tanstack/react-form';
 import { Button } from 'flowbite-react';
 import { useState } from 'react';
 import { z } from 'zod';
@@ -46,6 +47,9 @@ export function ProjectSettingsForm(props: ProjectSettingsFormProps) {
     },
   });
 
+  const isValid = useSelector(form.store, (state) => state.isValid);
+  const submitting = useSelector(form.store, (state) => state.isSubmitting);
+
   return (
     <form
       id="project-settings-form"
@@ -67,18 +71,9 @@ export function ProjectSettingsForm(props: ProjectSettingsFormProps) {
         </p>
       )}
       <div className="flex justify-end">
-        <form.Subscribe
-          selector={(state) => ({
-            isValid: state.isValid,
-            submitting: state.isSubmitting,
-          })}
-        >
-          {({ isValid, submitting }) => (
-            <Button type="submit" disabled={submitting || error !== null || !isValid}>
-              {submitting ? 'Saving...' : 'Save'}
-            </Button>
-          )}
-        </form.Subscribe>
+        <Button type="submit" disabled={submitting || error !== null || !isValid}>
+          {submitting ? 'Saving...' : 'Save'}
+        </Button>
       </div>
     </form>
   );

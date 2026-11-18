@@ -1,3 +1,4 @@
+import { useSelector } from '@tanstack/react-form';
 import { Button, Drawer } from 'flowbite-react';
 import type { DrawerTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
@@ -29,6 +30,8 @@ export function MobileAddTask(props: MobileAddTaskProps) {
 
   const { form, open, error, inputRef, openForm, closeForm } = useCreateTaskForm(onCreate);
   const bottomInset = useVisualViewportInset();
+  const isValid = useSelector(form.store, (state) => state.isValid);
+  const submitting = useSelector(form.store, (state) => state.isSubmitting);
 
   useEffect(() => {
     if (open) {
@@ -78,18 +81,9 @@ export function MobileAddTask(props: MobileAddTaskProps) {
                 )}
               </form.AppField>
             </div>
-            <form.Subscribe
-              selector={(state) => ({
-                isValid: state.isValid,
-                submitting: state.isSubmitting,
-              })}
-            >
-              {({ isValid, submitting }) => (
-                <Button type="submit" disabled={submitting || !isValid}>
-                  Add
-                </Button>
-              )}
-            </form.Subscribe>
+            <Button type="submit" disabled={submitting || !isValid}>
+              Add
+            </Button>
           </form>
           {error === null ? null : (
             <p className="text-danger text-sm" role="alert">

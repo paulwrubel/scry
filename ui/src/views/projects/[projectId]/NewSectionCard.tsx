@@ -1,3 +1,4 @@
+import { useSelector } from '@tanstack/react-form';
 import { Button, Card, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react';
 import type { CardTheme } from 'flowbite-react';
 import type { DeepPartial } from 'flowbite-react/types';
@@ -37,6 +38,9 @@ export function NewSectionCard(props: NewSectionCardProps) {
       setOpen(false);
     },
   });
+
+  const isValid = useSelector(form.store, (state) => state.isValid);
+  const submitting = useSelector(form.store, (state) => state.isSubmitting);
 
   function close() {
     form.reset();
@@ -88,18 +92,9 @@ export function NewSectionCard(props: NewSectionCardProps) {
           <Button color="alternative" onClick={close}>
             Cancel
           </Button>
-          <form.Subscribe
-            selector={(state) => ({
-              isValid: state.isValid,
-              submitting: state.isSubmitting,
-            })}
-          >
-            {({ isValid, submitting }) => (
-              <Button type="submit" form="new-section-form" disabled={submitting || !isValid}>
-                Add
-              </Button>
-            )}
-          </form.Subscribe>
+          <Button type="submit" form="new-section-form" disabled={submitting || !isValid}>
+            Add
+          </Button>
         </ModalFooter>
       </Modal>
     </>

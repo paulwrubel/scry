@@ -654,6 +654,83 @@ describe('expandEvents', () => {
 
     expect(expandEvents([plain], from, to, ZONE)[0]).toBe(plain);
   });
+
+  it('applies an override to exactly one generated occurrence', () => {
+    const expanded = expandEvents(
+      [
+        {
+          ...recurringEvent(
+            'twice',
+            dateInterval('2026-10-05', '2026-10-06'),
+            'FREQ=WEEKLY;BYDAY=MO,TH',
+          ),
+          overrides: [
+            {
+              original_start: { kind: 'date', date: '2026-11-02' },
+              title: 'moved',
+              interval: dateInterval('2026-11-03', '2026-11-04'),
+            },
+          ],
+        },
+      ],
+      from,
+      to,
+      ZONE,
+    );
+
+    expect(expanded).toHaveLength(2);
+    const moved = expanded.find((item) => item.title === 'moved');
+    expect(moved?.occurrenceStart).toEqual({ kind: 'date', date: '2026-11-02' });
+    expect(moved?.interval).toEqual(dateInterval('2026-11-03', '2026-11-04'));
+
+    const untouched = expanded.find((item) => item.title === 'twice');
+    expect(untouched?.occurrenceStart).toEqual({ kind: 'date', date: '2026-11-05' });
+    expect(untouched?.interval).toEqual(dateInterval('2026-11-05', '2026-11-06'));
+  });
+
+  it('ignores an override whose original start is not generated', () => {
+    const expanded = expandEvents(
+      [
+        {
+          ...recurringEvent('weekly', dateInterval('2026-10-05', '2026-10-06'), 'FREQ=WEEKLY'),
+          overrides: [{ original_start: { kind: 'date', date: '2026-11-03' }, title: 'orphan' }],
+        },
+      ],
+      from,
+      to,
+      ZONE,
+    );
+
+    expect(expanded.map((item) => item.occurrenceStart)).toEqual([
+      { kind: 'date', date: '2026-11-02' },
+    ]);
+    expect(expanded[0].title).toBe('weekly');
+  });
+
+  it('includes an override that moves an out-of-window start into the window', () => {
+    const expanded = expandEvents(
+      [
+        {
+          ...recurringEvent('weekly', dateInterval('2026-10-05', '2026-10-06'), 'FREQ=WEEKLY'),
+          overrides: [
+            {
+              original_start: { kind: 'date', date: '2026-10-26' },
+              title: 'moved',
+              interval: dateInterval('2026-11-03', '2026-11-04'),
+            },
+          ],
+        },
+      ],
+      from,
+      to,
+      ZONE,
+    );
+
+    expect(expanded.map((item) => item.title)).toEqual(['weekly', 'moved']);
+    const moved = expanded.find((item) => item.title === 'moved');
+    expect(moved?.occurrenceStart).toEqual({ kind: 'date', date: '2026-10-26' });
+    expect(moved?.interval).toEqual(dateInterval('2026-11-03', '2026-11-04'));
+  });
 });
 
 describe('eventKey', () => {

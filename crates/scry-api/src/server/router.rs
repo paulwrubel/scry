@@ -164,12 +164,14 @@ fn build_automations_router() -> Router<ScryState> {
 
 /// Routes nested under `/events`.
 fn build_events_router() -> Router<ScryState> {
-    Router::new().route(
-        "/{id}",
-        get(handlers::get_event)
-            .put(handlers::update_event)
-            .delete(handlers::delete_event),
-    )
+    Router::new()
+        .route(
+            "/{id}",
+            get(handlers::get_event)
+                .put(handlers::update_event)
+                .delete(handlers::delete_event),
+        )
+        .route("/{id}/split", post(handlers::split_event))
 }
 
 #[cfg(feature = "embed-ui")]

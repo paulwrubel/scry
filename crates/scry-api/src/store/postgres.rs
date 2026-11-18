@@ -8,16 +8,17 @@ use scry_core::error::StorageError;
 use scry_core::ids::{AutomationId, CommentId, EventId, Handle, ProjectId, SectionId, TaskId};
 use scry_core::models::{
     Automation, AutomationAction, AutomationTrigger, Change, ChangeKind, ClosedReason, Color,
-    Comment, Entity, EntityType, Event, ExternalIdentity, ExternalMetadata, Priority, Project,
-    ProjectSnapshot, Section, Tags, Task, TaskState,
+    Comment, Entity, EntityType, Event, EventOverride, ExternalIdentity, ExternalMetadata,
+    Priority, Project, ProjectSnapshot, Section, Tags, Task, TaskState,
 };
 use scry_core::position::{Position, n_keys_between};
 use scry_core::recurrence::RRule;
 use scry_core::store::Store;
-use scry_core::temporal::When;
+use scry_core::temporal::{Interval, When};
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};
 use sqlx::{Postgres, Transaction};
+use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use uuid::Uuid;
 
@@ -317,6 +318,7 @@ struct EventFields {
     description: Option<String>,
     event_interval: serde_json::Value,
     recurrence: Option<serde_json::Value>,
+    overrides: Vec<EventOverride>,
     created_at: SqlxTimestamp,
     updated_at: SqlxTimestamp,
 }
@@ -329,6 +331,7 @@ fn event_from_fields(fields: EventFields) -> Result<Event, StorageError> {
         description,
         event_interval,
         recurrence,
+        overrides,
         created_at,
         updated_at,
     } = fields;
@@ -349,9 +352,152 @@ fn event_from_fields(fields: EventFields) -> Result<Event, StorageError> {
         description,
         interval,
         recurrence,
+        overrides,
         created_at: created_at.to_jiff(),
         updated_at: updated_at.to_jiff(),
     })
+}
+
+fn event_override_from_fields(
+    event_id: Uuid,
+    original_start: serde_json::Value,
+    title: Option<String>,
+    description: Option<String>,
+    event_interval: Option<serde_json::Value>,
+) -> Result<EventOverride, StorageError> {
+    let original_start = serde_json::from_value(original_start).map_err(|e| {
+        StorageError::Database(format!("event {event_id} has an invalid override: {e}"))
+    })?;
+    let interval = event_interval
+        .map(serde_json::from_value::<Interval>)
+        .transpose()
+        .map_err(|e| {
+            StorageError::Database(format!("event {event_id} has an invalid override: {e}"))
+        })?;
+
+    Ok(EventOverride {
+        original_start,
+        title,
+        description,
+        interval,
+    })
+}
+
+async fn load_event_overrides(
+    conn: &mut PgConnection,
+    event_id: EventId,
+) -> Result<Vec<EventOverride>, StorageError> {
+    let rows = sqlx::query!(
+        r#"
+            SELECT original_start, title, description, event_interval
+            FROM event_overrides
+            WHERE event_id = $1
+            ORDER BY original_start
+        "#,
+        event_id,
+    )
+    .fetch_all(conn)
+    .await
+    .map_err(|e| StorageError::Database(format!("failed to load event overrides: {e}")))?;
+
+    rows.into_iter()
+        .map(|row| {
+            event_override_from_fields(
+                event_id,
+                row.original_start,
+                row.title,
+                row.description,
+                row.event_interval,
+            )
+        })
+        .collect()
+}
+
+async fn load_overrides_for_events(
+    conn: &mut PgConnection,
+    event_ids: &[Uuid],
+) -> Result<HashMap<Uuid, Vec<EventOverride>>, StorageError> {
+    let mut overrides: HashMap<Uuid, Vec<EventOverride>> = HashMap::new();
+    if event_ids.is_empty() {
+        return Ok(overrides);
+    }
+
+    let rows = sqlx::query!(
+        r#"
+            SELECT event_id, original_start, title, description, event_interval
+            FROM event_overrides
+            WHERE event_id = ANY($1)
+            ORDER BY event_id, original_start
+        "#,
+        event_ids,
+    )
+    .fetch_all(conn)
+    .await
+    .map_err(|e| StorageError::Database(format!("failed to load event overrides: {e}")))?;
+
+    for row in rows {
+        let event_override = event_override_from_fields(
+            row.event_id,
+            row.original_start,
+            row.title,
+            row.description,
+            row.event_interval,
+        )?;
+        overrides
+            .entry(row.event_id)
+            .or_default()
+            .push(event_override);
+    }
+
+    Ok(overrides)
+}
+
+async fn replace_event_overrides(
+    conn: &mut PgConnection,
+    event_id: EventId,
+    overrides: &[EventOverride],
+) -> Result<(), StorageError> {
+    sqlx::query!(
+        r#"
+            DELETE FROM event_overrides
+            WHERE event_id = $1
+        "#,
+        event_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| StorageError::Database(format!("failed to replace event overrides: {e}")))?;
+
+    for event_override in overrides {
+        let original_start = serde_json::to_value(&event_override.original_start).map_err(|e| {
+            StorageError::Database(format!("failed to serialize an event override: {e}"))
+        })?;
+        let event_interval = event_override
+            .interval
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| {
+                StorageError::Database(format!("failed to serialize an event override: {e}"))
+            })?;
+
+        sqlx::query!(
+            r#"
+                INSERT INTO event_overrides (event_id, original_start, title, description, event_interval)
+                VALUES ($1, $2, $3, $4, $5)
+            "#,
+            event_id,
+            original_start,
+            event_override.title.as_deref(),
+            event_override.description.as_deref(),
+            event_interval,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| StorageError::Database(format!("failed to replace event overrides: {e}")))?;
+    }
+
+    Ok(())
 }
 
 #[async_trait]
@@ -1510,7 +1656,10 @@ impl Store for PostgresStore {
         .await
         {
             Ok(result) => match result.rows_affected() {
-                1 => Ok(event),
+                1 => {
+                    replace_event_overrides(&mut conn, event.id, &event.overrides).await?;
+                    Ok(event)
+                }
                 n => Err(StorageError::Database(format!(
                     "failed to create event: expected 1 row affected, got {n}"
                 ))),
@@ -1548,16 +1697,20 @@ impl Store for PostgresStore {
         .fetch_optional(&mut *conn)
         .await
         {
-            Ok(Some(row)) => Ok(Some(event_from_fields(EventFields {
-                id: row.id,
-                project_id: row.project_id,
-                title: row.title,
-                description: row.description,
-                event_interval: row.event_interval,
-                recurrence: row.recurrence,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            })?)),
+            Ok(Some(row)) => {
+                let overrides = load_event_overrides(&mut conn, id).await?;
+                Ok(Some(event_from_fields(EventFields {
+                    id: row.id,
+                    project_id: row.project_id,
+                    title: row.title,
+                    description: row.description,
+                    event_interval: row.event_interval,
+                    recurrence: row.recurrence,
+                    overrides,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                })?))
+            }
             Ok(None) => Ok(None),
             Err(e) => Err(StorageError::Database(format!(
                 "failed to look up event: {}",
@@ -1593,21 +1746,26 @@ impl Store for PostgresStore {
         .fetch_all(&mut *conn)
         .await
         {
-            Ok(rows) => rows
-                .into_iter()
-                .map(|row| {
-                    event_from_fields(EventFields {
-                        id: row.id,
-                        project_id: row.project_id,
-                        title: row.title,
-                        description: row.description,
-                        event_interval: row.event_interval,
-                        recurrence: row.recurrence,
-                        created_at: row.created_at,
-                        updated_at: row.updated_at,
+            Ok(rows) => {
+                let event_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+                let mut overrides = load_overrides_for_events(&mut conn, &event_ids).await?;
+
+                rows.into_iter()
+                    .map(|row| {
+                        event_from_fields(EventFields {
+                            id: row.id,
+                            project_id: row.project_id,
+                            title: row.title,
+                            description: row.description,
+                            event_interval: row.event_interval,
+                            recurrence: row.recurrence,
+                            overrides: overrides.remove(&row.id).unwrap_or_default(),
+                            created_at: row.created_at,
+                            updated_at: row.updated_at,
+                        })
                     })
-                })
-                .collect::<Result<Vec<Event>, StorageError>>(),
+                    .collect::<Result<Vec<Event>, StorageError>>()
+            }
             Err(e) => Err(StorageError::Database(format!(
                 "failed to list events: {}",
                 e
@@ -1655,7 +1813,10 @@ impl Store for PostgresStore {
                     "event with id '{}' not found",
                     event.id
                 ))),
-                _ => Ok(event),
+                _ => {
+                    replace_event_overrides(&mut conn, event.id, &event.overrides).await?;
+                    Ok(event)
+                }
             },
             Err(e) => Err(StorageError::Database(format!(
                 "failed to update event: {}",

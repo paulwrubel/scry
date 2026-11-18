@@ -336,7 +336,7 @@ describe('TaskDetail', () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close as' }));
     fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
 
     await waitFor(() => {
@@ -355,7 +355,7 @@ describe('TaskDetail', () => {
     const enqueue = vi.fn(async () => undefined);
     renderTask(projectSnapshot(), enqueue);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close as' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancelled' }));
 
     await waitFor(() => {
@@ -386,7 +386,7 @@ describe('TaskDetail', () => {
       enqueue,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reopen task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen' }));
 
     await waitFor(() => {
       expect(enqueue).toHaveBeenCalledWith(
@@ -487,7 +487,7 @@ describe('TaskDetail', () => {
 
     expect(screen.queryByRole('button', { name: 'Edit title' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Edit description' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Close task' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Close as' })).toBeNull();
     expect(screen.getByRole('link', { name: 'acme/widgets#123' }).getAttribute('href')).toBe(
       'https://github.com/acme/widgets/issues/123',
     );
