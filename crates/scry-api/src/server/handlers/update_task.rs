@@ -24,14 +24,16 @@ pub struct UpdateTaskRequest {
     #[serde(default)]
     pub clear_section: bool,
     pub state: Option<TaskState>,
-    #[serde(with = "scry_core::sync::double_option")]
+    #[serde(default, with = "scry_core::sync::double_option")]
     pub due: Option<Option<When>>,
     #[serde(
+        default,
         skip_serializing_if = "Option::is_none",
         with = "scry_core::sync::double_option"
     )]
     pub external_identity: Option<Option<ExternalIdentity>>,
     #[serde(
+        default,
         skip_serializing_if = "Option::is_none",
         with = "scry_core::sync::double_option"
     )]
@@ -86,5 +88,51 @@ pub async fn update_task(
     match state.service.update_task_by_id(task.id, input).await {
         Ok(task) => Json(task).into_response(),
         Err(error) => AppError::from(error).into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // These tests guard the three-state contract of `due`, `external_identity`,
+    // and `external_metadata`. They rely on `double_option` and `#[serde(default)]`
+    // together: without `default`, serde treats a field with a custom
+    // deserializer as required, so an omitted field fails to parse and axum
+    // turns that into a 422 at the REST boundary. `scry sync` sends only
+    // `external_metadata` and omits the other two, so dropping `default` breaks
+    // every sync update rather than just an edge case.
+
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn omitted_tri_state_fields_deserialize_as_unchanged() {
+        let request: UpdateTaskRequest = serde_json::from_value(json!({}))
+            .expect("omitted tri-state fields should mean unchanged");
+
+        assert!(request.due.is_none());
+        assert!(request.external_identity.is_none());
+        assert!(request.external_metadata.is_none());
+    }
+
+    #[test]
+    fn tri_state_fields_distinguish_absent_and_null() {
+        // An explicit null is a request to clear, not the same as omitting the field.
+        let request: UpdateTaskRequest =
+            serde_json::from_value(json!({ "due": null, "external_identity": null }))
+                .expect("explicit null should clear the fields");
+
+        assert_eq!(request.due, Some(None));
+        assert_eq!(request.external_identity, Some(None));
+
+        // The shape `scry sync` sends: metadata present, due and identity absent.
+        let request: UpdateTaskRequest = serde_json::from_value(json!({
+            "external_metadata": { "provider": "github", "state": "open" }
+        }))
+        .expect("metadata without due or identity should still parse");
+
+        assert!(matches!(
+            request.external_metadata,
+            Some(Some(ExternalMetadata::Github { .. }))
+        ));
     }
 }
